@@ -122,17 +122,35 @@ def generate(slug):
     draw.rounded_rectangle([50, 50, 70 + tag_w, 88], radius=6, fill=p["dot"])
     draw.text((60, 60), tag_label, font=tag_font, fill=(10, 10, 10))
 
-    # Title (auto-wrap, max 2 lines at 68px, fall back to 52px if too long)
+    # Split title on ":" into main title + subtitle
+    if ":" in title:
+        main_title, subtitle = title.split(":", 1)
+        main_title = main_title.strip()
+        subtitle = subtitle.strip()
+    else:
+        main_title = title
+        subtitle = ""
+
+    # Main title (auto-wrap, large bold)
     for font_size in [68, 56, 46]:
         title_font = ImageFont.truetype(FONT_BOLD, font_size)
-        lines = wrap_text(title, title_font, W - 120, draw)
-        if len(lines) <= 3:
+        lines = wrap_text(main_title, title_font, W - 120, draw)
+        if len(lines) <= 2:
             break
 
     title_y = 130
-    for line in lines[:3]:
+    for line in lines[:2]:
         draw.text((60, title_y), line, font=title_font, fill=(255, 255, 255))
         title_y += font_size + 10
+
+    # Subtitle (smaller, lighter gray)
+    if subtitle:
+        sub_font = ImageFont.truetype(FONT_REG, 30)
+        sub_lines = wrap_text(subtitle, sub_font, W - 120, draw)
+        title_y += 8
+        for line in sub_lines[:2]:
+            draw.text((60, title_y), line, font=sub_font, fill=(180, 180, 180))
+            title_y += 40
 
     # Brand line
     brand_font = ImageFont.truetype(FONT_BOLD, 20)
