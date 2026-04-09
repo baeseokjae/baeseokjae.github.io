@@ -32,7 +32,7 @@ Every guide on RockB is based on actual usage and research. We test tools oursel
 RockB is run by **Seokjae Bae**, a technology enthusiast and writer with a passion for making AI accessible to everyone. You can find me on:
 
 - [GitHub](https://github.com/baeseokjae)
-- [X (Twitter)](https://x.com/baeseokjae)
+- [X (Twitter)](https://x.com/seok_____j)
 
 ## Contact
 

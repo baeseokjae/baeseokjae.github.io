@@ -21,6 +21,6 @@ We'd love to hear from you. Whether you have a question about one of our guides,
 ## Connect
 
 - [GitHub](https://github.com/baeseokjae)
-- [X (Twitter)](https://x.com/baeseokjae)
+- [X (Twitter)](https://x.com/seok_____j)
 
 We aim to respond to all inquiries within 48 hours.
