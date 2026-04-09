@@ -8,6 +8,7 @@ cover:
   image: "/images/ai-hardware-2026.png"
   alt: "AI Hardware 2026: NVIDIA H200 vs AMD MI300X vs Google TPU v5 Compared"
   relative: false
+schema: "schema-ai-hardware-2026"
 ---
 
 Choosing AI hardware in 2026 means navigating a more competitive market than ever before. NVIDIA still holds 80%+ market share thanks to the CUDA ecosystem, but AMD's MI300X delivers superior memory bandwidth at roughly half the price, while Google's TPU v5p and AWS Trainium 2 offer vertically integrated economics that can cut inference costs by 30–50%. The right choice depends on your workload, team expertise, and total cost of ownership — not just raw TFLOPS.
