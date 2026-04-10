@@ -31,7 +31,7 @@ Run agents in this order for the selected topic:
 
 5. **Publisher** (Claude Code) — deploys to GitHub
    - Runs: hugo --minify → git add → git commit → git push
-   - Output: live URL at https://baeseokjae.github.io/blog/posts/{slug}/
+   - Output: live URL at https://baeseokjae.github.io/posts/{slug}/
 
 ### Step 3 — Completion
 - Update topics.json: set "published": true for the completed topic

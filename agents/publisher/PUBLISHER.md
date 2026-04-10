@@ -19,4 +19,4 @@ Run these commands in exact order:
 
 After successful push, report:
 - Commit hash
-- Live URL: https://baeseokjae.github.io/blog/posts/{slug}/
+- Live URL: https://baeseokjae.github.io/posts/{slug}/

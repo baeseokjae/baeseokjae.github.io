@@ -6,7 +6,7 @@ description: "Perplexity wins on accuracy (92%), Google wins on reach, ChatGPT w
 draft: false
 schema: "schema-perplexity-vs-chatgpt-vs-google-ai-search-2026"
 cover:
-  image: "/blog/images/perplexity-vs-chatgpt-vs-google-ai-search-2026.png"
+  image: "/images/perplexity-vs-chatgpt-vs-google-ai-search-2026.png"
   alt: "Perplexity vs ChatGPT vs Google: The AI Search Engine Battle of 2026"
   relative: false
 ---

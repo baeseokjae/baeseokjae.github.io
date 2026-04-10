@@ -12,7 +12,7 @@ Write a blog post following this mandatory structure:
    - description (under 155 chars, direct answer)
    - draft: false
    - cover:
-       image: "/blog/images/{slug}.png"
+       image: "/images/{slug}.png"
        alt: "{post title}"
        relative: false
 

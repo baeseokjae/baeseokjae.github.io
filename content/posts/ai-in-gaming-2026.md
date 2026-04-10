@@ -6,7 +6,7 @@ description: "AI in gaming 2026 is a $4.54B market reshaping how games are built
 draft: false
 schema: "schema-ai-in-gaming-2026"
 cover:
-  image: "/blog/images/ai-in-gaming-2026.png"
+  image: "/images/ai-in-gaming-2026.png"
   alt: "AI in Gaming 2026: Procedural Content Generation and NPC Intelligence Explained"
   relative: false
 ---

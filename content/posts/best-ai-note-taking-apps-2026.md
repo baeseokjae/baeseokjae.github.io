@@ -13,7 +13,7 @@ description: "Best AI note-taking apps 2026: Notion AI for teams, Mem for zero-f
 draft: false
 schema: "schema-best-ai-note-taking-apps-2026"
 cover:
-  image: "/blog/images/best-ai-note-taking-apps-2026.png"
+  image: "/images/best-ai-note-taking-apps-2026.png"
   alt: "Best AI Note-Taking Apps in 2026: Notion AI vs Mem vs Obsidian vs Reflect"
   relative: false
 ---
