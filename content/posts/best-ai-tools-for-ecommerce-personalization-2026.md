@@ -12,6 +12,7 @@ tags:
   - AI merchandising
 description: "Dynamic Yield leads for enterprises, Nosto excels with agentic AI, and Klevu (Athos Commerce) dominates AI search—here's the 2026 comparison."
 draft: false
+schema: "schema-best-ai-tools-for-ecommerce-personalization-2026"
 cover:
   image: "/images/best-ai-tools-for-ecommerce-personalization-2026.png"
   alt: "Best AI Tools for E-commerce Personalization in 2026: Dynamic Yield vs Klevu vs Nosto"
