@@ -5,7 +5,7 @@ tags: ["MCP", "RAG", "AI agents", "Model Context Protocol", "retrieval augmented
 description: "MCP, RAG, and AI agents solve different problems. MCP connects tools, RAG retrieves knowledge, and agents orchestrate actions. See how they work together."
 draft: false
 cover:
-  image: "/images/mcp-vs-rag-vs-ai-agents.png"
+  image: "/images/mcp-vs-rag-vs-ai-agents-2026.png"
   alt: "Cover image for mcp-vs-rag-vs-ai-agents-2026"
   relative: false
 schema: "schema-mcp-vs-rag-vs-ai-agents-2026"
