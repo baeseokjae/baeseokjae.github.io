@@ -4,6 +4,7 @@ date: 2026-04-10T04:40:00+00:00
 tags: ["build AI chatbot GPT-5 RAG 2026", "GPT-5 chatbot tutorial", "RAG chatbot implementation", "LangChain GPT-5 integration", "retrieval-augmented generation tutorial", "OpenAI API chatbot", "Pinecone vector database chatbot", "chatbot deployment 2026", "AI customer service bot"]
 description: "Learn how to build an AI-powered chatbot using GPT-5 and RAG in 2026 — with step-by-step code, vector databases, LangChain integration, and deployment options."
 draft: false
+schema: "schema-ai-powered-chatbot-gpt5-rag-2026"
 cover:
   image: "/images/ai-powered-chatbot-gpt5-rag-2026.png"
   alt: "How to Build an AI-Powered Chatbot with GPT-5 and RAG in 2026"
