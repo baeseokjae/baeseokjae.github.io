@@ -16,7 +16,7 @@ We'd love to hear from you. Whether you have a question about one of our guides,
 
 ## Get in Touch
 
-**Email:** baeseokjae@gmail.com
+**Email:** bsjp9400@gmail.com
 
 ## Connect
 
