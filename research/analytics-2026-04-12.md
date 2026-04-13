@@ -1,14 +1,14 @@
 # Blog Analytics Report — 2026-04-12
-*Generated: 2026-04-12 13:00 (approximate)*
 
 ## Executive Summary
-- **Total articles:** 37 (35 published, 2 researched)
-- **GSC traffic:** Minimal (1 impression, 0 clicks) — site indexing early stage.
-- **Pending research tasks:** 0 (no open issues assigned to Researcher)
-- **Content gaps identified:** 31 high‑intent commercial categories.
+- **Total published posts**: 40
+- **Researched, not yet published**: 5
+- **Pending Paperclip issues**: 8
+- **GSC impressions (7 days)**: 1 (zero clicks)
 
 ## GSC Performance
-### Daily Report
+
+### Daily Report (7-day window)
 ```
 === DAILY GSC REPORT (2026-04-02 ~ 2026-04-09) ===
 Clicks: 0 | Impressions: 1 | CTR: 0.00%
@@ -17,7 +17,7 @@ Top Queries:
   [0c/1i pos:8.0] "veo 3" -site:reddit.com -site:twitter.com -site:x.com -site:wykop.pl -site:tripadvisor.com -site:youtube.com -site:yelp.com -site:booking.com -site:facebook.com -site:instagram.com -site:tiktok.com
 ```
 
-### Weekly Report (includes striking distance & pages)
+### Weekly Report
 ```
 === DAILY GSC REPORT (2026-04-02 ~ 2026-04-09) ===
 Clicks: 0 | Impressions: 1 | CTR: 0.00%
@@ -32,7 +32,7 @@ None found yet.
   [0c/10i] /
 ```
 
-### Striking Distance (positions 11‑20)
+### Striking Distance (positions 11-20)
 ```
 === STRIKING DISTANCE (pos 11-20, near page 1) ===
 None found yet.
@@ -45,98 +45,62 @@ None found yet.
 ```
 
 ## Content Pipeline Status
-- **Published:** 35 articles
-- **Researched (ready for writing):** 2
-  - `ai-ui-ux-design-prototyping-tools-2026` — AI for UI/UX Design and Prototyping in 2026: Best Tools
-  - `ai-rpa-physical-automation-2026` — AI for Robotics Process Automation (RPA) and Physical Automation in 2026
 
-## Paperclip Issues
-No open research tasks assigned.
+**Topics by status**: {'published': 40, 'researched': 5}
+
+### Researched but Not Published
+- `ai-affiliate-marketing-tools-2026` — AI for Affiliate Marketing in 2026: Best Tools for Link Building and Commission Optimization
+- `ai-lead-generation-tools-2026` — AI for Lead Generation in 2026: Best Tools for B2B Sales Prospecting
+- `ai-project-management-tools-2026` — AI for Project Management in 2026: Best Tools for Agile and Remote Teams
+- `ai-customer-success-tools-2026` — AI for Customer Success in 2026: Best Tools for Retention and Upsell
+- `ai-sales-forecasting-tools-2026` — AI for Sales Forecasting in 2026: Best Predictive Analytics Tools
+
+### Pending Paperclip Issues
+- **[ROC-269]** Write blog post: Best AI Content Writing Tools in 2026: Jasper vs Copy.ai vs Writesonic (in_progress)
+- **[ROC-275]** Publish post: best-ai-content-writing-tools-2026 (todo)
+- **[ROC-273]** Generate SEO schema: best-ai-content-writing-tools-2026 (todo)
+- **[ROC-261]** Publish blog post: Best AI SEO Tools in 2026 (in_review)
+- **[ROC-259]** Generate SEO schema: best-ai-seo-tools-2026 (todo)
+- **[ROC-188]** Publish: Local AI Model Serving Frameworks in 2026 (in_review)
+- **[ROC-137]** Quality review: AI vs Traditional Automation in Business Workflows 2026 (todo)
+- **[ROC-18]** 에이전트 구조 검토: Thumbnail 중복 및 모델 선정 적합성 (backlog)
 
 ## Content Gap Analysis
-High‑intent commercial categories **not yet covered** in the blog:
 
-- **AI Ethics**
-- **AI Governance**
-- **AI Compliance**
-- **AI for Sustainability**
-- **AI for Supply Chain**
-- **AI for Real Estate**
-- **AI for Sales**
-- **AI for Product Management**
-- **AI for Project Management**
-- **AI for Quality Assurance**
-- **AI for Risk Management**
-- **AI for SEO**
-- **AI for Email Marketing**
-- **AI for Content Marketing**
-- **AI for Video Editing**
-- **AI for Podcast Production**
-- **AI for Music Generation**
-- **AI for Art**
-- **AI for IoT**
-- **AI for Edge Computing**
-- … and 11 more.
+### High-Commercial-Intent Topics Already Covered
+The blog already has strong coverage in:
+- AI Legal (contract review)
+- AI HR (talent acquisition)
+- AI Cybersecurity
+- AI Finance
+- AI Marketing
+- AI Sales Forecasting
+- AI Customer Support
+- AI Project Management
 
-**Already covered categories:**
-- AI for HR (talent acquisition)
-- AI for Legal (document review)
-- AI for Customer Support
-- AI for Marketing (generative)
-- AI for Healthcare
-- AI for Education
-- AI for Finance
-- AI for Gaming
-- AI for Cybersecurity
-- AI for DevOps/MLOps
-- … and more.
-
-## Suggested New Topics
-Based on gap analysis, the following high‑intent topics are recommended for research:
-
-1. **AI Ethics Framework 2026: Best Tools for Responsible AI Development**
-   - Keyword: "AI ethics framework 2026"
-   - Type: guide
-   - Commercial intent: High (B2B, compliance, governance)
-
-2. **AI for Supply Chain Optimization in 2026: Predictive Analytics and Demand Forecasting**
-   - Keyword: "AI supply chain optimization 2026"
-   - Type: explainer
-   - Commercial intent: High (logistics, manufacturing)
-
-3. **AI for Sustainability and Green Tech: Reducing Carbon Footprint with Machine Learning**
-   - Keyword: "AI for sustainability 2026"
-   - Type: guide
-   - Commercial intent: Growing (ESG, regulatory)
-
-4. **AI for Sales and CRM in 2026: Best Tools for Lead Scoring and Pipeline Management**
-   - Keyword: "AI for sales CRM 2026"
-   - Type: comparison
-   - Commercial intent: High (sales tech stack)
-
-5. **AI for Project Management in 2026: Automating Task Allocation and Resource Planning**
-   - Keyword: "AI project management tools 2026"
-   - Type: comparison
-   - Commercial intent: Medium (SaaS, team collaboration)
-
-These topics target underserved commercial audiences and align with current trends.
+### Identified Gaps
+The following high-commercial-intent verticals are **missing**:
+- AI Ethics
+- AI Compliance
+- AI Sustainability
+- AI Green
+- AI Environment
+- AI Supply chain
+- AI Real estate
+- AI Insurance
+- AI Government
+- AI Public sector
+- AI Regulatory
+- AI Risk
+- AI Audit
+- AI Governance
 
 ## Recommendations
-1. **Complete the researched topics** → assign writing tasks for `ai-ui-ux-design-prototyping-tools-2026` and `ai-rpa-physical-automation-2026`.
-2. **Explore high‑intent gaps** → prioritize categories with strong commercial intent:
-   - *AI Ethics* (potential for tool‑comparison or guide content)
-   - *AI Governance*
-   - *AI Compliance*
-   - *AI for Sustainability*
-   - *AI for Supply Chain*
-3. **Improve discoverability** → ensure all published posts have SEO schema, internal linking, and are submitted to Google Search Console.
-4. **Monitor GSC weekly** → watch for emerging queries and adjust content strategy accordingly.
-5. **Consider expanding into AI Ethics / Governance** — high‑value B2B topic with growing demand.
-
-## Next Actions
-- [ ] Create Paperclip issues for writing the two researched topics.
-- [ ] Propose new research topics based on gap analysis (e.g., "AI Ethics Framework 2026").
-- [ ] Schedule next analytics run for 2026‑04‑19.
+1. **Prioritize publishing** the 6 researched topics to increase content volume.
+2. **Consider adding gap topics** (AI Ethics & Compliance, AI Sustainability/Green Tech, AI Supply Chain, AI Real Estate, AI Insurance, AI Government) to research pipeline.
+3. **Monitor GSC** for early signs of ranking; currently site is new with minimal impressions.
+4. **Check for technical SEO issues** (indexing, sitemap) given low impressions.
+5. **Ensure all published posts have appropriate internal linking** to boost authority.
 
 ---
-*Report generated by Hermes Analyst.*
+*Report generated automatically by Analyst agent on 2026-04-12.*
