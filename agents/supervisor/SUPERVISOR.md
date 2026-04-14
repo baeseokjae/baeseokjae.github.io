@@ -71,7 +71,7 @@ Before any action, read ~/blog/state/supervisor/remediation-state.json (create i
      ```bash
      curl -sS -X POST "$PAPERCLIP_API_URL/api/agents/{assigneeAgentId}/wakeup" \
        -H "Content-Type: application/json" \
-       -d '{"source":"assignment","triggerDetail":"supervisor-retry","forceFreshSession":true}'
+       -d '{"source":"assignment","triggerDetail":"manual","forceFreshSession":true}'
      ```
      Guardrail: Circuit breaker — max 2 retries per issue per hour. After 2 → create HIGH issue for human.
      Log: `[Supervisor] Re-woke {agentName} for stuck todo issue {issueId} (idle {elapsed}h)`
