@@ -1,14 +1,21 @@
 ---
-title: ".cursorrules vs CLAUDE.md vs AGENTS.md 2026: Which AI Config File Should You Use?"
-date: 2026-04-17T21:00:16+00:00
-tags: ["cursorrules vs claude.md vs agents.md", "AI coding config", "CLAUDE.md", "AGENTS.md", "cursor rules"]
-description: "Compare AI coding config formats: .cursorrules, CLAUDE.md, AGENTS.md, .cursor/rules. Which format best fits your team in 2026?"
-draft: false
 cover:
-  image: "/images/cursorrules-vs-claude-md-vs-agents-md-2026.png"
-  alt: ".cursorrules vs CLAUDE.md vs AGENTS.md 2026"
+  alt: .cursorrules vs CLAUDE.md vs AGENTS.md 2026
+  image: /images/cursorrules-vs-claude-md-vs-agents-md-2026.png
   relative: false
-schema: "schema-cursorrules-vs-claude-md-vs-agents-md-2026"
+date: 2026-04-17 21:00:16+00:00
+description: 'Compare AI coding config formats: .cursorrules, CLAUDE.md, AGENTS.md,
+  .cursor/rules. Which format best fits your team in 2026?'
+draft: false
+schema: schema-cursorrules-vs-claude-md-vs-agents-md-2026
+tags:
+- cursorrules vs claude.md vs agents.md
+- AI coding config
+- CLAUDE.md
+- AGENTS.md
+- cursor rules
+title: '.cursorrules vs CLAUDE.md vs AGENTS.md 2026: Which AI Config File Should You
+  Use?'
 ---
 
 If your AI coding agent keeps making the same mistakes — using the wrong import style, ignoring your test conventions, or not knowing which files to avoid — the fix is a config file, not a better prompt. In 2026, three formats dominate: `.cursorrules` for Cursor-only teams, `CLAUDE.md` for Claude Code users who want the most features, and `AGENTS.md` for teams using multiple AI tools. Here is how to choose.
