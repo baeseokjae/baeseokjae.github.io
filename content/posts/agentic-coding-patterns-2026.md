@@ -2,7 +2,7 @@
 title: "Agentic Coding Patterns 2026: 8 Workflows That Ship Code 10x Faster"
 date: 2026-04-18T08:43:44+00:00
 tags: ["agentic coding", "AI coding tools", "developer productivity", "Claude Code", "Cursor AI", "software engineering"]
-description: "8 proven agentic coding patterns that senior developers use in 2026 to ship production code faster with AI agents — with concrete workflows and real examples."
+description: "8 agentic coding patterns senior developers use to ship code 10x faster with AI agents: spec-first, iterative loops, quality gates, and more."
 draft: false
 cover:
   image: "/images/agentic-coding-patterns-2026.png"

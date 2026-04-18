@@ -2,7 +2,7 @@
 title: "AGENTS.md Guide 2026: How to Write AI Agent Instructions for Every Tool"
 date: 2026-04-18T06:11:17+00:00
 tags: ["AGENTS.md", "AI coding", "developer tools", "Claude Code", "Cursor", "Codex"]
-description: "Learn how to write an effective AGENTS.md file in 2026 — the open standard that cuts AI agent runtime by 28.6% and works across Codex, Cursor, Claude Code, and 20+ tools."
+description: "AGENTS.md is the open standard for AI agent instructions that cuts agent runtime 28.6% and works across Cursor, Claude Code, Windsurf, and 20+ tools."
 draft: false
 cover:
   image: "/images/agents-md-guide-2026.png"

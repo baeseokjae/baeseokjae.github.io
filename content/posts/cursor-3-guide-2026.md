@@ -2,7 +2,7 @@
 title: "Cursor 3 Guide 2026: Agents Window, Parallel Agents, and Design Mode"
 date: 2026-04-18T08:40:54+00:00
 tags: ["cursor", "ai-ide", "cursor-3", "parallel-agents", "ai-coding"]
-description: "Complete Cursor 3 guide covering the new Agents Window, parallel agents, Design Mode, Composer 2 model, and cloud agents — everything you need to ship faster in 2026."
+description: "Cursor 3 guide: Agents Window, parallel agents, Design Mode, Composer 2 model, and cloud agents for shipping code faster in 2026."
 draft: false
 cover:
   image: "/images/cursor-3-guide-2026.png"
