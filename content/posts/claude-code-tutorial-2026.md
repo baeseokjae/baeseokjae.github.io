@@ -7,6 +7,7 @@ date: 2026-04-17 11:48:45+00:00
 description: 'Claude Code 2026 tutorial: installation, setup, memory, skills, hooks,
   MCP servers, and agentic workflows for autonomous AI coding.'
 draft: false
+schema: "schema-claude-code-tutorial-2026"
 schema: schema-claude-code-tutorial-2026
 tags:
 - claude-code

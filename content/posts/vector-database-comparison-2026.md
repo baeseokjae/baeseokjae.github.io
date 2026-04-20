@@ -7,6 +7,7 @@ date: 2026-04-15 05:23:58+00:00
 description: Pinecone, Weaviate, Chroma, and pgvector compared on performance, pricing,
   and use cases for production RAG systems in 2026.
 draft: false
+schema: "schema-vector-database-comparison-2026"
 schema: schema-vector-database-comparison-2026
 tags:
 - vector-database
