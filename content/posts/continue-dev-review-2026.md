@@ -2,7 +2,7 @@
 title: "Continue.dev Review 2026: Open-Source GitHub Copilot Alternative"
 date: 2026-04-19T16:41:02+00:00
 tags: ["continue-dev", "ai-coding-tools", "open-source", "github-copilot-alternative", "developer-tools"]
-description: "Comprehensive Continue.dev review 2026 — the pivot to Continuous AI agents, CLI-first architecture, local LLM support, and how it compares to Copilot and Cursor."
+description: "Comprehensive Continue.dev review 2026 — CLI-first Continuous AI agents, local LLM support, and how it compares to Copilot and Cursor."
 draft: false
 cover:
   image: "/images/continue-dev-review-2026.png"
