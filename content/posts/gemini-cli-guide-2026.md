@@ -8,7 +8,6 @@ description: 'Complete Gemini CLI guide 2026: install, authenticate, and use Goo
   Gemini in your terminal with 1M token context and a generous free tier.'
 draft: false
 schema: "schema-gemini-cli-guide-2026"
-schema: schema-gemini-cli-guide-2026
 tags:
 - gemini-cli
 - ai-coding-tools

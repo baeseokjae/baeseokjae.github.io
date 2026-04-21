@@ -8,7 +8,6 @@ description: Real benchmark data comparing GPT-4o, Claude 3.5 Sonnet, and Gemini
   Pro on coding, speed, cost, and developer experience in 2026.
 draft: false
 schema: "schema-gpt4o-vs-claude-vs-gemini-developer-2026"
-schema: schema-gpt4o-vs-claude-vs-gemini-developer-2026
 tags:
 - LLM
 - GPT-4o
