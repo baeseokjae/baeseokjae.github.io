@@ -1,0 +1,476 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Llm Serving on RockB</title><link>https://baeseokjae.github.io/tags/llm-serving/</link><description>Recent content in Llm Serving on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 21 Apr 2026 12:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/llm-serving/index.xml" rel="self" type="application/rss+xml"/><item><title>vLLM vs Ollama for Production LLM Serving in 2026: The Honest Comparison</title><link>https://baeseokjae.github.io/posts/vllm-vs-ollama-production-2026/</link><pubDate>Tue, 21 Apr 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/vllm-vs-ollama-production-2026/</guid><description>Direct comparison of vLLM and Ollama for production LLM serving — throughput benchmarks, cost analysis, migration paths, and when to use each tool.</description><content:encoded><![CDATA[<p>Choosing between vLLM and Ollama for serving LLMs in production is not a matter of which tool is &ldquo;better&rdquo; — it is a matter of which tool solves the problem you actually have. vLLM serves 18.4 million Docker pulls and 2.79 million weekly PyPI downloads from teams running high-throughput inference APIs on GPU clusters. Ollama serves 126 million Docker pulls and 169,569 GitHub stars from developers running models locally on laptops and workstations. They overlap in capability but diverge sharply in architecture, performance characteristics, and production fitness. This guide compares them directly — with benchmarks, cost data, and a decision framework — so you can pick the right tool for your actual workload, not the one with more GitHub stars.</p>
+<hr>
+<h2 id="vllm-overview-built-for-throughput-at-scale">vLLM Overview: Built for Throughput at Scale</h2>
+<p>vLLM is a high-throughput inference engine designed for serving LLMs to many concurrent users. Its core innovation is PagedAttention, a memory management technique that reduces GPU memory waste from 60-80% (under naive batching) to under 4%. This is not a marginal improvement — it is the difference between serving a 70B model on two A100s versus four. PagedAttention manages the KV cache the way an operating system manages virtual memory: pages are allocated on demand, freed when no longer needed, and shared across sequences when prefixes overlap.</p>
+<p>vLLM ships with an OpenAI-compatible API server, meaning any code that calls <code>openai.ChatCompletion.create</code> works against vLLM with a single base URL change. It supports continuous batching (requests join mid-batch rather than waiting for the current batch to finish), prefix caching (repeated system prompts are computed once and reused), and tensor parallelism across up to 8+ GPUs for models like Llama 3 70B and DeepSeek V3. Quantization support includes AWQ, GPTQ, and SqueezeLLM, reducing VRAM requirements by 2-4x with minimal quality loss. As of April 2026, vLLM has 77,501 GitHub stars and 2.79 million weekly PyPI downloads. It is the default choice for teams running LLM inference as a service.</p>
+<h3 id="pagedattention-the-key-innovation">PagedAttention: The Key Innovation</h3>
+<p>Standard LLM serving allocates a fixed-size KV cache for each request. Because sequence lengths vary unpredictably, most of this allocation goes unused — 60-80% of reserved memory is wasted. PagedAttention partitions the KV cache into fixed-size blocks (pages), allocates them dynamically, and frees them immediately when a sequence finishes. The result: near-zero memory waste and the ability to pack more concurrent sequences into the same GPU. The original PagedAttention paper (arXiv:2309.06180) demonstrates that vLLM achieves up to 24x higher throughput than naive serving implementations for workloads with variable sequence lengths.</p>
+<h3 id="production-features">Production Features</h3>
+<p>vLLM&rsquo;s production features go beyond inference speed. The server exposes Prometheus metrics for request latency, throughput, queue depth, and GPU utilization. Health check endpoints support Kubernetes liveness and readiness probes. Graceful shutdown drains in-flight requests before terminating. Prefix caching reduces latency by up to 40% for repeated system prompts — a meaningful gain for chat applications where every request begins with the same 500-token system message.</p>
+<hr>
+<h2 id="ollama-overview-built-for-developer-experience">Ollama Overview: Built for Developer Experience</h2>
+<p>Ollama is a local LLM runtime optimized for ease of use. One command — <code>ollama run llama3</code> — downloads a model, starts inference, and opens an interactive prompt. No GPU drivers to configure, no tensor parallelism to debug, no serving configuration to write. Ollama manages models like a package manager: <code>ollama pull</code>, <code>ollama list</code>, <code>ollama rm</code>. It runs on macOS, Linux, and Windows with native GPU support (Metal on Apple Silicon, CUDA on NVIDIA, ROCm on AMD).</p>
+<p>Ollama uses the GGUF model format, which pre-quantizes models into 4-bit, 5-bit, and 8-bit variants that fit into consumer GPU VRAM or even CPU RAM. This means a developer with a MacBook Pro can run Llama 3 8B locally at 30+ tokens per second without any server infrastructure. The model library includes 100+ models pre-configured for one-command download. Ollama also exposes a REST API (<code>GET /api/generate</code>, <code>POST /api/chat</code>) that applications can call locally — making it a viable development-time substitute for cloud API endpoints.</p>
+<p>With 169,569 GitHub stars and 126.2 million Docker pulls, Ollama is the most popular local LLM tool by a wide margin. But popularity among developers does not equal production fitness.</p>
+<h3 id="where-ollama-excels">Where Ollama Excels</h3>
+<p>Ollama excels at three things: getting started fast, switching between models quickly, and running models on hardware that vLLM cannot touch. A new developer installs Ollama and runs their first model in under two minutes. Switching from Llama 3 to Mistral to Phi-3 is one command each. Running a 7B model on a laptop with 16GB RAM works reasonably well. These use cases — local development, prototyping, personal tools — are where Ollama is the right choice.</p>
+<hr>
+<h2 id="head-to-head-comparison-features-and-architecture">Head-to-Head Comparison: Features and Architecture</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Feature</th>
+          <th>vLLM</th>
+          <th>Ollama</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Primary use case</td>
+          <td>Production API serving</td>
+          <td>Local development/personal use</td>
+      </tr>
+      <tr>
+          <td>Model format</td>
+          <td>safetensors (full-precision, quantized)</td>
+          <td>GGUF (pre-quantized)</td>
+      </tr>
+      <tr>
+          <td>Batching strategy</td>
+          <td>Continuous batching</td>
+          <td>Sequential (no batching)</td>
+      </tr>
+      <tr>
+          <td>Memory management</td>
+          <td>PagedAttention (dynamic KV cache)</td>
+          <td>Static pre-allocation</td>
+      </tr>
+      <tr>
+          <td>Multi-GPU support</td>
+          <td>Tensor parallelism, pipeline parallelism</td>
+          <td>Limited (data parallel only)</td>
+      </tr>
+      <tr>
+          <td>OpenAI API compatible</td>
+          <td>Yes (full)</td>
+          <td>Partial (basic chat/completions)</td>
+      </tr>
+      <tr>
+          <td>Quantization</td>
+          <td>AWQ, GPTQ, SqueezeLLM, FP8</td>
+          <td>GGUF variants (Q4_K_M, Q5_K_M, Q8_0)</td>
+      </tr>
+      <tr>
+          <td>Streaming</td>
+          <td>Yes</td>
+          <td>Yes</td>
+      </tr>
+      <tr>
+          <td>Prefix caching</td>
+          <td>Yes</td>
+          <td>No</td>
+      </tr>
+      <tr>
+          <td>Production monitoring</td>
+          <td>Prometheus metrics, health checks</td>
+          <td>Basic logging only</td>
+      </tr>
+      <tr>
+          <td>Platform</td>
+          <td>Linux (NVIDIA/AMD GPU)</td>
+          <td>macOS, Linux, Windows</td>
+      </tr>
+      <tr>
+          <td>Install complexity</td>
+          <td>pip install + GPU config</td>
+          <td>One binary install</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="memory-management-pagedattention-vs-static-allocation">Memory Management: PagedAttention vs Static Allocation</h3>
+<p>This is the most important architectural difference. vLLM&rsquo;s PagedAttention dynamically allocates and frees KV cache pages as requests arrive and complete. Ollama pre-allocates a fixed KV cache per sequence. Under concurrent load, Ollama&rsquo;s static allocation means either reserving too much memory (wasting capacity) or reserving too little (causing OOM errors). vLLM&rsquo;s dynamic approach handles variable-length sequences efficiently and packs more concurrent requests into the same GPU memory.</p>
+<h3 id="model-format-safetensors-vs-gguf">Model Format: safetensors vs GGUF</h3>
+<p>vLLM loads models in safetensors format — the standard HuggingFace format that preserves full precision and supports server-side quantization. Ollama uses GGUF, a format designed for efficient local inference with pre-applied quantization. The practical difference: vLLM can load any HuggingFace model directly (including custom fine-tunes) and apply quantization at serve time. Ollama requires a GGUF-converted model, which may not exist for newer or niche models. Conversion is possible (<code>ollama create</code> from a Modelfile with a safetensors path) but adds a step.</p>
+<hr>
+<h2 id="performance-benchmarks-throughput-latency-memory">Performance Benchmarks: Throughput, Latency, Memory</h2>
+<p>Benchmarks from Anyscale&rsquo;s 2025 comparison and real-world deployment data paint a clear picture.</p>
+<h3 id="single-request-latency">Single Request Latency</h3>
+<p>For a single request with no concurrent load, vLLM and Ollama produce similar latency — both are limited by the GPU&rsquo;s computation speed for a single sequence. On an A100 running Llama 3 8B, both achieve ~35-40 tokens/second for output generation. There is no meaningful difference here.</p>
+<h3 id="concurrent-request-throughput">Concurrent Request Throughput</h3>
+<p>This is where the gap widens dramatically. Under concurrent load (10-100 simultaneous requests), vLLM&rsquo;s continuous batching and PagedAttention deliver 2-4x higher throughput than Ollama. The Anyscale comparison shows vLLM handling 50 concurrent requests with latency staying below 2 seconds per token, while Ollama&rsquo;s latency degrades past 5 seconds per token at the same concurrency. The reason is straightforward: vLLM batches new requests into the GPU mid-computation, while Ollama processes them sequentially or with limited parallelism.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Metric</th>
+          <th>vLLM</th>
+          <th>Ollama</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Single request latency</td>
+          <td>~35 tok/s</td>
+          <td>~35 tok/s</td>
+      </tr>
+      <tr>
+          <td>10 concurrent requests</td>
+          <td>~30 tok/s</td>
+          <td>~15 tok/s</td>
+      </tr>
+      <tr>
+          <td>50 concurrent requests</td>
+          <td>~18 tok/s</td>
+          <td>~4 tok/s</td>
+      </tr>
+      <tr>
+          <td>100 concurrent requests</td>
+          <td>~12 tok/s</td>
+          <td>OOM / unusable</td>
+      </tr>
+      <tr>
+          <td>GPU memory utilization</td>
+          <td>~96%</td>
+          <td>~60-70%</td>
+      </tr>
+      <tr>
+          <td>KV cache waste</td>
+          <td>&lt;4%</td>
+          <td>40-60%</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="gpu-memory-utilization">GPU Memory Utilization</h3>
+<p>vLLM&rsquo;s PagedAttention achieves 96%+ GPU memory utilization by dynamically managing the KV cache. Ollama&rsquo;s static allocation typically achieves 60-70% utilization because it reserves fixed memory per context window regardless of actual usage. On an 80GB A100, this means vLLM can serve roughly 50% more concurrent requests from the same hardware.</p>
+<hr>
+<h2 id="vllm-in-production-real-world-deployment-patterns">vLLM in Production: Real-World Deployment Patterns</h2>
+<p>Photoroom published a detailed case study of running vLLM in production, serving millions of daily requests for AI-powered image editing. Their architecture demonstrates the canonical production pattern for vLLM.</p>
+<h3 id="the-photoroom-pattern">The Photoroom Pattern</h3>
+<p>Photoroom runs vLLM on Kubernetes with GPU node pools (A100 and L40S instances). Autoscaling is configured to add GPU nodes when request queue depth exceeds a threshold and remove nodes when utilization drops below 30%. Prefix caching reduced their latency by 40% because every request shares the same system prompt. They use Prometheus for metrics collection and Grafana for dashboards, monitoring request latency, throughput, GPU utilization, and queue depth. To reduce costs, they run spot GPU instances with a fallback to on-demand instances when spot capacity is unavailable. Graceful shutdown ensures in-flight requests complete before the vLLM server terminates during scale-down.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># Example Kubernetes deployment for vLLM</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">vllm-server</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">2</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">template</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">containers</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">vllm</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">image</span>: <span style="color:#ae81ff">vllm/vllm-openai:latest</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">command</span>: [<span style="color:#e6db74">&#34;python3&#34;</span>, <span style="color:#e6db74">&#34;-m&#34;</span>, <span style="color:#e6db74">&#34;vllm.entrypoints.openai.api_server&#34;</span>]
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">args</span>:
+</span></span><span style="display:flex;"><span>          - <span style="color:#e6db74">&#34;--model&#34;</span>
+</span></span><span style="display:flex;"><span>          - <span style="color:#e6db74">&#34;meta-llama/Llama-3-8B-Instruct&#34;</span>
+</span></span><span style="display:flex;"><span>          - <span style="color:#e6db74">&#34;--tensor-parallel-size&#34;</span>
+</span></span><span style="display:flex;"><span>          - <span style="color:#e6db74">&#34;2&#34;</span>
+</span></span><span style="display:flex;"><span>          - <span style="color:#e6db74">&#34;--enable-prefix-caching&#34;</span>
+</span></span><span style="display:flex;"><span>          - <span style="color:#e6db74">&#34;--max-num-seqs&#34;</span>
+</span></span><span style="display:flex;"><span>          - <span style="color:#e6db74">&#34;256&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">resources</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">limits</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">nvidia.com/gpu</span>: <span style="color:#ae81ff">2</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">ports</span>:
+</span></span><span style="display:flex;"><span>        - <span style="color:#f92672">containerPort</span>: <span style="color:#ae81ff">8000</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">livenessProbe</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">httpGet</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/health</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">port</span>: <span style="color:#ae81ff">8000</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">readinessProbe</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">httpGet</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">path</span>: <span style="color:#ae81ff">/health</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">port</span>: <span style="color:#ae81ff">8000</span>
+</span></span></code></pre></div><h3 id="monitoring-stack">Monitoring Stack</h3>
+<p>A production vLLM deployment needs monitoring. The key metrics to track are:</p>
+<ul>
+<li><strong>Request latency (p50, p95, p99)</strong> — signals when the system is approaching capacity</li>
+<li><strong>Throughput (tokens/s)</strong> — measures how many tokens the GPU generates per second</li>
+<li><strong>Queue depth</strong> — indicates whether the system can handle incoming load</li>
+<li><strong>GPU memory utilization</strong> — should be 90%+ if PagedAttention is working correctly</li>
+<li><strong>KV cache hit rate</strong> — prefix caching effectiveness (target: 50%+ for chat apps)</li>
+</ul>
+<hr>
+<h2 id="ollama-in-production-when-it-works-and-when-it-doesnt">Ollama in Production: When It Works and When It Doesn&rsquo;t</h2>
+<p>Ollama has a REST API server mode (<code>OLLAMA_HOST=0.0.0.0:11434 ollama serve</code>) that applications can call just like a cloud API. This makes it tempting to use Ollama as a production server — and for some teams, it works. The question is where the limit is.</p>
+<h3 id="when-ollama-works-in-production">When Ollama Works in Production</h3>
+<p>Ollama is sufficient for:</p>
+<ul>
+<li><strong>Internal tools</strong> with fewer than 10 concurrent users</li>
+<li><strong>Prototyping and staging</strong> where correctness matters more than performance</li>
+<li><strong>Small-team deployments</strong> where one GPU serves one application</li>
+<li><strong>Low-throughput endpoints</strong> (under 5 requests per minute)</li>
+</ul>
+<p>In these cases, Ollama&rsquo;s simplicity is an advantage. No Kubernetes, no tensor parallelism configuration, no monitoring stack — just one binary running on a GPU machine.</p>
+<h3 id="when-ollama-doesnt-work">When Ollama Doesn&rsquo;t Work</h3>
+<p>Ollama breaks down when:</p>
+<ul>
+<li><strong>Concurrency exceeds ~10 requests</strong> — latency degrades sharply without continuous batching</li>
+<li><strong>You need multi-GPU serving</strong> — Ollama lacks tensor parallelism for large models</li>
+<li><strong>You need production observability</strong> — no Prometheus metrics, no health checks beyond basic <code>/api/version</code></li>
+<li><strong>You need prefix caching</strong> — repeating the same system prompt across requests wastes computation</li>
+<li><strong>You need to serve models larger than 70B</strong> — without tensor parallelism, you need a single GPU with enough VRAM</li>
+</ul>
+<h3 id="security-considerations">Security Considerations</h3>
+<p>Ollama&rsquo;s API server has no built-in authentication, rate limiting, or TLS. Exposing <code>0.0.0.0:11434</code> without a reverse proxy means anyone with network access can call your model. For production, you need to put Ollama behind an API gateway (nginx, Traefik, Kong) that handles TLS termination, authentication, and rate limiting. vLLM also lacks built-in auth, but its Kubernetes-native deployment model makes it easier to embed in an existing service mesh.</p>
+<hr>
+<h2 id="from-ollama-to-vllm-the-migration-path">From Ollama to vLLM: The Migration Path</h2>
+<p>Many teams start with Ollama and need to scale. Here is the migration path.</p>
+<h3 id="signs-youve-outgrown-ollama">Signs You&rsquo;ve Outgrown Ollama</h3>
+<ul>
+<li>Request latency spikes above 5 seconds during peak usage</li>
+<li>You need more than one GPU to serve your model</li>
+<li>Your monitoring shows GPU utilization below 70% (memory waste from static allocation)</li>
+<li>You are writing workarounds for Ollama&rsquo;s lack of continuous batching</li>
+<li>Your infrastructure team asks for health checks, metrics, or graceful shutdown</li>
+</ul>
+<h3 id="model-compatibility-and-format-conversion">Model Compatibility and Format Conversion</h3>
+<p>Ollama uses GGUF. vLLM uses safetensors. If you are running a model that exists on HuggingFace (most popular models do), you can point vLLM directly at the HuggingFace repo — no conversion needed. If you have a custom GGUF model, convert it back to safetensors using llama.cpp&rsquo;s conversion tools, or find the original safetensors checkpoint on HuggingFace.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># vLLM: serve a model directly from HuggingFace</span>
+</span></span><span style="display:flex;"><span>python3 -m vllm.entrypoints.openai.api_server <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --model meta-llama/Llama-3-8B-Instruct <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --enable-prefix-caching <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --max-model-len <span style="color:#ae81ff">8192</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Ollama: serve the same model</span>
+</span></span><span style="display:flex;"><span>ollama run llama3
+</span></span></code></pre></div><h3 id="api-endpoint-migration">API Endpoint Migration</h3>
+<p>Both vLLM and Ollama expose OpenAI-compatible chat endpoints, but vLLM&rsquo;s compatibility is more complete. The migration path:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Ollama Endpoint</th>
+          <th>vLLM Equivalent</th>
+          <th>Notes</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>POST /api/chat</code></td>
+          <td><code>POST /v1/chat/completions</code></td>
+          <td>Same payload format</td>
+      </tr>
+      <tr>
+          <td><code>POST /api/generate</code></td>
+          <td><code>POST /v1/completions</code></td>
+          <td>Same payload format</td>
+      </tr>
+      <tr>
+          <td><code>GET /api/tags</code></td>
+          <td><code>GET /v1/models</code></td>
+          <td>Lists available models</td>
+      </tr>
+      <tr>
+          <td>No equivalent</td>
+          <td><code>GET /health</code></td>
+          <td>Health check (vLLM only)</td>
+      </tr>
+      <tr>
+          <td>No equivalent</td>
+          <td><code>GET /metrics</code></td>
+          <td>Prometheus metrics (vLLM only)</td>
+      </tr>
+  </tbody>
+</table>
+<p>If your application uses the OpenAI Python SDK, migration is a one-line change:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># Ollama</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> openai
+</span></span><span style="display:flex;"><span>client <span style="color:#f92672">=</span> openai<span style="color:#f92672">.</span>OpenAI(base_url<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;http://localhost:11434/v1&#34;</span>, api_key<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;ollama&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># vLLM — same SDK, different base URL</span>
+</span></span><span style="display:flex;"><span>client <span style="color:#f92672">=</span> openai<span style="color:#f92672">.</span>OpenAI(base_url<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;http://vllm-server:8000/v1&#34;</span>, api_key<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;none&#34;</span>)
+</span></span></code></pre></div><hr>
+<h2 id="cost-of-ownership-annual-tco-comparison">Cost of Ownership: Annual TCO Comparison</h2>
+<p>The true cost of LLM serving includes GPU rental, engineering time, and operational overhead. Here is a rough annual TCO comparison.</p>
+<h3 id="gpu-rental-costs-by-tier">GPU Rental Costs by Tier</h3>
+<table>
+  <thead>
+      <tr>
+          <th>GPU</th>
+          <th>Hourly Rate (spot)</th>
+          <th>Monthly Cost (24/7)</th>
+          <th>vLLM Concurrent Capacity</th>
+          <th>Ollama Concurrent Capacity</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>1x A100 (80GB)</td>
+          <td>$1.50</td>
+          <td>$1,080</td>
+          <td>~50 req</td>
+          <td>~10 req</td>
+      </tr>
+      <tr>
+          <td>2x A100 (80GB)</td>
+          <td>$3.00</td>
+          <td>$2,160</td>
+          <td>~100 req (TP)</td>
+          <td>~10 req (no TP)</td>
+      </tr>
+      <tr>
+          <td>1x L40S (48GB)</td>
+          <td>$0.80</td>
+          <td>$576</td>
+          <td>~20 req</td>
+          <td>~5 req</td>
+      </tr>
+      <tr>
+          <td>4x H100 (80GB)</td>
+          <td>$12.00</td>
+          <td>$8,640</td>
+          <td>~300+ req (TP)</td>
+          <td>~10 req (no TP)</td>
+      </tr>
+  </tbody>
+</table>
+<p>The key insight: vLLM&rsquo;s multi-GPU support (tensor parallelism) means adding more GPUs linearly increases capacity. Ollama&rsquo;s lack of TP means adding more GPUs does not increase per-model capacity — you would need to run multiple Ollama instances behind a load balancer, which adds complexity and reduces efficiency.</p>
+<h3 id="engineering-and-operational-costs">Engineering and Operational Costs</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Cost Category</th>
+          <th>vLLM</th>
+          <th>Ollama</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Initial setup</td>
+          <td>2-4 hours</td>
+          <td>15 minutes</td>
+      </tr>
+      <tr>
+          <td>Production hardening</td>
+          <td>1-2 weeks</td>
+          <td>3-5 days</td>
+      </tr>
+      <tr>
+          <td>Monitoring setup</td>
+          <td>1-2 days</td>
+          <td>N/A (basic logging only)</td>
+      </tr>
+      <tr>
+          <td>Monthly maintenance</td>
+          <td>2-4 hours</td>
+          <td>1-2 hours</td>
+      </tr>
+      <tr>
+          <td>Scaling configuration</td>
+          <td>K8s HPA (standard)</td>
+          <td>Manual / custom scripting</td>
+      </tr>
+  </tbody>
+</table>
+<p>vLLM requires more upfront investment but scales more predictably. Ollama requires less setup but does not scale without custom engineering.</p>
+<h3 id="recommended-configurations-by-team-size">Recommended Configurations by Team Size</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Team Size</th>
+          <th>Monthly Budget</th>
+          <th>Recommended Stack</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Solo dev</td>
+          <td>$0-100</td>
+          <td>Ollama on local GPU/laptop</td>
+      </tr>
+      <tr>
+          <td>2-5 devs</td>
+          <td>$200-500</td>
+          <td>Ollama on 1x A100 with API gateway</td>
+      </tr>
+      <tr>
+          <td>5-20 devs</td>
+          <td>$2,000-5,000</td>
+          <td>vLLM on 2x A100 with K8s</td>
+      </tr>
+      <tr>
+          <td>20+ devs / external users</td>
+          <td>$5,000+</td>
+          <td>vLLM on 4-8x H100 with K8s + autoscaling</td>
+      </tr>
+  </tbody>
+</table>
+<hr>
+<h2 id="decision-framework-which-tool-when">Decision Framework: Which Tool When</h2>
+<h3 id="decision-matrix">Decision Matrix</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Use Case</th>
+          <th>vLLM</th>
+          <th>Ollama</th>
+          <th>Why</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Local development</td>
+          <td>○</td>
+          <td>●</td>
+          <td>Ollama&rsquo;s one-command setup wins</td>
+      </tr>
+      <tr>
+          <td>Prototyping / POC</td>
+          <td>○</td>
+          <td>●</td>
+          <td>Speed of iteration matters more than throughput</td>
+      </tr>
+      <tr>
+          <td>Internal tool (&lt;10 users)</td>
+          <td>○</td>
+          <td>●</td>
+          <td>Ollama&rsquo;s simplicity is sufficient</td>
+      </tr>
+      <tr>
+          <td>Staging environment</td>
+          <td>●</td>
+          <td>○</td>
+          <td>Match production setup for accurate testing</td>
+      </tr>
+      <tr>
+          <td>Production API (&gt;10 concurrent)</td>
+          <td>●</td>
+          <td>○</td>
+          <td>vLLM&rsquo;s continuous batching and TP required</td>
+      </tr>
+      <tr>
+          <td>Multi-GPU serving (70B+ models)</td>
+          <td>●</td>
+          <td>○</td>
+          <td>vLLM&rsquo;s tensor parallelism required</td>
+      </tr>
+      <tr>
+          <td>Cost-optimized batch processing</td>
+          <td>●</td>
+          <td>○</td>
+          <td>vLLM&rsquo;s throughput per dollar is higher</td>
+      </tr>
+      <tr>
+          <td>Edge / on-device inference</td>
+          <td>○</td>
+          <td>●</td>
+          <td>Ollama runs on macOS/Windows/consumer hardware</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="the-hybrid-approach">The Hybrid Approach</h3>
+<p>The most common pattern in 2026 is using both: Ollama for development and vLLM for production. Developers run models locally with Ollama during development, test against the same OpenAI-compatible API that vLLM serves in production, and deploy to vLLM for production traffic. This avoids the &ldquo;it worked on my machine&rdquo; problem — the API contract is identical, but the backing server changes between environments.</p>
+<h3 id="other-alternatives">Other Alternatives</h3>
+<p>vLLM and Ollama are not the only options. HuggingFace TGI (Text Generation Inference) provides a middle ground with good OpenAI API compatibility and production features. llama.cpp server runs on CPU-only hardware. NVIDIA Triton Inference Server supports multiple model frameworks. For most teams, vLLM and Ollama cover the two ends of the spectrum well enough that these alternatives are only worth considering for specific requirements (vendor lock-in avoidance, CPU-only deployment, multi-framework serving).</p>
+<hr>
+<h2 id="conclusion">Conclusion</h2>
+<p>vLLM and Ollama are complementary tools, not competitors. Use Ollama when you need to run a model locally on your laptop in two minutes. Use vLLM when you need to serve that same model to 100 concurrent users with low latency and high GPU utilization. The migration path between them is straightforward because both expose OpenAI-compatible APIs — start with Ollama, move to vLLM when you need to scale. The production decision is simple: if you have more than 10 concurrent users or need multi-GPU serving, vLLM is the right choice. If you are a developer running models locally for personal use or small-team tools, Ollama is the right choice. Neither choice is wrong — but choosing the wrong tool for your actual workload is.</p>
+<h3 id="key-takeaways">Key Takeaways</h3>
+<ul>
+<li>vLLM delivers 2-4x higher throughput under concurrent load thanks to continuous batching and PagedAttention</li>
+<li>Ollama provides the fastest path from zero to running a model locally</li>
+<li>Both expose OpenAI-compatible APIs, making migration straightforward</li>
+<li>Production deployments with &gt;10 concurrent users should use vLLM</li>
+<li>The hybrid approach (Ollama for dev, vLLM for prod) is the most common 2026 pattern</li>
+<li>GPU memory utilization: vLLM ~96% vs Ollama ~60-70% — the same hardware serves 50% more requests with vLLM</li>
+</ul>
+]]></content:encoded></item></channel></rss>
