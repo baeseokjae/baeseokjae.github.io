@@ -9,7 +9,7 @@ tags:
   - mcp
   - agents
   - developer-tools
-description: "A practical guide to Mastra AI, the TypeScript-first framework for building production AI agents. Covers setup, agents, tools, MCP, workflows, RAG, evals, deployment, and a head-to-head comparison with LangGraph and CrewAI."
+description: "A practical guide to Mastra AI, the TypeScript-first framework for building production AI agents. Covers setup, agents, tools, MCP, workflows, RAG, evals"
 draft: false
 cover:
   image: /images/mastra-ai-typescript-framework-2026.png
