@@ -1,4 +1,542 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Developer-Tools on RockB</title><link>https://baeseokjae.github.io/tags/developer-tools/</link><description>Recent content in Developer-Tools on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 23 Apr 2026 01:26:29 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/developer-tools/index.xml" rel="self" type="application/rss+xml"/><item><title>AI Code Review Tools Comparison 2026: Which Tool Catches the Most Bugs in Your PRs?</title><link>https://baeseokjae.github.io/posts/ai-code-review-tools-comparison-2026/</link><pubDate>Thu, 23 Apr 2026 01:26:29 +0000</pubDate><guid>https://baeseokjae.github.io/posts/ai-code-review-tools-comparison-2026/</guid><description>Greptile catches 82% of bugs vs CodeRabbit&amp;#39;s 44% — but noise ratio and pricing change the real-world picture. Here&amp;#39;s the honest 2026 comparison.</description><content:encoded><![CDATA[<p>The best AI code review tool in 2026 depends on what your team optimizes for: raw bug catch rate favors Greptile (82%), price-to-value favors CodeRabbit ($24/dev/month), and test coverage favors Qodo. Independent benchmarks show a 2x spread between the top and bottom performers — and the tool with the highest recall isn&rsquo;t always the one your team should ship with.</p>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Developer-Tools on RockB</title><link>https://baeseokjae.github.io/tags/developer-tools/</link><description>Recent content in Developer-Tools on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Fri, 24 Apr 2026 07:12:07 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/developer-tools/index.xml" rel="self" type="application/rss+xml"/><item><title>Claude Code Subagents Guide 2026: Parallel Agents for Faster Development</title><link>https://baeseokjae.github.io/posts/claude-code-subagents-guide-2026/</link><pubDate>Fri, 24 Apr 2026 07:12:07 +0000</pubDate><guid>https://baeseokjae.github.io/posts/claude-code-subagents-guide-2026/</guid><description>Complete guide to Claude Code subagents: create custom agents, run parallel workflows, optimize costs with model routing, and ship faster.</description><content:encoded><![CDATA[<p>Claude Code subagents are isolated AI workers that your main Claude session can spin up, delegate tasks to, and collect results from — letting you run multiple jobs in parallel instead of waiting for each one to finish sequentially. If you&rsquo;ve ever watched Claude slowly work through a 10-file refactor one file at a time, subagents are the fix.</p>
+<h2 id="what-are-claude-code-subagents-architecture-and-how-they-work">What Are Claude Code Subagents? (Architecture and How They Work)</h2>
+<p>Claude Code subagents are purpose-built AI workers that run inside their own isolated context windows, each with a dedicated system prompt, a specific toolset, and optionally a different model than the parent session. When the main agent calls the <code>Agent</code> tool, it spawns a subagent, passes a task description, and the subagent executes fully independently — reading files, running searches, writing code — then returns only its final result. The parent&rsquo;s context window never sees the subagent&rsquo;s intermediate steps, tool outputs, or reasoning chains. This context isolation is the key architectural advantage: a subagent researching API documentation might consume 200K tokens of intermediate output, but the parent receives a clean 500-word summary.</p>
+<p>Claude Code supports 16+ parallel agents running simultaneously for complex workflows. Each subagent is a first-class Claude instance with the same tool access as the parent — Bash, Read, Write, Grep, Glob — or a restricted subset you define. The separation isn&rsquo;t just logical: with the <code>isolation: &quot;worktree&quot;</code> flag, each subagent gets its own git worktree, meaning they can write to different files without merge conflicts. Opus 4.7 became the default model for Claude Code starting April 23, 2026, but individual subagents can override this to use cheaper models for routine tasks — a design decision that directly drives cost and speed. The agent lifecycle is: parent delegates → subagent spawns in fresh context → subagent works autonomously → subagent returns result → parent continues. There is no back-and-forth; once spawned, a subagent runs to completion.</p>
+<h3 id="how-subagent-context-isolation-works">How Subagent Context Isolation Works</h3>
+<p>Subagent context isolation means the subagent&rsquo;s entire conversation thread — tool calls, search results, file reads — exists in a separate memory space from the parent. When the subagent finishes, only the text in its final message comes back to the parent. A subagent exploring 50,000 lines of legacy code returns &ldquo;Found 3 relevant functions in auth/middleware.go&rdquo; — not the full exploration trace. This keeps the parent&rsquo;s context window clean and focused on high-level coordination rather than drowning in implementation noise.</p>
+<h2 id="subagents-vs-agent-teams-choosing-the-right-pattern">Subagents vs Agent Teams: Choosing the Right Pattern</h2>
+<p>Subagents and Agent Teams solve different coordination problems. Subagents are the right choice when workers don&rsquo;t need to communicate with each other — each one gets a task, runs it, and reports back to the parent. Agent Teams are for situations where workers need to share state, pass intermediate results between themselves, or react to each other&rsquo;s outputs during execution. If you&rsquo;re running 9 parallel code reviews (each reviewer looks at a different quality dimension), subagents are ideal: they&rsquo;re independent, they don&rsquo;t need to know what the security reviewer found before the performance reviewer starts. If you&rsquo;re building a multi-step pipeline where Step B needs Step A&rsquo;s output before it can begin, that&rsquo;s a sequential workflow, and orchestrating it through the parent is cleaner than subagents.</p>
+<p>The practical decision framework comes down to three questions: (1) Can all tasks start at the same time with the same inputs? (2) Does each task produce a standalone result? (3) Are the tasks touching different files or resources? If yes to all three, use parallel subagents. If any task depends on another task&rsquo;s output, run them sequentially through the parent or consider an Agent Team with shared memory. Cost matters here too: parallel subagents all bill simultaneously, so spawning 10 agents at once costs the same in wall-clock time as one but burns 10× the tokens in the same minute.</p>
+<h3 id="when-sequential-beats-parallel">When Sequential Beats Parallel</h3>
+<p>Sequential subagent execution makes sense when the output of one step is the input for the next — a research subagent finds the relevant files, then a coding subagent rewrites them based on those findings. Running these in parallel would mean the coding agent starts without knowing which files to touch. The parent orchestrates sequentially: spawn Researcher → wait for result → spawn Coder with Researcher&rsquo;s output → wait for result → commit.</p>
+<h2 id="how-to-create-custom-subagents-agents-directory-and-frontmatter">How to Create Custom Subagents (agents/ directory and frontmatter)</h2>
+<p>Custom subagents live as Markdown files in your project&rsquo;s <code>.claude/agents/</code> directory. Each file defines a specialized worker: its name (used to invoke it), a description (used by the parent to decide when to delegate to it), optional tool restrictions, and an optional model override. The frontmatter fields are <code>name</code>, <code>description</code>, <code>tools</code>, and <code>model</code>. The body of the file is the system prompt — the instructions the subagent follows when it runs.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-markdown" data-lang="markdown"><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span>name: security-reviewer
+</span></span><span style="display:flex;"><span>description: Reviews code changes for security vulnerabilities — SQL injection, XSS, auth bypasses, secrets in code. Use when reviewing PRs or auditing new endpoints.
+</span></span><span style="display:flex;"><span>tools: Read, Grep, Glob
+</span></span><span style="display:flex;"><span>model: claude-sonnet-4-6
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>You are a security-focused code reviewer. When given a file or diff, check for:
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> SQL injection via string concatenation in queries
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> XSS via unescaped user input in templates
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> Hardcoded secrets, API keys, or credentials
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> Auth bypass patterns (missing middleware, direct object references)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> Insecure deserialization
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Report each finding with: file path, line number, severity (Critical/High/Medium), and a one-sentence fix recommendation.
+</span></span></code></pre></div><p>Save this as <code>.claude/agents/security-reviewer.md</code>. Now the parent session&rsquo;s <code>Agent</code> tool can invoke it by description match — or you can explicitly reference it. The <code>tools</code> field restricts the subagent to only Read, Grep, and Glob: it can look at code but not execute shell commands or write files. This is a security boundary for untrusted or narrow tasks. The <code>model</code> field routes this subagent to <code>claude-sonnet-4-6</code> instead of the default Opus — appropriate for a structured review task that doesn&rsquo;t require deep reasoning.</p>
+<h3 id="global-vs-project-subagents">Global vs Project Subagents</h3>
+<p>Subagents in <code>~/.claude/agents/</code> are global and available in every project. Subagents in <code>.claude/agents/</code> (project-level) are only available in that project. Global agents are ideal for utility workers you reuse everywhere — a <code>grep-expert</code> that knows advanced search patterns, a <code>commit-message-writer</code> that follows your conventions. Project agents encode domain-specific knowledge: a <code>schema-validator</code> that knows your company&rsquo;s API schema format, or a <code>migration-reviewer</code> that knows your database conventions.</p>
+<h2 id="running-parallel-subagents-for-10x-faster-development">Running Parallel Subagents for 10x Faster Development</h2>
+<p>Parallel subagent execution is the most direct path to faster development in Claude Code. Instead of reading 10 files sequentially — each file read blocking the next — you delegate all 10 reads simultaneously and wait for the first to finish while the others run in the background. The explicit pattern is to tell Claude: &ldquo;Use parallel subagents for each of these tasks&rdquo; and list independent work items. Claude&rsquo;s internal <code>Agent</code> tool accepts a <code>run_in_background</code> flag that makes this automatic for independent work.</p>
+<p>A real-world benchmark: exploring 5 large files for API usage patterns takes roughly 45 seconds sequentially (9 seconds per file). Running 5 subagents in parallel returns all results in ~12 seconds — the time of the slowest single lookup. The split-and-merge pattern scales this further: 50 functions split into 10 batches of 5, all 10 batches run simultaneously, results merged by the parent. Review time for a 50-function audit drops from 7+ minutes to under 90 seconds. The <code>/resume</code> command on large sessions is up to 67% faster on 40MB+ sessions after recent Claude Code optimizations, meaning even the overhead of managing large parallel sessions has been reduced.</p>
+<h3 id="prompting-for-parallel-execution">Prompting for Parallel Execution</h3>
+<p>The most reliable way to trigger parallel subagents is explicit instruction in your prompt:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 840 137"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='0' y='20' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='0' y='36' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='0' y='52' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='0' y='68' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='0' y='100' fill='currentColor' style='font-size:1em'>E</text>
+<text text-anchor='middle' x='0' y='116' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='8' y='100' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='8' y='116' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='16' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='16' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='16' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='16' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='16' y='100' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='16' y='116' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='24' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='24' y='36' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='24' y='52' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='24' y='68' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='24' y='100' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='24' y='116' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='32' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='32' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='32' y='52' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='32' y='68' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='32' y='116' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>z</text>
+<text text-anchor='middle' x='40' y='20' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='40' y='36' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='40' y='52' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='40' y='68' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='40' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='40' y='116' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='48' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='48' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='48' y='52' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='48' y='68' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='48' y='100' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='48' y='116' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='56' y='20' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='56' y='36' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='56' y='52' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='56' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='56' y='100' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='64' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='64' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='64' y='52' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='64' y='68' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='64' y='100' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='64' y='116' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='72' y='20' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='72' y='36' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='72' y='52' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='72' y='68' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='72' y='100' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='72' y='116' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='80' y='20' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='80' y='36' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='80' y='52' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='80' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='80' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='80' y='116' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='88' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='88' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='88' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='88' y='68' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='88' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='96' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='96' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='96' y='52' fill='currentColor' style='font-size:1em'>w</text>
+<text text-anchor='middle' x='96' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='96' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='96' y='116' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='104' y='20' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='104' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='104' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='104' y='68' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='104' y='116' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='112' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='112' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='112' y='52' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='112' y='68' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='112' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='112' y='116' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='120' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='120' y='20' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='120' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='120' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='120' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='120' y='100' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='120' y='116' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='128' y='20' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='128' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='128' y='52' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='128' y='68' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='128' y='100' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='128' y='116' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='136' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='136' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='136' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='136' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='136' y='100' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='136' y='116' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='144' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='144' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='144' y='36' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='144' y='52' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='144' y='68' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='144' y='100' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='144' y='116' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='152' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='152' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='152' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='152' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='152' y='100' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='160' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='160' y='52' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='160' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='160' y='116' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='168' y='52' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='168' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='168' y='116' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='176' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='176' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='176' y='100' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='176' y='116' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='184' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='184' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='184' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='192' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='192' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='192' y='116' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='200' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='200' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='200' y='116' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='208' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='208' y='116' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='216' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='216' y='100' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='216' y='116' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='224' y='4' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='224' y='100' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='232' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='232' y='100' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='232' y='116' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='240' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='240' y='116' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='248' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='248' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='256' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='256' y='100' fill='currentColor' style='font-size:1em'>x</text>
+<text text-anchor='middle' x='256' y='116' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='264' y='100' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='272' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='272' y='100' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='272' y='116' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='280' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='280' y='100' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='280' y='116' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='288' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='288' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='288' y='116' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='296' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='296' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='296' y='116' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='304' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='304' y='100' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='304' y='116' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='312' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='312' y='116' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='320' y='100' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='320' y='116' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='328' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='328' y='100' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='336' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='336' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='336' y='116' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='344' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='344' y='100' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='344' y='116' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='352' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='352' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='352' y='116' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='360' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='360' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='360' y='116' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='368' y='100' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='368' y='116' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='376' y='4' fill='currentColor' style='font-size:1em'>4</text>
+<text text-anchor='middle' x='376' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='376' y='116' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='384' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='384' y='116' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='392' y='4' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='392' y='100' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='392' y='116' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='400' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='408' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='408' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='416' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='416' y='100' fill='currentColor' style='font-size:1em'>x</text>
+<text text-anchor='middle' x='424' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='424' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='432' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='440' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='440' y='100' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='448' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='448' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='456' y='100' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='464' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='464' y='100' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='472' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='480' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='480' y='100' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='488' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='488' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='496' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='496' y='100' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='504' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='504' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='512' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='512' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='520' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='520' y='100' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='528' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='536' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='536' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='544' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='544' y='100' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='552' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='552' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='560' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='560' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='568' y='4' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='568' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='576' y='100' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='584' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='592' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='592' y='100' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='600' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='600' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='608' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='608' y='100' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='616' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='624' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='624' y='100' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='632' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='632' y='100' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='640' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='640' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='648' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='656' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='656' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='664' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='664' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='672' y='4' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='672' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='680' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='680' y='100' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='688' y='4' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='688' y='100' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='696' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='704' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='704' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='712' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='712' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='720' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='720' y='100' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='728' y='4' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='728' y='100' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='736' y='100' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='744' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='752' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='760' y='100' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='776' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='784' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='792' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='800' y='100' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='808' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='816' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='824' y='100' fill='currentColor' style='font-size:1em'>.</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>Claude will spawn 4 agents simultaneously, each reading and analyzing one file, then synthesize the results. Without &ldquo;in parallel&rdquo; or &ldquo;using separate subagents,&rdquo; Claude may default to sequential execution in a single context.</p>
+<h2 id="git-worktrees--subagents-true-file-isolation-for-parallel-work">Git Worktrees + Subagents: True File Isolation for Parallel Work</h2>
+<p>The critical constraint on parallel subagents is file conflicts: if two subagents try to write to the same file simultaneously, one will overwrite the other&rsquo;s changes. The <code>isolation: &quot;worktree&quot;</code> flag solves this at the filesystem level. When a subagent runs with worktree isolation, Claude Code creates a new git worktree — a separate working directory linked to the same repository — and the subagent operates entirely within that worktree. The main branch and other worktrees are unaffected until you explicitly merge.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-markdown" data-lang="markdown"><span style="display:flex;"><span># In your prompt or subagent definition:
+</span></span><span style="display:flex;"><span># isolation: &#34;worktree&#34; enables per-subagent git worktrees
+</span></span></code></pre></div><p>The workflow for parallel feature development: define 3 subagents, each working on a different feature branch in its own worktree. Subagent A adds the user profile endpoint, Subagent B adds the notification system, Subagent C adds the analytics dashboard. All three run simultaneously. Each commits to its worktree&rsquo;s branch. The parent then reviews the three branches, runs tests, and merges the passing ones. This is genuine parallel development — not just parallel reading, but parallel writing with zero risk of interference. Worktrees are automatically cleaned up if the subagent makes no changes; if changes were made, the path and branch are returned so the parent can inspect and merge.</p>
+<h3 id="worktree-isolation-tradeoffs">Worktree Isolation Tradeoffs</h3>
+<p>Worktree isolation adds overhead: each worktree is a full working directory copy (though shared via git&rsquo;s object store, so not as expensive as a full clone). For read-only tasks — code analysis, documentation lookup, search — the overhead isn&rsquo;t worth it; just run parallel subagents without isolation. Reserve worktree isolation for subagents that will write files, create migrations, or make commits. The rule of thumb: if the subagent&rsquo;s output is a text result, no isolation needed. If the output is file changes, use <code>isolation: &quot;worktree&quot;</code>.</p>
+<h2 id="model-selection-strategy-opus-sonnet-and-haiku-for-cost-optimization">Model Selection Strategy: Opus, Sonnet, and Haiku for Cost Optimization</h2>
+<p>Claude Code&rsquo;s model routing capability — assigning different models to different subagents — is one of the most underused cost optimization levers available. Opus output tokens cost nearly 19× more than Haiku output tokens: a 5,000-token task costs $0.375 with Opus vs $0.02 with Haiku. The Advisor Strategy (Opus for planning + Sonnet/Haiku for execution) cuts costs 11% while improving code quality compared to running everything on Opus. The logic: Opus&rsquo;s reasoning advantage matters most for ambiguous, multi-step decisions. For structured, well-defined tasks — format a JSON file, check syntax, count lines, grep for a pattern — Haiku is just as accurate and costs a fraction of the price.</p>
+<p>The routing framework by task type:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Task Type</th>
+          <th>Recommended Model</th>
+          <th>Why</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Architecture decisions, complex debugging</td>
+          <td>Opus 4.7</td>
+          <td>Needs deep reasoning</td>
+      </tr>
+      <tr>
+          <td>Feature implementation, code generation</td>
+          <td>Sonnet 4.6</td>
+          <td>Best speed/quality balance</td>
+      </tr>
+      <tr>
+          <td>File lookup, syntax check, grep, count</td>
+          <td>Haiku 4.5</td>
+          <td>Routine, deterministic output</td>
+      </tr>
+      <tr>
+          <td>Code review (structured checklist)</td>
+          <td>Sonnet 4.6</td>
+          <td>Pattern matching, not reasoning</td>
+      </tr>
+      <tr>
+          <td>Research synthesis, writing documentation</td>
+          <td>Sonnet 4.6</td>
+          <td>High-quality text, not code logic</td>
+      </tr>
+  </tbody>
+</table>
+<p>The <code>model</code> field in a subagent&rsquo;s frontmatter overrides the session default:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-markdown" data-lang="markdown"><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span>name: fast-grep
+</span></span><span style="display:flex;"><span>description: Finds function definitions, import patterns, and usage examples quickly.
+</span></span><span style="display:flex;"><span>tools: Read, Grep, Glob
+</span></span><span style="display:flex;"><span>model: claude-haiku-4-5-20251001
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span>You are a fast search specialist. Return exact file paths and line numbers. No explanations.
+</span></span></code></pre></div><p>A realistic cost comparison for a 20-file codebase audit: all-Opus runs at ~$1.50 total. Routed (Opus orchestrator, Sonnet reviewers, Haiku for file lookups) runs at ~$0.35. Same quality on the output that matters; 77% cheaper on the routine steps.</p>
+<h2 id="5-real-world-subagent-patterns-every-developer-should-know">5 Real-World Subagent Patterns Every Developer Should Know</h2>
+<p>Real-world subagent patterns are reusable templates for common development workflows that benefit from delegation, parallelism, or context isolation. Each pattern targets a specific bottleneck: slow sequential file reads, contaminated context windows, bulk processing, comprehensive code review, and complex multi-phase tasks. Knowing these five patterns means you can immediately apply subagents to concrete situations rather than designing workflows from scratch. The patterns below come from production use cases, including the 9-agent code review framework that reduced review time from minutes to seconds, and the split-and-merge pattern used for auditing codebases with 50+ functions simultaneously. Two factors determine which pattern to reach for: whether tasks are independent (parallel patterns) or sequential (pipeline patterns), and whether tasks produce file changes (worktree isolation required) or just text results (no isolation needed). Start with the parallel code review pattern — it&rsquo;s immediately applicable to any PR workflow and demonstrates the full subagent value proposition with zero custom setup required beyond listing what each reviewer should check.</p>
+<h3 id="pattern-1-9-agent-parallel-code-review">Pattern 1: 9-Agent Parallel Code Review</h3>
+<p>Spawn 9 subagents simultaneously, each focused on one quality dimension:</p>
+<ol>
+<li>Security reviewer (injection, auth, secrets)</li>
+<li>Performance reviewer (N+1 queries, large allocations)</li>
+<li>Error handling reviewer (unhandled exceptions, missing rollbacks)</li>
+<li>Type safety reviewer (any casts, missing null checks)</li>
+<li>Test coverage reviewer (untested paths, edge cases)</li>
+<li>Documentation reviewer (missing docstrings, outdated comments)</li>
+<li>Dependency reviewer (new packages, license issues)</li>
+<li>API contract reviewer (breaking changes, versioning)</li>
+<li>Accessibility reviewer (for frontend changes)</li>
+</ol>
+<p>Each reviewer reads the same diff but focuses on its own checklist. The parent collects 9 reports and synthesizes a final review. Review time drops from 5+ minutes to under 60 seconds.</p>
+<h3 id="pattern-2-explore-plan-execute-pipeline">Pattern 2: Explore-Plan-Execute Pipeline</h3>
+<p>Three sequential subagents for complex features: (1) Explorer scans the codebase to find relevant files, patterns, and potential conflicts; (2) Planner takes the Explorer&rsquo;s report and drafts a step-by-step implementation plan; (3) Executor implements the plan file by file using worktree isolation. The parent&rsquo;s context never fills up with raw exploration data — it receives clean handoffs at each phase boundary.</p>
+<h3 id="pattern-3-split-and-merge-for-bulk-processing">Pattern 3: Split-and-Merge for Bulk Processing</h3>
+<p>For tasks like &ldquo;add JSDoc comments to 50 functions&rdquo; or &ldquo;migrate 40 tests from Jest to Vitest&rdquo;: split the work into batches of 5-10, spawn one subagent per batch, collect results, merge. Each subagent handles a bounded, well-defined chunk. The parent&rsquo;s job is coordination and final merge, not execution.</p>
+<h3 id="pattern-4-context-clean-research">Pattern 4: Context-Clean Research</h3>
+<p>Delegate all web searches, documentation lookups, and file explorations to subagents before starting implementation. The subagent returns a 200-word briefing. The parent implements against the briefing without ever seeing the raw search results. This keeps the implementation context clean and prevents the 100K-token research dumps that slow down late-session performance.</p>
+<h3 id="pattern-5-parallel-feature-branches">Pattern 5: Parallel Feature Branches</h3>
+<p>For independent features on the same sprint: each subagent gets a worktree, a feature spec, and a deadline. They develop in parallel. The parent reviews each branch, runs the test suite, and merges passing branches. The bottleneck shifts from &ldquo;one feature at a time&rdquo; to &ldquo;review and merge throughput.&rdquo;</p>
+<h2 id="getting-started-with-community-subagents-awesome-claude-code-subagents">Getting Started with Community Subagents (awesome-claude-code-subagents)</h2>
+<p>The VoltAgent <code>awesome-claude-code-subagents</code> repository on GitHub contains 100+ specialized community subagents covering everything from Rust borrow checker guidance to Next.js performance auditing to SQL query optimization. Rather than writing every subagent from scratch, this library is the fastest way to get production-grade subagents into your workflow. Each entry in the repo is a ready-to-use <code>.md</code> file with tested frontmatter and a proven system prompt. The community has already debugged the edge cases: prompt phrasing that reliably triggers the right behavior, tool restrictions that prevent subagents from taking destructive actions, model assignments tuned for each task type.</p>
+<p>To get started: browse the repository&rsquo;s categories (Security, Performance, Testing, Documentation, Architecture), copy the files for the subagents most relevant to your work, and drop them into <code>.claude/agents/</code> in your project or <code>~/.claude/agents/</code> for global access. Test each subagent on a small task before including it in production workflows. The most-forked entries as of early 2026 are the security-reviewer, the test-generator, and the migration-planner — all representing tasks that benefit from focused context and structured output.</p>
+<h3 id="writing-your-first-custom-subagent">Writing Your First Custom Subagent</h3>
+<p>Start with a task you currently delegate to Claude via long, repeated prompts. If you find yourself typing the same 200-word instruction block every time you want a certain kind of review or analysis, that&rsquo;s a subagent. Write the instruction block into a frontmatter <code>.md</code> file, decide which tools the subagent needs, choose the cheapest model that handles the task reliably, and save it to <code>.claude/agents/</code>. Run it on 3-4 representative tasks. Adjust the system prompt based on the outputs. After 5 iterations, you&rsquo;ll have a reliable, reusable worker that handles that task better than an ad-hoc prompt ever did.</p>
+<hr>
+<h2 id="faq">FAQ</h2>
+<p><strong>What is the difference between a Claude Code subagent and a regular Claude session?</strong>
+A subagent runs in an isolated context window with its own system prompt, tool access restrictions, and optional model override. The parent session delegates a task, the subagent executes it independently, and only the final result comes back to the parent. A regular session shares the full conversation history with the model on every turn.</p>
+<p><strong>How many subagents can run in parallel in Claude Code?</strong>
+Claude Code supports 16+ parallel agents simultaneously. The practical limit depends on your API rate limits and the size of each subagent&rsquo;s workload. For most codebases, 5-10 parallel subagents covers the useful parallelism; beyond that, orchestration overhead starts to offset the gains.</p>
+<p><strong>Can subagents write to files without conflicting with each other?</strong>
+Yes, if you use the <code>isolation: &quot;worktree&quot;</code> flag. Each subagent with worktree isolation gets its own git worktree — a separate working directory — so simultaneous writes go to different locations. Without worktree isolation, parallel subagents that write to the same file will conflict.</p>
+<p><strong>How does model routing in subagents affect cost?</strong>
+Significant impact. Opus output tokens cost ~19× more than Haiku. Routing routine tasks (file lookups, pattern matching, syntax checks) to Haiku and reserving Opus for architectural decisions can reduce total session costs by 70-80% with no quality loss on the simple tasks.</p>
+<p><strong>Where do I find pre-built community subagents for Claude Code?</strong>
+The <code>VoltAgent/awesome-claude-code-subagents</code> repository on GitHub is the main community library with 100+ specialized subagents. Copy the relevant <code>.md</code> files to <code>.claude/agents/</code> in your project or <code>~/.claude/agents/</code> for global use.</p>
+]]></content:encoded></item><item><title>Superpowers Framework: TDD Methodology for AI Coding Agents 2026</title><link>https://baeseokjae.github.io/posts/superpowers-framework-ai-coding-2026/</link><pubDate>Fri, 24 Apr 2026 04:12:05 +0000</pubDate><guid>https://baeseokjae.github.io/posts/superpowers-framework-ai-coding-2026/</guid><description>Superpowers is the open-source framework that enforces TDD discipline on AI coding agents—here&amp;#39;s how to install it and why it works.</description><content:encoded><![CDATA[<p>The Superpowers framework is the fastest way to stop your AI coding agent from shipping broken code. Instead of hoping the model follows best practices, Superpowers installs a structured set of skills that <em>enforce</em> a clarify → design → plan → code → verify discipline on every task—red tests before green, always.</p>
+<h2 id="what-is-the-superpowers-framework-the-problem-it-solves">What Is the Superpowers Framework? (The Problem It Solves)</h2>
+<p>Superpowers is an open-source agent skills framework created by Jesse Vincent (obra) that encodes professional software engineering discipline—particularly test-driven development—into reusable skill files that AI coding agents auto-trigger by context. Released in October 2025, it gained 1,528 GitHub stars in its first 24 hours and reached 129,443 stars by April 2026, making it one of the most starred coding-agent repositories ever. The framework emerged from a concrete frustration: AI agents like Claude Code are capable of writing correct code, but when left unguided they skip tests, cut corners on design, and produce implementations that pass their own ad-hoc checks rather than actual requirements. Superpowers solves this by shipping 14 composable skills—from brainstorming to subagent code review—that transform an unconstrained coding agent into a disciplined engineering collaborator. Rather than patching behavior with a long CLAUDE.md paragraph, each skill is a focused SKILL.md file that triggers at the right moment and dispatches fresh subagents to handle isolated subtasks like writing failing tests or running a two-stage review.</p>
+<p>The core insight: you can&rsquo;t reliably instruct an AI agent to &ldquo;follow TDD&rdquo; in a system prompt. Under time pressure, the agent will write implementation first and retrofit tests. Superpowers removes the choice—the skill pipeline makes it structurally impossible to skip the red phase.</p>
+<h2 id="why-tdd-is-non-negotiable-for-ai-coding-agents">Why TDD Is Non-Negotiable for AI Coding Agents</h2>
+<p>TDD is non-negotiable for AI coding agents because without it, agents produce tests that are guaranteed to pass—not because the code is correct, but because the tests were written to match whatever the implementation already does. This is the &ldquo;tests-that-pass-by-construction&rdquo; failure mode: the agent writes a function, then generates a test that calls that function and asserts its actual output equals the expected output. The test suite is green from line one. It passes in CI. It ships to production. And it verifies nothing except that the code is internally consistent with itself—not that it satisfies the original requirement. Research from codemanship.wordpress.com in January 2026 confirmed this is the default behavior for AI agents operating without TDD constraints. Developers using Superpowers report 85–95% test coverage, compared to 30–50% with standard Claude Code prompting. The reason is structural: Superpowers forces the agent to write a failing test (red) before any implementation exists, proving the test is actually capable of catching a bug. Only then does the agent write the minimum implementation to make it pass (green), and finally refactor. This is classical Red-Green-Refactor, enforced mechanically rather than left to the agent&rsquo;s judgment.</p>
+<p>Separately, spec-driven development—writing detailed specifications before prompting the agent—reduces rollback rates by 60%+ compared to vague prompts. Superpowers operationalizes this through its clarify and design phases, which happen before a single line of code is written.</p>
+<h3 id="the-tests-that-pass-by-construction-problem">The Tests-That-Pass-By-Construction Problem</h3>
+<p>When an agent writes <code>assert add(2, 3) == add(2, 3)</code> instead of <code>assert add(2, 3) == 5</code>, the test is technically passing but meaningless. AI agents do this implicitly—they observe what the function returns and assert that value, rather than deriving the expected value from the specification. A red-first TDD workflow prevents this because the test is written before the function exists, forcing the developer (or agent) to derive the expected value from the requirement, not from the implementation.</p>
+<h2 id="how-superpowers-enforces-red-green-refactor-step-by-step">How Superpowers Enforces Red-Green-Refactor (Step by Step)</h2>
+<p>Superpowers enforces Red-Green-Refactor by wiring the TDD cycle into a deterministic skill pipeline that runs inside the coding agent&rsquo;s session—the agent cannot skip a phase any more than a CI pipeline can skip a step. When you invoke a coding task under Superpowers, the framework routes execution through a five-phase discipline: (1) <strong>Clarify</strong>: the agent asks structured clarifying questions before touching code, surfacing ambiguities that would otherwise surface as bugs; (2) <strong>Design</strong>: the agent produces a written design document, including interface contracts and data flow, before writing implementation; (3) <strong>Plan</strong>: the agent generates an ordered task list with explicit test checkpoints; (4) <strong>Code</strong>: implementation proceeds in TDD cycles—write one failing test, write minimum passing code, repeat; (5) <strong>Verify</strong>: a dedicated subagent performs two-stage code review against the original spec. Each phase dispatches a fresh subagent with a narrow context window, preventing the context contamination that causes agents to rationalize skipping tests when they already have implementation code in memory.</p>
+<p>The key architectural decision is subagent dispatch. Rather than one long agentic session where the model accumulates pressure to &ldquo;just finish,&rdquo; each skill spawns an isolated agent with a single responsibility. The test-writing subagent has never seen the implementation. It cannot rationalize passing tests by construction because the implementation doesn&rsquo;t exist in its context.</p>
+<h3 id="the-role-of-skillmd-files">The Role of SKILL.md Files</h3>
+<p>Each Superpowers skill is a SKILL.md file in the <code>.superpowers/skills/</code> directory. Skills declare their trigger conditions—the agent detects matching context and loads the relevant skill automatically. A skill for &ldquo;write failing tests&rdquo; triggers when the agent is about to implement a new function; a skill for &ldquo;subagent review&rdquo; triggers when a coding session is about to close. This auto-triggering is what distinguishes Superpowers from a CLAUDE.md instruction file, which relies on the agent choosing to follow instructions under all conditions.</p>
+<h2 id="installing-superpowers-in-2026-claude-code-cursor-codex-cli">Installing Superpowers in 2026 (Claude Code, Cursor, Codex CLI)</h2>
+<p>Installing Superpowers in 2026 takes under five minutes for Claude Code users and works across four major AI coding environments: Claude Code (via the built-in skill marketplace), Cursor, Codex CLI, and OpenCode. For Claude Code, the recommended path is the marketplace: open Claude Code, navigate to Skills, search &ldquo;Superpowers&rdquo;, and click Install. This writes the <code>.superpowers/</code> directory and all 14 skill files into your project root and registers them as auto-triggering skills. For Cursor, Codex CLI, and OpenCode, the manual path is: clone <code>github.com/obra/superpowers</code> and copy the <code>.superpowers/skills/</code> directory into your project root, then configure your tool to read from that path. As of Superpowers 5 (released Q1 2026), the framework also ships with a visual brainstorming skill that generates HTML mockups during the design phase—particularly useful for frontend work where a visual target reduces ambiguity before coding begins.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Manual install (Cursor, Codex CLI, OpenCode)</span>
+</span></span><span style="display:flex;"><span>git clone https://github.com/obra/superpowers /tmp/superpowers
+</span></span><span style="display:flex;"><span>cp -r /tmp/superpowers/.superpowers ./
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Verify installation</span>
+</span></span><span style="display:flex;"><span>ls .superpowers/skills/
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Should list 14 .md skill files</span>
+</span></span></code></pre></div><p>After installation, run a test task: ask your agent to &ldquo;add a function that parses ISO 8601 dates.&rdquo; With Superpowers active, the agent should ask clarifying questions before touching code. If it starts writing the function immediately, check that your tool is configured to read from <code>.superpowers/skills/</code>.</p>
+<h3 id="superpowers-5-visual-brainstorming">Superpowers 5 Visual Brainstorming</h3>
+<p>Superpowers 5 added an HTML mockup generation step to the design phase. When the task involves a UI component, the agent now produces a static HTML mockup and opens it in a browser tab before writing any React/Vue/template code. This gives the developer a visual contract to accept or reject before the agent invests in implementation. The mockup is committed alongside the spec document, making the design phase reviewable in version control.</p>
+<h2 id="the-14-core-skills-from-brainstorming-to-subagent-code-review">The 14 Core Skills: From Brainstorming to Subagent Code Review</h2>
+<p>The 14 Superpowers skills form a complete software development methodology, covering every phase from initial idea to production-ready code review. Each skill is a standalone SKILL.md file with a declared trigger condition, a structured prompt, and (in most cases) a subagent dispatch instruction. The skills group into five categories: <strong>Discovery</strong> (brainstorm, clarify, spec-write); <strong>Design</strong> (architecture, interface-design, mockup); <strong>Planning</strong> (task-breakdown, test-plan); <strong>Implementation</strong> (tdd-cycle, refactor, dependency-check); and <strong>Quality</strong> (subagent-review, coverage-check, retrospective). The brainstorm skill is deliberately first: it prevents the agent from jumping to an implementation approach before exploring alternatives. The agent generates three or more distinct approaches, evaluates trade-offs, and selects one before entering the design phase. This front-loads decision quality and prevents the sunk-cost problem where an agent has written 200 lines of code before discovering the approach was wrong. The subagent-review skill at the end dispatches two independent review agents: one checks correctness against the spec, one checks style and maintainability. Both reviews run in fresh contexts with no memory of the implementation session, producing genuinely independent assessments.</p>
+<p>The coverage-check skill enforces the 85–95% coverage target by running the test suite, parsing the coverage report, and refusing to close the session if coverage is below the configured threshold. The threshold is configurable per project in <code>.superpowers/config.yaml</code>.</p>
+<h3 id="yagni-and-dry-enforcement">YAGNI and DRY Enforcement</h3>
+<p>Two skills directly enforce classic software engineering principles. The YAGNI (You Aren&rsquo;t Gonna Need It) check runs during the planning phase and flags any planned feature that isn&rsquo;t required by the current spec. The DRY check runs during the refactor phase and detects duplicated logic across the implementation, prompting the agent to extract it before closing. These aren&rsquo;t stylistic suggestions—skills that detect violations pause execution and require explicit sign-off to continue, making the principles operationally enforceable rather than advisory.</p>
+<h2 id="real-world-results-chardet-700-case-study-41x-faster-968-accuracy">Real-World Results: chardet 7.0.0 Case Study (41x Faster, 96.8% Accuracy)</h2>
+<p>The chardet 7.0.0 release is the most-cited Superpowers case study because its results are independently verifiable and dramatically better than prior versions. The chardet library—Python&rsquo;s automatic character encoding detector—had been maintained incrementally for years, accumulating technical debt that made the encoding detection logic slow and brittle. Jesse Vincent, Superpowers&rsquo; creator, used the framework to drive a ground-up rewrite: the resulting version 7.0.0 runs 41 times faster than 6.x, achieves 96.8% detection accuracy across 99 encodings, and ships with a test suite covering 2,161 files. The 2,161-file test corpus is a direct product of the Superpowers TDD methodology: the test-plan skill generated a comprehensive encoding coverage matrix before any implementation existed, ensuring the test suite was derived from requirements rather than retrofitted to implementation. The 96.8% accuracy figure represents a significant improvement over the industry baseline, and the 41x speed improvement came directly from the architecture skill surfacing a more efficient algorithm before the agent committed to the legacy approach. Without the brainstorm-first and design-before-code phases, the agent would likely have implemented an optimized version of the existing algorithm rather than reconsidering the architectural foundation.</p>
+<p>This case study validates the framework&rsquo;s core claim: the upfront investment in clarify → design → plan phases pays off in implementation quality that simple &ldquo;just write it&rdquo; prompting cannot match, regardless of model capability.</p>
+<h3 id="how-to-apply-the-chardet-approach-to-your-project">How to Apply the chardet Approach to Your Project</h3>
+<p>The chardet workflow generalizes: (1) start with the brainstorm skill to generate competing architectural approaches; (2) build a test corpus from the requirement specification before writing a single implementation line; (3) use the coverage-check skill to enforce corpus coverage; (4) let the tdd-cycle skill drive implementation. The key is resisting the urge to skip directly to coding. The chardet rewrite succeeded because the test corpus was built first—the implementation had to satisfy 2,161 real-world files, not a handful of hand-crafted examples.</p>
+<h2 id="superpowers-vs-standard-prompting-quality-comparison">Superpowers vs Standard Prompting: Quality Comparison</h2>
+<p>Superpowers consistently outperforms standard prompting across the quality metrics that matter in production: test coverage, spec adherence, and rollback rate. Standard prompting—whether via a long CLAUDE.md file, .cursorrules, or a system prompt—relies on the model choosing to follow instructions in every context and under every level of time pressure. Models do not reliably do this. As context length grows and the agent accumulates implementation momentum, adherence to prompting instructions degrades. Superpowers sidesteps this degradation by encoding behavior into skill pipelines rather than instructions: the agent cannot skip the red phase because the skill pipeline routes execution through it before the implementation skill is available. The empirical gap is significant: 85–95% test coverage with Superpowers vs. 30–50% with standard prompting. Rollback rates drop 60%+ when the clarify and design phases surface ambiguity before coding begins. These numbers are consistent with the broader finding that AI coding tools deliver a 2.5–3.5x ROI when used with structured workflows, compared to marginal gains when used as ad-hoc autocomplete.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Metric</th>
+          <th>Standard Prompting</th>
+          <th>Superpowers Framework</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Test Coverage</td>
+          <td>30–50%</td>
+          <td>85–95%</td>
+      </tr>
+      <tr>
+          <td>Spec Adherence</td>
+          <td>Variable</td>
+          <td>Enforced</td>
+      </tr>
+      <tr>
+          <td>Rollback Rate</td>
+          <td>Baseline</td>
+          <td>-60%</td>
+      </tr>
+      <tr>
+          <td>Code Review</td>
+          <td>Manual</td>
+          <td>Automated (subagent)</td>
+      </tr>
+      <tr>
+          <td>Setup Time</td>
+          <td>5 min</td>
+          <td>5 min</td>
+      </tr>
+  </tbody>
+</table>
+<p>The setup time is identical. The quality gap is not.</p>
+<h3 id="when-standard-prompting-is-enough">When Standard Prompting Is Enough</h3>
+<p>Superpowers adds overhead. For one-off scripts, quick prototypes, or exploratory analysis code that will never enter production, the five-phase discipline is overkill. CLAUDE.md instructions or .cursorrules work fine when correctness isn&rsquo;t critical and you&rsquo;re the only consumer of the output. Superpowers earns its overhead when: (a) the code runs in production, (b) multiple developers will maintain it, (c) correctness is externally verifiable (parsing, encoding, computation), or (d) the scope is large enough that rollbacks are expensive.</p>
+<h2 id="common-mistakes-and-how-to-avoid-them">Common Mistakes and How to Avoid Them</h2>
+<p>The most common Superpowers mistake is installing the framework and then bypassing it by prompting the agent directly with implementation instructions—&ldquo;write a function that does X&rdquo;—rather than activating the brainstorm or clarify skill first. When you start with an implementation prompt, you skip the design and planning phases, and the skills that should have run before coding are never triggered. The fix is to always start a task with the Superpowers entry point: in Claude Code, type <code>/superpowers</code> or invoke the brainstorm skill explicitly. The second most common mistake is setting the coverage threshold too low during initial setup. The default is 80%; for production code, set it to 90% or higher in <code>.superpowers/config.yaml</code>. A low threshold lets the coverage-check skill sign off on a partially covered codebase, undermining the framework&rsquo;s quality guarantees. Third: not committing the <code>.superpowers/</code> directory to version control. Skill files are project artifacts, not tooling configuration—they should be reviewed, versioned, and shared across the team. A skill file that enforces an encoding standard or a testing convention is as important to commit as a linter config.</p>
+<p>Misconfigured skill triggers are a fourth failure mode: if your tool isn&rsquo;t loading skills from <code>.superpowers/skills/</code>, the framework is silently inactive. Verify with a test task as described in the installation section above.</p>
+<h3 id="customizing-skills-for-your-stack">Customizing Skills for Your Stack</h3>
+<p>Skills are Markdown files with a structured prompt—they&rsquo;re designed to be modified. For a TypeScript project, fork the tdd-cycle skill and add an instruction to always use <code>describe</code>/<code>it</code> blocks and mock with <code>vi.fn()</code>. For a Python project, add a pytest coverage command to the coverage-check skill. The <code>.superpowers/config.yaml</code> file controls coverage thresholds, coverage tool, and which skills are active. Customization is low-friction and the changes are version-controlled alongside the skill files.</p>
+<h2 id="faq">FAQ</h2>
+<p><strong>What is the Superpowers framework for AI coding agents?</strong>
+Superpowers is an open-source framework of 14 agent skills that enforce a clarify → design → plan → code → verify discipline on AI coding agents like Claude Code and Cursor. It was created by Jesse Vincent (obra) and reached 129,443 GitHub stars by April 2026. Its primary mechanism is TDD enforcement: agents must write failing tests before any implementation, preventing the &ldquo;tests-that-pass-by-construction&rdquo; failure mode common in unguided AI coding sessions.</p>
+<p><strong>How do I install Superpowers in Claude Code?</strong>
+In Claude Code, open the Skills marketplace, search for &ldquo;Superpowers&rdquo;, and click Install. This creates the <code>.superpowers/</code> directory with all 14 skill files in your project root. For Cursor and Codex CLI, clone <code>github.com/obra/superpowers</code> and copy the <code>.superpowers/skills/</code> directory into your project. Verify the install by asking your agent to add a function—it should ask clarifying questions before writing any code.</p>
+<p><strong>What are the 14 Superpowers skills?</strong>
+The 14 skills group into five categories: Discovery (brainstorm, clarify, spec-write), Design (architecture, interface-design, mockup), Planning (task-breakdown, test-plan), Implementation (tdd-cycle, refactor, dependency-check), and Quality (subagent-review, coverage-check, retrospective). Each is a standalone SKILL.md file that auto-triggers based on context within the coding agent&rsquo;s session.</p>
+<p><strong>Does Superpowers work with models other than Claude?</strong>
+Yes. Superpowers ships skill files for Claude Code, Cursor (GPT-4/Claude backend), Codex CLI, and OpenCode. The framework is model-agnostic in principle—skills are Markdown prompt files that any instruction-following model can execute. In practice, the subagent dispatch features work best with models that support tool use and can spawn sub-sessions, which covers all four officially supported environments.</p>
+<p><strong>How does Superpowers compare to just writing a good CLAUDE.md file?</strong>
+CLAUDE.md instructions rely on the model consistently choosing to follow them—reliability degrades as context grows and the agent accumulates implementation momentum. Superpowers encodes behavior into a pipeline: skills are triggered mechanically, not by the model&rsquo;s judgment. The practical result is 85–95% test coverage with Superpowers vs. 30–50% with CLAUDE.md prompting, and 60%+ lower rollback rates. For production code, Superpowers is the more reliable choice; for quick scripts, a well-written CLAUDE.md is sufficient.</p>
+]]></content:encoded></item><item><title>AI Code Review Tools Comparison 2026: Which Tool Catches the Most Bugs in Your PRs?</title><link>https://baeseokjae.github.io/posts/ai-code-review-tools-comparison-2026/</link><pubDate>Thu, 23 Apr 2026 01:26:29 +0000</pubDate><guid>https://baeseokjae.github.io/posts/ai-code-review-tools-comparison-2026/</guid><description>Greptile catches 82% of bugs vs CodeRabbit&amp;#39;s 44% — but noise ratio and pricing change the real-world picture. Here&amp;#39;s the honest 2026 comparison.</description><content:encoded><![CDATA[<p>The best AI code review tool in 2026 depends on what your team optimizes for: raw bug catch rate favors Greptile (82%), price-to-value favors CodeRabbit ($24/dev/month), and test coverage favors Qodo. Independent benchmarks show a 2x spread between the top and bottom performers — and the tool with the highest recall isn&rsquo;t always the one your team should ship with.</p>
 <h2 id="why-ai-code-review-tools-are-becoming-essential-in-2026">Why AI Code Review Tools Are Becoming Essential in 2026</h2>
 <p>AI code review tools are automated systems that analyze pull requests for bugs, security vulnerabilities, style violations, and logic errors — typically within seconds of a PR being opened. Unlike static analyzers that match fixed patterns, the best 2026 tools understand intent, cross-file dependencies, and domain context. Teams deploying AI code review see a 30–60% reduction in PR cycle times and a 25–35% decrease in production defect rates according to enterprise ROI studies from Exceeds.ai. The market has accelerated sharply: the global AI code tools market is projected to reach $22.2 billion by 2030, driven by teams discovering that a $24/month tool can catch what $200/hour senior engineers miss on a Friday afternoon. Daily AI users merge ~60% more pull requests than light users, and AI-authored code now accounts for 22% of merged commits — making automated review a quality gate, not a luxury.</p>
 <p>The core value proposition is asymmetric leverage. A human reviewer scanning 500 lines of diff under time pressure misses an average of 30–40% of functional bugs. An AI reviewer with full codebase context running in the background misses none of the patterns it&rsquo;s been trained to catch, and flags them in milliseconds. The productivity argument won out at Bancolombia and JPMorgan, which reported 20–55% productivity gains after deploying enterprise AI coding tools. The question isn&rsquo;t whether to use AI code review — it&rsquo;s which tool matches your team&rsquo;s bug profile, security posture, and workflow.</p>

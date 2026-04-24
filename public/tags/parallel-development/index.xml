@@ -1,0 +1,447 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Parallel-Development on RockB</title><link>https://baeseokjae.github.io/tags/parallel-development/</link><description>Recent content in Parallel-Development on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Fri, 24 Apr 2026 07:12:07 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/parallel-development/index.xml" rel="self" type="application/rss+xml"/><item><title>Claude Code Subagents Guide 2026: Parallel Agents for Faster Development</title><link>https://baeseokjae.github.io/posts/claude-code-subagents-guide-2026/</link><pubDate>Fri, 24 Apr 2026 07:12:07 +0000</pubDate><guid>https://baeseokjae.github.io/posts/claude-code-subagents-guide-2026/</guid><description>Complete guide to Claude Code subagents: create custom agents, run parallel workflows, optimize costs with model routing, and ship faster.</description><content:encoded><![CDATA[<p>Claude Code subagents are isolated AI workers that your main Claude session can spin up, delegate tasks to, and collect results from — letting you run multiple jobs in parallel instead of waiting for each one to finish sequentially. If you&rsquo;ve ever watched Claude slowly work through a 10-file refactor one file at a time, subagents are the fix.</p>
+<h2 id="what-are-claude-code-subagents-architecture-and-how-they-work">What Are Claude Code Subagents? (Architecture and How They Work)</h2>
+<p>Claude Code subagents are purpose-built AI workers that run inside their own isolated context windows, each with a dedicated system prompt, a specific toolset, and optionally a different model than the parent session. When the main agent calls the <code>Agent</code> tool, it spawns a subagent, passes a task description, and the subagent executes fully independently — reading files, running searches, writing code — then returns only its final result. The parent&rsquo;s context window never sees the subagent&rsquo;s intermediate steps, tool outputs, or reasoning chains. This context isolation is the key architectural advantage: a subagent researching API documentation might consume 200K tokens of intermediate output, but the parent receives a clean 500-word summary.</p>
+<p>Claude Code supports 16+ parallel agents running simultaneously for complex workflows. Each subagent is a first-class Claude instance with the same tool access as the parent — Bash, Read, Write, Grep, Glob — or a restricted subset you define. The separation isn&rsquo;t just logical: with the <code>isolation: &quot;worktree&quot;</code> flag, each subagent gets its own git worktree, meaning they can write to different files without merge conflicts. Opus 4.7 became the default model for Claude Code starting April 23, 2026, but individual subagents can override this to use cheaper models for routine tasks — a design decision that directly drives cost and speed. The agent lifecycle is: parent delegates → subagent spawns in fresh context → subagent works autonomously → subagent returns result → parent continues. There is no back-and-forth; once spawned, a subagent runs to completion.</p>
+<h3 id="how-subagent-context-isolation-works">How Subagent Context Isolation Works</h3>
+<p>Subagent context isolation means the subagent&rsquo;s entire conversation thread — tool calls, search results, file reads — exists in a separate memory space from the parent. When the subagent finishes, only the text in its final message comes back to the parent. A subagent exploring 50,000 lines of legacy code returns &ldquo;Found 3 relevant functions in auth/middleware.go&rdquo; — not the full exploration trace. This keeps the parent&rsquo;s context window clean and focused on high-level coordination rather than drowning in implementation noise.</p>
+<h2 id="subagents-vs-agent-teams-choosing-the-right-pattern">Subagents vs Agent Teams: Choosing the Right Pattern</h2>
+<p>Subagents and Agent Teams solve different coordination problems. Subagents are the right choice when workers don&rsquo;t need to communicate with each other — each one gets a task, runs it, and reports back to the parent. Agent Teams are for situations where workers need to share state, pass intermediate results between themselves, or react to each other&rsquo;s outputs during execution. If you&rsquo;re running 9 parallel code reviews (each reviewer looks at a different quality dimension), subagents are ideal: they&rsquo;re independent, they don&rsquo;t need to know what the security reviewer found before the performance reviewer starts. If you&rsquo;re building a multi-step pipeline where Step B needs Step A&rsquo;s output before it can begin, that&rsquo;s a sequential workflow, and orchestrating it through the parent is cleaner than subagents.</p>
+<p>The practical decision framework comes down to three questions: (1) Can all tasks start at the same time with the same inputs? (2) Does each task produce a standalone result? (3) Are the tasks touching different files or resources? If yes to all three, use parallel subagents. If any task depends on another task&rsquo;s output, run them sequentially through the parent or consider an Agent Team with shared memory. Cost matters here too: parallel subagents all bill simultaneously, so spawning 10 agents at once costs the same in wall-clock time as one but burns 10× the tokens in the same minute.</p>
+<h3 id="when-sequential-beats-parallel">When Sequential Beats Parallel</h3>
+<p>Sequential subagent execution makes sense when the output of one step is the input for the next — a research subagent finds the relevant files, then a coding subagent rewrites them based on those findings. Running these in parallel would mean the coding agent starts without knowing which files to touch. The parent orchestrates sequentially: spawn Researcher → wait for result → spawn Coder with Researcher&rsquo;s output → wait for result → commit.</p>
+<h2 id="how-to-create-custom-subagents-agents-directory-and-frontmatter">How to Create Custom Subagents (agents/ directory and frontmatter)</h2>
+<p>Custom subagents live as Markdown files in your project&rsquo;s <code>.claude/agents/</code> directory. Each file defines a specialized worker: its name (used to invoke it), a description (used by the parent to decide when to delegate to it), optional tool restrictions, and an optional model override. The frontmatter fields are <code>name</code>, <code>description</code>, <code>tools</code>, and <code>model</code>. The body of the file is the system prompt — the instructions the subagent follows when it runs.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-markdown" data-lang="markdown"><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span>name: security-reviewer
+</span></span><span style="display:flex;"><span>description: Reviews code changes for security vulnerabilities — SQL injection, XSS, auth bypasses, secrets in code. Use when reviewing PRs or auditing new endpoints.
+</span></span><span style="display:flex;"><span>tools: Read, Grep, Glob
+</span></span><span style="display:flex;"><span>model: claude-sonnet-4-6
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>You are a security-focused code reviewer. When given a file or diff, check for:
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> SQL injection via string concatenation in queries
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> XSS via unescaped user input in templates
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> Hardcoded secrets, API keys, or credentials
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> Auth bypass patterns (missing middleware, direct object references)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> Insecure deserialization
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Report each finding with: file path, line number, severity (Critical/High/Medium), and a one-sentence fix recommendation.
+</span></span></code></pre></div><p>Save this as <code>.claude/agents/security-reviewer.md</code>. Now the parent session&rsquo;s <code>Agent</code> tool can invoke it by description match — or you can explicitly reference it. The <code>tools</code> field restricts the subagent to only Read, Grep, and Glob: it can look at code but not execute shell commands or write files. This is a security boundary for untrusted or narrow tasks. The <code>model</code> field routes this subagent to <code>claude-sonnet-4-6</code> instead of the default Opus — appropriate for a structured review task that doesn&rsquo;t require deep reasoning.</p>
+<h3 id="global-vs-project-subagents">Global vs Project Subagents</h3>
+<p>Subagents in <code>~/.claude/agents/</code> are global and available in every project. Subagents in <code>.claude/agents/</code> (project-level) are only available in that project. Global agents are ideal for utility workers you reuse everywhere — a <code>grep-expert</code> that knows advanced search patterns, a <code>commit-message-writer</code> that follows your conventions. Project agents encode domain-specific knowledge: a <code>schema-validator</code> that knows your company&rsquo;s API schema format, or a <code>migration-reviewer</code> that knows your database conventions.</p>
+<h2 id="running-parallel-subagents-for-10x-faster-development">Running Parallel Subagents for 10x Faster Development</h2>
+<p>Parallel subagent execution is the most direct path to faster development in Claude Code. Instead of reading 10 files sequentially — each file read blocking the next — you delegate all 10 reads simultaneously and wait for the first to finish while the others run in the background. The explicit pattern is to tell Claude: &ldquo;Use parallel subagents for each of these tasks&rdquo; and list independent work items. Claude&rsquo;s internal <code>Agent</code> tool accepts a <code>run_in_background</code> flag that makes this automatic for independent work.</p>
+<p>A real-world benchmark: exploring 5 large files for API usage patterns takes roughly 45 seconds sequentially (9 seconds per file). Running 5 subagents in parallel returns all results in ~12 seconds — the time of the slowest single lookup. The split-and-merge pattern scales this further: 50 functions split into 10 batches of 5, all 10 batches run simultaneously, results merged by the parent. Review time for a 50-function audit drops from 7+ minutes to under 90 seconds. The <code>/resume</code> command on large sessions is up to 67% faster on 40MB+ sessions after recent Claude Code optimizations, meaning even the overhead of managing large parallel sessions has been reduced.</p>
+<h3 id="prompting-for-parallel-execution">Prompting for Parallel Execution</h3>
+<p>The most reliable way to trigger parallel subagents is explicit instruction in your prompt:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 840 137"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='0' y='20' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='0' y='36' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='0' y='52' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='0' y='68' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='0' y='100' fill='currentColor' style='font-size:1em'>E</text>
+<text text-anchor='middle' x='0' y='116' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='8' y='100' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='8' y='116' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='16' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='16' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='16' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='16' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='16' y='100' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='16' y='116' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='24' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='24' y='36' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='24' y='52' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='24' y='68' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='24' y='100' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='24' y='116' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='32' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='32' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='32' y='52' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='32' y='68' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='32' y='116' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>z</text>
+<text text-anchor='middle' x='40' y='20' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='40' y='36' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='40' y='52' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='40' y='68' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='40' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='40' y='116' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='48' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='48' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='48' y='52' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='48' y='68' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='48' y='100' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='48' y='116' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='56' y='20' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='56' y='36' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='56' y='52' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='56' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='56' y='100' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='64' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='64' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='64' y='52' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='64' y='68' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='64' y='100' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='64' y='116' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='72' y='20' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='72' y='36' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='72' y='52' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='72' y='68' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='72' y='100' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='72' y='116' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='80' y='20' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='80' y='36' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='80' y='52' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='80' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='80' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='80' y='116' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='88' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='88' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='88' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='88' y='68' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='88' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='96' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='96' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='96' y='52' fill='currentColor' style='font-size:1em'>w</text>
+<text text-anchor='middle' x='96' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='96' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='96' y='116' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='104' y='20' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='104' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='104' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='104' y='68' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='104' y='116' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='112' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='112' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='112' y='52' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='112' y='68' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='112' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='112' y='116' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='120' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='120' y='20' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='120' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='120' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='120' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='120' y='100' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='120' y='116' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='128' y='20' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='128' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='128' y='52' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='128' y='68' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='128' y='100' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='128' y='116' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='136' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='136' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='136' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='136' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='136' y='100' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='136' y='116' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='144' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='144' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='144' y='36' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='144' y='52' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='144' y='68' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='144' y='100' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='144' y='116' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='152' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='152' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='152' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='152' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='152' y='100' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='160' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='160' y='52' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='160' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='160' y='116' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='168' y='52' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='168' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='168' y='116' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='176' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='176' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='176' y='100' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='176' y='116' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='184' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='184' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='184' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='192' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='192' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='192' y='116' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='200' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='200' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='200' y='116' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='208' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='208' y='116' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='216' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='216' y='100' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='216' y='116' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='224' y='4' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='224' y='100' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='232' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='232' y='100' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='232' y='116' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='240' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='240' y='116' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='248' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='248' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='256' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='256' y='100' fill='currentColor' style='font-size:1em'>x</text>
+<text text-anchor='middle' x='256' y='116' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='264' y='100' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='272' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='272' y='100' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='272' y='116' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='280' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='280' y='100' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='280' y='116' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='288' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='288' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='288' y='116' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='296' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='296' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='296' y='116' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='304' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='304' y='100' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='304' y='116' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='312' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='312' y='116' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='320' y='100' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='320' y='116' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='328' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='328' y='100' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='336' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='336' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='336' y='116' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='344' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='344' y='100' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='344' y='116' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='352' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='352' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='352' y='116' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='360' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='360' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='360' y='116' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='368' y='100' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='368' y='116' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='376' y='4' fill='currentColor' style='font-size:1em'>4</text>
+<text text-anchor='middle' x='376' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='376' y='116' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='384' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='384' y='116' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='392' y='4' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='392' y='100' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='392' y='116' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='400' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='408' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='408' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='416' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='416' y='100' fill='currentColor' style='font-size:1em'>x</text>
+<text text-anchor='middle' x='424' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='424' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='432' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='440' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='440' y='100' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='448' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='448' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='456' y='100' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='464' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='464' y='100' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='472' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='480' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='480' y='100' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='488' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='488' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='496' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='496' y='100' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='504' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='504' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='512' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='512' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='520' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='520' y='100' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='528' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='536' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='536' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='544' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='544' y='100' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='552' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='552' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='560' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='560' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='568' y='4' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='568' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='576' y='100' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='584' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='592' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='592' y='100' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='600' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='600' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='608' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='608' y='100' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='616' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='624' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='624' y='100' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='632' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='632' y='100' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='640' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='640' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='648' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='656' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='656' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='664' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='664' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='672' y='4' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='672' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='680' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='680' y='100' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='688' y='4' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='688' y='100' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='696' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='704' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='704' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='712' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='712' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='720' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='720' y='100' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='728' y='4' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='728' y='100' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='736' y='100' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='744' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='752' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='760' y='100' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='776' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='784' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='792' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='800' y='100' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='808' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='816' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='824' y='100' fill='currentColor' style='font-size:1em'>.</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>Claude will spawn 4 agents simultaneously, each reading and analyzing one file, then synthesize the results. Without &ldquo;in parallel&rdquo; or &ldquo;using separate subagents,&rdquo; Claude may default to sequential execution in a single context.</p>
+<h2 id="git-worktrees--subagents-true-file-isolation-for-parallel-work">Git Worktrees + Subagents: True File Isolation for Parallel Work</h2>
+<p>The critical constraint on parallel subagents is file conflicts: if two subagents try to write to the same file simultaneously, one will overwrite the other&rsquo;s changes. The <code>isolation: &quot;worktree&quot;</code> flag solves this at the filesystem level. When a subagent runs with worktree isolation, Claude Code creates a new git worktree — a separate working directory linked to the same repository — and the subagent operates entirely within that worktree. The main branch and other worktrees are unaffected until you explicitly merge.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-markdown" data-lang="markdown"><span style="display:flex;"><span># In your prompt or subagent definition:
+</span></span><span style="display:flex;"><span># isolation: &#34;worktree&#34; enables per-subagent git worktrees
+</span></span></code></pre></div><p>The workflow for parallel feature development: define 3 subagents, each working on a different feature branch in its own worktree. Subagent A adds the user profile endpoint, Subagent B adds the notification system, Subagent C adds the analytics dashboard. All three run simultaneously. Each commits to its worktree&rsquo;s branch. The parent then reviews the three branches, runs tests, and merges the passing ones. This is genuine parallel development — not just parallel reading, but parallel writing with zero risk of interference. Worktrees are automatically cleaned up if the subagent makes no changes; if changes were made, the path and branch are returned so the parent can inspect and merge.</p>
+<h3 id="worktree-isolation-tradeoffs">Worktree Isolation Tradeoffs</h3>
+<p>Worktree isolation adds overhead: each worktree is a full working directory copy (though shared via git&rsquo;s object store, so not as expensive as a full clone). For read-only tasks — code analysis, documentation lookup, search — the overhead isn&rsquo;t worth it; just run parallel subagents without isolation. Reserve worktree isolation for subagents that will write files, create migrations, or make commits. The rule of thumb: if the subagent&rsquo;s output is a text result, no isolation needed. If the output is file changes, use <code>isolation: &quot;worktree&quot;</code>.</p>
+<h2 id="model-selection-strategy-opus-sonnet-and-haiku-for-cost-optimization">Model Selection Strategy: Opus, Sonnet, and Haiku for Cost Optimization</h2>
+<p>Claude Code&rsquo;s model routing capability — assigning different models to different subagents — is one of the most underused cost optimization levers available. Opus output tokens cost nearly 19× more than Haiku output tokens: a 5,000-token task costs $0.375 with Opus vs $0.02 with Haiku. The Advisor Strategy (Opus for planning + Sonnet/Haiku for execution) cuts costs 11% while improving code quality compared to running everything on Opus. The logic: Opus&rsquo;s reasoning advantage matters most for ambiguous, multi-step decisions. For structured, well-defined tasks — format a JSON file, check syntax, count lines, grep for a pattern — Haiku is just as accurate and costs a fraction of the price.</p>
+<p>The routing framework by task type:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Task Type</th>
+          <th>Recommended Model</th>
+          <th>Why</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Architecture decisions, complex debugging</td>
+          <td>Opus 4.7</td>
+          <td>Needs deep reasoning</td>
+      </tr>
+      <tr>
+          <td>Feature implementation, code generation</td>
+          <td>Sonnet 4.6</td>
+          <td>Best speed/quality balance</td>
+      </tr>
+      <tr>
+          <td>File lookup, syntax check, grep, count</td>
+          <td>Haiku 4.5</td>
+          <td>Routine, deterministic output</td>
+      </tr>
+      <tr>
+          <td>Code review (structured checklist)</td>
+          <td>Sonnet 4.6</td>
+          <td>Pattern matching, not reasoning</td>
+      </tr>
+      <tr>
+          <td>Research synthesis, writing documentation</td>
+          <td>Sonnet 4.6</td>
+          <td>High-quality text, not code logic</td>
+      </tr>
+  </tbody>
+</table>
+<p>The <code>model</code> field in a subagent&rsquo;s frontmatter overrides the session default:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-markdown" data-lang="markdown"><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span>name: fast-grep
+</span></span><span style="display:flex;"><span>description: Finds function definitions, import patterns, and usage examples quickly.
+</span></span><span style="display:flex;"><span>tools: Read, Grep, Glob
+</span></span><span style="display:flex;"><span>model: claude-haiku-4-5-20251001
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span>You are a fast search specialist. Return exact file paths and line numbers. No explanations.
+</span></span></code></pre></div><p>A realistic cost comparison for a 20-file codebase audit: all-Opus runs at ~$1.50 total. Routed (Opus orchestrator, Sonnet reviewers, Haiku for file lookups) runs at ~$0.35. Same quality on the output that matters; 77% cheaper on the routine steps.</p>
+<h2 id="5-real-world-subagent-patterns-every-developer-should-know">5 Real-World Subagent Patterns Every Developer Should Know</h2>
+<p>Real-world subagent patterns are reusable templates for common development workflows that benefit from delegation, parallelism, or context isolation. Each pattern targets a specific bottleneck: slow sequential file reads, contaminated context windows, bulk processing, comprehensive code review, and complex multi-phase tasks. Knowing these five patterns means you can immediately apply subagents to concrete situations rather than designing workflows from scratch. The patterns below come from production use cases, including the 9-agent code review framework that reduced review time from minutes to seconds, and the split-and-merge pattern used for auditing codebases with 50+ functions simultaneously. Two factors determine which pattern to reach for: whether tasks are independent (parallel patterns) or sequential (pipeline patterns), and whether tasks produce file changes (worktree isolation required) or just text results (no isolation needed). Start with the parallel code review pattern — it&rsquo;s immediately applicable to any PR workflow and demonstrates the full subagent value proposition with zero custom setup required beyond listing what each reviewer should check.</p>
+<h3 id="pattern-1-9-agent-parallel-code-review">Pattern 1: 9-Agent Parallel Code Review</h3>
+<p>Spawn 9 subagents simultaneously, each focused on one quality dimension:</p>
+<ol>
+<li>Security reviewer (injection, auth, secrets)</li>
+<li>Performance reviewer (N+1 queries, large allocations)</li>
+<li>Error handling reviewer (unhandled exceptions, missing rollbacks)</li>
+<li>Type safety reviewer (any casts, missing null checks)</li>
+<li>Test coverage reviewer (untested paths, edge cases)</li>
+<li>Documentation reviewer (missing docstrings, outdated comments)</li>
+<li>Dependency reviewer (new packages, license issues)</li>
+<li>API contract reviewer (breaking changes, versioning)</li>
+<li>Accessibility reviewer (for frontend changes)</li>
+</ol>
+<p>Each reviewer reads the same diff but focuses on its own checklist. The parent collects 9 reports and synthesizes a final review. Review time drops from 5+ minutes to under 60 seconds.</p>
+<h3 id="pattern-2-explore-plan-execute-pipeline">Pattern 2: Explore-Plan-Execute Pipeline</h3>
+<p>Three sequential subagents for complex features: (1) Explorer scans the codebase to find relevant files, patterns, and potential conflicts; (2) Planner takes the Explorer&rsquo;s report and drafts a step-by-step implementation plan; (3) Executor implements the plan file by file using worktree isolation. The parent&rsquo;s context never fills up with raw exploration data — it receives clean handoffs at each phase boundary.</p>
+<h3 id="pattern-3-split-and-merge-for-bulk-processing">Pattern 3: Split-and-Merge for Bulk Processing</h3>
+<p>For tasks like &ldquo;add JSDoc comments to 50 functions&rdquo; or &ldquo;migrate 40 tests from Jest to Vitest&rdquo;: split the work into batches of 5-10, spawn one subagent per batch, collect results, merge. Each subagent handles a bounded, well-defined chunk. The parent&rsquo;s job is coordination and final merge, not execution.</p>
+<h3 id="pattern-4-context-clean-research">Pattern 4: Context-Clean Research</h3>
+<p>Delegate all web searches, documentation lookups, and file explorations to subagents before starting implementation. The subagent returns a 200-word briefing. The parent implements against the briefing without ever seeing the raw search results. This keeps the implementation context clean and prevents the 100K-token research dumps that slow down late-session performance.</p>
+<h3 id="pattern-5-parallel-feature-branches">Pattern 5: Parallel Feature Branches</h3>
+<p>For independent features on the same sprint: each subagent gets a worktree, a feature spec, and a deadline. They develop in parallel. The parent reviews each branch, runs the test suite, and merges passing branches. The bottleneck shifts from &ldquo;one feature at a time&rdquo; to &ldquo;review and merge throughput.&rdquo;</p>
+<h2 id="getting-started-with-community-subagents-awesome-claude-code-subagents">Getting Started with Community Subagents (awesome-claude-code-subagents)</h2>
+<p>The VoltAgent <code>awesome-claude-code-subagents</code> repository on GitHub contains 100+ specialized community subagents covering everything from Rust borrow checker guidance to Next.js performance auditing to SQL query optimization. Rather than writing every subagent from scratch, this library is the fastest way to get production-grade subagents into your workflow. Each entry in the repo is a ready-to-use <code>.md</code> file with tested frontmatter and a proven system prompt. The community has already debugged the edge cases: prompt phrasing that reliably triggers the right behavior, tool restrictions that prevent subagents from taking destructive actions, model assignments tuned for each task type.</p>
+<p>To get started: browse the repository&rsquo;s categories (Security, Performance, Testing, Documentation, Architecture), copy the files for the subagents most relevant to your work, and drop them into <code>.claude/agents/</code> in your project or <code>~/.claude/agents/</code> for global access. Test each subagent on a small task before including it in production workflows. The most-forked entries as of early 2026 are the security-reviewer, the test-generator, and the migration-planner — all representing tasks that benefit from focused context and structured output.</p>
+<h3 id="writing-your-first-custom-subagent">Writing Your First Custom Subagent</h3>
+<p>Start with a task you currently delegate to Claude via long, repeated prompts. If you find yourself typing the same 200-word instruction block every time you want a certain kind of review or analysis, that&rsquo;s a subagent. Write the instruction block into a frontmatter <code>.md</code> file, decide which tools the subagent needs, choose the cheapest model that handles the task reliably, and save it to <code>.claude/agents/</code>. Run it on 3-4 representative tasks. Adjust the system prompt based on the outputs. After 5 iterations, you&rsquo;ll have a reliable, reusable worker that handles that task better than an ad-hoc prompt ever did.</p>
+<hr>
+<h2 id="faq">FAQ</h2>
+<p><strong>What is the difference between a Claude Code subagent and a regular Claude session?</strong>
+A subagent runs in an isolated context window with its own system prompt, tool access restrictions, and optional model override. The parent session delegates a task, the subagent executes it independently, and only the final result comes back to the parent. A regular session shares the full conversation history with the model on every turn.</p>
+<p><strong>How many subagents can run in parallel in Claude Code?</strong>
+Claude Code supports 16+ parallel agents simultaneously. The practical limit depends on your API rate limits and the size of each subagent&rsquo;s workload. For most codebases, 5-10 parallel subagents covers the useful parallelism; beyond that, orchestration overhead starts to offset the gains.</p>
+<p><strong>Can subagents write to files without conflicting with each other?</strong>
+Yes, if you use the <code>isolation: &quot;worktree&quot;</code> flag. Each subagent with worktree isolation gets its own git worktree — a separate working directory — so simultaneous writes go to different locations. Without worktree isolation, parallel subagents that write to the same file will conflict.</p>
+<p><strong>How does model routing in subagents affect cost?</strong>
+Significant impact. Opus output tokens cost ~19× more than Haiku. Routing routine tasks (file lookups, pattern matching, syntax checks) to Haiku and reserving Opus for architectural decisions can reduce total session costs by 70-80% with no quality loss on the simple tasks.</p>
+<p><strong>Where do I find pre-built community subagents for Claude Code?</strong>
+The <code>VoltAgent/awesome-claude-code-subagents</code> repository on GitHub is the main community library with 100+ specialized subagents. Copy the relevant <code>.md</code> files to <code>.claude/agents/</code> in your project or <code>~/.claude/agents/</code> for global use.</p>
+]]></content:encoded></item></channel></rss>

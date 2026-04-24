@@ -1,23 +1,23 @@
 # Paperclip Pipeline Health Report
-Generated: 2026-04-24 00:01 UTC
+Generated: 2026-04-24 06:00 UTC
 
 ## Overview
 | Metric | Value |
 |--------|-------|
-| Total Issues | 1189 |
-| Backlog | 60 |
-| Todo | 19 |
-| In Progress | 2 |
-| Done | 819 |
-| Cancelled | 285 |
+| Total Issues | 1217 |
+| Backlog | 9 |
+| Todo | 10 |
+| In Progress | 3 |
+| Done | 880 |
+| Cancelled | 313 |
 | Error | 0 |
-| Completed (24h) | 109 |
+| Completed (24h) | 110 |
 
 ## Agent Health
 | Agent | Status | Heartbeat | MaxConc | Model |
 |-------|--------|-----------|---------|-------|
 | Analyst | idle | ON | 3 | claude-haiku-4-5-20251001 |
-| ContentDirector | idle | ON | 3 | claude-sonnet-4-6 |
+| ContentDirector | running | ON | 3 | claude-sonnet-4-6 |
 | Publisher | running | ON | 3 | claude-haiku-4-5-20251001 |
 | Researcher | idle | ON | 3 | claude-sonnet-4-6 |
 | SEO | idle | ON | 3 | claude-haiku-4-5-20251001 |
@@ -32,13 +32,13 @@ Generated: 2026-04-24 00:01 UTC
 ## Pipeline Flow
 | Stage | Completed | Backlog | In Progress |
 |-------|-----------|---------|-------------|
-| Research | 90 | 0 | 0 |
-| Write | 94 | 0 | 0 |
-| SEO | 53 | 21 | 0 |
-| Thumbnail | 54 | 20 | 0 |
-| Publish | 100 | 0 | 0 |
+| Research | 92 | 0 | 0 |
+| Write | 95 | 0 | 0 |
+| SEO | 63 | 5 | 0 |
+| Thumbnail | 64 | 4 | 0 |
+| Publish | 112 | 0 | 0 |
 
 ## Content Stats
 | Metric | Value |
 |--------|-------|
-| Published posts on disk | 134 |
+| Published posts on disk | 135 |
