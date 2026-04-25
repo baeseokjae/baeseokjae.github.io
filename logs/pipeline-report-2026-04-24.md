@@ -1,17 +1,17 @@
 # Paperclip Pipeline Health Report
-Generated: 2026-04-24 06:00 UTC
+Generated: 2026-04-24 18:01 UTC
 
 ## Overview
 | Metric | Value |
 |--------|-------|
-| Total Issues | 1217 |
-| Backlog | 9 |
-| Todo | 10 |
-| In Progress | 3 |
-| Done | 880 |
-| Cancelled | 313 |
+| Total Issues | 1294 |
+| Backlog | 23 |
+| Todo | 11 |
+| In Progress | 2 |
+| Done | 920 |
+| Cancelled | 333 |
 | Error | 0 |
-| Completed (24h) | 110 |
+| Completed (24h) | 125 |
 
 ## Agent Health
 | Agent | Status | Heartbeat | MaxConc | Model |
@@ -32,13 +32,13 @@ Generated: 2026-04-24 06:00 UTC
 ## Pipeline Flow
 | Stage | Completed | Backlog | In Progress |
 |-------|-----------|---------|-------------|
-| Research | 92 | 0 | 0 |
-| Write | 95 | 0 | 0 |
-| SEO | 63 | 5 | 0 |
-| Thumbnail | 64 | 4 | 0 |
-| Publish | 112 | 0 | 0 |
+| Research | 101 | 1 | 0 |
+| Write | 103 | 1 | 0 |
+| SEO | 70 | 7 | 0 |
+| Thumbnail | 66 | 12 | 0 |
+| Publish | 114 | 1 | 0 |
 
 ## Content Stats
 | Metric | Value |
 |--------|-------|
-| Published posts on disk | 135 |
+| Published posts on disk | 142 |
