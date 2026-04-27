@@ -2,7 +2,7 @@
 title: "Continue.dev vs GitHub Copilot 2026: Open-Source Alternative That's Worth Switching To"
 date: 2026-04-25T09:02:45+00:00
 tags: ["continue.dev", "github-copilot", "open-source", "ai-coding", "developer-tools"]
-description: "Continue.dev vs GitHub Copilot 2026 comparison: pricing, BYO-models, CLI agents, and whether the open-source alternative is worth switching to."
+description: "Compare Continue.dev and GitHub Copilot: pricing, model flexibility, PR agents, and whether the open-source alternative is worth the switch."
 draft: false
 cover:
   image: "/images/continue-dev-vs-github-copilot-2026.png"
