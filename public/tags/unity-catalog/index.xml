@@ -1,0 +1,308 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Unity-Catalog on RockB</title><link>https://baeseokjae.github.io/tags/unity-catalog/</link><description>Recent content in Unity-Catalog on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sat, 25 Apr 2026 16:04:24 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/unity-catalog/index.xml" rel="self" type="application/rss+xml"/><item><title>Databricks Managed MCP Servers Guide: Developer Setup and Unity Catalog Integration</title><link>https://baeseokjae.github.io/posts/databricks-mcp-managed-servers-guide-2026/</link><pubDate>Sat, 25 Apr 2026 16:04:24 +0000</pubDate><guid>https://baeseokjae.github.io/posts/databricks-mcp-managed-servers-guide-2026/</guid><description>Complete developer guide for Databricks managed MCP servers: setup, authentication, Genie/Vector Search/UC Functions integration, and Unity Catalog governance.</description><content:encoded><![CDATA[<p>Databricks managed MCP servers give AI agents secure, governed access to your Lakehouse data — Genie (NL-to-SQL), Vector Search, and UC Functions — with zero infrastructure overhead and Unity Catalog permissions enforced automatically on every call.</p>
+<h2 id="what-are-databricks-managed-mcp-servers">What Are Databricks Managed MCP Servers?</h2>
+<p>Databricks managed MCP servers are hosted, serverless endpoints that expose Lakehouse capabilities — structured data queries, vector search, and custom functions — to any MCP-compatible AI client through the Model Context Protocol standard. Unlike self-hosted MCP servers that require you to provision infrastructure, manage TLS, and handle scaling, Databricks-managed servers run entirely on Databricks serverless compute with on-behalf-of-user authentication baked in. Every tool call automatically inherits the caller&rsquo;s Unity Catalog permissions, which means a data analyst connecting Claude Desktop to a Genie space can only query tables their UC role allows — no manual ACL syncing required. Databricks announced general availability of managed MCP servers in early 2026 alongside a broader &ldquo;Week of Agents&rdquo; initiative, and the platform has seen multi-agent workflow usage grow 327% in four months. The practical upshot for developers: you get enterprise-grade governance without writing a single line of server-side authentication code.</p>
+<h2 id="three-types-of-databricks-mcp-servers-managed-external-and-custom">Three Types of Databricks MCP Servers: Managed, External, and Custom</h2>
+<p>Databricks supports three MCP deployment models, and choosing the right one shapes your architecture from day one. <strong>Managed servers</strong> (Genie, Vector Search, UC Functions) are hosted by Databricks, require no setup, and auto-enforce Unity Catalog permissions. You simply point your client at the server URL. <strong>External servers</strong> are third-party MCP servers accessible via the MCP Catalog and Databricks Marketplace — partners like You.com, Glean, S&amp;P Global, Factset, Dun &amp; Bradstreet, and Moody&rsquo;s have published tools you can connect with single-click configuration. <strong>Custom servers</strong> are MCP servers you build and host on Databricks Apps using the <code>databricks-mcp</code> Python package; these give you full control over tool definitions but require deployment and maintenance. For most enterprise developers, managed servers cover 80% of use cases. Custom servers make sense when you need proprietary business logic exposed as MCP tools. External marketplace servers extend your agent&rsquo;s reach to financial data, search, and external knowledge bases.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Type</th>
+          <th>Setup effort</th>
+          <th>Governance</th>
+          <th>Best for</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Managed (Genie/VS/UC)</td>
+          <td>Zero — just configure client</td>
+          <td>Automatic UC enforcement</td>
+          <td>Lakehouse data access</td>
+      </tr>
+      <tr>
+          <td>External (Marketplace)</td>
+          <td>Single-click config</td>
+          <td>Partner-defined</td>
+          <td>Third-party data/tools</td>
+      </tr>
+      <tr>
+          <td>Custom (Databricks Apps)</td>
+          <td>Python dev + deployment</td>
+          <td>Developer-controlled</td>
+          <td>Proprietary logic</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="prerequisites-and-environment-setup-python-312-dependencies">Prerequisites and Environment Setup (Python 3.12+, Dependencies)</h2>
+<p>Getting your local environment ready for Databricks MCP development requires Python 3.10 at minimum, though 3.12+ is strongly recommended because the <code>mcp</code> package leverages newer async primitives. You&rsquo;ll also need serverless compute enabled in your Databricks workspace — without it, managed MCP endpoints won&rsquo;t activate. The core dependency set is small but version-pinned: <code>mcp&gt;=1.9</code> for the MCP protocol implementation, <code>databricks-sdk[openai]</code> for workspace client and auth helpers, <code>mlflow&gt;=3.1.0</code> for experiment tracking integration, <code>databricks-agents&gt;=1.0.0</code> for the agent framework, and <code>databricks-mcp</code> for the CLI and Python client. These pinned minimums exist because Databricks MCP uses the Streamable HTTP transport introduced in MCP 1.9 — older clients that only support SSE transport won&rsquo;t connect. Before writing any code, verify your workspace URL and that your user account has the <code>USE CATALOG</code> and <code>USE SCHEMA</code> Unity Catalog privileges on the catalogs you want to expose.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Create isolated environment</span>
+</span></span><span style="display:flex;"><span>python3.12 -m venv .venv <span style="color:#f92672">&amp;&amp;</span> source .venv/bin/activate
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Install all required packages</span>
+</span></span><span style="display:flex;"><span>pip install <span style="color:#e6db74">&#34;mcp&gt;=1.9&#34;</span> <span style="color:#e6db74">&#34;databricks-sdk[openai]&#34;</span> <span style="color:#e6db74">&#34;mlflow&gt;=3.1.0&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  <span style="color:#e6db74">&#34;databricks-agents&gt;=1.0.0&#34;</span> databricks-mcp
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify installation</span>
+</span></span><span style="display:flex;"><span>python -c <span style="color:#e6db74">&#34;import databricks_mcp; print(databricks_mcp.__version__)&#34;</span>
+</span></span></code></pre></div><h3 id="verifying-workspace-serverless-compute">Verifying Workspace Serverless Compute</h3>
+<p>Before configuring any MCP server, check that serverless compute is on. In the Databricks workspace UI, go to <strong>Settings &gt; Compute &gt; Serverless</strong> and confirm the toggle is enabled. Alternatively, use the SDK: <code>WorkspaceClient().settings.default_namespace_setting.get()</code> — if it throws a permission error rather than returning a result, serverless may be disabled at the workspace level and you&rsquo;ll need an admin to enable it.</p>
+<h2 id="authenticating-to-your-databricks-workspace-oauth-and-pat">Authenticating to Your Databricks Workspace (OAuth and PAT)</h2>
+<p>Databricks MCP supports two authentication paths for local development: OAuth (recommended) and Personal Access Tokens (PAT). OAuth uses the Databricks CLI&rsquo;s browser-based login flow and issues short-lived tokens that automatically refresh — this is the correct choice for human-in-the-loop developer workflows because it ties every MCP tool call to a specific user identity, which Unity Catalog can then audit. PAT-based auth uses a static token stored in environment variables; it&rsquo;s simpler to configure but creates a shared service account identity that bypasses per-user audit trails. For production agent deployments where no human is in the loop, service principal OAuth (M2M) is the right answer — not PATs. The <code>databricks-mcp</code> CLI detects which auth method to use based on environment variables, following the same credential chain as the Databricks SDK: environment variables → <code>~/.databrickscfg</code> → Azure Managed Identity (on Azure) → instance profile (on AWS).</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># OAuth login (recommended for local dev)</span>
+</span></span><span style="display:flex;"><span>databricks auth login --host https://your-workspace.azuredatabricks.net
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify auth works</span>
+</span></span><span style="display:flex;"><span>databricks auth env --host https://your-workspace.azuredatabricks.net
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># PAT alternative (less preferred)</span>
+</span></span><span style="display:flex;"><span>export DATABRICKS_HOST<span style="color:#f92672">=</span>https://your-workspace.azuredatabricks.net
+</span></span><span style="display:flex;"><span>export DATABRICKS_TOKEN<span style="color:#f92672">=</span>dapi...your-token-here
+</span></span></code></pre></div><h3 id="service-principal-oauth-for-production">Service Principal OAuth for Production</h3>
+<p>For unattended agent deployments, use M2M OAuth with a service principal. Create a service principal in your workspace, assign Unity Catalog roles to it, and configure OAuth credentials via the Databricks admin console. Set <code>DATABRICKS_CLIENT_ID</code> and <code>DATABRICKS_CLIENT_SECRET</code> environment variables instead of <code>DATABRICKS_TOKEN</code>. The SDK automatically detects M2M credentials and uses the client credentials flow, keeping tokens rotated without manual intervention.</p>
+<h2 id="installing-databricks-mcp-and-configuring-your-first-server">Installing databricks-mcp and Configuring Your First Server</h2>
+<p>The <code>databricks-mcp</code> package ships a CLI that generates MCP server configuration for all three managed server types. After installation, use <code>databricks-mcp serve</code> to start a local proxy that translates MCP protocol calls into Databricks API requests — this is what you configure external clients like Claude Desktop to point at. The configuration file (<code>mcp.json</code> in VS Code or the JSON config in Claude Desktop) specifies the command to run, the workspace host, and any server-specific parameters like the Genie space ID or vector search endpoint name. Generating the config requires knowing your workspace URL and, for Genie, the space ID visible in the Databricks UI under <strong>Genie &gt; Spaces</strong>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Generate MCP config for all managed servers</span>
+</span></span><span style="display:flex;"><span>databricks-mcp config generate <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --host https://your-workspace.azuredatabricks.net <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --output ./mcp-config.json
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Start a local MCP proxy (foreground, useful for debugging)</span>
+</span></span><span style="display:flex;"><span>databricks-mcp serve <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --host https://your-workspace.azuredatabricks.net <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --server genie <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --genie-space-id your-space-id
+</span></span></code></pre></div><p>The generated <code>mcp-config.json</code> follows the standard MCP client configuration format and can be dropped directly into VS Code&rsquo;s <code>.vscode/mcp.json</code> or Claude Desktop&rsquo;s config file without modification.</p>
+<h2 id="working-with-genie-spaces-natural-language-to-sql">Working with Genie Spaces (Natural Language to SQL)</h2>
+<p>Genie is Databricks&rsquo; natural-language-to-SQL service, and its MCP integration exposes a single high-value tool: <code>genie_execute_message</code>. You send a plain-English question — &ldquo;What were the top 10 revenue-generating products in Q1 2026?&rdquo; — and Genie translates it to SQL, executes it against tables in your Unity Catalog, and returns structured results. The critical architectural point is that Genie still enforces the caller&rsquo;s row-level security filters and column masks defined in Unity Catalog — a user without access to the <code>orders.pii_columns</code> column cannot retrieve that data through Genie, even if they phrase the question cleverly. Genie spaces are pre-configured by data teams with approved tables, semantic definitions, and query examples; developers connect to an existing space rather than defining schema from scratch. To find your space ID, navigate to <strong>Genie &gt; Spaces</strong> in the workspace UI — the ID appears in the URL as a UUID. Setting up Genie MCP takes under five minutes once your space exists.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># Direct SDK usage (useful for testing before configuring MCP client)</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> databricks.sdk <span style="color:#f92672">import</span> WorkspaceClient
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>w <span style="color:#f92672">=</span> WorkspaceClient()
+</span></span><span style="display:flex;"><span>space_id <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;your-genie-space-id&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Start a conversation</span>
+</span></span><span style="display:flex;"><span>conversation <span style="color:#f92672">=</span> w<span style="color:#f92672">.</span>genie<span style="color:#f92672">.</span>start_conversation(space_id<span style="color:#f92672">=</span>space_id)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Ask a question</span>
+</span></span><span style="display:flex;"><span>message <span style="color:#f92672">=</span> w<span style="color:#f92672">.</span>genie<span style="color:#f92672">.</span>create_conversation_message(
+</span></span><span style="display:flex;"><span>    space_id<span style="color:#f92672">=</span>space_id,
+</span></span><span style="display:flex;"><span>    conversation_id<span style="color:#f92672">=</span>conversation<span style="color:#f92672">.</span>conversation_id,
+</span></span><span style="display:flex;"><span>    content<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;What were the top 5 products by revenue last month?&#34;</span>,
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>print(message<span style="color:#f92672">.</span>attachments)
+</span></span></code></pre></div><h3 id="genie-limitations-and-best-practices">Genie Limitations and Best Practices</h3>
+<p>Genie performs best on well-defined analytical questions against structured tables. It struggles with multi-hop joins across more than four tables, ambiguous column names, and questions requiring real-time streaming data. Always configure your Genie space with SQL examples (at least 10-20 representative queries) to ground the model&rsquo;s SQL generation. When a Genie question returns unexpected results, check the space&rsquo;s <strong>Query History</strong> tab — Genie logs every generated SQL statement, making debugging straightforward.</p>
+<h2 id="vector-search-integration-for-unstructured-data-retrieval">Vector Search Integration for Unstructured Data Retrieval</h2>
+<p>Databricks Vector Search MCP exposes semantic similarity search over Delta Lake tables containing embeddings — the practical use case is retrieval-augmented generation (RAG) where an AI agent needs to find relevant documents, code snippets, or knowledge base articles before answering a question. The Vector Search MCP tool (<code>vector_search_query</code>) takes a natural-language query, converts it to an embedding using the endpoint you&rsquo;ve configured in your workspace, and returns the top-k most similar chunks with their metadata and similarity scores. Like Genie, Vector Search respects Unity Catalog permissions: the calling user must have <code>SELECT</code> on the source Delta table that backs the vector index. Vector Search indexes can be either <strong>Delta Sync</strong> (auto-synced from a Delta table as data changes) or <strong>Direct Vector Access</strong> (you manage embedding updates via API). For most RAG use cases, Delta Sync indexes are the right choice — new documents added to the source table are automatically embedded and indexed within minutes.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># Test vector search before wiring up MCP</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> databricks.sdk <span style="color:#f92672">import</span> WorkspaceClient
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>w <span style="color:#f92672">=</span> WorkspaceClient()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>results <span style="color:#f92672">=</span> w<span style="color:#f92672">.</span>vector_search_indexes<span style="color:#f92672">.</span>query_index(
+</span></span><span style="display:flex;"><span>    index_name<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;main.rag_catalog.docs_index&#34;</span>,
+</span></span><span style="display:flex;"><span>    columns<span style="color:#f92672">=</span>[<span style="color:#e6db74">&#34;content&#34;</span>, <span style="color:#e6db74">&#34;source_url&#34;</span>, <span style="color:#e6db74">&#34;last_updated&#34;</span>],
+</span></span><span style="display:flex;"><span>    query_text<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;databricks unity catalog row level security&#34;</span>,
+</span></span><span style="display:flex;"><span>    num_results<span style="color:#f92672">=</span><span style="color:#ae81ff">5</span>,
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">for</span> result <span style="color:#f92672">in</span> results<span style="color:#f92672">.</span>result<span style="color:#f92672">.</span>data_array:
+</span></span><span style="display:flex;"><span>    print(result)
+</span></span></code></pre></div><h3 id="combining-genie-and-vector-search-in-a-single-agent">Combining Genie and Vector Search in a Single Agent</h3>
+<p>The most powerful pattern is routing: a supervisor agent receives a user question, classifies it as structured (SQL/Genie) or unstructured (RAG/Vector Search), and dispatches to the appropriate MCP tool. Databricks&rsquo; Supervisor Agent became the #1 Agent Bricks use case within 4 months of launch (capturing 37% of all Agent Bricks usage), largely because this routing pattern maps cleanly onto Databricks&rsquo; tool set.</p>
+<h2 id="unity-catalog-functions-uc-functions-as-mcp-tools">Unity Catalog Functions (UC Functions) as MCP Tools</h2>
+<p>Unity Catalog Functions are Python or SQL functions registered in the UC metastore that can be discovered, governed, and executed like any other UC asset. The UC Functions MCP server (<code>uc_functions</code>) automatically converts every function in your specified catalog/schema into an MCP tool, with the function signature becoming the tool&rsquo;s input schema and the UC comment becoming the tool description. This means a Python function like <code>calculate_churn_risk(customer_id: str) -&gt; float</code> registered at <code>main.ml_tools.calculate_churn_risk</code> becomes a callable MCP tool with a properly typed input schema — no additional wrapping required. Unity Catalog handles permission checks on each invocation: the calling user needs <code>EXECUTE</code> privilege on the function. Organizations with unified AI governance ship 12x more AI projects than those without, and UC Functions as MCP tools is a direct mechanism for that governance — every tool invocation is logged in UC&rsquo;s audit trail.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-sql" data-lang="sql"><span style="display:flex;"><span><span style="color:#75715e">-- Register a UC Function (SQL example)
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">CREATE</span> <span style="color:#66d9ef">OR</span> <span style="color:#66d9ef">REPLACE</span> <span style="color:#66d9ef">FUNCTION</span> main.ml_tools.get_customer_tier(
+</span></span><span style="display:flex;"><span>  customer_id STRING <span style="color:#66d9ef">COMMENT</span> <span style="color:#e6db74">&#34;Unique customer identifier&#34;</span>
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">RETURNS</span> STRING
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">COMMENT</span> <span style="color:#e6db74">&#34;Returns customer tier (Bronze/Silver/Gold/Platinum) based on LTV&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">LANGUAGE</span> <span style="color:#66d9ef">SQL</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">AS</span> <span style="color:#960050;background-color:#1e0010">$$</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">SELECT</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">CASE</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">WHEN</span> lifetime_value <span style="color:#f92672">&gt;=</span> <span style="color:#ae81ff">50000</span> <span style="color:#66d9ef">THEN</span> <span style="color:#e6db74">&#39;Platinum&#39;</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">WHEN</span> lifetime_value <span style="color:#f92672">&gt;=</span> <span style="color:#ae81ff">10000</span> <span style="color:#66d9ef">THEN</span> <span style="color:#e6db74">&#39;Gold&#39;</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">WHEN</span> lifetime_value <span style="color:#f92672">&gt;=</span> <span style="color:#ae81ff">1000</span>  <span style="color:#66d9ef">THEN</span> <span style="color:#e6db74">&#39;Silver&#39;</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">ELSE</span> <span style="color:#e6db74">&#39;Bronze&#39;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">END</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">FROM</span> main.customers.profiles
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">WHERE</span> id <span style="color:#f92672">=</span> customer_id
+</span></span><span style="display:flex;"><span><span style="color:#960050;background-color:#1e0010">$$</span>;
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># Register a Python UC Function</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> databricks.sdk <span style="color:#f92672">import</span> WorkspaceClient
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> databricks.sdk.service.catalog <span style="color:#f92672">import</span> FunctionInfo
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># After defining your function in a notebook or via SDK,</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># it appears automatically in the UC Functions MCP server</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># — no extra registration step needed</span>
+</span></span></code></pre></div><h2 id="unity-catalog-governance-and-permission-enforcement">Unity Catalog Governance and Permission Enforcement</h2>
+<p>Unity Catalog&rsquo;s permission model flows transparently through every Databricks MCP tool call. When a user invokes an MCP tool, the Databricks MCP server issues the underlying API call on behalf of that user using the OAuth token from the initial authentication. Unity Catalog evaluates the caller&rsquo;s privileges — <code>SELECT</code> for Genie and Vector Search queries, <code>EXECUTE</code> for UC Functions — and applies row-level security filters, column masks, and data lineage tracking exactly as it would for a direct SQL query. This on-behalf-of-user design is the key differentiator from service-account-based MCP approaches: you get full audit trails showing which user queried which data, when, and through which AI client. For organizations in regulated industries (financial services, healthcare), this is often a hard compliance requirement. The Databricks audit log records MCP tool calls under the <code>databricks_mcp</code> action category, making it straightforward to build SIEM dashboards that monitor AI agent data access alongside traditional BI tool access.</p>
+<h3 id="setting-up-unity-catalog-permissions-for-mcp">Setting Up Unity Catalog Permissions for MCP</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-sql" data-lang="sql"><span style="display:flex;"><span><span style="color:#75715e">-- Grant Genie space access (table-level)
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">GRANT</span> <span style="color:#66d9ef">SELECT</span> <span style="color:#66d9ef">ON</span> <span style="color:#66d9ef">TABLE</span> main.sales.orders <span style="color:#66d9ef">TO</span> <span style="color:#f92672">`</span><span style="color:#66d9ef">data</span><span style="color:#f92672">-</span>analyst<span style="color:#f92672">-</span><span style="color:#66d9ef">group</span><span style="color:#f92672">`</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">-- Grant Vector Search index access
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">GRANT</span> <span style="color:#66d9ef">SELECT</span> <span style="color:#66d9ef">ON</span> <span style="color:#66d9ef">TABLE</span> main.rag_catalog.docs_source <span style="color:#66d9ef">TO</span> <span style="color:#f92672">`</span>developer<span style="color:#f92672">-</span><span style="color:#66d9ef">group</span><span style="color:#f92672">`</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">-- Grant UC Function execution
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">GRANT</span> <span style="color:#66d9ef">EXECUTE</span> <span style="color:#66d9ef">ON</span> <span style="color:#66d9ef">FUNCTION</span> main.ml_tools.calculate_churn_risk <span style="color:#66d9ef">TO</span> <span style="color:#f92672">`</span>ml<span style="color:#f92672">-</span>engineer<span style="color:#f92672">-</span><span style="color:#66d9ef">group</span><span style="color:#f92672">`</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">-- Optional: restrict specific columns via column mask
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">ALTER</span> <span style="color:#66d9ef">TABLE</span> main.sales.orders
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">ALTER</span> <span style="color:#66d9ef">COLUMN</span> customer_email
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">SET</span> MASK main.masks.email_mask
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">USING</span> COLUMNS (customer_email)
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">FOR</span> (IS_MEMBER(<span style="color:#e6db74">&#39;data-analyst-group&#39;</span>));
+</span></span></code></pre></div><h2 id="connecting-external-clients-claude-desktop-vs-code-github-copilot">Connecting External Clients: Claude Desktop, VS Code, GitHub Copilot</h2>
+<p>Any MCP-compatible client can connect to Databricks managed MCP servers in under 10 minutes. The configuration pattern is the same across clients: specify the <code>databricks-mcp</code> CLI command as the server process, and pass your workspace host and server type as arguments. Claude Desktop stores MCP config in <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> (macOS) or <code>%APPDATA%\Claude\claude_desktop_config.json</code> (Windows). VS Code reads from <code>.vscode/mcp.json</code> in the workspace root, and GitHub Copilot uses a similar JSON format in the Copilot settings file.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span><span style="color:#75715e">// Claude Desktop: ~/Library/Application Support/Claude/claude_desktop_config.json
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;mcpServers&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;databricks-genie&#34;</span>: {
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;command&#34;</span>: <span style="color:#e6db74">&#34;databricks-mcp&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;args&#34;</span>: [
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;serve&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;--host&#34;</span>, <span style="color:#e6db74">&#34;https://your-workspace.azuredatabricks.net&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;--server&#34;</span>, <span style="color:#e6db74">&#34;genie&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;--genie-space-id&#34;</span>, <span style="color:#e6db74">&#34;your-space-uuid&#34;</span>
+</span></span><span style="display:flex;"><span>      ]
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;databricks-vector-search&#34;</span>: {
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;command&#34;</span>: <span style="color:#e6db74">&#34;databricks-mcp&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;args&#34;</span>: [
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;serve&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;--host&#34;</span>, <span style="color:#e6db74">&#34;https://your-workspace.azuredatabricks.net&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;--server&#34;</span>, <span style="color:#e6db74">&#34;vector_search&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;--index-name&#34;</span>, <span style="color:#e6db74">&#34;main.rag_catalog.docs_index&#34;</span>
+</span></span><span style="display:flex;"><span>      ]
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;databricks-uc-functions&#34;</span>: {
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;command&#34;</span>: <span style="color:#e6db74">&#34;databricks-mcp&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;args&#34;</span>: [
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;serve&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;--host&#34;</span>, <span style="color:#e6db74">&#34;https://your-workspace.azuredatabricks.net&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;--server&#34;</span>, <span style="color:#e6db74">&#34;uc_functions&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;--catalog&#34;</span>, <span style="color:#e6db74">&#34;main&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;--schema&#34;</span>, <span style="color:#e6db74">&#34;ml_tools&#34;</span>
+</span></span><span style="display:flex;"><span>      ]
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span><span style="color:#75715e">// VS Code: .vscode/mcp.json
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;servers&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;databricks&#34;</span>: {
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;stdio&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;command&#34;</span>: <span style="color:#e6db74">&#34;databricks-mcp&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;args&#34;</span>: [<span style="color:#e6db74">&#34;serve&#34;</span>, <span style="color:#e6db74">&#34;--host&#34;</span>, <span style="color:#e6db74">&#34;${env:DATABRICKS_HOST}&#34;</span>, <span style="color:#e6db74">&#34;--server&#34;</span>, <span style="color:#e6db74">&#34;genie&#34;</span>,
+</span></span><span style="display:flex;"><span>               <span style="color:#e6db74">&#34;--genie-space-id&#34;</span>, <span style="color:#e6db74">&#34;${env:GENIE_SPACE_ID}&#34;</span>]
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><h3 id="troubleshooting-client-connections">Troubleshooting Client Connections</h3>
+<p>The most common connection failure is expired OAuth tokens — run <code>databricks auth login</code> again if you see <code>401 Unauthorized</code> in the MCP server logs. The second most common issue is missing serverless compute: check the Databricks workspace admin settings if tools connect but every call returns a <code>ComputeNotAvailable</code> error.</p>
+<h2 id="using-the-mcp-catalog-and-databricks-marketplace">Using the MCP Catalog and Databricks Marketplace</h2>
+<p>The Databricks MCP Catalog (Beta) is a centralized registry for discovering and governing MCP servers within your organization — think of it as an internal App Store for AI tools. Teams register their custom MCP servers (built on Databricks Apps or elsewhere) in the catalog with descriptions, input schemas, and access policies. Other teams can then discover and connect to these tools without needing to know deployment details. The Databricks Marketplace extends this further: external partners have published MCP servers for financial data (S&amp;P Global, Factset, Moody&rsquo;s, Dun &amp; Bradstreet), enterprise search (Glean), and web search (You.com). Connecting a marketplace MCP server uses single-click configuration in the workspace UI — Databricks handles credential exchange and connection management. This is the fastest path to giving your AI agents access to high-value external data sources without building custom connectors.</p>
+<h3 id="registering-a-custom-server-in-mcp-catalog">Registering a Custom Server in MCP Catalog</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> databricks.sdk <span style="color:#f92672">import</span> WorkspaceClient
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>w <span style="color:#f92672">=</span> WorkspaceClient()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Register your custom MCP server in the catalog</span>
+</span></span><span style="display:flex;"><span>w<span style="color:#f92672">.</span>mcp_catalog<span style="color:#f92672">.</span>register_server(
+</span></span><span style="display:flex;"><span>    name<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;my-team-crm-tools&#34;</span>,
+</span></span><span style="display:flex;"><span>    description<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;CRM data access tools for sales team agents&#34;</span>,
+</span></span><span style="display:flex;"><span>    server_url<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;https://your-databricks-app.azurewebsites.net/mcp&#34;</span>,
+</span></span><span style="display:flex;"><span>    auth_type<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;unity_catalog&#34;</span>,
+</span></span><span style="display:flex;"><span>    tags<span style="color:#f92672">=</span>[<span style="color:#e6db74">&#34;crm&#34;</span>, <span style="color:#e6db74">&#34;sales&#34;</span>, <span style="color:#e6db74">&#34;production&#34;</span>],
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre></div><h2 id="monitoring-mcp-usage-with-ai-gateway">Monitoring MCP Usage with AI Gateway</h2>
+<p>Databricks AI Gateway provides a unified control plane for monitoring, rate limiting, and access management across all MCP tool calls in your workspace. When you route MCP traffic through AI Gateway, every tool invocation generates a structured log entry containing: calling user, tool name, input parameters (redacted for PII if configured), response latency, token usage (for LLM-backed tools like Genie), and Unity Catalog audit metadata. AI Gateway also enforces rate limits per user or team — preventing a runaway agent from monopolizing Genie space compute. Setting up AI Gateway for MCP requires creating an AI Gateway endpoint in the workspace UI and pointing your MCP server configuration at the gateway URL instead of the direct API endpoint. The latency overhead is typically under 10ms for the gateway layer, negligible compared to Genie query execution time (usually 2-15 seconds).</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># Query AI Gateway usage logs for MCP calls</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> databricks.sdk <span style="color:#f92672">import</span> WorkspaceClient
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> pandas <span style="color:#66d9ef">as</span> pd
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>w <span style="color:#f92672">=</span> WorkspaceClient()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># AI Gateway logs are surfaced in system tables</span>
+</span></span><span style="display:flex;"><span>df <span style="color:#f92672">=</span> spark<span style="color:#f92672">.</span>sql(<span style="color:#e6db74">&#34;&#34;&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  SELECT
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    timestamp,
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    request_metadata.user_id,
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    request_metadata.tool_name,
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    response_metadata.latency_ms,
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    response_metadata.status_code
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  FROM system.ai_gateway.mcp_request_logs
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  WHERE timestamp &gt;= current_date() - INTERVAL 7 DAYS
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  ORDER BY timestamp DESC
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  LIMIT 1000
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">&#34;&#34;&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>display(df)
+</span></span></code></pre></div><h2 id="building-custom-mcp-servers-on-databricks-apps">Building Custom MCP Servers on Databricks Apps</h2>
+<p>When managed servers don&rsquo;t cover your use case — proprietary ML model inference, custom ETL triggers, or business logic not expressible as UC Functions — you can build and host MCP servers on Databricks Apps. The key constraint is transport: Databricks Apps uses HTTP, so your MCP server must use Streamable HTTP transport (introduced in MCP 1.9) rather than stdio. The <code>databricks-mcp</code> package provides base classes that handle authentication, Unity Catalog permission checks, and the Streamable HTTP transport layer; you define only the tool implementations. Apps automatically scale with traffic and integrate with workspace IAM for authentication — users authenticate via OAuth the same way they would with managed servers.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># app.py — minimal Databricks Apps MCP server</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> databricks_mcp <span style="color:#f92672">import</span> DatabricksMCPServer, tool
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> databricks.sdk <span style="color:#f92672">import</span> WorkspaceClient
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>app <span style="color:#f92672">=</span> DatabricksMCPServer(name<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;my-custom-tools&#34;</span>, version<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;1.0.0&#34;</span>)
+</span></span><span style="display:flex;"><span>w <span style="color:#f92672">=</span> WorkspaceClient()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">@tool</span>(
+</span></span><span style="display:flex;"><span>    name<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;get_pipeline_status&#34;</span>,
+</span></span><span style="display:flex;"><span>    description<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;Returns the current status and last run time for a Delta Live Tables pipeline&#34;</span>,
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">get_pipeline_status</span>(pipeline_id: str) <span style="color:#f92672">-&gt;</span> dict:
+</span></span><span style="display:flex;"><span>    pipeline <span style="color:#f92672">=</span> w<span style="color:#f92672">.</span>pipelines<span style="color:#f92672">.</span>get(pipeline_id<span style="color:#f92672">=</span>pipeline_id)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;name&#34;</span>: pipeline<span style="color:#f92672">.</span>name,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;state&#34;</span>: pipeline<span style="color:#f92672">.</span>state<span style="color:#f92672">.</span>value,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;last_modified&#34;</span>: str(pipeline<span style="color:#f92672">.</span>last_modified),
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Databricks Apps expects a WSGI/ASGI app bound to PORT env var</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">if</span> __name__ <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;__main__&#34;</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">import</span> uvicorn<span style="color:#f92672">,</span> os
+</span></span><span style="display:flex;"><span>    uvicorn<span style="color:#f92672">.</span>run(app<span style="color:#f92672">.</span>asgi_app, host<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;0.0.0.0&#34;</span>, port<span style="color:#f92672">=</span>int(os<span style="color:#f92672">.</span>environ<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;PORT&#34;</span>, <span style="color:#ae81ff">8080</span>)))
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># databricks.yml — deployment config for Databricks Apps</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">bundle</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">custom-mcp-server</span>
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span><span style="color:#f92672">resources</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">apps</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">custom-mcp</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">name</span>: <span style="color:#ae81ff">custom-mcp-server</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">source_code_path</span>: <span style="color:#ae81ff">./app</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">description</span>: <span style="color:#ae81ff">Custom MCP server for pipeline management tools</span>
+</span></span></code></pre></div><h3 id="performance-considerations-for-custom-servers">Performance Considerations for Custom Servers</h3>
+<p>Cold-start latency on Databricks Apps ranges from 1-3 seconds when the app hasn&rsquo;t received traffic in several minutes. For MCP tool calls in interactive AI workflows, this cold-start is noticeable. Mitigate it with a lightweight health-check endpoint that your monitoring system pings every 30 seconds to keep the app warm, or use the Databricks Apps &ldquo;always-on&rdquo; option (available at higher pricing tiers).</p>
+<h2 id="best-practices-for-enterprise-mcp-deployments">Best Practices for Enterprise MCP Deployments</h2>
+<p>Enterprise-scale MCP deployments on Databricks require intentional decisions around governance, performance, and observability from day one — retrofitting these later is significantly more expensive. The governance foundation is straightforward: always use OAuth rather than PATs, never share service principal credentials across teams, and register every MCP tool in the MCP Catalog so there&rsquo;s a discoverable inventory. Only 19% of organizations have deployed AI agents in production despite heavy interest, and the gap is often governance: teams that treat MCP tools as governed UC assets from the start close that gap faster. For performance, configure connection pooling in the <code>databricks-mcp</code> server (the <code>--max-connections</code> flag) to prevent per-tool-call connection overhead. For observability, route all MCP traffic through AI Gateway even if you&rsquo;re not using rate limiting — the audit logs alone justify the minimal latency cost. Finally, test Unity Catalog permission boundaries before your first production deployment: impersonate different user roles in a staging workspace and verify that UC masks and row filters behave as expected through the MCP interface.</p>
+<h3 id="checklist-for-production-readiness">Checklist for Production Readiness</h3>
+<ul>
+<li><input disabled="" type="checkbox"> OAuth (not PAT) auth configured for all client connections</li>
+<li><input disabled="" type="checkbox"> Service principals have minimum required UC privileges</li>
+<li><input disabled="" type="checkbox"> AI Gateway endpoint configured and MCP traffic routed through it</li>
+<li><input disabled="" type="checkbox"> Rate limits set per team or user group in AI Gateway</li>
+<li><input disabled="" type="checkbox"> All custom MCP servers registered in the MCP Catalog</li>
+<li><input disabled="" type="checkbox"> Unity Catalog row-level security tested with impersonation</li>
+<li><input disabled="" type="checkbox"> Databricks Apps health-check endpoint configured to prevent cold starts</li>
+<li><input disabled="" type="checkbox"> SIEM integration for <code>databricks_mcp</code> audit log category</li>
+<li><input disabled="" type="checkbox"> Genie space query examples updated as data schemas evolve</li>
+<li><input disabled="" type="checkbox"> Vector Search index sync lag monitored (alert if &gt; 15 minutes)</li>
+</ul>
+<hr>
+<h2 id="faq">FAQ</h2>
+<p><strong>Can I use Databricks managed MCP servers without Unity Catalog?</strong></p>
+<p>No. Unity Catalog must be enabled in your workspace for managed MCP servers to function — it provides the permission enforcement layer that every tool call relies on. If your workspace uses the legacy Hive metastore, you&rsquo;ll need to migrate to Unity Catalog before using managed MCP servers.</p>
+<p><strong>What&rsquo;s the difference between Databricks managed MCP and building your own MCP server from scratch?</strong></p>
+<p>Managed MCP servers are zero-setup, hosted by Databricks, and automatically enforce Unity Catalog governance. Building your own MCP server (on Databricks Apps or elsewhere) gives you full control over tool definitions and business logic but requires deployment, maintenance, and explicit permission checks. Start with managed servers; build custom ones only when you have requirements managed servers can&rsquo;t meet.</p>
+<p><strong>How does on-behalf-of-user authentication work in practice?</strong></p>
+<p>When a user connects Claude Desktop to a Databricks managed MCP server, they authenticate via the Databricks OAuth flow in their browser. The resulting short-lived OAuth token is stored locally by the <code>databricks-mcp</code> CLI. Every subsequent tool call sends this token to the Databricks API, which validates it and executes the request as that specific user — not as a shared service account. Unity Catalog then evaluates that user&rsquo;s specific permissions for the requested resource.</p>
+<p><strong>Can multiple AI clients connect to the same MCP server simultaneously?</strong></p>
+<p>Yes. The <code>databricks-mcp serve</code> command starts a local proxy process that handles multiple simultaneous connections. The underlying Databricks managed server is serverless and scales horizontally — there&rsquo;s no single-server bottleneck. Each client connection maintains its own authenticated session with its own OAuth token, so concurrent users see their own permission-filtered results.</p>
+<p><strong>Is Databricks MCP available on AWS, Azure, and GCP?</strong></p>
+<p>Managed MCP servers are available on all three cloud providers where Databricks operates, as long as serverless compute is enabled in your workspace. The Python package, CLI, and configuration format are identical across clouds — only the workspace host URL differs. AI Gateway and MCP Catalog (Beta) availability may lag slightly across clouds; check the Databricks release notes for per-cloud GA dates.</p>
+]]></content:encoded></item></channel></rss>

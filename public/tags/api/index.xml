@@ -1,4 +1,832 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Api on RockB</title><link>https://baeseokjae.github.io/tags/api/</link><description>Recent content in Api on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 21 Apr 2026 00:11:38 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/api/index.xml" rel="self" type="application/rss+xml"/><item><title>OpenAI Responses API Tutorial 2026: Build Stateful AI Apps in Python</title><link>https://baeseokjae.github.io/posts/openai-responses-api-tutorial-2026/</link><pubDate>Tue, 21 Apr 2026 00:11:38 +0000</pubDate><guid>https://baeseokjae.github.io/posts/openai-responses-api-tutorial-2026/</guid><description>Complete OpenAI Responses API tutorial 2026: stateful conversations, built-in tools, function calling, and migration from Chat Completions.</description><content:encoded><![CDATA[<p>The OpenAI Responses API is the new primary interface for building stateful, agentic AI applications — replacing the Assistants API (being sunset H1 2026) and extending beyond what Chat Completions can do. This tutorial walks through everything from your first API call to building multi-step agents with built-in tools like web search and file retrieval.</p>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Api on RockB</title><link>https://baeseokjae.github.io/tags/api/</link><description>Recent content in Api on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sat, 25 Apr 2026 22:03:49 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/api/index.xml" rel="self" type="application/rss+xml"/><item><title>Claude Opus 4.7 budget_tokens Removal: Migration from Extended Thinking</title><link>https://baeseokjae.github.io/posts/claude-opus-4-7-budget-tokens-breaking-change-2026/</link><pubDate>Sat, 25 Apr 2026 22:03:49 +0000</pubDate><guid>https://baeseokjae.github.io/posts/claude-opus-4-7-budget-tokens-breaking-change-2026/</guid><description>How to fix the 400 error from Claude Opus 4.7&amp;#39;s budget_tokens removal and migrate to adaptive thinking in Python and TypeScript.</description><content:encoded><![CDATA[<p>Claude Opus 4.7, released April 16, 2026, silently removed <code>budget_tokens</code> from its extended thinking API. Any code that passes <code>budget_tokens</code> to Opus 4.7 receives an immediate <code>400 Bad Request</code> error. The fix is a four-step migration: switch to <code>adaptive</code> thinking type, replace <code>budget_tokens</code> with the <code>effort</code> parameter, update agentic loops to use <code>task_budget</code>, and strip <code>temperature</code>, <code>top_p</code>, and <code>top_k</code>. This guide walks through each step with exact before/after code.</p>
+<h2 id="what-changed-in-claude-opus-47-budget_tokens-is-gone">What Changed in Claude Opus 4.7: budget_tokens Is Gone</h2>
+<p>Claude Opus 4.7 removed <code>budget_tokens</code> entirely from the extended thinking configuration, replacing it with an adaptive thinking system that automatically allocates reasoning compute based on task complexity. The change affects every application that previously used <code>thinking: { type: &quot;enabled&quot;, budget_tokens: N }</code> to control how much the model &ldquo;thinks&rdquo; before responding. Released April 16, 2026, Opus 4.7 also removes <code>temperature</code>, <code>top_p</code>, and <code>top_k</code> parameters — three additional fields that silently accepted values in 4.6 but now return 400 errors in 4.7. Pricing remains unchanged at $5/M input tokens and $25/M output tokens, and the model shows a 13% coding benchmark lift over Opus 4.6 on Anthropic&rsquo;s internal 93-task evaluation. For teams upgrading by changing only the model string, these breaking changes arrive without warning in production — there is no deprecation header or soft-failure mode in the API response before the hard 400 begins.</p>
+<h3 id="why-anthropic-removed-budget_tokens">Why Anthropic Removed budget_tokens</h3>
+<p>Anthropic&rsquo;s internal evaluations showed that adaptive thinking — where the model dynamically decides how much reasoning to apply — outperforms a fixed <code>budget_tokens</code> cap. When you hard-cap tokens at 8,000, the model either runs out of reasoning budget mid-thought or wastes compute finishing trivially. Adaptive mode removes the constraint and lets the model match reasoning depth to actual task difficulty, which produced better benchmark results across coding and agentic workloads.</p>
+<h2 id="the-400-error-explained-why-your-extended-thinking-code-breaks">The 400 Error Explained: Why Your Extended Thinking Code Breaks</h2>
+<p>The 400 error from Claude Opus 4.7 is a strict API validation rejection — not a quota error, rate limit, or content policy violation. It occurs because <code>budget_tokens</code> is no longer a recognized field in the thinking configuration object, and Anthropic&rsquo;s API now returns a hard validation error rather than silently ignoring unknown fields. If you upgraded from Opus 4.6 to 4.7 by changing only the model ID string in your config, every request using <code>thinking.budget_tokens</code> will fail immediately with a message like <code>{&quot;error&quot;:{&quot;type&quot;:&quot;invalid_request_error&quot;,&quot;message&quot;:&quot;Unknown field: budget_tokens in thinking configuration&quot;}}</code>. The same validation failure applies to requests that include <code>temperature</code>, <code>top_p</code>, or <code>top_k</code> at the top-level request body. Importantly, Anthropic did not introduce a deprecation warning period — Opus 4.6 accepted these fields, Opus 4.7 rejects them with no soft-failure mode in between. Teams running automated model upgrades via version aliases experienced instant production breakage.</p>
+<h3 id="finding-all-affected-call-sites">Finding All Affected Call Sites</h3>
+<p>Before migrating, locate every place in your codebase that uses these removed fields:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Find budget_tokens usage</span>
+</span></span><span style="display:flex;"><span>rg <span style="color:#e6db74">&#34;budget_tokens&#34;</span> --type py --type ts --type js -n
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Find removed sampling parameters</span>
+</span></span><span style="display:flex;"><span>rg <span style="color:#e6db74">&#34;temperature|top_p|top_k&#34;</span> --type py --type ts --type js -n | grep -v <span style="color:#e6db74">&#34;\.md&#34;</span>
+</span></span></code></pre></div><h2 id="step-1--switch-to-adaptive-thinking">Step 1 — Switch to Adaptive Thinking</h2>
+<p>Adaptive thinking is the replacement for the <code>enabled</code> thinking type with a fixed token budget. The migration changes one field in your thinking configuration object. The <code>adaptive</code> type signals that the model should dynamically allocate reasoning compute, removing the need to predict how much thinking a given task requires. In Python SDK terms, you replace <code>AnthropicThinking(type=&quot;enabled&quot;, budget_tokens=8000)</code> with <code>AnthropicThinking(type=&quot;adaptive&quot;)</code>. In raw JSON API terms, you replace <code>{&quot;type&quot;: &quot;enabled&quot;, &quot;budget_tokens&quot;: 8000}</code> with <code>{&quot;type&quot;: &quot;adaptive&quot;}</code>. The model ID should be updated to <code>claude-opus-4-7</code> or its alias. Note that <code>thinking.type = &quot;enabled&quot;</code> is also rejected on Opus 4.7 — only <code>&quot;adaptive&quot;</code> and <code>&quot;none&quot;</code> are valid values. If you want to disable extended thinking entirely on Opus 4.7, pass <code>{&quot;type&quot;: &quot;none&quot;}</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># Before (Opus 4.6)</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> anthropic
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>client <span style="color:#f92672">=</span> anthropic<span style="color:#f92672">.</span>Anthropic()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>response <span style="color:#f92672">=</span> client<span style="color:#f92672">.</span>messages<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>    model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;claude-opus-4-6&#34;</span>,
+</span></span><span style="display:flex;"><span>    max_tokens<span style="color:#f92672">=</span><span style="color:#ae81ff">16000</span>,
+</span></span><span style="display:flex;"><span>    thinking<span style="color:#f92672">=</span>{
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;enabled&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;budget_tokens&#34;</span>: <span style="color:#ae81ff">8000</span>
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    messages<span style="color:#f92672">=</span>[{<span style="color:#e6db74">&#34;role&#34;</span>: <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#e6db74">&#34;content&#34;</span>: <span style="color:#e6db74">&#34;Explain quantum entanglement.&#34;</span>}]
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># After (Opus 4.7)</span>
+</span></span><span style="display:flex;"><span>response <span style="color:#f92672">=</span> client<span style="color:#f92672">.</span>messages<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>    model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;claude-opus-4-7&#34;</span>,
+</span></span><span style="display:flex;"><span>    max_tokens<span style="color:#f92672">=</span><span style="color:#ae81ff">16000</span>,
+</span></span><span style="display:flex;"><span>    thinking<span style="color:#f92672">=</span>{
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;adaptive&#34;</span>
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    messages<span style="color:#f92672">=</span>[{<span style="color:#e6db74">&#34;role&#34;</span>: <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#e6db74">&#34;content&#34;</span>: <span style="color:#e6db74">&#34;Explain quantum entanglement.&#34;</span>}]
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#75715e">// Before (Opus 4.6)
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">import</span> <span style="color:#a6e22e">Anthropic</span> <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@anthropic-ai/sdk&#34;</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">client</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">Anthropic</span>();
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">response</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">client</span>.<span style="color:#a6e22e">messages</span>.<span style="color:#a6e22e">create</span>({
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">model</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;claude-opus-4-6&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">max_tokens</span>: <span style="color:#66d9ef">16000</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">thinking</span><span style="color:#f92672">:</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">type</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;enabled&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">budget_tokens</span>: <span style="color:#66d9ef">8000</span>,
+</span></span><span style="display:flex;"><span>  },
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">messages</span><span style="color:#f92672">:</span> [{ <span style="color:#a6e22e">role</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#a6e22e">content</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;Explain quantum entanglement.&#34;</span> }],
+</span></span><span style="display:flex;"><span>});
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// After (Opus 4.7)
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">response</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">client</span>.<span style="color:#a6e22e">messages</span>.<span style="color:#a6e22e">create</span>({
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">model</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;claude-opus-4-7&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">max_tokens</span>: <span style="color:#66d9ef">16000</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">thinking</span><span style="color:#f92672">:</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">type</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;adaptive&#34;</span>,
+</span></span><span style="display:flex;"><span>  },
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">messages</span><span style="color:#f92672">:</span> [{ <span style="color:#a6e22e">role</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#a6e22e">content</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;Explain quantum entanglement.&#34;</span> }],
+</span></span><span style="display:flex;"><span>});
+</span></span></code></pre></div><h2 id="step-2--replace-budget_tokens-with-the-effort-parameter">Step 2 — Replace budget_tokens with the Effort Parameter</h2>
+<p>The <code>effort</code> parameter is the new mechanism for controlling how much reasoning Opus 4.7 applies when adaptive thinking is enabled. It replaces <code>budget_tokens</code> as the user-facing control for reasoning depth, replacing a numeric token count with a named level that the model interprets relative to the task. The five levels are <code>low</code>, <code>medium</code>, <code>high</code>, <code>xhigh</code>, and <code>max</code>. Anthropic recommends <code>xhigh</code> as the default for coding and agentic tasks, and <code>medium</code> for summarization or classification where deep reasoning adds latency without benefit. Unlike <code>budget_tokens</code>, <code>effort</code> is advisory — the model may allocate more or less compute than the level suggests depending on task signals. You cannot set <code>effort</code> and <code>budget_tokens</code> simultaneously; the field does not exist in the thinking object and including it causes the same 400 error.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># Opus 4.7 with effort parameter</span>
+</span></span><span style="display:flex;"><span>response <span style="color:#f92672">=</span> client<span style="color:#f92672">.</span>messages<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>    model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;claude-opus-4-7&#34;</span>,
+</span></span><span style="display:flex;"><span>    max_tokens<span style="color:#f92672">=</span><span style="color:#ae81ff">16000</span>,
+</span></span><span style="display:flex;"><span>    thinking<span style="color:#f92672">=</span>{
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;adaptive&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;effort&#34;</span>: <span style="color:#e6db74">&#34;xhigh&#34;</span>   <span style="color:#75715e"># low | medium | high | xhigh | max</span>
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    messages<span style="color:#f92672">=</span>[{<span style="color:#e6db74">&#34;role&#34;</span>: <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#e6db74">&#34;content&#34;</span>: <span style="color:#e6db74">&#34;Write a merge sort in Rust with tests.&#34;</span>}]
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre></div><h3 id="effort-level-mapping-guide">Effort Level Mapping Guide</h3>
+<p>Use this table as a starting point for migrating your <code>budget_tokens</code> values to effort levels:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Old budget_tokens</th>
+          <th>Recommended effort</th>
+          <th>Use case</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>&lt; 2,000</td>
+          <td><code>low</code></td>
+          <td>Classification, routing, simple Q&amp;A</td>
+      </tr>
+      <tr>
+          <td>2,000–5,000</td>
+          <td><code>medium</code></td>
+          <td>Summarization, structured extraction</td>
+      </tr>
+      <tr>
+          <td>5,000–12,000</td>
+          <td><code>high</code></td>
+          <td>Multi-step reasoning, code review</td>
+      </tr>
+      <tr>
+          <td>12,000–20,000</td>
+          <td><code>xhigh</code></td>
+          <td>Complex coding, agentic tasks</td>
+      </tr>
+      <tr>
+          <td>&gt; 20,000</td>
+          <td><code>max</code></td>
+          <td>Research, exhaustive analysis</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="step-3--migrate-agentic-loops-with-task_budget">Step 3 — Migrate Agentic Loops with task_budget</h2>
+<p><code>task_budget</code> is a new advisory parameter for agentic loop use cases that replaces the pattern of passing <code>budget_tokens</code> to each individual API call. In extended thinking on Opus 4.6, teams would often set a per-call <code>budget_tokens</code> to prevent a multi-turn agent from consuming unlimited compute. Opus 4.7 introduces <code>task_budget</code> as a softer control that signals the model how much total thinking budget it has across the full agentic loop, rather than capping each individual turn. The minimum value is 20,000 tokens. Because it is advisory rather than a hard cap, the model can slightly exceed the budget if stopping mid-thought would produce a worse result. This is intentional — Anthropic found that hard mid-thought truncation was a significant source of degraded output quality in agentic contexts.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># Agentic loop with task_budget</span>
+</span></span><span style="display:flex;"><span>response <span style="color:#f92672">=</span> client<span style="color:#f92672">.</span>messages<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>    model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;claude-opus-4-7&#34;</span>,
+</span></span><span style="display:flex;"><span>    max_tokens<span style="color:#f92672">=</span><span style="color:#ae81ff">16000</span>,
+</span></span><span style="display:flex;"><span>    thinking<span style="color:#f92672">=</span>{
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;adaptive&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;effort&#34;</span>: <span style="color:#e6db74">&#34;xhigh&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;task_budget&#34;</span>: <span style="color:#ae81ff">80000</span>   <span style="color:#75715e"># advisory total tokens for the full loop, min 20000</span>
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    messages<span style="color:#f92672">=</span>conversation_history
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre></div><h3 id="task_budget-vs-max_tokens">task_budget vs max_tokens</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Parameter</th>
+          <th>Type</th>
+          <th>What it limits</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>max_tokens</code></td>
+          <td>Hard cap</td>
+          <td>Total output tokens per call</td>
+      </tr>
+      <tr>
+          <td><code>task_budget</code></td>
+          <td>Advisory</td>
+          <td>Total thinking tokens across the agentic loop</td>
+      </tr>
+      <tr>
+          <td><code>effort</code></td>
+          <td>Advisory level</td>
+          <td>Per-call reasoning depth signal</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="step-4--remove-temperature-top_p-and-top_k">Step 4 — Remove temperature, top_p, and top_k</h2>
+<p>Claude Opus 4.7 rejects <code>temperature</code>, <code>top_p</code>, and <code>top_k</code> at the request body level when adaptive thinking is enabled. These parameters were silently accepted in Opus 4.6 even when extended thinking was active (the model effectively ignored them during thinking mode). Opus 4.7 enforces the constraint with a hard 400 error. If your codebase passes these parameters conditionally — for example, setting <code>temperature=0</code> for reproducibility — you must strip them from requests that use adaptive thinking. For non-thinking requests on Opus 4.7, these parameters may still be available; check the API docs for the current state. The safest migration strategy is to remove all three from your thinking-mode code paths unconditionally.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># Before — these cause 400 on Opus 4.7 with adaptive thinking</span>
+</span></span><span style="display:flex;"><span>response <span style="color:#f92672">=</span> client<span style="color:#f92672">.</span>messages<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>    model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;claude-opus-4-7&#34;</span>,
+</span></span><span style="display:flex;"><span>    max_tokens<span style="color:#f92672">=</span><span style="color:#ae81ff">16000</span>,
+</span></span><span style="display:flex;"><span>    temperature<span style="color:#f92672">=</span><span style="color:#ae81ff">0.7</span>,    <span style="color:#75715e"># ❌ 400 error</span>
+</span></span><span style="display:flex;"><span>    top_p<span style="color:#f92672">=</span><span style="color:#ae81ff">0.9</span>,          <span style="color:#75715e"># ❌ 400 error  </span>
+</span></span><span style="display:flex;"><span>    top_k<span style="color:#f92672">=</span><span style="color:#ae81ff">50</span>,           <span style="color:#75715e"># ❌ 400 error</span>
+</span></span><span style="display:flex;"><span>    thinking<span style="color:#f92672">=</span>{<span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;adaptive&#34;</span>},
+</span></span><span style="display:flex;"><span>    messages<span style="color:#f92672">=</span>[<span style="color:#f92672">...</span>]
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># After — clean request for Opus 4.7 adaptive thinking</span>
+</span></span><span style="display:flex;"><span>response <span style="color:#f92672">=</span> client<span style="color:#f92672">.</span>messages<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>    model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;claude-opus-4-7&#34;</span>,
+</span></span><span style="display:flex;"><span>    max_tokens<span style="color:#f92672">=</span><span style="color:#ae81ff">16000</span>,
+</span></span><span style="display:flex;"><span>    thinking<span style="color:#f92672">=</span>{<span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;adaptive&#34;</span>, <span style="color:#e6db74">&#34;effort&#34;</span>: <span style="color:#e6db74">&#34;high&#34;</span>},
+</span></span><span style="display:flex;"><span>    messages<span style="color:#f92672">=</span>[<span style="color:#f92672">...</span>]
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre></div><h2 id="full-beforeafter-code-examples-python-and-typescript">Full Before/After Code Examples (Python and TypeScript)</h2>
+<p>The full migration consolidates all four steps into a single diff per language. These examples show a realistic production pattern: a helper function that wraps the Anthropic client and handles model-specific configuration, so changing from 4.6 to 4.7 requires updating one function rather than every call site. The Python example uses the <code>anthropic</code> SDK; the TypeScript example uses <code>@anthropic-ai/sdk</code>. Both examples show the complete parameter set including <code>task_budget</code> for agentic contexts. After migrating, run a parallel test that sends the same prompt to both 4.6 and 4.7 and compares output quality — Anthropic&rsquo;s 13% coding benchmark improvement means results may differ even for semantically equivalent requests, and you should validate that your downstream systems handle the output format correctly.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># migration_helper.py</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> anthropic
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>client <span style="color:#f92672">=</span> anthropic<span style="color:#f92672">.</span>Anthropic()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">create_thinking_request</span>(
+</span></span><span style="display:flex;"><span>    prompt: str,
+</span></span><span style="display:flex;"><span>    model: str <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;claude-opus-4-7&#34;</span>,
+</span></span><span style="display:flex;"><span>    max_tokens: int <span style="color:#f92672">=</span> <span style="color:#ae81ff">16000</span>,
+</span></span><span style="display:flex;"><span>    effort: str <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;xhigh&#34;</span>,
+</span></span><span style="display:flex;"><span>    task_budget: int <span style="color:#f92672">|</span> <span style="color:#66d9ef">None</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">None</span>,
+</span></span><span style="display:flex;"><span>    conversation_history: list <span style="color:#f92672">|</span> <span style="color:#66d9ef">None</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">None</span>,
+</span></span><span style="display:flex;"><span>) <span style="color:#f92672">-&gt;</span> anthropic<span style="color:#f92672">.</span>types<span style="color:#f92672">.</span>Message:
+</span></span><span style="display:flex;"><span>    thinking_config: dict <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;adaptive&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;effort&#34;</span>: effort,
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> task_budget <span style="color:#f92672">is</span> <span style="color:#f92672">not</span> <span style="color:#66d9ef">None</span>:
+</span></span><span style="display:flex;"><span>        thinking_config[<span style="color:#e6db74">&#34;task_budget&#34;</span>] <span style="color:#f92672">=</span> max(task_budget, <span style="color:#ae81ff">20000</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    messages <span style="color:#f92672">=</span> conversation_history <span style="color:#f92672">or</span> []
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> prompt:
+</span></span><span style="display:flex;"><span>        messages <span style="color:#f92672">=</span> messages <span style="color:#f92672">+</span> [{<span style="color:#e6db74">&#34;role&#34;</span>: <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#e6db74">&#34;content&#34;</span>: prompt}]
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> client<span style="color:#f92672">.</span>messages<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>        model<span style="color:#f92672">=</span>model,
+</span></span><span style="display:flex;"><span>        max_tokens<span style="color:#f92672">=</span>max_tokens,
+</span></span><span style="display:flex;"><span>        thinking<span style="color:#f92672">=</span>thinking_config,
+</span></span><span style="display:flex;"><span>        messages<span style="color:#f92672">=</span>messages,
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># No temperature, top_p, or top_k</span>
+</span></span><span style="display:flex;"><span>    )
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#75715e">// migrationHelper.ts
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> <span style="color:#a6e22e">Anthropic</span> <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@anthropic-ai/sdk&#34;</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">client</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">Anthropic</span>();
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">interface</span> <span style="color:#a6e22e">ThinkingRequestOptions</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">prompt</span>: <span style="color:#66d9ef">string</span>;
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">model?</span>: <span style="color:#66d9ef">string</span>;
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">maxTokens?</span>: <span style="color:#66d9ef">number</span>;
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">effort</span><span style="color:#f92672">?:</span> <span style="color:#e6db74">&#34;low&#34;</span> <span style="color:#f92672">|</span> <span style="color:#e6db74">&#34;medium&#34;</span> <span style="color:#f92672">|</span> <span style="color:#e6db74">&#34;high&#34;</span> <span style="color:#f92672">|</span> <span style="color:#e6db74">&#34;xhigh&#34;</span> <span style="color:#f92672">|</span> <span style="color:#e6db74">&#34;max&#34;</span>;
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">taskBudget?</span>: <span style="color:#66d9ef">number</span>;
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">conversationHistory?</span>: <span style="color:#66d9ef">Anthropic.MessageParam</span>[];
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">function</span> <span style="color:#a6e22e">createThinkingRequest</span>({
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">prompt</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">model</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;claude-opus-4-7&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">maxTokens</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">16000</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">effort</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;xhigh&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">taskBudget</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">conversationHistory</span> <span style="color:#f92672">=</span> [],
+</span></span><span style="display:flex;"><span>}<span style="color:#f92672">:</span> <span style="color:#a6e22e">ThinkingRequestOptions</span>)<span style="color:#f92672">:</span> <span style="color:#a6e22e">Promise</span>&lt;<span style="color:#f92672">Anthropic.Message</span>&gt; {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">thinkingConfig</span>: <span style="color:#66d9ef">Record</span>&lt;<span style="color:#f92672">string</span>, <span style="color:#a6e22e">unknown</span>&gt; <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">type</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;adaptive&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">effort</span>,
+</span></span><span style="display:flex;"><span>  };
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> (<span style="color:#a6e22e">taskBudget</span> <span style="color:#f92672">!==</span> <span style="color:#66d9ef">undefined</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">thinkingConfig</span>.<span style="color:#a6e22e">task_budget</span> <span style="color:#f92672">=</span> Math.<span style="color:#a6e22e">max</span>(<span style="color:#a6e22e">taskBudget</span>, <span style="color:#ae81ff">20000</span>);
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">messages</span>: <span style="color:#66d9ef">Anthropic.MessageParam</span>[] <span style="color:#f92672">=</span> [
+</span></span><span style="display:flex;"><span>    ...<span style="color:#a6e22e">conversationHistory</span>,
+</span></span><span style="display:flex;"><span>    { <span style="color:#a6e22e">role</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#a6e22e">content</span>: <span style="color:#66d9ef">prompt</span> },
+</span></span><span style="display:flex;"><span>  ];
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">client</span>.<span style="color:#a6e22e">messages</span>.<span style="color:#a6e22e">create</span>({
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">model</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">max_tokens</span>: <span style="color:#66d9ef">maxTokens</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">thinking</span>: <span style="color:#66d9ef">thinkingConfig</span> <span style="color:#66d9ef">as</span> <span style="color:#a6e22e">Anthropic</span>.<span style="color:#a6e22e">ThinkingConfigParam</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">messages</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// No temperature, top_p, or top_k
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  });
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><h2 id="performance-and-cost-impact-of-the-migration">Performance and Cost Impact of the Migration</h2>
+<p>Migration to Opus 4.7 adaptive thinking affects performance and cost in three separate ways: benchmark quality, tokenizer changes, and efficiency features. On the positive side, Anthropic reports a 13% lift on internal coding benchmarks over Opus 4.6, and adaptive thinking produces better reasoning outcomes than fixed <code>budget_tokens</code> in Anthropic&rsquo;s own evaluations. Token pricing is unchanged at $5/M input and $25/M output. However, Opus 4.7 ships with an updated tokenizer that may count 1.0–1.35x more tokens for the same content depending on code density and language — so your token spend may increase even with the same prompts and outputs. On the efficiency side, prompt caching offers up to 90% cost savings on cached input tokens, and batch processing provides 50% off for non-real-time workloads. For agentic loops, <code>task_budget</code> replaces the blunt approach of hard-capping each call, which reduces the overhead of restarting interrupted reasoning chains.</p>
+<h3 id="cost-comparison-table">Cost Comparison Table</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Factor</th>
+          <th>Opus 4.6</th>
+          <th>Opus 4.7</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Input pricing</td>
+          <td>$5/M tokens</td>
+          <td>$5/M tokens (unchanged)</td>
+      </tr>
+      <tr>
+          <td>Output pricing</td>
+          <td>$25/M tokens</td>
+          <td>$25/M tokens (unchanged)</td>
+      </tr>
+      <tr>
+          <td>Tokenizer</td>
+          <td>v4.6</td>
+          <td>v4.7 (1.0–1.35x token count)</td>
+      </tr>
+      <tr>
+          <td>Prompt caching</td>
+          <td>Available</td>
+          <td>Up to 90% savings</td>
+      </tr>
+      <tr>
+          <td>Batch processing</td>
+          <td>Available</td>
+          <td>50% savings</td>
+      </tr>
+      <tr>
+          <td>Coding benchmark</td>
+          <td>Baseline</td>
+          <td>+13% over 4.6</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="testing-your-migration-and-validating-behavior">Testing Your Migration and Validating Behavior</h2>
+<p>Testing an Opus 4.7 migration requires more than confirming the 400 errors are gone. Adaptive thinking can allocate significantly different amounts of compute than your previous <code>budget_tokens</code> values, which means reasoning depth and output style may shift even for prompts that worked well before. The recommended test strategy is a three-phase approach: first, run a smoke test that confirms all migrated endpoints return 200; second, run a parallel comparison that sends identical prompts to both Opus 4.6 and 4.7 and logs the thinking block token counts and response lengths; third, evaluate output quality against your domain-specific acceptance criteria. Pay particular attention to tasks where you previously used low <code>budget_tokens</code> values (under 2,000) to control costs — adaptive thinking may allocate substantially more compute for the same prompts, which is good for quality but requires monitoring your token spend during the first week after migration. Use Anthropic&rsquo;s usage API to track per-request thinking token consumption while you tune <code>effort</code> levels.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># Smoke test for migration validation</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> anthropic
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> pytest
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>client <span style="color:#f92672">=</span> anthropic<span style="color:#f92672">.</span>Anthropic()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">test_opus_47_adaptive_thinking</span>():
+</span></span><span style="display:flex;"><span>    response <span style="color:#f92672">=</span> client<span style="color:#f92672">.</span>messages<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>        model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;claude-opus-4-7&#34;</span>,
+</span></span><span style="display:flex;"><span>        max_tokens<span style="color:#f92672">=</span><span style="color:#ae81ff">4096</span>,
+</span></span><span style="display:flex;"><span>        thinking<span style="color:#f92672">=</span>{<span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;adaptive&#34;</span>, <span style="color:#e6db74">&#34;effort&#34;</span>: <span style="color:#e6db74">&#34;medium&#34;</span>},
+</span></span><span style="display:flex;"><span>        messages<span style="color:#f92672">=</span>[{<span style="color:#e6db74">&#34;role&#34;</span>: <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#e6db74">&#34;content&#34;</span>: <span style="color:#e6db74">&#34;What is 2+2?&#34;</span>}]
+</span></span><span style="display:flex;"><span>    )
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">assert</span> response<span style="color:#f92672">.</span>stop_reason <span style="color:#f92672">in</span> (<span style="color:#e6db74">&#34;end_turn&#34;</span>, <span style="color:#e6db74">&#34;max_tokens&#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># Verify thinking block present</span>
+</span></span><span style="display:flex;"><span>    thinking_blocks <span style="color:#f92672">=</span> [b <span style="color:#66d9ef">for</span> b <span style="color:#f92672">in</span> response<span style="color:#f92672">.</span>content <span style="color:#66d9ef">if</span> b<span style="color:#f92672">.</span>type <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;thinking&#34;</span>]
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">assert</span> len(thinking_blocks) <span style="color:#f92672">&gt;=</span> <span style="color:#ae81ff">0</span>  <span style="color:#75715e"># may be 0 for trivial tasks with adaptive</span>
+</span></span><span style="display:flex;"><span>    print(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Thinking tokens used: </span><span style="color:#e6db74">{</span>sum(len(b<span style="color:#f92672">.</span>thinking) <span style="color:#66d9ef">for</span> b <span style="color:#f92672">in</span> thinking_blocks)<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">test_no_budget_tokens_accepted</span>():
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">with</span> pytest<span style="color:#f92672">.</span>raises(anthropic<span style="color:#f92672">.</span>BadRequestError):
+</span></span><span style="display:flex;"><span>        client<span style="color:#f92672">.</span>messages<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>            model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;claude-opus-4-7&#34;</span>,
+</span></span><span style="display:flex;"><span>            max_tokens<span style="color:#f92672">=</span><span style="color:#ae81ff">4096</span>,
+</span></span><span style="display:flex;"><span>            thinking<span style="color:#f92672">=</span>{<span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;enabled&#34;</span>, <span style="color:#e6db74">&#34;budget_tokens&#34;</span>: <span style="color:#ae81ff">5000</span>},
+</span></span><span style="display:flex;"><span>            messages<span style="color:#f92672">=</span>[{<span style="color:#e6db74">&#34;role&#34;</span>: <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#e6db74">&#34;content&#34;</span>: <span style="color:#e6db74">&#34;test&#34;</span>}]
+</span></span><span style="display:flex;"><span>        )
+</span></span></code></pre></div><h2 id="faq">FAQ</h2>
+<p>The following questions cover the most common migration blockers developers encounter when upgrading from Claude Opus 4.6 to 4.7. The short version: <code>budget_tokens</code> is gone, <code>temperature</code>/<code>top_p</code>/<code>top_k</code> cause 400 errors with adaptive thinking, and <code>effort</code> plus optional <code>task_budget</code> are the replacement controls. The migration typically takes under an hour for a single-model codebase — most of the time is spent finding all call sites with <code>rg</code> and running parallel smoke tests to confirm behavior. If you hit a 400 error on Opus 4.7, the error message will name the invalid field explicitly, which makes debugging straightforward once you know that validation is now strict. Adaptive thinking on Opus 4.7 is not a drop-in replacement in behavior — output quality and reasoning depth will shift, so budget one to two days for output validation against your domain acceptance criteria even after the API errors are resolved.</p>
+<h3 id="does-claude-opus-47-support-budget_tokens-at-all">Does Claude Opus 4.7 support budget_tokens at all?</h3>
+<p>No. <code>budget_tokens</code> was fully removed in Opus 4.7 and passing it in the thinking configuration returns an immediate <code>400 Bad Request</code> error. There is no compatibility mode, alias, or fallback. The replacement is the <code>effort</code> parameter (<code>low</code>, <code>medium</code>, <code>high</code>, <code>xhigh</code>, <code>max</code>) combined with <code>thinking.type = &quot;adaptive&quot;</code>.</p>
+<h3 id="will-my-opus-46-code-work-on-opus-47-if-i-just-change-the-model-string">Will my Opus 4.6 code work on Opus 4.7 if I just change the model string?</h3>
+<p>Only if your code does not use <code>thinking.budget_tokens</code>, <code>temperature</code>, <code>top_p</code>, or <code>top_k</code> with extended thinking enabled. If it uses any of these, changing the model string alone will break your app with 400 errors immediately. Run <code>rg &quot;budget_tokens|temperature|top_p|top_k&quot;</code> across your codebase before switching model IDs.</p>
+<h3 id="what-is-the-minimum-value-for-task_budget">What is the minimum value for task_budget?</h3>
+<p>The minimum valid <code>task_budget</code> value is 20,000 tokens. Passing a value below this threshold causes a validation error. The parameter is advisory — the model may slightly exceed the budget rather than truncate a reasoning chain mid-thought.</p>
+<h3 id="does-effort-replace-budget_tokens-exactly-or-does-it-behave-differently">Does effort replace budget_tokens exactly, or does it behave differently?</h3>
+<p>Effort behaves differently. <code>budget_tokens</code> was a hard numeric cap that the model could not exceed. <code>effort</code> is an advisory signal — the model interprets it as a hint about reasoning depth but retains discretion over actual token allocation. This means results are less predictable in token count but generally better in quality, especially for tasks where the optimal reasoning depth was hard to predict in advance.</p>
+<h3 id="can-i-mix-adaptive-thinking-with-streaming-on-opus-47">Can I mix adaptive thinking with streaming on Opus 4.7?</h3>
+<p>Yes. Adaptive thinking on Opus 4.7 is compatible with streaming. Thinking blocks are streamed as <code>thinking_delta</code> events before the main <code>text_delta</code> events, the same pattern as extended thinking in Opus 4.6. The only change in streaming behavior is that you no longer see a predictable thinking block size since the model allocates compute adaptively.</p>
+]]></content:encoded></item><item><title>OpenAI Hosted Shell and Apply Patch: GPT-5.5 Compute Tools for Autonomous Code Execution</title><link>https://baeseokjae.github.io/posts/openai-hosted-shell-apply-patch-guide-2026/</link><pubDate>Sat, 25 Apr 2026 10:05:54 +0000</pubDate><guid>https://baeseokjae.github.io/posts/openai-hosted-shell-apply-patch-guide-2026/</guid><description>Complete guide to GPT-5.5&amp;#39;s hosted shell and apply_patch tools for building autonomous coding agents via the OpenAI Responses API.</description><content:encoded><![CDATA[<p>GPT-5.5&rsquo;s hosted shell and <code>apply_patch</code> tools let you run autonomous coding agents that explore filesystems, execute commands, and apply precise code edits — all inside an OpenAI-managed Debian 12 sandbox with no infrastructure to maintain.</p>
+<h2 id="what-are-openais-compute-tools-hosted-shell-and-apply-patch-explained">What Are OpenAI&rsquo;s Compute Tools? Hosted Shell and Apply Patch Explained</h2>
+<p>OpenAI&rsquo;s compute tools are two purpose-built capabilities in the Responses API that give models direct access to code execution environments and structured file-editing primitives. The <strong>hosted shell</strong> tool provisions an ephemeral Debian 12 container where GPT-5.5 can run arbitrary shell commands — installing packages, running test suites, inspecting file trees, and producing downloadable artifacts via <code>/mnt/data</code>. The <strong><code>apply_patch</code> tool</strong> gives the model a structured way to propose file modifications using the V4A diff format, which supports <code>create_file</code>, <code>update_file</code>, and <code>delete_file</code> operations with surgical precision. Together, these two tools form a closed loop: the model explores a codebase with shell commands, identifies what needs to change, and applies those changes via structured patches — without the host application needing to interpret or re-execute diffs. As of April 2026, these tools are only available through the Responses API (not the Chat Completions API) and require GPT-5.5 or compatible models. The combination represents OpenAI&rsquo;s most direct answer to Claude Code, GitHub Copilot Agent, and similar agentic coding platforms.</p>
+<h2 id="gpt-55-spud-the-model-that-powers-these-tools">GPT-5.5 (Spud): The Model That Powers These Tools</h2>
+<p>GPT-5.5, codenamed &ldquo;Spud,&rdquo; was released on April 23, 2026 — the first fully retrained base model since GPT-4.5. It is specifically optimized for agentic, multi-step workflows that involve tool use across long contexts. GPT-5.5 achieves <strong>82.7% on Terminal-Bench 2.0</strong>, the state-of-the-art benchmark for complex command-line workflows, and <strong>58.6% on SWE-Bench Pro</strong> for real-world GitHub issue resolution (compared to Claude Opus 4.7&rsquo;s 64.3% on the same benchmark). The model supports a <strong>1M token context window</strong> and natively integrates with hosted shell, <code>apply_patch</code>, computer use, Skills, MCP servers, and web search. Pricing is $5 per 1M input tokens and $30 per 1M output tokens — double the GPT-5.4 rate, reflecting the higher capability level. GPT-5.5 Pro ($30/$180 per 1M tokens) offers enhanced reasoning but notably does <strong>not</strong> support <code>apply_patch</code>, making standard GPT-5.5 the correct choice for autonomous code-editing agents. If your workflow requires multi-file refactoring, bug patching, or test generation at scale, GPT-5.5 is the model to use.</p>
+<h2 id="how-the-hosted-shell-works-debian-12-container-architecture">How the Hosted Shell Works: Debian 12 Container Architecture</h2>
+<p>The hosted shell provisions an OpenAI-managed Debian 12 environment with controlled internet access that is isolated from your application&rsquo;s runtime and credentials. When you include <code>{&quot;type&quot;: &quot;shell&quot;}</code> in the <code>tools</code> array and set <code>container</code> to <code>&quot;container_auto&quot;</code>, OpenAI automatically allocates a fresh container for each session. The model can execute any shell command — <code>apt-get install</code>, <code>pytest</code>, <code>git log</code>, <code>find</code>, <code>curl</code> — and the output streams back from the container runtime into the model&rsquo;s context. Files written to <code>/mnt/data</code> inside the container become downloadable artifacts available after the session. Container pricing is separate from token costs: $0.03/GB for 1GB sessions or $1.92/64GB for larger workloads, billed per 20-minute session window (pricing active from March 31, 2026). The architecture deliberately separates the <strong>control harness</strong> (your application code, API keys, environment variables) from the <strong>compute layer</strong> (the sandboxed container), which prevents the model from exfiltrating credentials or making unauthorized network calls. Containers are ephemeral by default — state does not persist between API calls unless you mount a persistent volume or use the <code>/mnt/data</code> artifact mechanism.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> openai <span style="color:#f92672">import</span> OpenAI
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>client <span style="color:#f92672">=</span> OpenAI()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>response <span style="color:#f92672">=</span> client<span style="color:#f92672">.</span>responses<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>    model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;gpt-5.5&#34;</span>,
+</span></span><span style="display:flex;"><span>    tools<span style="color:#f92672">=</span>[{<span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;shell&#34;</span>}],
+</span></span><span style="display:flex;"><span>    container<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;container_auto&#34;</span>,
+</span></span><span style="display:flex;"><span>    input<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;List all Python files in /workspace and count total lines of code.&#34;</span>,
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">for</span> event <span style="color:#f92672">in</span> response:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> event<span style="color:#f92672">.</span>type <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;shell_call&#34;</span>:
+</span></span><span style="display:flex;"><span>        print(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Running: </span><span style="color:#e6db74">{</span>event<span style="color:#f92672">.</span>command<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">elif</span> event<span style="color:#f92672">.</span>type <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;shell_call_output&#34;</span>:
+</span></span><span style="display:flex;"><span>        print(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Output: </span><span style="color:#e6db74">{</span>event<span style="color:#f92672">.</span>output[:<span style="color:#ae81ff">200</span>]<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>)
+</span></span></code></pre></div><h3 id="container-session-lifecycle">Container Session Lifecycle</h3>
+<p>A container session begins when the first shell command executes and ends after 20 minutes of inactivity or when explicitly closed. Within a session, the container maintains full filesystem state — installed packages, created files, environment variables set by earlier commands. This allows multi-turn interactions where the model installs dependencies in one turn and runs tests in the next without re-provisioning. When building long-running agents, structure your prompts to batch related operations within a single session window to minimize container provisioning overhead and cost.</p>
+<h2 id="the-apply-patch-tool-v4a-diff-format-for-precise-code-edits">The Apply Patch Tool: V4A Diff Format for Precise Code Edits</h2>
+<p>The <code>apply_patch</code> tool gives GPT-5.5 a structured mechanism for proposing file modifications that your application can review, approve, or reject before execution. Unlike shell-based <code>sed</code> or <code>patch</code> commands that operate inside the sandbox, <code>apply_patch</code> emits structured <code>apply_patch_call</code> objects in the model&rsquo;s response output — the actual file changes happen in <strong>your</strong> filesystem, not the container&rsquo;s, giving you full control over what gets modified. The tool uses the <strong>V4A diff format</strong>, a compact patch syntax that supports three operations: <code>create_file</code> (with full content), <code>update_file</code> (with context lines and replacements), and <code>delete_file</code>. Enable it by adding <code>{&quot;type&quot;: &quot;apply_patch&quot;}</code> to your tools array. The model generates patches that are precise, machine-readable, and auditable — each patch specifies exactly which lines change and why, making code review tractable even for large refactors. This design reflects a key architectural choice: the model proposes, the human (or application) disposes. You can add an approval gate, write the patches to a staging directory, run your test suite against them, and only apply on green.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span>response <span style="color:#f92672">=</span> client<span style="color:#f92672">.</span>responses<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>    model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;gpt-5.5&#34;</span>,
+</span></span><span style="display:flex;"><span>    tools<span style="color:#f92672">=</span>[
+</span></span><span style="display:flex;"><span>        {<span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;shell&#34;</span>},
+</span></span><span style="display:flex;"><span>        {<span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;apply_patch&#34;</span>},
+</span></span><span style="display:flex;"><span>    ],
+</span></span><span style="display:flex;"><span>    container<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;container_auto&#34;</span>,
+</span></span><span style="display:flex;"><span>    input<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;&#34;&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    Read src/auth.py. The JWT token expiry is hardcoded to 3600 seconds.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    Refactor it to read from an environment variable JWT_EXPIRY_SECONDS with
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    a fallback of 3600. Apply the patch when ready.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    &#34;&#34;&#34;</span>,
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">for</span> event <span style="color:#f92672">in</span> response:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> event<span style="color:#f92672">.</span>type <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;apply_patch_call&#34;</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Review patch before applying</span>
+</span></span><span style="display:flex;"><span>        print(event<span style="color:#f92672">.</span>patch)
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Apply: event.apply() or handle manually</span>
+</span></span></code></pre></div><h3 id="v4a-diff-format-in-practice">V4A Diff Format in Practice</h3>
+<p>The V4A format is intentionally minimal. An <code>update_file</code> patch looks like this:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 496 73"
+      >
+      <g transform='translate(8,16)'>
+<circle cx='0' cy='0' r='6' stroke='currentColor' fill='currentColor'></circle>
+<circle cx='8' cy='0' r='6' stroke='currentColor' fill='currentColor'></circle>
+<circle cx='16' cy='0' r='6' stroke='currentColor' fill='currentColor'></circle>
+<text text-anchor='middle' x='0' y='20' fill='currentColor' style='font-size:1em'>@</text>
+<text text-anchor='middle' x='0' y='36' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='0' y='52' fill='currentColor' style='font-size:1em'>+</text>
+<text text-anchor='middle' x='8' y='20' fill='currentColor' style='font-size:1em'>@</text>
+<text text-anchor='middle' x='8' y='36' fill='currentColor' style='font-size:1em'>J</text>
+<text text-anchor='middle' x='8' y='52' fill='currentColor' style='font-size:1em'>J</text>
+<text text-anchor='middle' x='16' y='36' fill='currentColor' style='font-size:1em'>W</text>
+<text text-anchor='middle' x='16' y='52' fill='currentColor' style='font-size:1em'>W</text>
+<text text-anchor='middle' x='24' y='36' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='24' y='52' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>U</text>
+<text text-anchor='middle' x='32' y='36' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='32' y='52' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='40' y='36' fill='currentColor' style='font-size:1em'>E</text>
+<text text-anchor='middle' x='40' y='52' fill='currentColor' style='font-size:1em'>E</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='48' y='36' fill='currentColor' style='font-size:1em'>X</text>
+<text text-anchor='middle' x='48' y='52' fill='currentColor' style='font-size:1em'>X</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='56' y='36' fill='currentColor' style='font-size:1em'>P</text>
+<text text-anchor='middle' x='56' y='52' fill='currentColor' style='font-size:1em'>P</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='64' y='36' fill='currentColor' style='font-size:1em'>I</text>
+<text text-anchor='middle' x='64' y='52' fill='currentColor' style='font-size:1em'>I</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='72' y='36' fill='currentColor' style='font-size:1em'>R</text>
+<text text-anchor='middle' x='72' y='52' fill='currentColor' style='font-size:1em'>R</text>
+<text text-anchor='middle' x='80' y='36' fill='currentColor' style='font-size:1em'>Y</text>
+<text text-anchor='middle' x='80' y='52' fill='currentColor' style='font-size:1em'>Y</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>F</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='96' y='36' fill='currentColor' style='font-size:1em'>=</text>
+<text text-anchor='middle' x='96' y='52' fill='currentColor' style='font-size:1em'>=</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='112' y='36' fill='currentColor' style='font-size:1em'>3</text>
+<text text-anchor='middle' x='112' y='52' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='120' y='4' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='120' y='36' fill='currentColor' style='font-size:1em'>6</text>
+<text text-anchor='middle' x='120' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='128' y='36' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='128' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='136' y='36' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='136' y='52' fill='currentColor' style='font-size:1em'>(</text>
+<text text-anchor='middle' x='144' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='144' y='52' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='152' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='152' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='160' y='52' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='168' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='176' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='176' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='184' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='184' y='52' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='192' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='192' y='52' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='200' y='4' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='200' y='52' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='208' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='208' y='52' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='216' y='4' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='216' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='224' y='52' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='232' y='52' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='240' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='248' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='256' y='52' fill='currentColor' style='font-size:1em'>(</text>
+<text text-anchor='middle' x='264' y='52' fill='currentColor' style='font-size:1em'>"</text>
+<text text-anchor='middle' x='272' y='52' fill='currentColor' style='font-size:1em'>J</text>
+<text text-anchor='middle' x='280' y='52' fill='currentColor' style='font-size:1em'>W</text>
+<text text-anchor='middle' x='288' y='52' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='296' y='52' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='304' y='52' fill='currentColor' style='font-size:1em'>E</text>
+<text text-anchor='middle' x='312' y='52' fill='currentColor' style='font-size:1em'>X</text>
+<text text-anchor='middle' x='320' y='52' fill='currentColor' style='font-size:1em'>P</text>
+<text text-anchor='middle' x='328' y='52' fill='currentColor' style='font-size:1em'>I</text>
+<text text-anchor='middle' x='336' y='52' fill='currentColor' style='font-size:1em'>R</text>
+<text text-anchor='middle' x='344' y='52' fill='currentColor' style='font-size:1em'>Y</text>
+<text text-anchor='middle' x='352' y='52' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='360' y='52' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='368' y='52' fill='currentColor' style='font-size:1em'>E</text>
+<text text-anchor='middle' x='376' y='52' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='384' y='52' fill='currentColor' style='font-size:1em'>O</text>
+<text text-anchor='middle' x='392' y='52' fill='currentColor' style='font-size:1em'>N</text>
+<text text-anchor='middle' x='400' y='52' fill='currentColor' style='font-size:1em'>D</text>
+<text text-anchor='middle' x='408' y='52' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='416' y='52' fill='currentColor' style='font-size:1em'>"</text>
+<text text-anchor='middle' x='424' y='52' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='440' y='52' fill='currentColor' style='font-size:1em'>3</text>
+<text text-anchor='middle' x='448' y='52' fill='currentColor' style='font-size:1em'>6</text>
+<text text-anchor='middle' x='456' y='52' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='464' y='52' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='472' y='52' fill='currentColor' style='font-size:1em'>)</text>
+<text text-anchor='middle' x='480' y='52' fill='currentColor' style='font-size:1em'>)</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>Context lines (unchanged code around the edit) help the patch engine locate the right position even if line numbers have shifted. <code>create_file</code> patches include the full file content inline. <code>delete_file</code> patches require only the filename. The format is designed for model output — terse enough to fit in long context windows, structured enough to parse deterministically.</p>
+<h2 id="building-an-autonomous-coding-agent-shell--apply-patch-workflow">Building an Autonomous Coding Agent: Shell + Apply Patch Workflow</h2>
+<p>The most powerful pattern combines hosted shell for exploration and <code>apply_patch</code> for modifications in a four-phase loop: <strong>explore → plan → patch → verify</strong>. In the explore phase, the model uses shell commands to understand the codebase structure, identify failing tests, and locate the code that needs to change. In the plan phase, it reasons through the changes required. In the patch phase, it emits <code>apply_patch_call</code> objects for each file to modify. In the verify phase, it runs the test suite inside the container to confirm the changes are correct. This loop can run fully autonomously or with a human-in-the-loop approval gate between patch and verify. The shell tool handles exploration and verification; <code>apply_patch</code> handles modifications. Neither tool is sufficient alone — shell-only agents write changes via <code>sed</code> or <code>tee</code>, which is fragile and hard to audit; <code>apply_patch</code>-only agents cannot run tests to verify correctness. The combination is what makes the workflow production-grade.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> openai <span style="color:#f92672">import</span> OpenAI
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> subprocess
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>client <span style="color:#f92672">=</span> OpenAI()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>SYSTEM_PROMPT <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;&#34;&#34;You are an autonomous coding agent. For each task:
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">1. Use shell to explore the codebase and understand the problem
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">2. Use shell to run existing tests to understand what&#39;s failing
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">3. Use apply_patch to propose precise code changes
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">4. Use shell to run tests again and verify your fix works
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">Report results when done.&#34;&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">run_agent</span>(task: str, workspace: str):
+</span></span><span style="display:flex;"><span>    messages <span style="color:#f92672">=</span> [{<span style="color:#e6db74">&#34;role&#34;</span>: <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#e6db74">&#34;content&#34;</span>: <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Workspace: </span><span style="color:#e6db74">{</span>workspace<span style="color:#e6db74">}</span><span style="color:#ae81ff">\n\n</span><span style="color:#e6db74">Task: </span><span style="color:#e6db74">{</span>task<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>}]
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">while</span> <span style="color:#66d9ef">True</span>:
+</span></span><span style="display:flex;"><span>        response <span style="color:#f92672">=</span> client<span style="color:#f92672">.</span>responses<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>            model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;gpt-5.5&#34;</span>,
+</span></span><span style="display:flex;"><span>            tools<span style="color:#f92672">=</span>[
+</span></span><span style="display:flex;"><span>                {<span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;shell&#34;</span>},
+</span></span><span style="display:flex;"><span>                {<span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;apply_patch&#34;</span>},
+</span></span><span style="display:flex;"><span>            ],
+</span></span><span style="display:flex;"><span>            container<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;container_auto&#34;</span>,
+</span></span><span style="display:flex;"><span>            system<span style="color:#f92672">=</span>SYSTEM_PROMPT,
+</span></span><span style="display:flex;"><span>            input<span style="color:#f92672">=</span>messages,
+</span></span><span style="display:flex;"><span>        )
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        patches_applied <span style="color:#f92672">=</span> []
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> event <span style="color:#f92672">in</span> response:
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> event<span style="color:#f92672">.</span>type <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;apply_patch_call&#34;</span>:
+</span></span><span style="display:flex;"><span>                <span style="color:#75715e"># Apply patch to local filesystem</span>
+</span></span><span style="display:flex;"><span>                result <span style="color:#f92672">=</span> subprocess<span style="color:#f92672">.</span>run(
+</span></span><span style="display:flex;"><span>                    [<span style="color:#e6db74">&#34;patch&#34;</span>, <span style="color:#e6db74">&#34;-p0&#34;</span>],
+</span></span><span style="display:flex;"><span>                    input<span style="color:#f92672">=</span>event<span style="color:#f92672">.</span>patch,
+</span></span><span style="display:flex;"><span>                    capture_output<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>,
+</span></span><span style="display:flex;"><span>                    text<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>
+</span></span><span style="display:flex;"><span>                )
+</span></span><span style="display:flex;"><span>                patches_applied<span style="color:#f92672">.</span>append({
+</span></span><span style="display:flex;"><span>                    <span style="color:#e6db74">&#34;patch&#34;</span>: event<span style="color:#f92672">.</span>patch,
+</span></span><span style="display:flex;"><span>                    <span style="color:#e6db74">&#34;success&#34;</span>: result<span style="color:#f92672">.</span>returncode <span style="color:#f92672">==</span> <span style="color:#ae81ff">0</span>,
+</span></span><span style="display:flex;"><span>                    <span style="color:#e6db74">&#34;output&#34;</span>: result<span style="color:#f92672">.</span>stdout <span style="color:#f92672">or</span> result<span style="color:#f92672">.</span>stderr
+</span></span><span style="display:flex;"><span>                })
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> response<span style="color:#f92672">.</span>status <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;completed&#34;</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">return</span> {
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;patches&#34;</span>: patches_applied,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;summary&#34;</span>: response<span style="color:#f92672">.</span>output_text
+</span></span><span style="display:flex;"><span>            }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Add tool results to message history and continue</span>
+</span></span><span style="display:flex;"><span>        messages <span style="color:#f92672">=</span> response<span style="color:#f92672">.</span>messages
+</span></span></code></pre></div><h2 id="real-world-use-cases-refactors-bug-fixes-and-migrations">Real-World Use Cases: Refactors, Bug Fixes, and Migrations</h2>
+<p>Hosted shell and <code>apply_patch</code> unlock several high-value automated workflows that were previously too complex or risky to automate. <strong>Multi-file refactors</strong>: renaming a function across 50 files, updating import paths after a package reorganization, or migrating from one ORM to another. The model explores the codebase, identifies all affected files, and emits a sequence of <code>apply_patch_call</code> objects — one per file — that can be reviewed as a batch before application. <strong>Bug fixes from issue descriptions</strong>: given a GitHub issue URL or error stack trace, the agent reproduces the bug in the container, locates the root cause, patches it, and runs the test suite to confirm resolution. <strong>API migrations</strong>: when a third-party SDK releases a breaking change, the agent reads the migration guide (via shell <code>curl</code>), identifies all call sites in your codebase, and patches them to the new API. <strong>Test generation</strong>: the agent reads a source file, generates corresponding test cases in the container&rsquo;s scratch space, validates they pass, then uses <code>apply_patch</code> to write the test file into your repository. <strong>Dependency upgrades</strong>: the agent runs <code>pip install --upgrade</code> or <code>npm update</code>, runs your test suite, identifies breakages, patches the affected code, and repeats until tests pass.</p>
+<h3 id="when-not-to-use-the-hosted-shell">When Not to Use the Hosted Shell</h3>
+<p>The hosted shell is not appropriate for operations that require access to production systems, customer data, or credentials. The container isolation prevents credential theft by design, but this also means the agent cannot directly connect to your production database or internal services. For workflows that require such access, use the <code>apply_patch</code> tool in isolation (without hosted shell) combined with your own local execution environment, where you control what tools and credentials the agent can access.</p>
+<h2 id="security-best-practices-sandboxing-path-validation-and-audit-logging">Security Best Practices: Sandboxing, Path Validation, and Audit Logging</h2>
+<p>The hosted shell&rsquo;s container isolation eliminates the most dangerous attack vector — direct access to the host filesystem and credentials — but applications using <code>apply_patch</code> still need their own security controls. The key principle: <strong>never apply patches to arbitrary paths without validation</strong>. Validate that all patch targets are within your project root, reject patches that modify <code>.env</code> files, credentials, or CI/CD configuration, and require explicit approval for patches to production code paths. Implement an audit log that records every <code>apply_patch_call</code> with the full patch content, timestamp, model version, and the task prompt that generated it — this creates an immutable record for debugging and compliance. For multi-agent pipelines where one agent&rsquo;s output becomes another&rsquo;s input, add an intermediate validation step that checks patch syntax, target path safety, and changeset size before forwarding. Rate-limit the number of files a single agent run can modify to bound blast radius. Finally, always run your test suite after applying patches in CI, even if the agent reports success — test suite verification in the container is informative but not authoritative for your actual test environment.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> os
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> pathlib <span style="color:#f92672">import</span> Path
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>PROJECT_ROOT <span style="color:#f92672">=</span> Path(<span style="color:#e6db74">&#34;/workspace/myapp&#34;</span>)<span style="color:#f92672">.</span>resolve()
+</span></span><span style="display:flex;"><span>BLOCKED_PATTERNS <span style="color:#f92672">=</span> [<span style="color:#e6db74">&#34;.env&#34;</span>, <span style="color:#e6db74">&#34;credentials&#34;</span>, <span style="color:#e6db74">&#34;secrets&#34;</span>, <span style="color:#e6db74">&#34;.aws&#34;</span>, <span style="color:#e6db74">&#34;.ssh&#34;</span>]
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">safe_apply_patch</span>(patch_event, project_root<span style="color:#f92672">=</span>PROJECT_ROOT):
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;&#34;&#34;Validate and apply a patch only if targets are within project root.&#34;&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>    lines <span style="color:#f92672">=</span> patch_event<span style="color:#f92672">.</span>patch<span style="color:#f92672">.</span>splitlines()
+</span></span><span style="display:flex;"><span>    targets <span style="color:#f92672">=</span> [l<span style="color:#f92672">.</span>split(<span style="color:#e6db74">&#34;: &#34;</span>, <span style="color:#ae81ff">1</span>)[<span style="color:#ae81ff">1</span>] <span style="color:#66d9ef">for</span> l <span style="color:#f92672">in</span> lines <span style="color:#66d9ef">if</span> l<span style="color:#f92672">.</span>startswith(<span style="color:#e6db74">&#34;*** &#34;</span>)]
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> target <span style="color:#f92672">in</span> targets:
+</span></span><span style="display:flex;"><span>        target_path <span style="color:#f92672">=</span> (project_root <span style="color:#f92672">/</span> target)<span style="color:#f92672">.</span>resolve()
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Prevent path traversal</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> <span style="color:#f92672">not</span> str(target_path)<span style="color:#f92672">.</span>startswith(str(project_root)):
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">raise</span> <span style="color:#a6e22e">ValueError</span>(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Path traversal attempt: </span><span style="color:#e6db74">{</span>target<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Block sensitive files</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> any(p <span style="color:#f92672">in</span> str(target_path) <span style="color:#66d9ef">for</span> p <span style="color:#f92672">in</span> BLOCKED_PATTERNS):
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">raise</span> <span style="color:#a6e22e">ValueError</span>(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Blocked sensitive path: </span><span style="color:#e6db74">{</span>target<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># Safe to apply</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> subprocess<span style="color:#f92672">.</span>run([<span style="color:#e6db74">&#34;patch&#34;</span>, <span style="color:#e6db74">&#34;-p0&#34;</span>], input<span style="color:#f92672">=</span>patch_event<span style="color:#f92672">.</span>patch, <span style="color:#f92672">...</span>)
+</span></span></code></pre></div><h2 id="pricing-breakdown-api-costs-container-sessions-and-when-to-use-gpt-55-pro">Pricing Breakdown: API Costs, Container Sessions, and When to Use GPT-5.5 Pro</h2>
+<p>Understanding the cost structure is essential for building economically viable agents. Token costs and container costs are billed independently and accumulate differently across agent run types.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Component</th>
+          <th>GPT-5.5</th>
+          <th>GPT-5.5 Pro</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Input tokens</td>
+          <td>$5 / 1M</td>
+          <td>$30 / 1M</td>
+      </tr>
+      <tr>
+          <td>Output tokens</td>
+          <td>$30 / 1M</td>
+          <td>$180 / 1M</td>
+      </tr>
+      <tr>
+          <td>apply_patch</td>
+          <td>Supported</td>
+          <td><strong>Not supported</strong></td>
+      </tr>
+      <tr>
+          <td>Container (1GB)</td>
+          <td>$0.03/session</td>
+          <td>$0.03/session</td>
+      </tr>
+      <tr>
+          <td>Container (64GB)</td>
+          <td>$1.92/session</td>
+          <td>$1.92/session</td>
+      </tr>
+      <tr>
+          <td>Context window</td>
+          <td>1M tokens</td>
+          <td>1M tokens</td>
+      </tr>
+  </tbody>
+</table>
+<p>GPT-5.5 Pro&rsquo;s 6x token cost premium is only justified for tasks that require deep multi-step reasoning without tool use — complex architectural analysis, security audit reports, or algorithmic design. For any workflow that uses <code>apply_patch</code>, standard GPT-5.5 is the only option, as Pro explicitly does not support it. For high-volume batch workflows (nightly dependency updates, automated test generation across a monorepo), cache your system prompts and codebase context using the Responses API&rsquo;s caching layer to reduce input token costs by up to 75%. A typical bug-fix agent run that explores 20 files and applies 3 patches costs approximately $0.08–$0.15 in tokens plus $0.03 for the container session — well under $0.20 per resolved issue.</p>
+<h3 id="container-cost-optimization">Container Cost Optimization</h3>
+<p>Container sessions bill per 20-minute window, not per command. Batch multiple related operations within a single agent run to maximize utilization. If your workflow involves repeated runs against the same codebase (e.g., a nightly CI bot), use persistent volumes to avoid re-installing dependencies each session. For development and testing, use a local sandbox (Docker + the OpenAI API without <code>container_auto</code>) to avoid container costs entirely during iteration.</p>
+<h2 id="gpt-55-vs-claude-code-vs-github-copilot-agent-agentic-coding-comparison">GPT-5.5 vs Claude Code vs GitHub Copilot Agent: Agentic Coding Comparison</h2>
+<p>The autonomous coding agent space now has three dominant approaches, each with distinct architectural trade-offs that affect what workflows they handle best.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Capability</th>
+          <th>GPT-5.5 (Shell + Patch)</th>
+          <th>Claude Code</th>
+          <th>GitHub Copilot Agent</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Hosted sandbox</td>
+          <td>OpenAI-managed Debian 12</td>
+          <td>Local process</td>
+          <td>GitHub Actions runner</td>
+      </tr>
+      <tr>
+          <td>Code editing primitive</td>
+          <td>apply_patch (V4A)</td>
+          <td>Direct file writes</td>
+          <td>Direct file writes</td>
+      </tr>
+      <tr>
+          <td>Benchmark (SWE-Bench Pro)</td>
+          <td>58.6%</td>
+          <td>64.3% (Opus 4.7)</td>
+          <td>~52% (est.)</td>
+      </tr>
+      <tr>
+          <td>Terminal-Bench 2.0</td>
+          <td>82.7%</td>
+          <td>Not published</td>
+          <td>Not published</td>
+      </tr>
+      <tr>
+          <td>Context window</td>
+          <td>1M tokens</td>
+          <td>200K tokens</td>
+          <td>128K tokens</td>
+      </tr>
+      <tr>
+          <td>PR integration</td>
+          <td>Via API</td>
+          <td>Native Git</td>
+          <td>Native GitHub PRs</td>
+      </tr>
+      <tr>
+          <td>Audit trail</td>
+          <td>apply_patch_call log</td>
+          <td>Git diff</td>
+          <td>PR review thread</td>
+      </tr>
+      <tr>
+          <td>Pricing model</td>
+          <td>Per token + container</td>
+          <td>Subscription / API</td>
+          <td>Subscription</td>
+      </tr>
+  </tbody>
+</table>
+<p>GPT-5.5 leads on Terminal-Bench 2.0 (CLI workflows) and context length, making it the strongest choice for large monorepo refactors where full-codebase context matters. Claude Opus 4.7 leads on SWE-Bench Pro (real GitHub issues), making it stronger for nuanced bug diagnosis. Copilot Agent has the tightest GitHub integration but the smallest context window, limiting it to targeted, file-scoped changes. For teams already invested in the OpenAI API ecosystem, GPT-5.5 with hosted shell and <code>apply_patch</code> delivers a cohesive platform without additional infrastructure. For teams that need maximum accuracy on complex bugs, Claude Code remains the benchmark leader.</p>
+<h2 id="getting-started-complete-code-example-with-shell-and-apply-patch">Getting Started: Complete Code Example with Shell and Apply Patch</h2>
+<p>The following is a production-ready example that implements the full explore → patch → verify loop with error handling, patch validation, and result reporting. This pattern is suitable for CI/CD integration, nightly maintenance bots, or interactive developer tools.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> openai <span style="color:#f92672">import</span> OpenAI
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> pathlib <span style="color:#f92672">import</span> Path
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> subprocess
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> json
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> logging
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>logging<span style="color:#f92672">.</span>basicConfig(level<span style="color:#f92672">=</span>logging<span style="color:#f92672">.</span>INFO)
+</span></span><span style="display:flex;"><span>logger <span style="color:#f92672">=</span> logging<span style="color:#f92672">.</span>getLogger(__name__)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>client <span style="color:#f92672">=</span> OpenAI()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>PROJECT_ROOT <span style="color:#f92672">=</span> Path<span style="color:#f92672">.</span>cwd()
+</span></span><span style="display:flex;"><span>BLOCKED_PATHS <span style="color:#f92672">=</span> {<span style="color:#e6db74">&#34;.env&#34;</span>, <span style="color:#e6db74">&#34;.aws&#34;</span>, <span style="color:#e6db74">&#34;.ssh&#34;</span>, <span style="color:#e6db74">&#34;credentials&#34;</span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>SYSTEM_PROMPT <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;&#34;&#34;You are a senior software engineer running inside an OpenAI compute environment.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">You have access to a hosted shell and the apply_patch tool.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">Your workflow for every task:
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">1. Use shell to understand the codebase structure (ls, find, cat key files)
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">2. Use shell to run existing tests and understand the current state
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">3. Plan your changes carefully before patching
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">4. Use apply_patch for each file modification — never use shell to write files directly
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">5. Use shell to run tests after patching and verify your changes work
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">6. Report results: files changed, tests passed/failed, any caveats
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">Be precise. Be minimal. Only change what the task requires.&#34;&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">validate_patch</span>(patch_text: str) <span style="color:#f92672">-&gt;</span> bool:
+</span></span><span style="display:flex;"><span>    lines <span style="color:#f92672">=</span> patch_text<span style="color:#f92672">.</span>splitlines()
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> line <span style="color:#f92672">in</span> lines:
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> line<span style="color:#f92672">.</span>startswith(<span style="color:#e6db74">&#34;*** &#34;</span>) <span style="color:#f92672">and</span> <span style="color:#e6db74">&#34;: &#34;</span> <span style="color:#f92672">in</span> line:
+</span></span><span style="display:flex;"><span>            target <span style="color:#f92672">=</span> line<span style="color:#f92672">.</span>split(<span style="color:#e6db74">&#34;: &#34;</span>, <span style="color:#ae81ff">1</span>)[<span style="color:#ae81ff">1</span>]<span style="color:#f92672">.</span>strip()
+</span></span><span style="display:flex;"><span>            target_path <span style="color:#f92672">=</span> (PROJECT_ROOT <span style="color:#f92672">/</span> target)<span style="color:#f92672">.</span>resolve()
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> <span style="color:#f92672">not</span> str(target_path)<span style="color:#f92672">.</span>startswith(str(PROJECT_ROOT)):
+</span></span><span style="display:flex;"><span>                logger<span style="color:#f92672">.</span>error(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Path traversal blocked: </span><span style="color:#e6db74">{</span>target<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>                <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">False</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> any(blocked <span style="color:#f92672">in</span> target <span style="color:#66d9ef">for</span> blocked <span style="color:#f92672">in</span> BLOCKED_PATHS):
+</span></span><span style="display:flex;"><span>                logger<span style="color:#f92672">.</span>error(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Sensitive path blocked: </span><span style="color:#e6db74">{</span>target<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>                <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">False</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">True</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">apply_patch</span>(patch_text: str) <span style="color:#f92672">-&gt;</span> dict:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> <span style="color:#f92672">not</span> validate_patch(patch_text):
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> {<span style="color:#e6db74">&#34;success&#34;</span>: <span style="color:#66d9ef">False</span>, <span style="color:#e6db74">&#34;error&#34;</span>: <span style="color:#e6db74">&#34;Patch validation failed&#34;</span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    result <span style="color:#f92672">=</span> subprocess<span style="color:#f92672">.</span>run(
+</span></span><span style="display:flex;"><span>        [<span style="color:#e6db74">&#34;patch&#34;</span>, <span style="color:#e6db74">&#34;-p0&#34;</span>, <span style="color:#e6db74">&#34;--dry-run&#34;</span>],
+</span></span><span style="display:flex;"><span>        input<span style="color:#f92672">=</span>patch_text,
+</span></span><span style="display:flex;"><span>        capture_output<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>,
+</span></span><span style="display:flex;"><span>        text<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>,
+</span></span><span style="display:flex;"><span>        cwd<span style="color:#f92672">=</span>PROJECT_ROOT
+</span></span><span style="display:flex;"><span>    )
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> result<span style="color:#f92672">.</span>returncode <span style="color:#f92672">!=</span> <span style="color:#ae81ff">0</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> {<span style="color:#e6db74">&#34;success&#34;</span>: <span style="color:#66d9ef">False</span>, <span style="color:#e6db74">&#34;error&#34;</span>: result<span style="color:#f92672">.</span>stderr}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    result <span style="color:#f92672">=</span> subprocess<span style="color:#f92672">.</span>run(
+</span></span><span style="display:flex;"><span>        [<span style="color:#e6db74">&#34;patch&#34;</span>, <span style="color:#e6db74">&#34;-p0&#34;</span>],
+</span></span><span style="display:flex;"><span>        input<span style="color:#f92672">=</span>patch_text,
+</span></span><span style="display:flex;"><span>        capture_output<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>,
+</span></span><span style="display:flex;"><span>        text<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>,
+</span></span><span style="display:flex;"><span>        cwd<span style="color:#f92672">=</span>PROJECT_ROOT
+</span></span><span style="display:flex;"><span>    )
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;success&#34;</span>: result<span style="color:#f92672">.</span>returncode <span style="color:#f92672">==</span> <span style="color:#ae81ff">0</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;output&#34;</span>: result<span style="color:#f92672">.</span>stdout,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;error&#34;</span>: result<span style="color:#f92672">.</span>stderr <span style="color:#66d9ef">if</span> result<span style="color:#f92672">.</span>returncode <span style="color:#f92672">!=</span> <span style="color:#ae81ff">0</span> <span style="color:#66d9ef">else</span> <span style="color:#66d9ef">None</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">run_coding_agent</span>(task: str) <span style="color:#f92672">-&gt;</span> dict:
+</span></span><span style="display:flex;"><span>    logger<span style="color:#f92672">.</span>info(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Starting agent for task: </span><span style="color:#e6db74">{</span>task[:<span style="color:#ae81ff">80</span>]<span style="color:#e6db74">}</span><span style="color:#e6db74">...&#34;</span>)
+</span></span><span style="display:flex;"><span>    audit_log <span style="color:#f92672">=</span> []
+</span></span><span style="display:flex;"><span>    patches_applied <span style="color:#f92672">=</span> []
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    response <span style="color:#f92672">=</span> client<span style="color:#f92672">.</span>responses<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>        model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;gpt-5.5&#34;</span>,
+</span></span><span style="display:flex;"><span>        tools<span style="color:#f92672">=</span>[
+</span></span><span style="display:flex;"><span>            {<span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;shell&#34;</span>},
+</span></span><span style="display:flex;"><span>            {<span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;apply_patch&#34;</span>},
+</span></span><span style="display:flex;"><span>        ],
+</span></span><span style="display:flex;"><span>        container<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;container_auto&#34;</span>,
+</span></span><span style="display:flex;"><span>        system<span style="color:#f92672">=</span>SYSTEM_PROMPT,
+</span></span><span style="display:flex;"><span>        input<span style="color:#f92672">=</span>task,
+</span></span><span style="display:flex;"><span>        stream<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>,
+</span></span><span style="display:flex;"><span>    )
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> event <span style="color:#f92672">in</span> response:
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> event<span style="color:#f92672">.</span>type <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;shell_call&#34;</span>:
+</span></span><span style="display:flex;"><span>            logger<span style="color:#f92672">.</span>info(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Shell: </span><span style="color:#e6db74">{</span>event<span style="color:#f92672">.</span>command[:<span style="color:#ae81ff">100</span>]<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">elif</span> event<span style="color:#f92672">.</span>type <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;apply_patch_call&#34;</span>:
+</span></span><span style="display:flex;"><span>            logger<span style="color:#f92672">.</span>info(<span style="color:#e6db74">&#34;Patch proposed, validating...&#34;</span>)
+</span></span><span style="display:flex;"><span>            audit_log<span style="color:#f92672">.</span>append({
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;apply_patch_call&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;patch&#34;</span>: event<span style="color:#f92672">.</span>patch,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;task&#34;</span>: task,
+</span></span><span style="display:flex;"><span>            })
+</span></span><span style="display:flex;"><span>            result <span style="color:#f92672">=</span> apply_patch(event<span style="color:#f92672">.</span>patch)
+</span></span><span style="display:flex;"><span>            patches_applied<span style="color:#f92672">.</span>append(result)
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> result[<span style="color:#e6db74">&#34;success&#34;</span>]:
+</span></span><span style="display:flex;"><span>                logger<span style="color:#f92672">.</span>info(<span style="color:#e6db74">&#34;Patch applied successfully&#34;</span>)
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">else</span>:
+</span></span><span style="display:flex;"><span>                logger<span style="color:#f92672">.</span>error(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Patch failed: </span><span style="color:#e6db74">{</span>result[<span style="color:#e6db74">&#39;error&#39;</span>]<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">elif</span> event<span style="color:#f92672">.</span>type <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;response.done&#34;</span>:
+</span></span><span style="display:flex;"><span>            logger<span style="color:#f92672">.</span>info(<span style="color:#e6db74">&#34;Agent completed&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;patches_applied&#34;</span>: patches_applied,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;patches_succeeded&#34;</span>: sum(<span style="color:#ae81ff">1</span> <span style="color:#66d9ef">for</span> p <span style="color:#f92672">in</span> patches_applied <span style="color:#66d9ef">if</span> p[<span style="color:#e6db74">&#34;success&#34;</span>]),
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;audit_log&#34;</span>: audit_log,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;summary&#34;</span>: response<span style="color:#f92672">.</span>output_text <span style="color:#66d9ef">if</span> hasattr(response, <span style="color:#e6db74">&#34;output_text&#34;</span>) <span style="color:#66d9ef">else</span> <span style="color:#e6db74">&#34;&#34;</span>,
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">if</span> __name__ <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;__main__&#34;</span>:
+</span></span><span style="display:flex;"><span>    result <span style="color:#f92672">=</span> run_coding_agent(
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;Find all hardcoded timeout values in src/ and replace them with &#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;constants defined in src/config/timeouts.py. Create that file if it &#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;doesn&#39;t exist. Run the test suite to verify nothing breaks.&#34;</span>
+</span></span><span style="display:flex;"><span>    )
+</span></span><span style="display:flex;"><span>    print(json<span style="color:#f92672">.</span>dumps(result, indent<span style="color:#f92672">=</span><span style="color:#ae81ff">2</span>, default<span style="color:#f92672">=</span>str))
+</span></span></code></pre></div><h2 id="faq">FAQ</h2>
+<p><strong>Does the hosted shell have internet access?</strong>
+Yes, with restrictions. OpenAI-managed containers have controlled internet access that allows common package manager operations (<code>apt-get</code>, <code>pip install</code>, <code>npm install</code>) and public API calls, but blocks access to internal networks and restricts certain outbound protocols. This is intentional: the container needs to install dependencies but should not be able to reach your internal databases or VPNs.</p>
+<p><strong>Can I use apply_patch without the hosted shell?</strong>
+Yes. The <code>apply_patch</code> tool operates independently of the hosted shell. If your application already manages code execution locally (e.g., in a Docker container you control), you can enable only <code>apply_patch</code> and handle all file operations yourself. The model will emit <code>apply_patch_call</code> events that your application applies to its own filesystem.</p>
+<p><strong>Is GPT-5.5 better than Claude Code for autonomous coding?</strong>
+It depends on the benchmark. GPT-5.5 scores higher on Terminal-Bench 2.0 (82.7% vs. unreported for Claude Code), making it stronger for CLI-heavy workflows. Claude Opus 4.7 scores higher on SWE-Bench Pro (64.3% vs. GPT-5.5&rsquo;s 58.6%), making it better for complex real-world bug resolution. For teams in the OpenAI ecosystem, GPT-5.5 with hosted shell and <code>apply_patch</code> is the most integrated solution.</p>
+<p><strong>What happens if a patch fails to apply?</strong>
+The <code>apply_patch</code> tool emits the patch as structured output — your application is responsible for applying it. If <code>patch -p0</code> fails (e.g., due to context mismatch), you can return the error to the model in a follow-up turn and ask it to generate a corrected patch. Build retry logic with a maximum of 2–3 attempts before surfacing the error to a human reviewer.</p>
+<p><strong>How do I handle large codebases with GPT-5.5&rsquo;s 1M token context?</strong>
+GPT-5.5&rsquo;s 1M token context is large enough to hold approximately 30,000–40,000 lines of code. For monorepos larger than this, use the shell tool to identify the relevant subset of files (via <code>grep</code>, <code>find</code>, or language-specific analysis tools) and pass only those files as context. Structure your prompts to load files lazily — let the model request the files it needs rather than dumping the entire codebase upfront.</p>
+]]></content:encoded></item><item><title>OpenAI Responses API Tutorial 2026: Build Stateful AI Apps in Python</title><link>https://baeseokjae.github.io/posts/openai-responses-api-tutorial-2026/</link><pubDate>Tue, 21 Apr 2026 00:11:38 +0000</pubDate><guid>https://baeseokjae.github.io/posts/openai-responses-api-tutorial-2026/</guid><description>Complete OpenAI Responses API tutorial 2026: stateful conversations, built-in tools, function calling, and migration from Chat Completions.</description><content:encoded><![CDATA[<p>The OpenAI Responses API is the new primary interface for building stateful, agentic AI applications — replacing the Assistants API (being sunset H1 2026) and extending beyond what Chat Completions can do. This tutorial walks through everything from your first API call to building multi-step agents with built-in tools like web search and file retrieval.</p>
 <h2 id="what-is-the-openai-responses-api">What Is the OpenAI Responses API?</h2>
 <p>The OpenAI Responses API is a stateful, tool-native interface for building AI agents and multi-turn applications — launched in March 2025 as OpenAI&rsquo;s replacement for the Assistants API and a significant evolution beyond Chat Completions. Unlike Chat Completions, which is stateless (every request requires you to resend the full conversation history), Responses API maintains conversation state server-side using <code>previous_response_id</code>. A 10-turn conversation with Chat Completions resends your entire history on turn 10, making it up to 5x more expensive for long dialogues. Responses API sends only the new message each turn — the server already holds context. Built-in tools (web search at $25–50/1K queries, file search at $2.50/1K queries) are first-class citizens rather than custom function definitions, and reasoning tokens from o3 and o4-mini are preserved between turns instead of being discarded. OpenAI has moved all example code in the openai-python repository to Responses API patterns — it is where the platform is going.</p>
 <h3 id="key-architecture-concepts">Key Architecture Concepts</h3>
