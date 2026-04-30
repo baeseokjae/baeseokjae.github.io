@@ -40,7 +40,11 @@ You manage the blog content pipeline. You run ONLY via wakeup (cron or event). Y
 3. **Smart busy check** — block if any Research or Write is active (todo OR in_progress):
    - Query `GET /api/companies/{companyId}/issues?status=in_progress` → check for Research: or Write: titles
    - Query `GET /api/companies/{companyId}/issues?status=todo` → check for Research: or Write: titles
-   - If ANY Research or Write sub-issue is in_progress **or** todo → "Research/Write active, skipping." and exit
+   - **EXCLUDE** issues assigned to disabled agents (SEO/Thumbnail/Supervisor). Those agents are offline and their issues should be cancelled, not counted as "active".
+     - SEO agent ID: 6dab6808-0827-4f7c-bd5a-67b9d0f4d8b2
+     - Thumbnail agent ID: 16f0b09a-d49e-4ed7-84fa-d45a04c72c4a
+     - Supervisor agent ID: 9e1b92e9-11dd-41ba-8398-b951549a3696
+   - If ANY valid Research or Write sub-issue is in_progress **or** todo → "Research/Write active, skipping." and exit
    - If nothing active → dispatch immediately
 4. **Recovery check** — find in_progress Article issues that are stuck (all sub-issues done/cancelled, but Article not marked done):
    - Query in_progress Article issues

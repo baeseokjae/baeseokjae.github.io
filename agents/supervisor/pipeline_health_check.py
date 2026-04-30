@@ -467,6 +467,104 @@ def check_missing_schemas():
 
 
 # ============================================================
+# Check 6b: Blocked issue auto-recovery
+# ============================================================
+
+def check_blocked_auto_recovery(issues, dry_run):
+    """Auto-recover blocked issues:
+    - If all files exist (post + schema + cover) → mark as done
+    - If files missing → re-queue as todo with original assignee
+    """
+    report.log("Check 6b: Blocked issue auto-recovery")
+    recovered = 0
+
+    blocked = [i for i in issues if i.get("status") == "blocked"]
+    if not blocked:
+        report.log("No blocked issues found")
+        return 0
+
+    report.log(f"Found {len(blocked)} blocked issues to evaluate")
+
+    for issue in blocked:
+        identifier = issue.get("identifier", "N/A")
+        title = (issue.get("title") or "")[:80]
+        desc = (issue.get("description") or "")[:500].lower()
+
+        # Extract slug from description or title
+        slug = None
+        import re
+        # Try "slug: xxx" pattern in description
+        slug_match = re.search(r'slug[:\s]+([a-z0-9][-a-z0-9]+[a-z0-9])', desc)
+        if slug_match:
+            slug = slug_match.group(1)
+        else:
+            # Try to extract from title like "Write: AI Testing Tools (slug)"
+            title_text = (issue.get("title") or "")
+            slug_match2 = re.search(r'\(([a-z0-9][-a-z0-9]+[a-z0-9])\)', title_text, re.IGNORECASE)
+            if slug_match2:
+                slug = slug_match2.group(1).lower()
+
+        if not slug:
+            # Also try extracting from description paths like ~/blog/content/posts/{slug}.md
+            path_match = re.search(r'content/posts/([a-z0-9][-a-z0-9]+)', desc)
+            if path_match:
+                slug = path_match.group(1)
+
+        if not slug:
+            # Non-blog issue (analytics, maintenance, etc.) — skip
+            report.log(f"BLOCKED: {identifier} — no slug found, likely non-blog issue, skipping")
+            continue
+
+        # Check if all required files exist
+        post_path = os.path.join(POSTS_DIR, f"{slug}.md")
+        schema_path = os.path.join(SCHEMAS_DIR, f"schema-{slug}.html")
+        cover_path = os.path.join(IMAGES_DIR, f"{slug}.png")
+
+        post_exists = os.path.exists(post_path)
+        schema_exists = os.path.exists(schema_path)
+        cover_exists = os.path.exists(cover_path)
+
+        all_exist = post_exists and schema_exists and cover_exists
+
+        identifier_str = identifier
+        report.log(f"BLOCKED {identifier_str}: slug={slug} post={post_exists} schema={schema_exists} cover={cover_exists}")
+
+        if dry_run:
+            if all_exist:
+                report.log(f"[DRY RUN] Would mark {identifier_str} as done (all files present)")
+            else:
+                report.log(f"[DRY RUN] Would re-queue {identifier_str} as todo (missing files)")
+            continue
+
+        if all_exist:
+            # All files exist — mark as done
+            result = api("PATCH", f"{BASE_URL}/issues/{issue['id']}", {"status": "done"})
+            if isinstance(result, dict) and "error" not in result:
+                report.log(f"RECOVERED: {identifier_str} → done (all files present)", "ACTION")
+                recovered += 1
+            else:
+                report.log(f"Failed to mark {identifier_str} as done: {result.get('error', 'unknown')}", "WARN")
+        else:
+            # Missing files — re-queue as todo with original assignee
+            assignee_id = issue.get("assigneeAgentId")
+            patch_data = {"status": "todo"}
+            if assignee_id:
+                patch_data["assigneeAgentId"] = assignee_id
+            result = api("PATCH", f"{BASE_URL}/issues/{issue['id']}", patch_data)
+            if isinstance(result, dict) and "error" not in result:
+                report.log(f"RE-QUEUED: {identifier_str} → todo (missing: " +
+                           f"{'post ' if not post_exists else ''}" +
+                           f"{'schema ' if not schema_exists else ''}" +
+                           f"{'cover' if not cover_exists else ''})", "ACTION")
+                recovered += 1
+            else:
+                report.log(f"Failed to re-queue {identifier_str}: {result.get('error', 'unknown')}", "WARN")
+
+    report.log(f"Blocked issues recovered/re-queued: {recovered}")
+    return recovered
+
+
+# ============================================================
 # Check 6: Issues assigned to disabled agents (SEO/Thumbnail)
 # ============================================================
 
@@ -569,15 +667,18 @@ def run(dry_run=False):
     report.log("")
     disabled_cancelled = check_disabled_agent_issues(issues, agents, dry_run)
     report.log("")
+    blocked_recovered = check_blocked_auto_recovery(issues, dry_run)
+    report.log("")
 
     # Summary
-    total_actions = stuck_cancelled + zombie_cancelled + strategist_wakes + disabled_cancelled
+    total_actions = stuck_cancelled + zombie_cancelled + strategist_wakes + disabled_cancelled + blocked_recovered
     report.log("=" * 60)
     report.log(f"Summary: {total_actions} actions taken")
     report.log(f"  Stuck subtasks cancelled: {stuck_cancelled}")
     report.log(f"  Zombie subtasks cancelled: {zombie_cancelled}")
     report.log(f"  Strategist wakes: {strategist_wakes}")
     report.log(f"  Disabled-agent issues cancelled: {disabled_cancelled}")
+    report.log(f"  Blocked issues recovered/re-queued: {blocked_recovered}")
     report.log(f"  Missing cover images (warnings): {missing_images}")
     report.log(f"  Missing schema files (warnings): {missing_schemas}")
     report.log("Pipeline Health Check complete")
