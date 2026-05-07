@@ -1,4 +1,396 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Security on RockB</title><link>https://baeseokjae.github.io/tags/security/</link><description>Recent content in Security on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sun, 26 Apr 2026 01:04:36 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/security/index.xml" rel="self" type="application/rss+xml"/><item><title>Peta AI Agent Credential Security: Scoped Credentials Without Raw API Key Exposure</title><link>https://baeseokjae.github.io/posts/peta-ai-agent-credential-guide-2026/</link><pubDate>Sun, 26 Apr 2026 01:04:36 +0000</pubDate><guid>https://baeseokjae.github.io/posts/peta-ai-agent-credential-guide-2026/</guid><description>How Peta gives AI agents scoped, policy-controlled credentials — eliminating raw API key exposure in MCP and agentic workflows.</description><content:encoded><![CDATA[<p>Giving an AI agent a raw API key is structurally equivalent to handing your housekeeper a master key with no expiry date, no audit trail, and no way to revoke access to a specific door. Peta fixes this by acting as a control plane that intercepts every credential request, enforces a least-privilege policy, and injects short-lived scoped tokens at runtime — so the agent never sees your actual secrets.</p>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Security on RockB</title><link>https://baeseokjae.github.io/tags/security/</link><description>Recent content in Security on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 05 May 2026 15:03:56 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/security/index.xml" rel="self" type="application/rss+xml"/><item><title>MCP OAuth 2.1 Authentication: Complete Developer Guide 2026</title><link>https://baeseokjae.github.io/posts/mcp-oauth-authentication-guide-2026/</link><pubDate>Tue, 05 May 2026 15:03:56 +0000</pubDate><guid>https://baeseokjae.github.io/posts/mcp-oauth-authentication-guide-2026/</guid><description>Step-by-step guide to implementing OAuth 2.1 authentication for MCP servers in 2026, covering PKCE, Protected Resource Metadata, and enterprise gateway patterns.</description><content:encoded><![CDATA[<p>Only 8.5% of MCP servers currently implement OAuth 2.1 authentication — despite it being the protocol&rsquo;s mandatory security standard for remote deployments. If your server handles sensitive data or enterprise workloads, that gap is your attack surface. This guide walks you through the complete implementation, from metadata discovery to token introspection, with working Python code.</p>
+<h2 id="what-is-mcp-oauth-21-and-why-it-matters-in-2026">What Is MCP OAuth 2.1 and Why It Matters in 2026</h2>
+<p>MCP OAuth 2.1 authentication is the authorization framework mandated by the Model Context Protocol specification for all remote HTTP-based servers that expose tools or resources to AI agents. As of the November 2025 spec revision, any MCP server accessible over the internet must implement OAuth 2.1 with PKCE (Proof Key for Code Exchange using the S256 method) — no exceptions. The spec explicitly bans the implicit grant and the plain PKCE method that OAuth 2.0 permitted.</p>
+<p>The stakes are real: a 2026 security audit found that 25% of public MCP servers have no authentication at all, and 53% rely on long-lived static API keys or Personal Access Tokens — credentials that, once leaked, provide indefinite access. The public MCP server registry grew from roughly 1,200 entries in Q1 2025 to over 9,400 servers by mid-April 2026, which means the attack surface has grown more than 7× in fourteen months. Meanwhile, 38% of organizations say security concerns are actively blocking their MCP adoption, and 50% of MCP builders cite access control as their top challenge.</p>
+<p>OAuth 2.1 solves the core problem: it separates the token issuer (your identity provider) from the resource server (your MCP server), ensuring that AI agents prove their identity with short-lived, scoped credentials rather than permanent secrets. For enterprise teams, this is the difference between an auditable access-control system and a credential sprawl nightmare.</p>
+<h2 id="the-mcp-authorization-spec-timeline-marchnovember-2025">The MCP Authorization Spec Timeline (March–November 2025)</h2>
+<p>The MCP authorization spec evolved rapidly through three major revisions in nine months, and understanding what changed helps you avoid implementing an outdated pattern. The March 2025 revision introduced OAuth 2.1 as the baseline for remote MCP servers, replacing the earlier ad-hoc API key recommendations. Authorization server metadata discovery (RFC 8414) was included, letting clients auto-discover token endpoints without hardcoded URLs.</p>
+<p>The June 2025 revision added two critical requirements. First, RFC 9728 Protected Resource Metadata became mandatory — remote servers must now expose a <code>/.well-known/oauth-protected-resource</code> endpoint that tells clients which authorization server to use. Second, dynamic client registration (RFC 7591) became a SHOULD (effectively required for clients like Claude Desktop and ChatGPT that need to self-register). Servers that skip dynamic registration must maintain a static allowlist of client IDs, which breaks compatibility with off-the-shelf AI clients.</p>
+<p>The November 2025 revision — the one currently in force — made three additional changes: it explicitly banned the <code>plain</code> PKCE method in favor of S256 only, required resource parameters (RFC 8707) in all token requests to prevent token reuse across servers, and mandated that 401 responses include a properly formatted <code>WWW-Authenticate</code> header pointing to the authorization server. Servers built against the March 2025 spec are likely missing at least two of these requirements. The clearest signal that a server is outdated: it accepts PKCE <code>plain</code> method or returns 401 without a <code>WWW-Authenticate</code> header.</p>
+<h2 id="core-concepts-oauth-21--pkce-for-mcp">Core Concepts: OAuth 2.1 + PKCE for MCP</h2>
+<p>OAuth 2.1 with PKCE is the grant type used by every MCP client authenticating to a remote server. It works by having the client generate a cryptographic secret (the <code>code_verifier</code>) before the authorization request, derive a challenge from it (the <code>code_challenge</code>), and send only the challenge to the authorization server during the redirect. The server stores the challenge and demands the original verifier during token exchange — preventing an attacker who intercepts the authorization code from redeeming it without also having the verifier, which never travels over the network.</p>
+<p>For MCP specifically, PKCE matters because AI agent clients often run in environments where storing client secrets is impractical or insecure — a desktop application, a CI runner, or a serverless function. PKCE lets these &ldquo;public clients&rdquo; authenticate securely without embedding long-lived secrets. The MCP spec mandates the S256 method: <code>code_challenge = BASE64URL(SHA-256(ASCII(code_verifier)))</code>. The verifier must be a cryptographically random string of 43–128 characters from the unreserved character set.</p>
+<p>The five actors in an MCP OAuth 2.1 flow are: (1) the <strong>AI agent / MCP client</strong>, which initiates the flow; (2) the <strong>authorization server</strong> (Auth0, Keycloak, Okta, Cognito), which issues tokens; (3) the <strong>MCP server</strong>, which acts as a resource server that validates tokens; (4) the <strong>user</strong>, who grants consent; and (5) the <strong>Protected Resource Metadata endpoint</strong>, a <code>/.well-known</code> URL on the MCP server that auto-routes clients to the correct authorization server. Without understanding all five, you&rsquo;ll end up with a flow that works in tests but breaks with real clients.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Concept</th>
+          <th>OAuth 2.0</th>
+          <th>OAuth 2.1 (MCP)</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>PKCE</td>
+          <td>Optional</td>
+          <td>Mandatory (S256 only)</td>
+      </tr>
+      <tr>
+          <td>Implicit grant</td>
+          <td>Allowed</td>
+          <td>Banned</td>
+      </tr>
+      <tr>
+          <td>Resource owner password grant</td>
+          <td>Allowed</td>
+          <td>Banned</td>
+      </tr>
+      <tr>
+          <td>Client secrets for public clients</td>
+          <td>Common</td>
+          <td>Discouraged</td>
+      </tr>
+      <tr>
+          <td>Token endpoint auth</td>
+          <td>Various methods</td>
+          <td><code>client_secret_post</code> or PKCE</td>
+      </tr>
+      <tr>
+          <td><code>WWW-Authenticate</code> on 401</td>
+          <td>Optional</td>
+          <td>Mandatory</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="how-the-mcp-authorization-flow-works-step-by-step">How the MCP Authorization Flow Works Step by Step</h2>
+<p>The MCP authorization flow follows a seven-step sequence that every client implementing the spec must execute. Understanding each step tells you where failures occur and where to add logging. The sequence begins when an MCP client discovers your server&rsquo;s metadata, generates its PKCE credentials, redirects the user to consent, receives an authorization code, exchanges it for tokens, and then attaches those tokens to subsequent MCP requests.</p>
+<p><strong>Step 1 — Protected Resource Metadata discovery.</strong> The client fetches <code>GET /.well-known/oauth-protected-resource</code> on your MCP server. The response is a JSON document (RFC 9728) that includes the <code>authorization_servers</code> field — a list of authorization server URLs the client should use.</p>
+<p><strong>Step 2 — Authorization server metadata discovery.</strong> The client fetches <code>GET {authorization_server}/.well-known/oauth-authorization-server</code>. This RFC 8414 document provides the <code>authorization_endpoint</code>, <code>token_endpoint</code>, <code>registration_endpoint</code> (for dynamic registration), and supported scopes.</p>
+<p><strong>Step 3 — Dynamic client registration (if needed).</strong> If the client has no pre-registered <code>client_id</code>, it POSTs to the <code>registration_endpoint</code> with its metadata (name, redirect URIs, grant types). The server responds with a <code>client_id</code> and optional <code>client_secret</code>.</p>
+<p><strong>Step 4 — PKCE credential generation.</strong> The client generates a cryptographically random <code>code_verifier</code> (minimum 43 characters) and computes <code>code_challenge = BASE64URL(SHA-256(code_verifier))</code>.</p>
+<p><strong>Step 5 — Authorization redirect.</strong> The client redirects the user to the <code>authorization_endpoint</code> with query parameters: <code>response_type=code</code>, <code>client_id</code>, <code>redirect_uri</code>, <code>scope</code>, <code>state</code> (CSRF token), <code>code_challenge</code>, and <code>code_challenge_method=S256</code>. The user authenticates and consents.</p>
+<p><strong>Step 6 — Token exchange.</strong> The client POSTs to the <code>token_endpoint</code> with <code>grant_type=authorization_code</code>, the received <code>code</code>, <code>redirect_uri</code>, <code>code_verifier</code>, and — critically — the <code>resource</code> parameter (RFC 8707) set to your MCP server&rsquo;s URL. The authorization server validates the PKCE challenge and issues an <code>access_token</code> and optionally a <code>refresh_token</code>.</p>
+<p><strong>Step 7 — Bearer token usage.</strong> The client attaches the access token to every MCP request as <code>Authorization: Bearer {token}</code>. Your MCP server validates the token on each request, checks the <code>aud</code> (audience) claim against its own URL, and verifies the required scopes.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> secrets
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> hashlib
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> base64
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> urllib.parse
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Step 4: Generate PKCE credentials</span>
+</span></span><span style="display:flex;"><span>code_verifier <span style="color:#f92672">=</span> secrets<span style="color:#f92672">.</span>token_urlsafe(<span style="color:#ae81ff">64</span>)
+</span></span><span style="display:flex;"><span>code_challenge_bytes <span style="color:#f92672">=</span> hashlib<span style="color:#f92672">.</span>sha256(code_verifier<span style="color:#f92672">.</span>encode())<span style="color:#f92672">.</span>digest()
+</span></span><span style="display:flex;"><span>code_challenge <span style="color:#f92672">=</span> base64<span style="color:#f92672">.</span>urlsafe_b64encode(code_challenge_bytes)<span style="color:#f92672">.</span>rstrip(<span style="color:#e6db74">b</span><span style="color:#e6db74">&#39;=&#39;</span>)<span style="color:#f92672">.</span>decode()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Step 5: Build authorization URL</span>
+</span></span><span style="display:flex;"><span>params <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;response_type&#34;</span>: <span style="color:#e6db74">&#34;code&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;client_id&#34;</span>: <span style="color:#e6db74">&#34;your-client-id&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;redirect_uri&#34;</span>: <span style="color:#e6db74">&#34;https://yourapp.com/callback&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;scope&#34;</span>: <span style="color:#e6db74">&#34;mcp:read mcp:write&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;state&#34;</span>: secrets<span style="color:#f92672">.</span>token_urlsafe(<span style="color:#ae81ff">16</span>),
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;code_challenge&#34;</span>: code_challenge,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;code_challenge_method&#34;</span>: <span style="color:#e6db74">&#34;S256&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;resource&#34;</span>: <span style="color:#e6db74">&#34;https://your-mcp-server.com&#34;</span>,  <span style="color:#75715e"># RFC 8707</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>auth_url <span style="color:#f92672">=</span> <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;https://auth.example.com/authorize?</span><span style="color:#e6db74">{</span>urllib<span style="color:#f92672">.</span>parse<span style="color:#f92672">.</span>urlencode(params)<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>
+</span></span></code></pre></div><h2 id="implementing-protected-resource-metadata-rfc-9728">Implementing Protected Resource Metadata (RFC 9728)</h2>
+<p>RFC 9728 Protected Resource Metadata is the hidden requirement that most MCP OAuth guides skip — and its absence breaks compatibility with Claude Desktop, ChatGPT plugins, and any spec-compliant MCP client. A remote MCP server that returns a 404 on <code>/.well-known/oauth-protected-resource</code> will fail the auto-discovery step, causing clients to either fail silently or prompt users for manual configuration. The RFC requires this endpoint to be served without authentication, over HTTPS in production, and to return a JSON document with a minimum set of fields.</p>
+<p>The required fields are <code>resource</code> (the canonical URL of your MCP server) and <code>authorization_servers</code> (an array of authorization server URLs). Optional but recommended fields include <code>scopes_supported</code> (the scopes your server understands), <code>bearer_methods_supported</code> (always <code>[&quot;header&quot;]</code> for MCP), and <code>resource_documentation</code> (a URL to your server&rsquo;s documentation).</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> fastapi <span style="color:#f92672">import</span> FastAPI
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> fastapi.responses <span style="color:#f92672">import</span> JSONResponse
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>app <span style="color:#f92672">=</span> FastAPI()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>MCP_SERVER_URL <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;https://your-mcp-server.com&#34;</span>
+</span></span><span style="display:flex;"><span>AUTHORIZATION_SERVER <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;https://auth.example.com&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">@app.get</span>(<span style="color:#e6db74">&#34;/.well-known/oauth-protected-resource&#34;</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">protected_resource_metadata</span>():
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> JSONResponse({
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;resource&#34;</span>: MCP_SERVER_URL,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;authorization_servers&#34;</span>: [AUTHORIZATION_SERVER],
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;scopes_supported&#34;</span>: [<span style="color:#e6db74">&#34;mcp:read&#34;</span>, <span style="color:#e6db74">&#34;mcp:write&#34;</span>, <span style="color:#e6db74">&#34;mcp:admin&#34;</span>],
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;bearer_methods_supported&#34;</span>: [<span style="color:#e6db74">&#34;header&#34;</span>],
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;resource_documentation&#34;</span>: <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">{</span>MCP_SERVER_URL<span style="color:#e6db74">}</span><span style="color:#e6db74">/docs&#34;</span>,
+</span></span><span style="display:flex;"><span>    })
+</span></span></code></pre></div><p>One subtle requirement: the <code>resource</code> field in this document must exactly match the <code>resource</code> parameter clients send in token requests. If your server URL has a trailing slash in the metadata but clients omit it in the token request, the authorization server&rsquo;s audience validation will fail. Use a canonical form (no trailing slash, lowercase hostname) and document it clearly for client implementors.</p>
+<p>For servers deployed behind a reverse proxy (nginx, Cloudflare), ensure the <code>Host</code> header is forwarded correctly so that dynamically generated URLs in responses reflect the public URL, not the internal container address. This is a common source of auth failures in Docker-based deployments.</p>
+<h2 id="dynamic-client-registration-rfc-7591-in-practice">Dynamic Client Registration (RFC 7591) in Practice</h2>
+<p>Dynamic client registration (RFC 7591) allows MCP clients — including Claude Desktop, ChatGPT integrations, and custom agents — to self-register with your authorization server without requiring manual pre-provisioning. Without it, every new AI tool that wants to use your MCP server requires you to create a client ID and share it out-of-band, which creates administrative overhead and breaks the ecosystem-scale interoperability that MCP is designed for.</p>
+<p>The registration endpoint (<code>registration_endpoint</code> in your authorization server metadata) accepts a POST with a JSON body describing the client. The authorization server responds with a <code>client_id</code> (and optionally a <code>client_secret</code> for confidential clients, though public MCP clients should not receive one). The fields that matter most for MCP compatibility are <code>grant_types</code> (must include <code>authorization_code</code>), <code>token_endpoint_auth_method</code> (<code>none</code> for public clients using PKCE), <code>redirect_uris</code> (must be pre-validated against an allowlist in production), and <code>response_types</code> (<code>[&quot;code&quot;]</code> only — <code>token</code> is banned in OAuth 2.1).</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> httpx
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">register_client</span>(registration_endpoint: str, redirect_uri: str) <span style="color:#f92672">-&gt;</span> dict:
+</span></span><span style="display:flex;"><span>    payload <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;client_name&#34;</span>: <span style="color:#e6db74">&#34;My MCP Agent&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;redirect_uris&#34;</span>: [redirect_uri],
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;grant_types&#34;</span>: [<span style="color:#e6db74">&#34;authorization_code&#34;</span>, <span style="color:#e6db74">&#34;refresh_token&#34;</span>],
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;response_types&#34;</span>: [<span style="color:#e6db74">&#34;code&#34;</span>],
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;token_endpoint_auth_method&#34;</span>: <span style="color:#e6db74">&#34;none&#34;</span>,  <span style="color:#75715e"># public client, uses PKCE</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;scope&#34;</span>: <span style="color:#e6db74">&#34;mcp:read mcp:write&#34;</span>,
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">with</span> httpx<span style="color:#f92672">.</span>AsyncClient() <span style="color:#66d9ef">as</span> client:
+</span></span><span style="display:flex;"><span>        resp <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> client<span style="color:#f92672">.</span>post(registration_endpoint, json<span style="color:#f92672">=</span>payload)
+</span></span><span style="display:flex;"><span>        resp<span style="color:#f92672">.</span>raise_for_status()
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> resp<span style="color:#f92672">.</span>json()  <span style="color:#75715e"># contains client_id</span>
+</span></span></code></pre></div><p>In production, you should rate-limit the registration endpoint and implement an approval workflow or IP allowlist, because open dynamic registration is an abuse vector: a malicious actor could register thousands of clients to enumerate your authorization server&rsquo;s behavior. Auth0 and Okta offer fine-grained controls for this; Keycloak&rsquo;s dynamic registration is disabled by default and must be explicitly enabled per realm.</p>
+<h2 id="building-an-oauth-21-mcp-server-with-fastmcp-python">Building an OAuth 2.1 MCP Server with FastMCP (Python)</h2>
+<p>FastMCP is the fastest path to a production-ready OAuth-authenticated MCP server in Python. It handles the JSON-RPC transport, tool registration, and middleware integration, so you only need to implement the OAuth validation layer. The key design principle is that your MCP server is a resource server only — it never shows login pages, never issues tokens, and never stores credentials. Token issuance is the authorization server&rsquo;s job.</p>
+<p>The minimal implementation requires four components: the Protected Resource Metadata endpoint, a Bearer token validator middleware, tool definitions, and an ASGI app that wires them together.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> fastmcp <span style="color:#f92672">import</span> FastMCP
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> fastapi <span style="color:#f92672">import</span> FastAPI, Request, HTTPException
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> fastapi.responses <span style="color:#f92672">import</span> JSONResponse
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> httpx
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> jwt  <span style="color:#75715e"># PyJWT</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>MCP_SERVER_URL <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;https://your-mcp-server.com&#34;</span>
+</span></span><span style="display:flex;"><span>AUTHORIZATION_SERVER <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;https://auth.example.com&#34;</span>
+</span></span><span style="display:flex;"><span>JWKS_URI <span style="color:#f92672">=</span> <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">{</span>AUTHORIZATION_SERVER<span style="color:#e6db74">}</span><span style="color:#e6db74">/.well-known/jwks.json&#34;</span>
+</span></span><span style="display:flex;"><span>REQUIRED_SCOPE <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;mcp:read&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>mcp <span style="color:#f92672">=</span> FastMCP(<span style="color:#e6db74">&#34;Secure MCP Server&#34;</span>)
+</span></span><span style="display:flex;"><span>app <span style="color:#f92672">=</span> FastAPI()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Protected Resource Metadata (RFC 9728)</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">@app.get</span>(<span style="color:#e6db74">&#34;/.well-known/oauth-protected-resource&#34;</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">protected_resource_metadata</span>():
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> JSONResponse({
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;resource&#34;</span>: MCP_SERVER_URL,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;authorization_servers&#34;</span>: [AUTHORIZATION_SERVER],
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;scopes_supported&#34;</span>: [<span style="color:#e6db74">&#34;mcp:read&#34;</span>, <span style="color:#e6db74">&#34;mcp:write&#34;</span>],
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;bearer_methods_supported&#34;</span>: [<span style="color:#e6db74">&#34;header&#34;</span>],
+</span></span><span style="display:flex;"><span>    })
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Token validation middleware</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">@app.middleware</span>(<span style="color:#e6db74">&#34;http&#34;</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">validate_bearer_token</span>(request: Request, call_next):
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># Skip auth for metadata endpoint</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> request<span style="color:#f92672">.</span>url<span style="color:#f92672">.</span>path <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;/.well-known/oauth-protected-resource&#34;</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">await</span> call_next(request)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    auth_header <span style="color:#f92672">=</span> request<span style="color:#f92672">.</span>headers<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;Authorization&#34;</span>, <span style="color:#e6db74">&#34;&#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> <span style="color:#f92672">not</span> auth_header<span style="color:#f92672">.</span>startswith(<span style="color:#e6db74">&#34;Bearer &#34;</span>):
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> JSONResponse(
+</span></span><span style="display:flex;"><span>            status_code<span style="color:#f92672">=</span><span style="color:#ae81ff">401</span>,
+</span></span><span style="display:flex;"><span>            headers<span style="color:#f92672">=</span>{
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;WWW-Authenticate&#34;</span>: (
+</span></span><span style="display:flex;"><span>                    <span style="color:#e6db74">f</span><span style="color:#e6db74">&#39;Bearer realm=&#34;</span><span style="color:#e6db74">{</span>MCP_SERVER_URL<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;, &#39;</span>
+</span></span><span style="display:flex;"><span>                    <span style="color:#e6db74">f</span><span style="color:#e6db74">&#39;resource_metadata=&#34;</span><span style="color:#e6db74">{</span>MCP_SERVER_URL<span style="color:#e6db74">}</span><span style="color:#e6db74">/.well-known/oauth-protected-resource&#34;&#39;</span>
+</span></span><span style="display:flex;"><span>                )
+</span></span><span style="display:flex;"><span>            },
+</span></span><span style="display:flex;"><span>            content<span style="color:#f92672">=</span>{<span style="color:#e6db74">&#34;error&#34;</span>: <span style="color:#e6db74">&#34;unauthorized&#34;</span>},
+</span></span><span style="display:flex;"><span>        )
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    token <span style="color:#f92672">=</span> auth_header<span style="color:#f92672">.</span>removeprefix(<span style="color:#e6db74">&#34;Bearer &#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">try</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Fetch JWKS and validate JWT</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">with</span> httpx<span style="color:#f92672">.</span>AsyncClient() <span style="color:#66d9ef">as</span> client:
+</span></span><span style="display:flex;"><span>            jwks_resp <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> client<span style="color:#f92672">.</span>get(JWKS_URI)
+</span></span><span style="display:flex;"><span>            jwks <span style="color:#f92672">=</span> jwks_resp<span style="color:#f92672">.</span>json()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        jwks_client <span style="color:#f92672">=</span> jwt<span style="color:#f92672">.</span>PyJWKClient(JWKS_URI)
+</span></span><span style="display:flex;"><span>        signing_key <span style="color:#f92672">=</span> jwks_client<span style="color:#f92672">.</span>get_signing_key_from_jwt(token)
+</span></span><span style="display:flex;"><span>        payload <span style="color:#f92672">=</span> jwt<span style="color:#f92672">.</span>decode(
+</span></span><span style="display:flex;"><span>            token,
+</span></span><span style="display:flex;"><span>            signing_key<span style="color:#f92672">.</span>key,
+</span></span><span style="display:flex;"><span>            algorithms<span style="color:#f92672">=</span>[<span style="color:#e6db74">&#34;RS256&#34;</span>],
+</span></span><span style="display:flex;"><span>            audience<span style="color:#f92672">=</span>MCP_SERVER_URL,  <span style="color:#75715e"># validate aud claim</span>
+</span></span><span style="display:flex;"><span>        )
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Check required scope</span>
+</span></span><span style="display:flex;"><span>        scopes <span style="color:#f92672">=</span> payload<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;scope&#34;</span>, <span style="color:#e6db74">&#34;&#34;</span>)<span style="color:#f92672">.</span>split()
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> REQUIRED_SCOPE <span style="color:#f92672">not</span> <span style="color:#f92672">in</span> scopes:
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">raise</span> HTTPException(status_code<span style="color:#f92672">=</span><span style="color:#ae81ff">403</span>, detail<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;insufficient_scope&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        request<span style="color:#f92672">.</span>state<span style="color:#f92672">.</span>user_id <span style="color:#f92672">=</span> payload<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;sub&#34;</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">await</span> call_next(request)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">except</span> jwt<span style="color:#f92672">.</span>InvalidTokenError <span style="color:#66d9ef">as</span> e:
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> JSONResponse(
+</span></span><span style="display:flex;"><span>            status_code<span style="color:#f92672">=</span><span style="color:#ae81ff">401</span>,
+</span></span><span style="display:flex;"><span>            headers<span style="color:#f92672">=</span>{<span style="color:#e6db74">&#34;WWW-Authenticate&#34;</span>: <span style="color:#e6db74">f</span><span style="color:#e6db74">&#39;Bearer error=&#34;invalid_token&#34; error_description=&#34;</span><span style="color:#e6db74">{</span>e<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;&#39;</span>},
+</span></span><span style="display:flex;"><span>            content<span style="color:#f92672">=</span>{<span style="color:#e6db74">&#34;error&#34;</span>: <span style="color:#e6db74">&#34;invalid_token&#34;</span>},
+</span></span><span style="display:flex;"><span>        )
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Tool definition</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">@mcp.tool</span>()
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">get_data</span>(query: str) <span style="color:#f92672">-&gt;</span> str:
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;&#34;&#34;Fetch data based on a query string.&#34;&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Data for: </span><span style="color:#e6db74">{</span>query<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Mount MCP under FastAPI</span>
+</span></span><span style="display:flex;"><span>app<span style="color:#f92672">.</span>mount(<span style="color:#e6db74">&#34;/mcp&#34;</span>, mcp<span style="color:#f92672">.</span>get_asgi_app())
+</span></span></code></pre></div><p>This structure gives you a single ASGI application that handles both the OAuth metadata discovery and the MCP protocol. The <code>audience</code> validation in <code>jwt.decode</code> is non-negotiable: without it, a token issued for a different resource server can be replayed against yours. Always validate <code>aud</code> against your server&rsquo;s canonical URL.</p>
+<h2 id="token-management-access-tokens-refresh-tokens-and-introspection">Token Management: Access Tokens, Refresh Tokens, and Introspection</h2>
+<p>Token management for MCP deployments follows a short-lived access token + refresh token pattern, because AI agents may run for hours or days without user interaction. The MCP spec recommends access token lifetimes of 5–30 minutes — short enough to limit the blast radius of a leaked token, long enough to avoid excessive token refresh overhead during a typical tool-calling session. Refresh tokens should have lifetimes of 24 hours to 30 days depending on your security posture, with rotation on each use (a leaked refresh token can only be used once before the original is invalidated).</p>
+<p>Token introspection (RFC 7662) is the alternative to local JWT validation when you need real-time validity checks — for example, to immediately revoke access after a security incident without waiting for the token&rsquo;s expiry. The introspection endpoint accepts a <code>token</code> POST parameter and returns a JSON object with <code>active</code> (boolean), <code>scope</code>, <code>exp</code>, <code>sub</code>, and other claims. The tradeoff is latency: every MCP request triggers an HTTP round-trip to the authorization server.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">introspect_token</span>(token: str, auth_server: str, client_id: str, client_secret: str) <span style="color:#f92672">-&gt;</span> dict:
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;&#34;&#34;Validate token via introspection endpoint (use when revocation is critical).&#34;&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">with</span> httpx<span style="color:#f92672">.</span>AsyncClient() <span style="color:#66d9ef">as</span> client:
+</span></span><span style="display:flex;"><span>        resp <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> client<span style="color:#f92672">.</span>post(
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">{</span>auth_server<span style="color:#e6db74">}</span><span style="color:#e6db74">/oauth/introspect&#34;</span>,
+</span></span><span style="display:flex;"><span>            data<span style="color:#f92672">=</span>{<span style="color:#e6db74">&#34;token&#34;</span>: token},
+</span></span><span style="display:flex;"><span>            auth<span style="color:#f92672">=</span>(client_id, client_secret),
+</span></span><span style="display:flex;"><span>        )
+</span></span><span style="display:flex;"><span>        payload <span style="color:#f92672">=</span> resp<span style="color:#f92672">.</span>json()
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> <span style="color:#f92672">not</span> payload<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;active&#34;</span>):
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">raise</span> HTTPException(status_code<span style="color:#f92672">=</span><span style="color:#ae81ff">401</span>, detail<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;token_revoked&#34;</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> payload
+</span></span></code></pre></div><p>For most MCP servers, local JWT validation (verifying the signature and <code>exp</code> claim) is the right default, with a cached JWKS response (5-minute TTL) to avoid hitting the authorization server on every request. Reserve introspection for high-security tools — those that execute write operations, access PII, or trigger financial transactions — where the cost of a revoked token still being accepted for 30 minutes is unacceptable.</p>
+<p>Refresh token handling in agent workflows requires careful design: agents often run in background tasks without a user session, so the refresh flow must be non-interactive. Store refresh tokens in an encrypted secret store (AWS Secrets Manager, HashiCorp Vault, or environment variables in development), never in application logs or error messages. Implement a token refresh with 60-second overlap before expiry to avoid race conditions on concurrent tool calls.</p>
+<h2 id="enterprise-patterns-the-mcp-gateway-architecture">Enterprise Patterns: The MCP Gateway Architecture</h2>
+<p>The MCP gateway pattern has emerged as the dominant enterprise architecture for OAuth-authenticated MCP deployments in 2026. Rather than implementing OAuth validation in every individual MCP server, a centralized gateway proxy sits in front of all servers, handles token validation, enforces scope-based routing, and provides a unified audit log. Individual MCP servers behind the gateway can run without OAuth code entirely, accepting connections only from the trusted gateway IP range.</p>
+<p>The gateway architecture solves three enterprise problems that per-server OAuth implementation cannot. First, it centralizes credential policy: rotate the signing keys once at the gateway, and all downstream servers benefit immediately. Second, it solves the confused deputy problem — a vulnerability where a malicious MCP server uses its own token to call another MCP server on behalf of the original caller. The gateway enforces token isolation by reissuing downstream tokens with narrowed scopes. Third, it enables centralized rate limiting, request logging, and anomaly detection without modifying individual server code.</p>
+<p>A production MCP gateway handles several key functions:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Gateway Function</th>
+          <th>Implementation</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Protected Resource Metadata</td>
+          <td>Serves unified <code>/.well-known</code> endpoints for all upstream servers</td>
+      </tr>
+      <tr>
+          <td>Token validation</td>
+          <td>Validates Bearer tokens from clients; caches JWKS with 5-min TTL</td>
+      </tr>
+      <tr>
+          <td>Scope routing</td>
+          <td>Routes <code>mcp:crm:read</code> to CRM server, <code>mcp:db:write</code> to DB server</td>
+      </tr>
+      <tr>
+          <td>Downstream token</td>
+          <td>Issues scoped downstream tokens or passes validated claims as headers</td>
+      </tr>
+      <tr>
+          <td>Audit logging</td>
+          <td>Logs every tool call with <code>sub</code>, <code>scope</code>, timestamp, and response code</td>
+      </tr>
+      <tr>
+          <td>Rate limiting</td>
+          <td>Per-client-ID rate limits to prevent token abuse by compromised agents</td>
+      </tr>
+  </tbody>
+</table>
+<p>Popular open-source options for building an MCP gateway include Kong (with JWT and OAuth 2.0 plugins), Traefik with ForwardAuth middleware, and custom FastAPI proxies using the HTTPX streaming client. For teams already using Cloudflare, Cloudflare&rsquo;s Workers-based OAuth validation can serve as a lightweight gateway layer with near-zero latency overhead.</p>
+<p>The main tradeoff of the gateway pattern is that it introduces a single point of failure. Mitigate this with multiple gateway instances behind a load balancer, active health checks on upstream MCP servers, and circuit breakers that fail open (return 503 rather than silent data loss) when an upstream is unavailable.</p>
+<h2 id="security-best-practices-and-common-pitfalls">Security Best Practices and Common Pitfalls</h2>
+<p>Securing MCP OAuth 2.1 implementations requires addressing a set of attack patterns specific to AI agent deployments. The most critical pitfall is missing audience validation: if your MCP server validates the token signature and expiry but doesn&rsquo;t check the <code>aud</code> claim, any valid token issued for <em>any</em> resource on your authorization server can access your tools. This is a concrete attack vector, not a theoretical one — a token issued to access a user&rsquo;s calendar can be replayed against your MCP server if audience validation is absent.</p>
+<p><strong>Seven rules for production MCP OAuth security:</strong></p>
+<ol>
+<li><strong>Always validate <code>aud</code></strong> — check that the token&rsquo;s audience matches your server&rsquo;s canonical URL exactly (including scheme and no trailing slash).</li>
+<li><strong>Use S256 PKCE exclusively</strong> — reject any authorization request with <code>code_challenge_method=plain</code> at the authorization endpoint.</li>
+<li><strong>Enforce HTTPS everywhere</strong> — never accept Bearer tokens over HTTP in production; HTTPS ensures the token is not intercepted in transit.</li>
+<li><strong>Set short access token lifetimes</strong> — 5–15 minutes for tools that access sensitive data; 15–30 minutes for read-only tools.</li>
+<li><strong>Rotate refresh tokens on use</strong> — configure your authorization server for refresh token rotation; a rotated token that&rsquo;s used twice indicates a theft.</li>
+<li><strong>Scope your tokens narrowly</strong> — issue <code>mcp:read</code> for read operations and <code>mcp:write</code> for write operations; never issue a single broad scope that covers everything.</li>
+<li><strong>Log and alert on 401/403 spikes</strong> — a sudden increase in authentication failures often indicates a compromised client or a misconfigured agent retrying with an expired token.</li>
+</ol>
+<p>Common pitfalls to avoid:</p>
+<ul>
+<li><strong>Returning 403 without <code>WWW-Authenticate</code></strong> — clients expect this header to discover your authorization server; without it, they cannot initiate the flow automatically.</li>
+<li><strong>Storing tokens in logs</strong> — structured logging libraries often serialize full request objects; explicitly mask the <code>Authorization</code> header before logging.</li>
+<li><strong>Ignoring clock skew</strong> — JWT validators with zero tolerance for <code>nbf</code> and <code>exp</code> clock drift will fail intermittently; allow 30–60 seconds of leeway.</li>
+<li><strong>Using symmetric keys (HMAC)</strong> — HS256 requires sharing the secret with both the issuer and the validator; RS256 or ES256 asymmetric keys eliminate this risk.</li>
+</ul>
+<h2 id="testing-and-debugging-your-oauth-mcp-flow">Testing and Debugging Your OAuth MCP Flow</h2>
+<p>Testing an OAuth 2.1 MCP flow end-to-end requires a local authorization server, a test MCP client, and instrumented middleware that logs every step of the token lifecycle. The fastest local setup uses Keycloak in Docker, which supports all required OAuth 2.1 features including dynamic client registration, PKCE, token introspection, and RFC 8414 metadata discovery.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Start Keycloak for local MCP OAuth testing</span>
+</span></span><span style="display:flex;"><span>docker run -d <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -p 8080:8080 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -e KEYCLOAK_ADMIN<span style="color:#f92672">=</span>admin <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -e KEYCLOAK_ADMIN_PASSWORD<span style="color:#f92672">=</span>admin <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  quay.io/keycloak/keycloak:24.0.1 start-dev
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># After startup, configure realm at http://localhost:8080</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Create: realm &#34;mcp-test&#34;, client &#34;mcp-server&#34; (resource server), </span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># client &#34;mcp-client&#34; (public, PKCE only)</span>
+</span></span></code></pre></div><p>A minimal test script that validates your full OAuth flow:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> httpx
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> secrets
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> hashlib
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> base64
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>MCP_SERVER <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;http://localhost:8000&#34;</span>
+</span></span><span style="display:flex;"><span>AUTH_SERVER <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;http://localhost:8080/realms/mcp-test&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">run_flow_test</span>():
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># 1. Fetch Protected Resource Metadata</span>
+</span></span><span style="display:flex;"><span>    meta <span style="color:#f92672">=</span> httpx<span style="color:#f92672">.</span>get(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">{</span>MCP_SERVER<span style="color:#e6db74">}</span><span style="color:#e6db74">/.well-known/oauth-protected-resource&#34;</span>)<span style="color:#f92672">.</span>json()
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">assert</span> meta[<span style="color:#e6db74">&#34;authorization_servers&#34;</span>], <span style="color:#e6db74">&#34;Missing authorization_servers&#34;</span>
+</span></span><span style="display:flex;"><span>    print(<span style="color:#e6db74">&#34;✓ Protected Resource Metadata OK&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># 2. Fetch Authorization Server Metadata  </span>
+</span></span><span style="display:flex;"><span>    as_url <span style="color:#f92672">=</span> meta[<span style="color:#e6db74">&#34;authorization_servers&#34;</span>][<span style="color:#ae81ff">0</span>]
+</span></span><span style="display:flex;"><span>    as_meta <span style="color:#f92672">=</span> httpx<span style="color:#f92672">.</span>get(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">{</span>as_url<span style="color:#e6db74">}</span><span style="color:#e6db74">/.well-known/oauth-authorization-server&#34;</span>)<span style="color:#f92672">.</span>json()
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">assert</span> as_meta[<span style="color:#e6db74">&#34;token_endpoint&#34;</span>], <span style="color:#e6db74">&#34;Missing token_endpoint&#34;</span>
+</span></span><span style="display:flex;"><span>    print(<span style="color:#e6db74">&#34;✓ Authorization Server Metadata OK&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># 3. Validate PKCE S256 enforcement (plain should be rejected)</span>
+</span></span><span style="display:flex;"><span>    verifier <span style="color:#f92672">=</span> secrets<span style="color:#f92672">.</span>token_urlsafe(<span style="color:#ae81ff">64</span>)
+</span></span><span style="display:flex;"><span>    challenge_bytes <span style="color:#f92672">=</span> hashlib<span style="color:#f92672">.</span>sha256(verifier<span style="color:#f92672">.</span>encode())<span style="color:#f92672">.</span>digest()
+</span></span><span style="display:flex;"><span>    challenge <span style="color:#f92672">=</span> base64<span style="color:#f92672">.</span>urlsafe_b64encode(challenge_bytes)<span style="color:#f92672">.</span>rstrip(<span style="color:#e6db74">b</span><span style="color:#e6db74">&#34;=&#34;</span>)<span style="color:#f92672">.</span>decode()
+</span></span><span style="display:flex;"><span>    print(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;✓ PKCE credentials generated (verifier length: </span><span style="color:#e6db74">{</span>len(verifier)<span style="color:#e6db74">}</span><span style="color:#e6db74">)&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    print(<span style="color:#e6db74">&#34;All pre-flight checks passed. Proceed with browser-based auth flow.&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>run_flow_test()
+</span></span></code></pre></div><p>For debugging token validation failures, the most common root causes and their signals:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Error</th>
+          <th>Status</th>
+          <th><code>error</code> field</th>
+          <th>Root cause</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Missing <code>Authorization</code> header</td>
+          <td>401</td>
+          <td><code>unauthorized</code></td>
+          <td>Client not attaching Bearer token</td>
+      </tr>
+      <tr>
+          <td>Expired token</td>
+          <td>401</td>
+          <td><code>invalid_token</code></td>
+          <td><code>exp</code> claim in the past; check client refresh logic</td>
+      </tr>
+      <tr>
+          <td>Wrong audience</td>
+          <td>401</td>
+          <td><code>invalid_token</code></td>
+          <td><code>aud</code> claim doesn&rsquo;t match server URL</td>
+      </tr>
+      <tr>
+          <td>Insufficient scope</td>
+          <td>403</td>
+          <td><code>insufficient_scope</code></td>
+          <td>Token missing required scope; check client&rsquo;s <code>scope</code> parameter</td>
+      </tr>
+      <tr>
+          <td>Signature validation failure</td>
+          <td>401</td>
+          <td><code>invalid_token</code></td>
+          <td>JWKS cache stale after key rotation; force refresh</td>
+      </tr>
+      <tr>
+          <td>Missing <code>WWW-Authenticate</code></td>
+          <td>—</td>
+          <td>—</td>
+          <td>Server bug; add header to all 401 responses</td>
+      </tr>
+  </tbody>
+</table>
+<p>Use structured logging at the middleware level with a correlation ID per request, and emit a log line for every token validation outcome — success and failure. This makes tracing a multi-step agent workflow across tool calls tractable when things go wrong in production.</p>
+<h2 id="frequently-asked-questions">Frequently Asked Questions</h2>
+<p><strong>Do stdio-based MCP servers need OAuth?</strong>
+No. The MCP spec explicitly exempts stdio-based servers (those launched as subprocesses by the MCP client) from the OAuth requirement. Stdio servers run with the same trust level as the host process, so environment variable-based credentials (API keys, secrets) are sufficient and appropriate. OAuth 2.1 is only mandatory for remote HTTP/SSE-based servers that multiple agents or users access over a network.</p>
+<p><strong>Can I use API keys instead of OAuth for a remote MCP server?</strong>
+Technically possible but not compliant with the MCP spec for remote servers, and increasingly rejected by major MCP clients (Claude Desktop, ChatGPT plugins) that follow the spec. API keys are long-lived static secrets that don&rsquo;t support scope-based access control, token revocation, or multi-user consent flows. If you control both the client and server and security requirements are low, API keys are pragmatic. For any public or enterprise deployment, OAuth 2.1 is required.</p>
+<p><strong>What authorization server should I use in production?</strong>
+Auth0 and Okta are the lowest-friction options for teams without existing identity infrastructure — both support PKCE, dynamic client registration, JWKS, and token introspection out of the box. For self-hosted requirements, Keycloak (open source) and Zitadel (open source, OIDC-native) are the two strongest choices. Avoid building a custom authorization server: the surface area for security mistakes in token issuance, PKCE validation, and key management is enormous.</p>
+<p><strong>How do I handle token refresh in a long-running AI agent?</strong>
+Implement a token refresh 60 seconds before the access token expires, using the <code>expires_in</code> value from the initial token response. Store the refresh token in an encrypted secret store and implement single-consumer locking if multiple tool calls can run concurrently — two simultaneous refresh attempts will consume the refresh token, causing one to fail. After rotation, update the stored refresh token immediately before returning the new access token to the caller.</p>
+<p><strong>What&rsquo;s the confused deputy problem in MCP and how does OAuth solve it?</strong>
+The confused deputy problem occurs when a compromised or malicious MCP server uses its own access token to make requests to other MCP servers or downstream APIs on behalf of the original user, escalating its privileges beyond what the user intended. OAuth 2.1 addresses this by binding tokens to specific audiences (<code>aud</code> claim) and scopes: a token issued for <code>mcp-server-a</code> with <code>mcp:read</code> scope is cryptographically rejected by <code>mcp-server-b</code>. The enterprise MCP gateway pattern provides an additional layer by reissuing narrow downstream tokens for each hop, so no single token can be replayed across service boundaries.</p>
+]]></content:encoded></item><item><title>Peta AI Agent Credential Security: Scoped Credentials Without Raw API Key Exposure</title><link>https://baeseokjae.github.io/posts/peta-ai-agent-credential-guide-2026/</link><pubDate>Sun, 26 Apr 2026 01:04:36 +0000</pubDate><guid>https://baeseokjae.github.io/posts/peta-ai-agent-credential-guide-2026/</guid><description>How Peta gives AI agents scoped, policy-controlled credentials — eliminating raw API key exposure in MCP and agentic workflows.</description><content:encoded><![CDATA[<p>Giving an AI agent a raw API key is structurally equivalent to handing your housekeeper a master key with no expiry date, no audit trail, and no way to revoke access to a specific door. Peta fixes this by acting as a control plane that intercepts every credential request, enforces a least-privilege policy, and injects short-lived scoped tokens at runtime — so the agent never sees your actual secrets.</p>
 <h2 id="why-raw-api-keys-are-a-structural-risk-for-ai-agents">Why Raw API Keys Are a Structural Risk for AI Agents</h2>
 <p>Raw API keys given to AI agents represent a fundamentally broken security model, and the breach statistics for 2025 prove it. GitGuardian&rsquo;s 2026 report found that 28,649,024 new secrets were exposed in public GitHub commits in 2025 — a 34% year-over-year increase and the largest annual jump ever recorded. Of those, over 1.2 million were AI-service credentials, with 81% year-over-year growth; 12 of the top 15 fastest-growing leaked secret types were AI services. OpenRouter credential leaks alone grew more than 48x year-over-year as agents used it as a gateway to multiple models through a single shared key. Even Claude Code co-authored commits leaked secrets at roughly double the baseline rate. These numbers expose a systemic failure: the tooling that makes agents useful is also making credential hygiene nearly impossible to enforce through discipline alone. The root problem is structural — raw API keys have no concept of intent, scope, caller identity, or time limit, so any agent that holds one has more power than it needs and no mechanism to prove it used that power appropriately.</p>
 <h3 id="the-three-failure-modes-that-keep-repeating">The Three Failure Modes That Keep Repeating</h3>
