@@ -1,0 +1,91 @@
+---
+title: "Claude Code /ultrareview Command: What It Does and When to Use It"
+date: 2026-05-07T12:03:58+00:00
+tags: ["claude-code", "code-review", "ai-tools", "developer-tools", "ultrareview"]
+description: "A complete guide to /ultrareview in Claude Code — how the Find→Verify pipeline works, cost, modes, and when it pays off over /review."
+draft: false
+cover:
+  image: "/images/claude-code-ultrareview-guide-2026.png"
+  alt: "Claude Code /ultrareview Command: What It Does and When to Use It"
+  relative: false
+schema: "schema-claude-code-ultrareview-guide-2026"
+---
+
+The `/ultrareview` command deploys a fleet of cloud-hosted AI reviewer agents against your code. Run it before merging anything where a production bug would cost real time or money to fix.
+
+## What Is /ultrareview in Claude Code?
+
+`/ultrareview` is a Claude Code slash command that launches a multi-agent code review pipeline in the cloud. Unlike the standard `/review` command, which runs a single-pass analysis locally, `/ultrareview` spins up a fleet of specialized sub-agents — each looking at your diff through a different lens: logic correctness, security, performance, error handling, test coverage, and architectural patterns. The result is a structured findings report delivered back to your Claude Code session, usually within 5–10 minutes.
+
+Anthropic introduced the command in Claude Code v2.1.86. It requires a Claude account login — an API key alone is not sufficient, because the compute runs on Anthropic's cloud infrastructure, not on your machine. In internal testing, Anthropic engineers marked fewer than 1% of findings as incorrect, which is the headline stat that separates `/ultrareview` from earlier single-pass tools. On pull requests over 1,000 lines, 84% of runs return findings averaging 7.5 confirmed issues each — numbers that are hard to match with a single reviewer pass. The command runs as a background task, so you can keep coding while it works. A confirmation dialog appears before launch so you can cancel without being billed.
+
+## How /ultrareview Works: The Find → Verify Pipeline
+
+The Find → Verify two-stage pipeline is the architectural decision that keeps `/ultrareview`'s false positive rate under 1%. In the Find stage, each sub-agent independently scans the diff for candidate issues — generating a wide, unfiltered list. In the Verify stage, a second layer of agents re-examines every candidate and attempts to prove it is a real bug before it makes it into the final report. A candidate that cannot be verified gets dropped. This is the reason the tool returns fewer but higher-confidence findings compared to tools that surface everything they detect.
+
+The Find stage works by dividing the review surface into specialized domains: one agent focuses on logic errors, off-by-one mistakes, and null pointer conditions; another looks for injection vectors, authentication gaps, and secrets in plaintext; a third checks for N+1 query patterns and hot-loop inefficiencies. Dividing the work this way means each agent builds deep context for its domain rather than switching focus. The Verify stage then cross-references findings against the full diff context, checking whether the suspected bug can actually be triggered at runtime. This two-pass model is why a real test on an 11,000-line voice calling PR found 64 candidate bugs in the Find stage, then verified the set down to a confirmed list with zero false positives — completing in 17 minutes total. The compute runs entirely on Anthropic's infrastructure, so your local machine is not involved after the command is issued.
+
+## Two Ways to Run /ultrareview (Local Branch vs. GitHub PR)
+
+`/ultrareview` supports two distinct modes, and knowing which one to use saves both time and money. The no-arg form (`/ultrareview`) reviews your local branch diff against the default branch, including staged and uncommitted changes. This mode does not require a GitHub remote, making it useful for teams that work on private repositories, internal tooling, or monorepos where the PR lifecycle is managed outside GitHub.
+
+The PR mode (`/ultrareview <PR#>`) reviews a specific GitHub pull request by number. It fetches the diff and context directly from GitHub, which means it picks up review comments, CI status, and the full commit history for that PR. Use PR mode when you want findings aligned with the exact changeset reviewers and tests will see — not your local working state, which may include debug code or half-finished changes. For pre-merge checks, PR mode is the cleaner option. For exploratory reviews mid-feature, no-arg mode lets you run a check before you have pushed anything. Both modes output the same structured report format and go through the same Find → Verify pipeline. Both require Claude Code v2.1.86 or later and a logged-in Claude account, not just an API key.
+
+## What /ultrareview Reviews: Six Lenses
+
+`/ultrareview` applies six distinct review lenses to every diff, and understanding what each covers helps you interpret the findings report. The six areas are: correctness (logic errors, edge cases, off-by-one mistakes, null handling, race conditions), security (injection vectors, authentication and authorization gaps, secrets in plaintext, insecure deserialization), performance (N+1 queries, unbounded loops, memory allocation patterns), error handling (unhandled exceptions, swallowed errors, missing fallbacks at system boundaries), test coverage (untested branches, missing edge case tests, assertion quality), and architectural patterns (dependency direction violations, coupling issues, inconsistencies with the existing codebase conventions).
+
+Each lens is handled by a dedicated sub-agent that builds focused context rather than scanning the whole diff generically. The security agent, for instance, tracks data flow from user-controlled inputs through to sensitive operations — a kind of lightweight taint analysis that generic single-pass reviewers skip because it requires holding too much context at once. The architecture agent compares the incoming change against patterns it infers from the surrounding codebase, flagging when a new class introduces a dependency that runs backward through your layer boundaries. The performance agent looks specifically for patterns that scale poorly — joins inside loops, repeated database calls in list renderers, and regex compilation inside hot paths. All six sets of findings are merged into a single structured report before delivery, ranked by severity.
+
+## /ultrareview vs. /review vs. /security-review: Which to Use When
+
+These three commands occupy different niches and are not interchangeable. `/review` is a single-pass local analysis that takes seconds, costs nothing beyond your normal usage, and is appropriate for any change — it is the baseline check you run on every commit. `/security-review` is a focused single-agent scan targeting security surface specifically: injection, auth, secrets, and dependency vulnerabilities. It runs faster and costs less than `/ultrareview` and is the right choice when your change touches authentication, authorization, or data serialization and you want a security-specific pass without the full multi-agent overhead.
+
+`/ultrareview` is the heavyweight option: a cloud fleet that takes 5–10 minutes and costs $5–$20 per run. Use it when the blast radius of a production bug exceeds that cost — which is most backend changes touching payment flows, auth, data migrations, or complex business logic. A useful heuristic from Anthropic's own guidance: reserve `/ultrareview` for commits where a production bug would cost more than $20 to fix. For a one-line CSS change, `/review` is enough. For a 500-line auth refactor, `/ultrareview` pays for itself if it catches even one bug that would have required an incident response. The three commands stack well together: run `/review` on every commit in your editor, run `/security-review` when touching the security surface, and reserve `/ultrareview` for pre-merge checks on complex or high-stakes changes.
+
+## Cost and Requirements: What You Need Before Running It
+
+Running `/ultrareview` requires Claude Code v2.1.86 or later, a Claude account login (not just an API key), and a billing plan that covers extra usage. Pro and Max subscribers received three free one-time runs when the feature launched — that allotment expired on May 5, 2026. After the free runs, each review is billed to extra usage at $5–$20 per run depending on diff size.
+
+Small pull requests under 50 lines cost toward the low end of that range. Large multi-file PRs with thousands of lines cost toward the high end. The cost is deterministic in direction — larger diffs cost more — but the exact amount is not shown until the confirmation dialog appears before the review launches. That dialog lets you cancel without being billed, which is the right time to decide whether the change is large enough to justify the cost. There is no subscription tier that includes unlimited `/ultrareview` runs as of May 2026; it is always billed per run after the free allotment is exhausted. The compute runs on Anthropic's cloud infrastructure, so no local GPU or CPU is consumed during the review. You can close your laptop and come back to the findings report.
+
+## When to Use /ultrareview (and When to Skip It)
+
+Use `/ultrareview` when the combination of change complexity and production risk is high. Concrete triggers: a PR over 300 lines touching multiple files, any change to authentication or authorization logic, a database migration, a refactor that moves shared state, or any payment-adjacent code. The 84% finding rate on PRs over 1,000 lines means you are statistically likely to get actionable output on large changes. For a TrueNAS ZFS encryption refactor, the tool surfaced a type mismatch that was silently wiping the encryption key cache on every sync — the kind of bug that passes unit tests because the test fixtures don't exercise the full state machine.
+
+Skip `/ultrareview` for trivial changes: documentation edits, single-line config tweaks, dependency version bumps where the changelog is clean, or test-only changes where the production code is unchanged. Also skip it when you need a fast answer — the 5–10 minute window means it is not useful for iterative review during active coding. Use `/review` for that loop. `/ultrareview` is a pre-merge gate, not a development-cycle feedback tool. It also will not catch bugs that require deep domain knowledge to recognize — if a business rule is wrong, the agents will not know what the correct rule should have been. Human review remains essential for anything where correctness depends on understanding the product specification rather than the code.
+
+## Step-by-Step: Running /ultrareview on Your First PR
+
+Getting `/ultrareview` running for the first time takes under a minute of setup. First, confirm you are on Claude Code v2.1.86 or later by running `claude --version` in your terminal. If you are below that version, run `npm install -g @anthropic-ai/claude-code` to update.
+
+Second, make sure you are logged in with your Claude account — not just using an API key. Run `/login` inside Claude Code if you have not authenticated yet. Third, navigate to the branch you want to review. For the no-arg local mode, just make sure your changes are in the working tree or staged. For PR mode, note the PR number from your GitHub pull request URL. Fourth, type `/ultrareview` or `/ultrareview <PR#>` and press Enter. A confirmation dialog appears showing the estimated cost range. If the diff is larger or smaller than expected, you can cancel here at no charge. Fifth, accept the dialog and keep coding — the review runs in the background. When it finishes, the findings report appears in your Claude Code session, ranked by severity. Work through the confirmed findings from the top before pushing or merging.
+
+## Real-World Results: What Bugs Does It Actually Catch?
+
+The most instructive cases come from production codebases where the bugs were later confirmed. A one-line auth change at Anthropic — the kind of change that would sail through a human review in 30 seconds — was flagged as critical because the agents traced the data flow and identified that it silently broke login for a specific edge case in the OAuth callback path. A TrueNAS ZFS encryption refactor surfaced a type mismatch that wiped the encryption key cache on every sync operation; the test suite passed because fixtures used a simplified key structure that did not expose the mismatch. A real test on an 11,000-line voice calling PR found 64 candidate bugs in the Find stage; after the Verify pass, a confirmed subset remained with no false positives, taking 17 minutes end to end.
+
+These examples share a pattern: the bugs were ones where correctness depended on tracking a value or condition across multiple functions or files. Single-pass review tools miss these because they lose context across function boundaries. The sub-agent model in `/ultrareview` assigns an agent to build that context for its domain and hold it across the full diff before making a judgment. That is why auth flow bugs, encryption state bugs, and multi-step race conditions show up in the confirmed output — they are exactly the class of issue that requires the kind of sustained, domain-focused attention the pipeline is designed to provide.
+
+## Known Limitations and What It Won't Catch
+
+`/ultrareview` is not a replacement for human judgment on business logic and architecture. The agents can verify that code does what it appears to do — they cannot verify that what it does is what your product requires. If a pricing formula is wrong because a requirement was misunderstood, the agents will not flag it unless the code also violates a structural pattern they recognize. Business-rule correctness requires a domain expert who knows the specification.
+
+The tool also does not replace architectural review for large-scale structural decisions. Whether a new microservice should be extracted, whether a data model fits the long-term access patterns, whether a caching strategy makes sense for the read/write ratio — these require product and infrastructure context the agents do not have. Security findings are high-confidence, but not exhaustive: `/ultrareview` catches known-pattern vulnerabilities reliably, but novel attack vectors or application-specific trust-boundary violations that depend on deployment context may not surface. Finally, the 5–10 minute review window means it does not fit in tight inner development loops. Use it as a gate before merge, not as a feedback mechanism during feature development.
+
+## Frequently Asked Questions
+
+**Does /ultrareview work without a GitHub remote?**
+Yes. The no-arg form (`/ultrareview`) reviews your local branch diff against the default branch, including staged and uncommitted changes. No GitHub remote is required. Only the PR mode (`/ultrareview <PR#>`) needs GitHub access.
+
+**How much does /ultrareview cost per run?**
+Each run costs $5–$20 in extra usage, billed to your Claude account. Small PRs under 50 lines cost toward the low end; large multi-file PRs cost toward the high end. A confirmation dialog shows the estimated range before the review launches, and you can cancel at that point without being charged.
+
+**What version of Claude Code do I need?**
+Claude Code v2.1.86 or later. Run `claude --version` to check. If you are on an older version, update with `npm install -g @anthropic-ai/claude-code`.
+
+**Can I use /ultrareview with just an API key?**
+No. `/ultrareview` requires a Claude account login, not just an API key, because the review runs on Anthropic's cloud infrastructure. Run `/login` inside Claude Code if you have not authenticated with your account.
+
+**How does /ultrareview compare to /review for catching bugs?**
+`/review` is a fast, single-pass local analysis suited to every commit. `/ultrareview` uses a multi-agent Find → Verify pipeline that catches bugs requiring cross-function context — auth flow issues, state management bugs, race conditions — that single-pass tools miss. For complex or high-stakes changes, `/ultrareview` returns significantly more confirmed findings. For simple or low-risk changes, `/review` is sufficient and costs nothing extra.
