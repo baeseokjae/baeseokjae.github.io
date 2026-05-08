@@ -1,8 +1,8 @@
 ---
 title: "Cloudflare Project Think Guide 2026: Build Long-Running AI Agents with Durable Execution"
-date: 2026-05-03T00:06:10+00:00
-tags: ["cloudflare", "AI agents", "durable execution", "workers", "serverless"]
-description: "Cloudflare Project Think을 이용해 내구성 있는 장기 실행 AI 에이전트를 구축하는 완전 가이드."
+date: 2026-05-07T00:00:00+00:00
+tags: ["cloudflare", "ai-agents", "workers", "durable-objects", "typescript", "serverless"]
+description: "Cloudflare Project Think 2026: build long-running AI agents with durable execution, Fibers, Facets, and Workers infrastructure."
 draft: false
 cover:
   image: "/images/cloudflare-project-think-ai-agents-guide.png"
@@ -11,335 +11,223 @@ cover:
 schema: "schema-cloudflare-project-think-ai-agents-guide"
 ---
 
-Cloudflare Project Think은 서버리스 인프라 위에서 다단계 추론을 수행하는 AI 에이전트를 구축하기 위한 새로운 기반 클래스(base class)와 런타임 프리미티브 세트입니다. Fibers, Facets, Sessions, Dynamic Workers 네 가지 핵심 개념을 결합해 에이전트가 플랫폼 재시작 후에도 상태를 유지하고, 비용 효율적으로 대기하며, 필요할 때 코드를 직접 생성·실행할 수 있습니다.
+During Cloudflare Agents Week 2026, the internal AI engineering stack processed 20 million requests through AI Gateway and 241 billion tokens through Workers AI — the largest proof-of-concept for Cloudflare's own infrastructure as an AI agent runtime. Project Think is Cloudflare's answer to the question of how you build AI agents that run for minutes or hours, maintain state across tool calls, and spawn specialized sub-agents, all on serverless infrastructure. The framework provides a base class (`@cloudflare/think`) built on top of Durable Objects, giving agents persistent state, hibernation (zero billing during idle), and colocated sub-agent execution via RPC. As of April 2026, Project Think is in developer preview — APIs may change as feedback is incorporated. Here is a complete guide to the architecture and how to build with it.
 
 ## What is Cloudflare Project Think?
 
-Cloudflare Project Think은 2026년 4월 Agents Week에 공개된, AI 에이전트를 위한 내구성 있는 실행 환경입니다. 기존 서버리스 함수가 요청 하나에 응답하고 상태를 버리는 방식과 달리, Think 기반 에이전트는 Durable Object 위에서 동작하여 명령 포인터(instruction pointer)를 SQLite에 체크포인트로 저장합니다. 이 덕분에 GPT-o3나 Claude Opus처럼 수 분이 걸리는 추론 모델도 Workers 환경에서 중단 없이 실행됩니다. Cloudflare Agents Week 기간 중 Workers AI는 2,410억 개의 토큰을 처리했고, AI Gateway를 통해 2,000만 건의 요청이 라우팅되었습니다. Project Think는 현재 프리뷰 상태이며 API는 피드백에 따라 변경될 수 있습니다. 핵심 가치는 단순합니다: 에이전트 로직을 네트워크 프리미티브 수준으로 끌어내려, 프레임워크 코드에 의존하지 않고 프로덕션 수준의 내구성을 확보하는 것입니다. Project Think는 Fibers(내구성 실행), Facets(서브에이전트), Sessions(대화 트리), Dynamic Workers(샌드박스 코드 실행)라는 네 프리미티브로 구성됩니다. 이 구조는 에이전트가 플랫폼 재시작 후에도 상태를 유지하고, 사용자 없이도 스케줄에 따라 자율적으로 작업을 처리하며, LLM이 생성한 코드를 안전하게 실행하는 데 필요한 모든 기반을 제공합니다. 단일 Durable Object가 에이전트의 모든 상태를 소유하는 액터 모델 덕분에, 외부 데이터베이스 의존성 없이 에지 네트워크 300개 이상의 도시에서 일관된 성능을 보장합니다.
-
-### Why Stateless Request-Response Falls Short for Agents
-
-전통적인 서버리스 에이전트는 요청마다 새로 시작해 외부 KV 스토리지에 상태를 저장합니다. AWS Bedrock AgentCore와 Google ADK가 이 모델을 따릅니다. 문제는 긴 추론 루프에서 발생합니다. 타임아웃, 네트워크 레이턴시, 직렬화 오버헤드가 누적되면서 복잡한 다단계 작업이 깨집니다. Think는 이 문제를 액터(actor) 모델로 해결합니다. 각 에이전트는 영구적인 Durable Object이고, 상태는 외부로 나가지 않습니다.
+Cloudflare Project Think is a TypeScript framework for building long-running AI agents on Cloudflare's serverless infrastructure. It extends Durable Objects — Cloudflare's stateful, actor-model compute primitive — with primitives specifically designed for AI agent patterns: parallel execution threads (Fibers), modular sub-agents (Facets), persistent conversation trees (Sessions), and sandboxed code execution. The core insight behind Project Think is that most AI agent frameworks treat each tool call as a new stateless HTTP request. This works for short tasks but breaks for agents that need to maintain context across hours of execution, accumulate state between tool calls, and spawn specialized sub-agents for parallel work. Dynamic Workers, which power Project Think's sandboxed execution, are approximately 100x faster to start and up to 100x more memory-efficient than traditional containers — critical when agents need to spin up isolated execution environments on demand. Project Think is part of a broader 2026 Cloudflare push into AI infrastructure alongside Workers AI (model inference) and AI Gateway (observability and routing), positioning Cloudflare as a full-stack AI agent deployment target.
 
 ## Core Primitives: Fibers, Facets, Sessions, and Sandboxed Execution
 
-Project Think의 네 가지 핵심 프리미티브는 각각 에이전트 내구성, 병렬 서브에이전트, 대화 지속성, 안전한 코드 실행이라는 서로 다른 문제를 해결합니다. Fibers는 async/await 스타일로 작성된 긴 실행 흐름을 SQLite 체크포인트로 변환해 플랫폼 재시작 후에도 정확히 중단된 지점에서 재개합니다. Facets는 부모 Durable Object와 같은 노드에 배치(colocated)된 자식 Durable Objects로, RPC 레이턴시가 HTTP 왕복이 아닌 함수 호출 수준입니다. Sessions API는 대화를 `parent_id`로 연결된 관계형 트리로 저장해 브랜칭과 포크를 지원합니다. Dynamic Workers는 V8 아이솔레이트 기반 샌드박스로, 에이전트가 생성한 코드를 외부 접근 없이 실행합니다. 이 네 프리미티브가 결합되면 에이전트는 수면(sleep) → 작업(work) → 수면 사이클을 플랫폼 관여 없이 반복할 수 있습니다. 전통적인 서버리스 에이전트 프레임워크에서 내구성, 서브에이전트 통신, 대화 저장, 코드 실행은 각각 다른 서드파티 서비스에 아웃소싱되었습니다. Project Think는 이 네 가지를 하나의 Durable Object 런타임 안에 통합해 외부 의존성 없이 에이전트가 동작하도록 설계합니다. 이는 레이턴시와 운영 복잡도를 동시에 낮추는 아키텍처 결정으로, Agents Week 2026에서 Cloudflare가 "에이전트 인프라를 프레임워크 코드에서 네트워크 프리미티브로" 이동시킨다고 발표한 비전의 핵심입니다.
+Project Think introduces four primitives that extend the base Durable Object model for agent use:
 
-### Fibers: Durable Execution Under the Hood
+**Fibers** are isolated execution threads within a single agent instance. Each Fiber runs independently and can be awaited, cancelled, or monitored. When an agent needs to parallelize work — run three web searches simultaneously, or process multiple files concurrently — it spawns Fibers for each task. Fibers share the parent agent's state but execute independently, making them appropriate for fan-out patterns within a single agent.
 
-Fiber는 Think의 핵심 내구성 메커니즘입니다. `runFiber()` 함수를 호출하면 런타임은 해당 async 함수의 실행 상태를 SQLite에 직렬화합니다. 중간에 Workers 인스턴스가 재시작되거나 요금제 한도로 인한 일시 정지가 발생해도, Fiber는 마지막 체크포인트에서 재개됩니다. 아래는 기본 패턴입니다:
+**Facets** are child Durable Objects (sub-agents) that are colocated with the parent agent. The key distinction from Fibers: Facets have their own persistent state, their own tool sets, and their own execution loops. RPC latency between a parent agent and its Facets is comparable to function calls, not HTTP round-trips. This makes Facets suitable for specialized sub-agents — a researcher Facet, an analyst Facet, a writer Facet — that maintain their own context and can be reused across multiple parent agent sessions.
 
-```typescript
-import { ThinkAgent } from "@cloudflare/think";
+**Sessions** implement tree-structured conversation history with branching support. Instead of a flat conversation list, Sessions allow agents to explore multiple reasoning paths and branch back to earlier points. This supports "what if" reasoning: the agent can try one approach, observe the result, branch back to an earlier state, and try an alternative approach — without losing the history of either path.
 
-export class ResearchAgent extends ThinkAgent {
-  async run(topic: string) {
-    return this.runFiber(async () => {
-      const outline = await this.step("outline", () =>
-        this.ai.run("@cf/meta/llama-3.3-70b-instruct", {
-          messages: [{ role: "user", content: `Outline: ${topic}` }],
-        })
-      );
-      const draft = await this.step("draft", () =>
-        this.ai.run("@cf/meta/llama-3.3-70b-instruct", {
-          messages: [{ role: "user", content: `Write: ${outline.response}` }],
-        })
-      );
-      return draft.response;
-    });
-  }
-}
-```
-
-`step()` 호출은 자동으로 멱등성(idempotency)을 보장합니다. 같은 step ID가 이미 완료된 상태라면 캐시된 결과를 반환합니다.
-
-### Facets: Colocated Sub-Agents with RPC Speed
-
-Facets는 부모 에이전트가 필요할 때 생성하는 자식 Durable Objects입니다. 핵심 장점은 배치 위치입니다. 부모와 같은 PoP에서 실행되므로 Facet 호출은 HTTP 왕복 없이 프로세스 내 RPC로 처리됩니다. 이 레이턴시 특성 덕분에 병렬 서브에이전트가 현실적인 옵션이 됩니다. Facet은 `createFacet()` API로 생성하고, 부모의 바인딩을 상속받거나 별도로 구성할 수 있습니다.
+**Sandboxed Execution** provides isolated environments for running AI-generated code. Rather than executing model-generated code directly in the agent context, Project Think routes code execution through a sandboxed Dynamic Worker. The Execution Ladder (covered in its own section) controls which level of sandbox access an agent can escalate to, based on trust level.
 
 ## Getting Started with the Think Base Class (@cloudflare/think)
 
-`@cloudflare/think`는 Durable Object를 상속한 opinionated base class로, Fiber, Facets, Sessions, Dynamic Workers에 대한 고수준 API를 제공합니다. 2026년 4월 기준 npm 프리뷰 패키지로 배포 중이며, 공식 `cloudflare/agents` GitHub 저장소에는 30개 이상의 자급자족(self-contained) 데모 예제가 포함되어 있습니다. 시작하려면 Workers Paid 플랜($5/월 최소)이 필요하며, 이 플랜에는 Durable Objects, Workers, KV, Hyperdrive가 포함됩니다. 설치는 `npm install @cloudflare/think`로 패키지를 추가하고, `wrangler.toml`에 `new_sqlite_classes`로 Durable Object 바인딩을 설정하는 두 단계로 이루어집니다. SQLite 기반 Durable Objects는 2026년 1월부터 스토리지 요금이 청구되므로, `wrangler.toml` migrations 섹션에 `new_sqlite_classes`를 정확히 설정하는 것이 중요합니다. 첫 에이전트를 실행하기까지 실제 코드 줄 수는 약 30줄이며, `ThinkAgent`를 상속해 `runFiber()` 안에 로직을 작성하면 내구성, 체크포인트, 재개 기능이 자동으로 활성화됩니다. Wrangler CLI 4.x 이상에서는 `wrangler dev --remote` 옵션으로 로컬에서도 실제 Durable Object 환경을 시뮬레이션할 수 있어 프로덕션 배포 전 검증이 용이합니다. 프리뷰 단계이므로 프로덕션 크리티컬 워크로드 적용 전 API 변경 공지를 주시해야 합니다.
+The Think base class wraps a Durable Object with the agent primitives. A basic agent implementation:
 
-### Installation and wrangler.toml Setup
+```typescript
+import { Think } from '@cloudflare/think';
+import { Anthropic } from '@anthropic-ai/sdk';
 
-```bash
-npm install @cloudflare/think
+export class ResearchAgent extends Think {
+  private client = new Anthropic();
+
+  async run(query: string): Promise<string> {
+    // think() manages the tool call loop
+    const result = await this.think(query, {
+      tools: [
+        this.webSearch,
+        this.readFile,
+        this.writeFile,
+      ],
+      maxSteps: 20,
+    });
+    return result.output;
+  }
+
+  // Tool methods are automatically discovered and wrapped
+  async webSearch(query: string): Promise<string> {
+    // implementation
+  }
+}
+
+// Worker export
+export default {
+  fetch: ResearchAgent.mount('/agent')
+};
 ```
 
-`wrangler.toml`:
+The `think()` method manages the agent loop: it calls the LLM, executes tool calls, feeds results back to the model, and iterates until the task is complete or `maxSteps` is reached. The agent's state (conversation history, tool outputs, session tree) persists in the Durable Object's storage, surviving hibernation and resuming on the next wake event.
+
+Wrangler configuration for a Think-based agent requires Durable Objects:
 
 ```toml
-name = "my-think-agent"
+name = "my-agent"
 main = "src/index.ts"
 compatibility_date = "2026-04-01"
 
 [[durable_objects.bindings]]
-name = "MY_AGENT"
-class_name = "MyAgent"
+name = "AGENT"
+class_name = "ResearchAgent"
 
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["MyAgent"]
+new_classes = ["ResearchAgent"]
 ```
-
-`new_sqlite_classes`는 SQLite 기반 Durable Object임을 나타내는 필수 설정입니다. SQLite 기반 Durable Objects의 스토리지 요금은 2026년 1월부터 청구 활성화됐습니다.
-
-### Your First Think Agent: Step-by-Step
-
-```typescript
-import { ThinkAgent } from "@cloudflare/think";
-
-interface Env {
-  MY_AGENT: DurableObjectNamespace;
-  AI: Ai;
-}
-
-export class MyAgent extends ThinkAgent<Env> {
-  async fetch(request: Request): Promise<Response> {
-    const { searchParams } = new URL(request.url);
-    const task = searchParams.get("task") ?? "Hello!";
-
-    const result = await this.runFiber(async () => {
-      return this.step("main", async () => {
-        const resp = await this.env.AI.run(
-          "@cf/meta/llama-3.3-70b-instruct",
-          { messages: [{ role: "user", content: task }] }
-        );
-        return resp.response;
-      });
-    });
-
-    return Response.json({ result });
-  }
-}
-
-export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    const id = env.MY_AGENT.idFromName("default");
-    const stub = env.MY_AGENT.get(id);
-    return stub.fetch(request);
-  },
-};
-```
-
-`wrangler dev`로 로컬 테스트 후 `wrangler deploy`로 배포하면 에이전트가 Cloudflare 글로벌 네트워크(300개 이상의 도시)에 자동 배포됩니다.
 
 ## The Execution Ladder: Progressive Security for AI-Generated Code
 
-실행 사다리(Execution Ladder)는 에이전트가 생성한 코드를 신뢰 수준에 따라 단계적으로 실행하는 보안 모델로, Cloudflare가 Agents Week 2026에서 발표한 핵심 보안 아키텍처입니다. Tier 0, 1, 2로 구분되며, 각 단계는 명시적으로 부여된 역량만 허용하는 최소 권한 원칙을 따릅니다. Tier 0은 에이전트 자체 Workspace와 SQLite로, 외부 네트워크 없이 로컬 계산만 허용합니다. Tier 1은 Dynamic Worker로 실행하되 네트워크 없음(`globalOutbound: null`)으로 순수 계산 작업에 사용됩니다. Tier 2는 npm 접근과 번들링이 추가된 Dynamic Worker로, `worker-bundler`가 런타임에 npm 레지스트리에서 패키지를 가져와 esbuild로 번들링합니다. Dynamic Workers는 전통적인 컨테이너 대비 약 100배 빠르고 최대 100배 더 메모리 효율적입니다. 에이전트는 작업 요구사항에 따라 자동으로 적절한 Tier를 선택하거나, `ExtensionManager`를 통해 명시적으로 Tier를 지정할 수 있습니다. 이 설계는 LLM이 생성한 임의의 코드가 우발적으로 외부 시스템에 접근하거나 인프라를 손상시키는 리스크를 구조적으로 차단합니다. 가장 강력한 Tier 2 권한은 명시적 바인딩 설정 없이는 활성화되지 않으며, 이는 기업 보안 팀이 에이전트 코드 실행을 감사하기 쉽게 만드는 설계 결정입니다.
+The Execution Ladder is Project Think's model for granting AI agents progressively more powerful code execution capabilities based on trust level and task requirements:
 
-### Dynamic Workers: V8 Isolates for Agent-Generated Code
+**Level 1 — Read-only execution**: The agent can read files, query databases, and call external APIs. No write operations permitted. Default level for new agents.
 
-Dynamic Worker는 에이전트가 생성한 임의의 JavaScript/TypeScript 코드를 안전하게 실행하는 V8 아이솔레이트입니다. 각 Dynamic Worker는 거의 아무런 권한 없이 시작합니다(`globalOutbound: null`). 필요한 역량은 바인딩을 통해 명시적으로 부여됩니다. 이 최소 권한 설계는 LLM이 생성한 코드가 우발적으로 외부 시스템에 접근하는 것을 방지합니다. Tier 2에서는 `worker-bundler`가 런타임에 npm 패키지를 가져와 번들링하므로, 에이전트는 사전 설치된 라이브러리 없이도 새로운 도구를 즉석에서 사용할 수 있습니다.
+**Level 2 — Isolated write access**: The agent can write to temporary directories within a sandboxed Dynamic Worker. Changes don't persist to the host environment. Appropriate for data transformation tasks.
+
+**Level 3 — Full system with audit trail**: The agent can execute arbitrary code, modify files, and interact with the host system, but all operations are logged with full audit trail. Appropriate for code generation and deployment tasks where human review of the audit log is built into the workflow.
+
+The Execution Ladder prevents runaway code execution by requiring explicit escalation. An agent that starts at Level 1 must request Level 2 access and receive approval (manual or automated, depending on configuration) before gaining write capability. This applies even to self-authored extensions — when an agent writes a new tool and wants to execute it, the execution goes through the Execution Ladder rather than running directly in the agent context.
 
 ## Building Modular Agents with Facets (Sub-Agents)
 
-Facets는 Project Think의 멀티에이전트 아키텍처 핵심으로, 부모 Durable Object와 동일한 Cloudflare PoP에 colocated된 자식 Durable Objects입니다. 기존 HTTP 기반 서브에이전트와 달리 Facets의 RPC 레이턴시는 함수 호출 수준(마이크로초)이며, InfoQ 분석에 따르면 이는 HTTP 왕복의 수십~수백 배 빠른 통신 속도입니다. 단일 거대 에이전트 대신, 각각 전문 역량을 가진 여러 Facet을 조합해 복잡한 작업을 병렬로 처리할 수 있습니다. 예를 들어 리서치 에이전트는 웹 검색 Facet, 요약 Facet, 사실 검증 Facet을 동시에 생성해 `Promise.all()`로 병렬 실행하면 전체 작업 시간이 직렬 실행 대비 극적으로 단축됩니다. Facet은 `createFacet()` API로 생성하며, 부모의 바인딩을 상속하거나 별도로 구성할 수 있습니다. Facet 수명은 부모가 관리하며, 작업 완료 후 명시적으로 종료해 Durable Object 비용을 최소화할 수 있습니다. 각 Facet은 독립적인 SQLite 공간에 중간 결과를 저장할 수 있어, 부모 에이전트가 모든 결과를 메모리에 유지할 필요 없이 필요할 때 각 Facet에서 결과를 가져옵니다. 이 패턴은 마이크로서비스 아키텍처의 모듈성을 유지하면서 네트워크 오버헤드를 제거하는 절충점입니다.
-
-### Designing a Multi-Facet Research Pipeline
+Facets enable multi-agent architectures where specialized agents collaborate. The orchestrator spawns Facets for specific subtasks; Facets maintain their own state and return results to the orchestrator via RPC:
 
 ```typescript
-import { ThinkAgent } from "@cloudflare/think";
+export class OrchestratorAgent extends Think {
+  async run(project: string): Promise<string> {
+    // Spawn specialized Facets
+    const researcher = await this.facet('ResearcherFacet');
+    const analyst = await this.facet('AnalystFacet');
+    const writer = await this.facet('WriterFacet');
 
-export class OrchestratorAgent extends ThinkAgent<Env> {
-  async research(topic: string) {
-    return this.runFiber(async () => {
-      // Facets를 병렬로 생성
-      const [searchFacet, analysisFacet] = await Promise.all([
-        this.createFacet("search-agent", SearchFacet),
-        this.createFacet("analysis-agent", AnalysisFacet),
-      ]);
+    // Fan out to Facets in parallel using Fibers
+    const [researchData, marketData] = await Promise.all([
+      this.fiber(() => researcher.research(project)),
+      this.fiber(() => analyst.marketAnalysis(project)),
+    ]);
 
-      // 검색 실행
-      const rawResults = await this.step("search", () =>
-        searchFacet.search(topic)
-      );
-
-      // 분석 실행
-      const analysis = await this.step("analyze", () =>
-        analysisFacet.analyze(rawResults)
-      );
-
-      return analysis;
+    // Writer Facet receives outputs from both
+    const report = await writer.generate({
+      research: researchData,
+      market: marketData,
     });
+
+    return report;
   }
 }
 ```
 
-Facets는 부모와 독립적으로 상태를 유지하므로, 각자의 SQLite 공간에 중간 결과를 저장할 수 있습니다.
+Each Facet (ResearcherFacet, AnalystFacet, WriterFacet) is its own Durable Object with its own tool set, system prompt, and state. Colocated RPC means the latency between orchestrator and Facets is negligible — unlike HTTP-based multi-agent architectures where each agent-to-agent call adds network overhead.
 
 ## Persistent Sessions: Tree-Structured Conversations and Branching
 
-Sessions API는 AI 에이전트의 대화 히스토리를 플랫 리스트가 아닌 `parent_id`로 연결된 관계형 트리로 관리하는 Project Think의 대화 지속성 레이어입니다. 전통적인 챗 기록 저장 방식이 단순 배열이라면, Sessions는 각 메시지를 노드로, 응답을 자식 노드로 구성하는 트리 구조를 채택합니다. 이 설계 덕분에 대화 브랜칭과 병렬 추론 경로가 자연스럽게 표현됩니다. 예를 들어 에이전트가 동일한 맥락에서 "자세한 설명" 버전과 "간결한 요약" 버전을 동시에 생성할 때, Sessions API는 두 브랜치를 동일한 트리 구조 안에 저장하고 나중에 병합하거나 개별적으로 추적할 수 있습니다. Sessions는 Durable Object의 colocated SQLite에 저장되므로 외부 데이터베이스 없이 완전한 대화 지속성을 제공합니다. `this.session.addMessage()`, `this.session.getHistory()`, `this.session.branch()` 같은 고수준 API가 SQL 쿼리를 추상화하며, 긴 리서치 세션이나 멀티-라운드 문서 편집 작업처럼 수십 번의 교환이 필요한 에이전트 워크플로우에서도 맥락 손실 없이 상태를 유지합니다. SQLite 트리 구조 덕분에 특정 브랜치만 잘라내거나, 이전 상태로 롤백하거나, 두 브랜치의 결과를 비교하는 작업이 단순 SQL 쿼리 수준으로 가능합니다.
-
-### Branching Conversations for Parallel Reasoning
+The Sessions primitive implements conversation history as a tree rather than a flat array. This enables a key capability: the agent can "branch" to explore an alternative approach without losing the path not taken.
 
 ```typescript
-export class DialogAgent extends ThinkAgent<Env> {
-  async handleTurn(userMessage: string, sessionId: string) {
-    return this.runFiber(async () => {
-      // 현재 세션에 사용자 메시지 추가
-      const msgId = await this.session.addMessage(sessionId, {
-        role: "user",
-        content: userMessage,
-      });
+const session = await this.session.create('task-001');
 
-      // 두 가지 응답 스타일을 병렬 브랜치로 생성
-      const [detailedBranch, conciseBranch] = await Promise.all([
-        this.session.branch(msgId, "detailed"),
-        this.session.branch(msgId, "concise"),
-      ]);
+// Branch A: try approach 1
+const branchA = await session.branch();
+await branchA.execute(approach1);
+const resultA = await branchA.evaluate();
 
-      // 각 브랜치에서 독립적으로 추론
-      const [detailed, concise] = await Promise.all([
-        this.step(`detailed-${msgId}`, () =>
-          this.generateResponse(detailedBranch, "자세하게")
-        ),
-        this.step(`concise-${msgId}`, () =>
-          this.generateResponse(conciseBranch, "간결하게")
-        ),
-      ]);
+// Branch B: try approach 2 (from same starting point)
+const branchB = await session.branch();
+await branchB.execute(approach2);
+const resultB = await branchB.evaluate();
 
-      return { detailed, concise };
-    });
-  }
-}
+// Select the better result and continue from that branch
+const bestBranch = resultA.score > resultB.score ? branchA : branchB;
+await session.mergeBranch(bestBranch);
 ```
+
+Sessions persist in Durable Object storage, making them available across agent restarts and hibernation events. For long-running tasks that span hours, the session tree provides a complete audit trail of every reasoning path the agent explored, which approach was selected, and why — valuable for debugging and compliance.
 
 ## Self-Authored Extensions: Agents That Build Their Own Tools
 
-Self-authored extensions는 Project Think의 `ExtensionManager`를 통해 에이전트가 런타임에 새로운 도구를 코드로 직접 생성하고, Dynamic Worker 샌드박스에 즉시 배포해 사용하는 기능입니다. 재배포 없이 에이전트가 스스로 역량을 확장한다는 점에서, 기존 함수 호출(function calling) 패러다임을 넘어선 새로운 에이전트 자율성 수준을 보여줍니다. 이 패턴은 사용 사례가 예측 불가능한 범용 에이전트에 특히 유용합니다. 예를 들어 사용자가 "Stripe API에서 결제 데이터를 가져와 분석해줘"라고 요청하면, 에이전트는 LLM을 통해 Stripe SDK를 임포트하는 코드를 생성하고, `worker-bundler`가 런타임에 npm에서 패키지를 번들링하고, Tier 2 Dynamic Worker에서 실행한 뒤 결과를 반환합니다. 이 전체 과정이 사전 정의된 도구 없이 이루어집니다. 보안은 실행 사다리의 Tier 시스템이 담당하며, 에이전트가 생성한 코드는 명시적으로 부여된 바인딩 외에 아무것도 접근할 수 없습니다. 생성된 도구는 같은 세션 내에서 캐시되어 동일 요청에 재사용되며, 세션 종료 시 자동으로 정리됩니다. Agents Week 2026에서 Cloudflare는 이 기능을 "에이전트가 자신만의 운영 체제를 구축하는 것"에 비유하며, 장기적으로 에이전트 생태계를 자가 발전시키는 메커니즘으로 설명했습니다.
-
-### ExtensionManager in Practice
+Project Think enables agents to write and register new tools at runtime. When an agent encounters a capability it needs but doesn't have, it can generate the tool implementation, register it via the Extensions API, and use it in subsequent steps — without redeployment:
 
 ```typescript
-export class AutoToolAgent extends ThinkAgent<Env> {
-  async executeWithDynamicTool(taskDescription: string) {
-    return this.runFiber(async () => {
-      // LLM에게 필요한 도구 코드 생성 요청
-      const toolCode = await this.step("generate-tool", async () => {
-        const resp = await this.env.AI.run(
-          "@cf/meta/llama-3.3-70b-instruct",
-          {
-            messages: [
-              {
-                role: "system",
-                content:
-                  "Write a JavaScript function that accomplishes the task. Return only code.",
-              },
-              { role: "user", content: taskDescription },
-            ],
-          }
-        );
-        return resp.response;
-      });
+// Agent generates a tool when needed
+const toolCode = await this.model.generate(
+  `Write a TypeScript function that parses CSV files and returns structured data`
+);
 
-      // ExtensionManager로 동적 도구 등록 및 실행 (Tier 1: 네트워크 없음)
-      const result = await this.step("run-tool", () =>
-        this.extensions.run(toolCode, {
-          tier: 1, // 네트워크 없는 순수 계산
-          timeout: 30_000,
-        })
-      );
+// Register the generated tool
+await this.extensions.register({
+  name: 'parseCSV',
+  code: toolCode,
+  sandbox: 'level-2',  // Execution Ladder level for this tool
+});
 
-      return result;
-    });
-  }
-}
+// The tool is now available for subsequent steps
+const data = await this.tools.parseCSV(csvContent);
 ```
+
+All self-authored extensions execute through the Execution Ladder at the specified level — Level 2 by default, requiring explicit escalation to Level 3 for system access. The extensions registry persists in Durable Object storage, so tools the agent creates in one session are available in subsequent sessions.
 
 ## Project Think vs AWS Bedrock AgentCore vs Google ADK
 
-Cloudflare Project Think, AWS Bedrock AgentCore, Google ADK는 AI 에이전트 인프라에 대해 근본적으로 다른 실행 철학을 가집니다. Cloudflare Project Think는 액터(actor) 모델을 채택해 에이전트 상태를 Durable Object의 로컬 SQLite에 보관하며, Durable Object가 에이전트 생명주기를 전적으로 소유합니다. InfoQ 분석에 따르면 이 모델은 "stateless 오케스트레이션에서 내구성 있는 액터 기반 인프라로의 전환"을 의미합니다. AWS Bedrock AgentCore는 요청-응답 모델로 상태를 외부 DynamoDB 또는 ElastiCache에 저장하며, 각 에이전트 단계가 Lambda 호출로 매핑됩니다. Google ADK는 Python/Java SDK로 에이전트를 정의하고 Vertex AI Pipelines 또는 Cloud Run에 배포합니다. Project Think의 핵심 차별점은 colocation입니다. 에이전트, 상태, 서브에이전트가 모두 같은 노드에 있어 외부 DB 왕복 레이턴시가 없습니다. AWS와 Google은 관리형 클라우드 인프라의 풍부한 에코시스템이 강점이지만, 에이전트 레이턴시와 외부 의존성은 비교적 높습니다. Cloudflare는 에지 배치와 내구성이 강점이나 2026년 4월 기준 프리뷰 단계이며, GA 전 API 변경이 있을 수 있습니다.
-
-### Side-by-Side Comparison Table
-
-| Feature | Cloudflare Project Think | AWS Bedrock AgentCore | Google ADK |
+| | Cloudflare Project Think | AWS Bedrock AgentCore | Google ADK |
 |---|---|---|---|
-| **실행 모델** | Actor (Durable Object) | Request-Response (Lambda) | Pipeline (Cloud Run) |
-| **상태 저장** | 로컬 SQLite | 외부 DynamoDB/ElastiCache | 외부 Cloud Spanner/Redis |
-| **서브에이전트** | Facets (colocated RPC) | Step Functions 오케스트레이션 | Sub-agents (HTTP) |
-| **코드 샌드박스** | Dynamic Workers (V8) | Lambda 레이어 | Cloud Run 컨테이너 |
-| **배포 위치** | 300+ PoPs (에지) | 리전 기반 | 리전 기반 |
-| **대기 비용** | 하이버네이션 (무료 대기) | Lambda 대기 과금 | Cloud Run 최소 인스턴스 |
-| **현재 상태** | 프리뷰 (2026-04) | GA | GA |
-| **오픈소스 데모** | 30+ 예제 | 제한적 | SDK 예제 |
+| **Infrastructure** | Cloudflare Workers + Durable Objects | AWS Lambda + Bedrock | Google Cloud + Vertex |
+| **State model** | Durable Object (actor model) | Session service | Session management |
+| **Sub-agents** | Colocated Durable Objects (RPC) | Lambda functions (HTTP) | ADK agents (HTTP) |
+| **Cold start** | ~0ms (Durable Objects warm) | 100-500ms (Lambda) | 100-500ms |
+| **Idle billing** | Zero (hibernation) | Minimal (Lambda) | Minimal |
+| **Code execution** | Sandboxed Dynamic Workers | AWS SageMaker/Batch | Cloud Run |
+| **Best for** | Teams on Cloudflare, latency-sensitive agents | Teams on AWS, Bedrock models | Teams on GCP, Gemini-native |
 
-Project Think는 에지 레이턴시와 비용 효율이 중요한 글로벌 서비스에 유리하고, AWS는 기존 AWS 인프라와 통합이 필요한 엔터프라이즈에 적합하며, Google ADK는 Vertex AI 모델 에코시스템을 활용하는 팀에게 맞습니다.
+Project Think's primary advantage is the actor model: Durable Objects never have cold starts after first activation, making agent wake-from-hibernation nearly instant. For agents that sleep for hours between user interactions, this eliminates the cold start latency that Lambda-based architectures introduce.
 
 ## Production Deployment: Cost, Scheduling, and Hibernation
 
-Cloudflare Project Think 기반 에이전트의 프로덕션 배포는 비용 모델, 스케줄링, 하이버네이션 세 가지 운영 요소를 이해하는 것에서 시작됩니다. Workers Paid 플랜은 월 $5 최소 요금으로 Durable Objects, Workers, KV, Hyperdrive를 포함하며, SQLite 기반 Durable Objects 스토리지 요금은 2026년 1월부터 활성화됐습니다. 장기 실행 에이전트의 비용 최적화 핵심은 하이버네이션(hibernation)입니다. Think 기반 에이전트는 작업이 없을 때 자동으로 하이버네이션 상태로 전환되고, HTTP 요청, Durable Object 알람, 크론 트리거 같은 이벤트가 발생하면 밀리초 단위로 재개됩니다. 하이버네이션 중에는 CPU 요금이 발생하지 않아, 24시간 대기하다 하루 한 번만 실행되는 에이전트의 비용이 극적으로 낮아집니다. 스케줄링은 지연 실행(`delay`), 특정 시간 실행(`at`), 크론 스케줄(`cron`) 세 가지 방식을 지원합니다. 에이전트는 사용자 없이도 스스로 깨어나 작업하고 다시 잠들 수 있으며, 이 자율 사이클이 Project Think가 "장기 실행 AI 에이전트"로 포지셔닝되는 핵심 근거입니다. 프로덕션 비용 예측을 위해 Cloudflare의 Durable Objects 요금 계산기를 사용하는 것을 권장합니다.
+**Hibernation** is the core cost-control mechanism. When a Think agent has no active requests or scheduled tasks, it hibernates — consuming zero compute billing. The next request or scheduled wake wakes the Durable Object, loading its state from storage. For agents that run tasks on user request rather than continuously, hibernation means you pay only during actual execution.
 
-### Scheduling, Alarms, and Cron Triggers
+**Scheduling** with Cron triggers runs agents on a schedule without keeping them alive:
 
 ```typescript
-export class ScheduledAgent extends ThinkAgent<Env> {
-  // 크론으로 매일 오전 9시에 실행
-  async scheduled(controller: ScheduledController) {
-    await this.runFiber(async () => {
-      await this.step("daily-report", () => this.generateDailyReport());
-    });
-  }
+// In wrangler.toml
+[triggers]
+crons = ["0 9 * * 1"]  # Every Monday at 9am UTC
 
-  // 특정 작업을 지연 실행
-  async scheduleLaterTask(delayMs: number, payload: unknown) {
-    await this.runFiber(async () => {
-      // 지정 시간 후 알람 설정
-      const alarm = await this.storage.setAlarm(Date.now() + delayMs);
-
-      await this.step(`task-${alarm}`, async () => {
-        // 알람이 울리면 실행
-        return this.processPayload(payload);
-      });
-    });
-  }
-
-  async alarm() {
-    // 알람 핸들러: Fiber 자동 재개
-    await this.runFiber(async () => {
-      await this.step("alarm-handler", () => this.handleScheduledWork());
-    });
-  }
+// In agent
+async scheduled(event: ScheduledEvent): Promise<void> {
+  await this.run('generate weekly report');
 }
 ```
 
-`wrangler.toml`에 크론 트리거를 추가합니다:
+**Pricing** for a Think-based agent on the Workers Paid plan ($5/month base): Durable Object requests at $0.15/million, Durable Object compute at $12.50/million GB-seconds, Workers AI inference at model-specific rates. For an agent that processes 100 requests per day with 30-second average execution at 128MB: roughly $15-25/month in Durable Object compute, plus model inference costs.
 
-```toml
-[triggers]
-crons = ["0 9 * * *"]  # 매일 오전 9시 UTC
-```
+**SQLite storage** is available in Durable Objects for agents needing structured state beyond key-value: conversation history, tool outputs, session trees, and extension registries can all use SQLite within the Durable Object, without external database dependencies.
 
-### Cost Optimization Tips
-
-- **하이버네이션 우선**: 긴 대기 구간은 `sleep()`이나 알람으로 처리해 CPU 시간을 최소화
-- **SQLite 스토리지 관리**: 불필요한 세션 히스토리는 주기적으로 정리해 스토리지 비용 절감
-- **Facets 수명 관리**: 작업 완료 후 Facets를 명시적으로 종료해 불필요한 오브젝트 유지 방지
-- **step() 캐싱 활용**: 동일 step ID는 재실행 시 캐시에서 반환되므로 재시도 비용 없음
-- **Tier 선택 최적화**: 네트워크가 불필요한 작업은 Tier 1로 실행해 외부 의존성 제거
+---
 
 ## FAQ
 
-Cloudflare Project Think와 장기 실행 AI 에이전트 구축에 대해 개발자들이 가장 자주 묻는 질문을 정리했습니다. Project Think는 2026년 4월 기준 프리뷰 단계로, 공식 문서(`developers.cloudflare.com/agents/api-reference/think/`)와 GitHub 저장소의 데모 예제가 가장 신뢰할 수 있는 최신 정보 소스입니다. Workers Paid 플랜 비용($5/월 최소), SQLite 스토리지 요금(2026년 1월 청구 활성화), Fibers와 알람의 차이, Facets RPC 성능 특성, 기존 Cloudflare Agents SDK와의 마이그레이션 경로 등 핵심 사항을 아래에서 다룹니다. 빠르게 변화하는 프리뷰 제품이므로 개발 시작 전 `@cloudflare/think` npm 패키지의 최신 버전과 변경 로그를 확인하는 것을 권장합니다. Cloudflare의 공식 `cloudflare/agents` GitHub 저장소에는 30개 이상의 실행 가능한 데모 예제가 있어 실제 패턴을 빠르게 학습할 수 있으며, 각 예제는 독립 실행이 가능한 완전한 Workers 프로젝트로 구성되어 있습니다. Agents Week 2026 기간 중 3,683명 이상의 Cloudflare 내부 사용자가 Workers AI에서 인퍼런스를 실행했으며, 이는 Project Think가 프리뷰임에도 실제 내부 워크로드에서 검증되고 있음을 보여줍니다.
+**What is Cloudflare Project Think?**
 
-### Cloudflare Project Think은 정식 출시됐나요?
+Project Think is a TypeScript framework in developer preview (April 2026) for building long-running AI agents on Cloudflare Workers infrastructure. It extends Durable Objects with agent-specific primitives: Fibers (parallel execution threads), Facets (colocated sub-agents), Sessions (tree-structured conversation history), and sandboxed code execution via the Execution Ladder. Agents built with Project Think persist state across tool calls and survive hibernation without losing context.
 
-2026년 4월 기준 프리뷰(preview) 상태입니다. `@cloudflare/think` npm 패키지는 사용 가능하지만, API가 변경될 수 있어 프로덕션 크리티컬 워크로드에 적용할 때는 API 변경 공지를 주시해야 합니다.
+**How does Project Think differ from other agent frameworks like LangChain or CrewAI?**
 
-### Project Think를 사용하려면 어떤 Cloudflare 플랜이 필요한가요?
+Project Think is infrastructure-first rather than framework-first. LangChain and CrewAI provide high-level abstractions for agent logic that run on any infrastructure. Project Think provides lower-level infrastructure primitives (Durable Objects, Fibers, Facets) specifically designed for Cloudflare's deployment model. The advantage: zero cold starts via Durable Objects, zero idle billing via hibernation, and colocated sub-agent RPC. The tradeoff: tighter coupling to Cloudflare infrastructure.
 
-Workers Paid 플랜($5/월 최소)이 필요합니다. 이 플랜은 Durable Objects 사용량을 포함합니다. SQLite 기반 Durable Objects는 2026년 1월부터 스토리지 요금이 활성화됐습니다.
+**Is Project Think production-ready?**
 
-### Fibers와 일반 Durable Objects 알람의 차이는 무엇인가요?
+As of April 2026, Project Think is in developer preview — Cloudflare explicitly notes APIs may change as feedback is incorporated. It's suitable for internal tools, prototypes, and teams willing to track API changes. Production deployments in regulated industries or with strict stability requirements should wait for general availability.
 
-알람은 특정 시간에 핸들러를 호출하는 단순 스케줄러입니다. Fibers는 복잡한 다단계 비동기 흐름 전체를 체크포인트로 저장해, 플랫폼 재시작이나 타임아웃 후에도 정확히 중단된 지점에서 재개합니다. 알람은 Fibers 내에서 사용할 수 있습니다.
+**What models does Project Think support?**
 
-### Facets와 별도 Workers 서비스로 분리된 에이전트의 성능 차이는 얼마나 되나요?
+Project Think is model-agnostic. The `think()` loop works with any LLM that supports tool/function calling via an OpenAI-compatible API. Native integrations exist for Anthropic Claude, OpenAI GPT series, and models available via Cloudflare Workers AI. The agent implementation controls which model it calls; the framework handles state and execution management.
 
-Facets는 부모와 같은 PoP에 배치되어 RPC 레이턴시가 함수 호출 수준(마이크로초 단위)입니다. 별도 Workers 서비스 간 HTTP 호출은 수 밀리초에서 수십 밀리초가 소요됩니다. 다단계 오케스트레이션에서 이 차이는 누적되어 전체 레이턴시에 크게 영향을 미칩니다.
+**How does billing work for hibernating agents?**
 
-### Project Think와 기존 Cloudflare Agents SDK는 어떻게 다른가요?
-
-기존 Agents SDK는 에이전트 빌딩 블록을 제공하는 프레임워크 레이어입니다. Project Think는 이를 더 발전시켜 Fibers, Facets, Sessions, Dynamic Workers를 네트워크 프리미티브 수준으로 통합합니다. 기존 Agents SDK 코드는 Think로 점진적으로 마이그레이션할 수 있으며, Think는 기존 SDK보다 더 강한 내구성 보장을 제공합니다.
+Durable Objects hibernate when idle, consuming zero compute billing. You pay only for the time the object is active: processing requests, executing tool calls, or running scheduled tasks. Storage costs (for persisted session state) continue during hibernation at Durable Object storage rates ($0.20/GB-month). For agents with low average utilization, this makes Project Think significantly cheaper than keeping a container or VM running continuously.
