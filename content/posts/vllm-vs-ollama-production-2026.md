@@ -47,6 +47,8 @@ Ollama excels at three things: getting started fast, switching between models qu
 
 ## Head-to-Head Comparison: Features and Architecture
 
+The architectural differences between vLLM and Ollama are significant enough to determine production fitness — and the throughput gap under concurrent load captures the core contrast: **vLLM sustains ~18 tokens/second at 50 concurrent requests while Ollama degrades to ~4 tokens/second** under the same conditions, a 4.5x difference that compounds with scale. This gap does not come from raw GPU capability but from fundamentally different design priorities: vLLM is built for multi-user inference APIs where continuous batching and PagedAttention pack more work into every GPU cycle, while Ollama is built for single-user developer experience where simplicity and instant setup matter more than throughput density. The feature comparison below covers the dimensions that determine production fitness — batching strategy, memory management, multi-GPU support, quantization formats, monitoring, and platform compatibility — so you can map each tool's capabilities directly to your actual deployment requirements rather than relying on GitHub star counts.
+
 | Feature | vLLM | Ollama |
 |---------|------|--------|
 | Primary use case | Production API serving | Local development/personal use |
@@ -74,7 +76,7 @@ vLLM loads models in safetensors format — the standard HuggingFace format that
 
 ## Performance Benchmarks: Throughput, Latency, Memory
 
-Benchmarks from Anyscale's 2025 comparison and real-world deployment data paint a clear picture.
+Performance benchmarks tell a straightforward story: at a single request, vLLM and Ollama are nearly identical, but at **50 concurrent requests vLLM delivers ~18 tokens/second versus Ollama's ~4 tokens/second** — and at 100 concurrent requests, Ollama hits out-of-memory errors while vLLM continues serving at ~12 tokens/second. These are not marketing numbers; they come from Anyscale's 2025 comparison and real-world deployment data from production teams who migrated from Ollama to vLLM when concurrency demands grew beyond single-digit users. The difference is architectural: vLLM's continuous batching pulls new requests into mid-flight GPU computations, while Ollama queues them sequentially. The result is that the same A100 GPU hardware serves roughly 5x more concurrent users with vLLM than with Ollama at production latency thresholds. Benchmarks from Anyscale's 2025 comparison and real-world deployment data paint a clear picture.
 
 ### Single Request Latency
 
@@ -101,7 +103,7 @@ vLLM's PagedAttention achieves 96%+ GPU memory utilization by dynamically managi
 
 ## vLLM in Production: Real-World Deployment Patterns
 
-Photoroom published a detailed case study of running vLLM in production, serving millions of daily requests for AI-powered image editing. Their architecture demonstrates the canonical production pattern for vLLM.
+vLLM's production adoption is accelerating — with **2.79 million weekly PyPI downloads** as of April 2026, it is the default inference engine for teams running LLM APIs at scale on GPU clusters. The patterns that emerge across production deployments share common elements: Kubernetes with GPU node pools, autoscaling on queue depth, prefix caching enabled for any application that repeats system prompts, and Prometheus metrics feeding Grafana dashboards for real-time latency and throughput visibility. These are not optional extras — they are the operational infrastructure that separates a vLLM deployment that runs reliably at scale from one that fails unpredictably under load. Photoroom's publicly documented case study is the most detailed production reference available, covering autoscaling configuration, spot instance cost management, prefix caching gains, and graceful shutdown behavior. It represents the canonical production pattern that most vLLM deployments converge on after one or two rounds of incident-driven iteration. Photoroom published a detailed case study of running vLLM in production, serving millions of daily requests for AI-powered image editing, and their architecture demonstrates this canonical pattern directly.
 
 ### The Photoroom Pattern
 
@@ -158,7 +160,7 @@ A production vLLM deployment needs monitoring. The key metrics to track are:
 
 ## Ollama in Production: When It Works and When It Doesn't
 
-Ollama has a REST API server mode (`OLLAMA_HOST=0.0.0.0:11434 ollama serve`) that applications can call just like a cloud API. This makes it tempting to use Ollama as a production server — and for some teams, it works. The question is where the limit is.
+Ollama's production ceiling is lower than most teams expect — and the concrete threshold is approximately **10 concurrent users**, beyond which latency degrades sharply due to the absence of continuous batching. With **126 million Docker pulls**, Ollama is being deployed in production contexts far more often than its architecture was designed to support. For many of those deployments, it works well enough: internal tools, low-traffic staging environments, and small-team applications where simplicity and fast iteration matter more than throughput density are all legitimate production use cases for Ollama. The problem arises when teams treat it as a drop-in replacement for a proper inference API serving external users or high-frequency automated workloads. Understanding precisely where Ollama holds up and where it breaks — on concurrency, multi-GPU serving, observability, and security — is the fastest way to avoid the expensive late-stage infrastructure rewrite that comes from discovering these limits under production load. Ollama has a REST API server mode (`OLLAMA_HOST=0.0.0.0:11434 ollama serve`) that applications can call just like a cloud API. This makes it tempting to use Ollama as a production server — and for some teams, it works. The question is where the limit is.
 
 ### When Ollama Works in Production
 
@@ -187,7 +189,7 @@ Ollama's API server has no built-in authentication, rate limiting, or TLS. Expos
 
 ## From Ollama to vLLM: The Migration Path
 
-Many teams start with Ollama and need to scale. Here is the migration path.
+Migration from Ollama to vLLM is more straightforward than most teams expect — because **both tools expose OpenAI-compatible APIs**, the application code change is often a single base URL update from `http://localhost:11434/v1` to `http://vllm-server:8000/v1`. The harder parts are model format conversion and infrastructure setup, not API compatibility. Most teams that migrate do so because request latency has spiked past 5 seconds during peak load, or because their GPU utilization numbers reveal the memory waste that comes from Ollama's static KV cache allocation. The signs that you have outgrown Ollama are specific and measurable — once you see them, the migration timeline to a working vLLM deployment is typically 2–4 hours for the server setup plus 1–2 weeks for production hardening with Kubernetes, autoscaling, and monitoring. The migration path below covers the exact steps: recognizing when Ollama is no longer sufficient, handling model format differences between GGUF and safetensors, and updating API endpoint references in application code. Many teams start with Ollama and need to scale. Here is the migration path.
 
 ### Signs You've Outgrown Ollama
 
@@ -239,7 +241,7 @@ client = openai.OpenAI(base_url="http://vllm-server:8000/v1", api_key="none")
 
 ## Cost of Ownership: Annual TCO Comparison
 
-The true cost of LLM serving includes GPU rental, engineering time, and operational overhead. Here is a rough annual TCO comparison.
+vLLM's higher throughput density cuts annual GPU spend by 40–60% versus Ollama for the same request volume — the fundamental reason production teams absorb its setup cost. The true cost of LLM serving extends well beyond raw GPU rental: engineering time to deploy and harden the stack, ongoing operational overhead for monitoring and incident response, and the hidden cost of GPU memory waste when static KV cache allocation leaves 30–40% of VRAM idle. Ollama's low barrier to entry makes it attractive for early-stage teams, but that advantage reverses at scale. A single A100 running vLLM can serve roughly 5x more concurrent users than the same GPU running Ollama, which means the team that migrates avoids provisioning additional GPUs to compensate for architectural inefficiency. The sections below break down GPU rental rates, engineering labor, and recommended configurations by team size so you can estimate total cost of ownership before committing to either stack.
 
 ### GPU Rental Costs by Tier
 
@@ -277,6 +279,8 @@ vLLM requires more upfront investment but scales more predictably. Ollama requir
 
 ## Decision Framework: Which Tool When
 
+The single most useful rule is this: **10 concurrent users is the crossover point** where vLLM's architectural advantages outweigh Ollama's operational simplicity. Below that threshold, Ollama's one-binary install and zero-configuration model management are genuine productivity wins that vLLM cannot match. Above it, Ollama's lack of continuous batching and tensor parallelism creates latency spikes that degrade user experience and waste GPU capacity. This framework is not about which tool is objectively better — both tools are excellent at what they were designed for. It is about matching architectural strengths to actual workload requirements. A developer building a personal coding assistant has different needs than an engineering team running a customer-facing inference API. The decision matrix and hybrid approach below make it straightforward to identify which tool fits which scenario, and when the answer is both used together at different stages of the development lifecycle.
+
 ### Decision Matrix
 
 | Use Case | vLLM | Ollama | Why |
@@ -302,7 +306,7 @@ vLLM and Ollama are not the only options. HuggingFace TGI (Text Generation Infer
 
 ## Conclusion
 
-vLLM and Ollama are complementary tools, not competitors. Use Ollama when you need to run a model locally on your laptop in two minutes. Use vLLM when you need to serve that same model to 100 concurrent users with low latency and high GPU utilization. The migration path between them is straightforward because both expose OpenAI-compatible APIs — start with Ollama, move to vLLM when you need to scale. The production decision is simple: if you have more than 10 concurrent users or need multi-GPU serving, vLLM is the right choice. If you are a developer running models locally for personal use or small-team tools, Ollama is the right choice. Neither choice is wrong — but choosing the wrong tool for your actual workload is.
+vLLM and Ollama are complementary tools, not competitors — and the 4.5x throughput gap at 50 concurrent requests makes the production boundary clear. Use Ollama when you need to run a model locally on your laptop in two minutes. Use vLLM when you need to serve that same model to 100 concurrent users with low latency and high GPU utilization. The migration path between them is straightforward because both expose OpenAI-compatible APIs — start with Ollama, move to vLLM when you need to scale. The production decision is simple: if you have more than 10 concurrent users or need multi-GPU serving, vLLM is the right choice. If you are a developer running models locally for personal use or small-team tools, Ollama is the right choice. Neither choice is wrong — but choosing the wrong tool for your actual workload is.
 
 ### Key Takeaways
 

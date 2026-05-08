@@ -1,8 +1,8 @@
 ---
 title: "ChatGPT Super App Review 2026: Unified AI Platform with Codex, Atlas, and GPT-6"
-date: 2026-04-30T15:12:31+00:00
-tags: ["chatgpt", "openai", "ai-tools", "coding-agents", "ai-agents"]
-description: "ChatGPT Super App 2026 완전 리뷰: Codex, Atlas 브라우저, GPT-6 로드맵까지 통합된 OpenAI 플랫폼 심층 분석."
+date: 2026-05-08T00:00:00+00:00
+tags: ["chatgpt","openai","super-app","gpt-5-5","ai-platform"]
+description: "Full review of the ChatGPT Super App 2026: Codex coding agent, Atlas browser automation, GPT-5.5 benchmarks, pricing, and a head-to-head comparison with Claude and Gemini."
 draft: false
 cover:
   image: "/images/chatgpt-super-app-2026.png"
@@ -11,137 +11,76 @@ cover:
 schema: "schema-chatgpt-super-app-2026"
 ---
 
-ChatGPT Super App은 OpenAI가 2026년 4월 출시한 통합 AI 플랫폼으로, ChatGPT 대화 엔진, Codex 코딩 에이전트, Atlas AI 브라우저를 하나의 데스크톱 인터페이스로 묶은 제품이다. 900만 명 이상의 기업 사용자와 주간 활성 사용자 9억 명을 보유한 이 플랫폼이 실제로 생산성 혁명인지, 아니면 거대한 잠금 장치인지 직접 사용해봤다.
+OpenAI launched the ChatGPT Super App on April 6, 2026, positioning it not as a chatbot upgrade but as an AI operating system. With 800 million weekly active users as of Q1 2026 and over 7 million enterprise seats, the platform merges ChatGPT 5.5, the Codex software engineering agent, and the Atlas browser automation agent into a single unified workspace. If you have been switching between a chat window, a coding IDE, and a browser automation tool, this is the product that is supposed to eliminate that context-switching entirely.
 
-## ChatGPT Super App이란? (2026년 개요)
+## ChatGPT Super App 2026: The Unified AI Platform Explained
 
-ChatGPT Super App은 ChatGPT 5.5를 기반으로 한 통합 AI 운영 체제 수준의 플랫폼이다. OpenAI가 2026년 3월 발표하고 4월 6일 정식 출시한 이 제품은 기존에 분산되어 있던 ChatGPT 웹 인터페이스, OpenAI Codex 코딩 에이전트, Atlas AI 브라우저를 단일 데스크톱 애플리케이션으로 통합했다. 2026년 2월 기준 ChatGPT 주간 활성 사용자는 9억 명으로, 1년 전 4억 명에서 두 배 이상 증가했다. 월간 활성 사용자는 모든 통합 포함 시 12~15억 명으로 추정된다. OpenAI의 월간 수익은 20억 달러로 연간 환산 시 250억 달러에 달한다. Super App 전략의 핵심은 컨텍스트 연속성이다. 브라우저에서 찾은 정보, 작성 중인 코드, 진행 중인 대화가 하나의 세션 안에서 연결되어 있다. GPT-6(코드명 Spud) 출시 예정에 맞춰 설계된 이 플랫폼은 모델 업그레이드 시 자동으로 혜택을 받도록 설계되어 있다.
+The ChatGPT Super App crossed 800 million weekly active users by Q1 2026, doubling from 400 million a year earlier, which makes the platform impossible to dismiss as a niche product. Announced in March 2026 and shipped on April 6, the super app is OpenAI's answer to a straightforward question: why force users to open three separate tools when a single persistent workspace can do everything? The platform bundles GPT-5.5 as the reasoning and conversation layer, Codex as the autonomous software engineering agent, and Atlas as the AI-native browser that can navigate and interact with websites on your behalf. The entire premise is context continuity — the code Codex just wrote, the page Atlas just scraped, and the conversation you had an hour ago all live in one session. Fortune 500 adoption sits at 92%, and OpenAI is generating approximately $2 billion in monthly revenue. This is not a beta experiment. It is a production platform with serious enterprise buy-in, and the super app framing is a deliberate bet that unified context is worth more than best-in-class point solutions.
 
-OpenAI의 공동 창업자들이 제시한 비전은 "AI 운영 체제"다. 사용자가 별도의 앱을 전환하지 않고 하나의 컨텍스트 내에서 채팅, 코딩, 웹 브라우징을 수행할 수 있는 환경이다. 포춘 500대 기업의 92%가 이미 ChatGPT를 사용하고 있다는 점에서 기업 시장 공략이 명확한 전략이다.
+## What Changed in ChatGPT 5.5: Model Improvements and Benchmarks
 
-## 핵심 구성 요소: ChatGPT + Codex + Atlas 브라우저
+GPT-5.5 scores 93.6% on the GPQA Diamond benchmark and 82.7% on Terminal-Bench 2.0, which puts it firmly at the top of publicly reported AI performance tables as of Q2 2026. Those numbers matter because Terminal-Bench 2.0 specifically measures autonomous task execution in shell environments — exactly the kind of work the super app is designed to handle. Beyond raw benchmark scores, GPT-5.5 brings two changes that affect daily use more than any headline figure. First, memory is now persistent and project-aware: the model retains context across sessions, learns your preferred coding patterns and output formats, and surfaces relevant project history automatically rather than requiring you to re-paste background every time. Second, agentic execution is baked into the base model rather than bolted on as a plugin. Multi-step workflows — research a topic, draft a document, write supporting code, push a pull request — can run with minimal hand-holding. The model is also notably stronger at following long, complex instruction chains without drifting, which matters enormously when you are delegating autonomous tasks that run for several minutes without human checkpoints.
 
-ChatGPT Super App의 세 가지 핵심 구성 요소는 각각 독립적으로도 강력하지만, 통합 시 시너지 효과를 발휘한다. ChatGPT 5.5는 대화 및 추론 엔진으로, 향상된 메모리 시스템과 태스크 연속성을 제공한다. OpenAI Codex는 독립적으로 코드를 작성, 테스트, 디버그할 수 있는 코딩 에이전트로, 자동화 단일 태스크 코드 생성 평가에서 8.5/10점을 기록했으며 전체 코딩 자동화 점수는 7.5/10이다. Atlas 브라우저는 2026년 3월부터 macOS에서 베타로 제공 중인 AI 퍼스트 브라우저다. 현재 Windows와 모바일 버전은 미출시 상태다. 세 컴포넌트의 통합이 만들어내는 실질적 차이는 워크플로우 연속성에 있다. Atlas에서 경쟁사 문서를 브라우징하면서 Codex로 데이터를 분석하는 스크립트를 작성하고, ChatGPT가 그 결과를 설명하는 흐름이 하나의 세션 안에서 이루어진다. 컨텍스트 스위칭 비용이 실질적으로 줄어들며, 특히 리서치와 개발이 교차하는 작업에서 효율이 극대화된다. OpenAI가 이 통합을 "AI 운영 체제"로 부르는 이유가 여기에 있다. 단일 앱에서 정보 수집, 분석, 코드 작성, 콘텐츠 생성이 모두 이루어지는 환경은 이전에는 없었다.
+## Codex Integration: How Software Engineering Works Inside ChatGPT
 
-### ChatGPT 5.5의 메모리 개선
+Codex inside the ChatGPT Super App is not the autocomplete tool that shipped years ago — it is a full software engineering agent that scored 8.5 out of 10 on single-task automated code generation benchmarks and 7.5 out of 10 on overall coding automation evaluations. The practical difference from a standard coding assistant is that Codex can receive a high-level description, generate files, write tests, run those tests, read the failure output, and iterate on fixes — all without you touching the keyboard between steps. In practice, a prompt like "add a REST endpoint for user profile updates, write unit tests for it, and update the OpenAPI spec" produces a complete working result in under five minutes for most mid-complexity features. Codex also integrates directly with CI/CD pipelines, meaning it can open pull requests, attach test results, and flag its own confidence level on the changes it made. The integration is tightest on GitHub, though GitLab support shipped in beta alongside the super app launch. The main constraint worth knowing upfront: Codex's agent mode runs inside a sandboxed environment by default. Accessing your local filesystem or a private dev server requires additional configuration, and that setup is not zero-friction for teams with strict network policies.
 
-ChatGPT 5.5의 가장 눈에 띄는 변화는 메모리 시스템의 대폭 개선이다. 이전 버전 대비 장기 프로젝트 컨텍스트 유지가 크게 향상되었다. 사용자가 지난주에 논의한 프로젝트 세부 사항을 새 세션에서도 자동으로 참조하며, 사용자 선호도와 작업 스타일을 학습해 응답을 개인화한다. 이 기능은 개발 팀이나 장기 프로젝트를 진행하는 프리랜서에게 특히 유용하다.
+## Atlas Browser Agent: Autonomous Web Interaction in ChatGPT
 
-### Codex 에이전트 모드
+Atlas ships as an AI-native browser available in macOS beta as of March 2026, and it handles the class of tasks that previously required custom Selenium scripts or manual clicking. The agent can fill out forms, navigate multi-step web flows, book appointments, scrape structured data from sites that block conventional crawlers, and compose what it finds directly into the ChatGPT session. A concrete example: "Check these five competitor pricing pages, extract their plan limits, and build a comparison table" runs end-to-end in Atlas without any intermediate copy-paste from you. The integration payoff is that whatever Atlas retrieves flows immediately into GPT-5.5 context, so analysis, summarization, and follow-up code generation happen without a context switch. That said, Atlas is not a Chrome replacement for general browsing yet. The extension ecosystem is minimal, rendering performance on JavaScript-heavy sites trails Chromium, and the Windows and mobile versions have not shipped at time of writing. For AI-assisted research workflows and form automation tasks, Atlas is genuinely useful. For everyday browsing, the gap with Chrome is noticeable enough that most users will keep both open.
 
-Codex의 에이전트 모드는 단순 코드 완성을 넘어선다. 사용자가 고수준의 작업 설명을 입력하면 Codex가 파일을 생성하고, 테스트를 실행하며, 오류를 수정하는 전체 사이클을 자율적으로 처리한다. 전체 코딩 자동화 점수는 7.5/10으로, GitHub Copilot이나 Cursor와 직접 경쟁하는 수준이다.
+## Memory and Context: The Persistent AI Workspace
 
-## 주요 기능 및 통합 플랫폼의 역량
+Persistent memory is one of the most meaningful quality-of-life changes in the ChatGPT Super App, and it is worth treating as a first-class feature rather than a footnote. Prior to GPT-5.5, every session started blank. You re-explained the project, re-pasted the relevant code, and re-specified your formatting preferences. The new memory layer changes that: the model builds a project-aware context graph over time, surfacing information from past sessions when it is relevant to the current task. If you worked on a Python FastAPI service last week and open a new session today asking about adding authentication, the model already knows your project structure, your testing framework, and the naming conventions you used. Memory is scoped at the user level by default, with workspace-level memory for Business and Enterprise accounts that allows teams to share a shared context baseline. There are real privacy considerations here. Memory can be inspected, edited, and deleted from the settings panel, and OpenAI provides explicit controls over what gets retained. Enterprise deployments can disable cross-session memory entirely if data residency policies require it. For individual developers and knowledge workers, the productivity gain from not re-hydrating context on every session open is substantial and compounds quickly across a week of daily use.
 
-ChatGPT Super App의 핵심 기능은 통합 컨텍스트 관리, 에이전트 모드, Deep Research, 그리고 Sora 비디오 생성 연동이다. 에이전트 모드는 ChatGPT Plus($20/월) 이상에서 제공되며, 사용자 대신 멀티스텝 작업을 자율적으로 처리한다. 예를 들어 "이 경쟁사 10개의 가격 페이지를 스크래핑해서 비교표를 만들어줘"라는 지시를 내리면 Atlas 브라우저가 웹을 탐색하고 ChatGPT가 데이터를 구조화한다. Deep Research는 Plus 플랜에서 월 10회 제공되며, 수십 개의 출처를 종합해 심층 보고서를 생성한다. 코딩 작업에서는 Codex가 에이전트로 동작하며 전체 기능 구현을 맡는다. 단, Codex의 에이전트 모드는 현재 샌드박스 환경에서만 실행되므로 로컬 파일 시스템 접근에는 추가 설정이 필요하다. Sora 비디오 생성은 Plus 이상에서 제공되며, 텍스트 프롬프트로 짧은 비디오 클립을 생성할 수 있다. 통합 플랫폼의 역량에서 가장 중요한 변화는 단일 세션 내 툴 체이닝이다. 브라우저에서 선택한 텍스트를 ChatGPT에 직접 붙여넣거나, Codex가 생성한 코드를 즉시 테스트 환경에서 실행하는 워크플로우가 매끄럽게 연결된다. 엔터프라이즈 사용자의 경우 7백만 명 이상의 기업 시트 사용자가 이미 이 통합 환경에서 업무를 처리하고 있다.
+## ChatGPT Super App Pricing 2026: Which Plan Do You Need?
 
-실제 사용에서 주목할 점은 각 기능 간 전환이 얼마나 매끄럽냐다. 브라우저에서 선택한 텍스트를 ChatGPT에 직접 붙여넣거나, Codex가 생성한 코드를 즉시 테스트 환경에서 실행하는 워크플로우가 매끄럽게 연결된다.
+The ChatGPT Super App pricing structure has four tiers that matter for most users, and the right choice depends almost entirely on how often you hit the usage caps on Deep Research and agent execution. The Free tier gives limited access to GPT-5.5 for basic conversation and is not a meaningful option for anyone doing professional work. Plus at $20 per month is the practical entry point: it includes full model access, agent mode, Codex integration, Atlas browser access, and 10 Deep Research sessions per month — enough for a developer or content professional who uses AI daily but does not run research-intensive workflows every day. Pro at $200 per month removes usage caps on Deep Research, gives higher compute priority, and adds early access to experimental features. The jump from Plus to Pro is steep, and it is only justified if you are burning through Deep Research sessions by mid-month or running complex multi-agent workflows at high volume. Business and Enterprise pricing is custom and adds team management, SSO, data isolation guarantees, and API integration options. The honest summary: start at Plus, monitor your Deep Research usage for 30 days, and upgrade to Pro only if you hit the cap consistently. Most power users who do not run daily research pipelines find Plus sufficient.
 
-### 에이전트 모드 실전 테스트
+| Plan | Monthly Price | Key Capabilities |
+|---|---|---|
+| Free | $0 | Limited GPT-5.5 access, basic chat |
+| Plus | $20 | Full model suite, agent mode, Codex, Atlas, 10x Deep Research/month |
+| Pro | $200 | Unlimited Deep Research, priority compute, early feature access |
+| Business | Custom | Team management, SSO, data isolation, API integration |
 
-에이전트 모드를 실제 프로젝트에 적용해봤다. "Python으로 REST API 엔드포인트 5개를 작성하고, 각각에 대한 단위 테스트를 추가하고, README를 업데이트해줘"라는 지시에 Codex는 약 4분 만에 전체 작업을 완료했다. 코드 품질은 중급 개발자 수준으로, 기본 에러 처리와 타입 힌트가 포함되어 있었다. 복잡한 비즈니스 로직이나 도메인 특화 최적화는 여전히 인간 리뷰가 필요하다.
+## ChatGPT vs Claude vs Gemini: Super App Comparison
 
-## ChatGPT Super App 가격: Free, Go, Plus, Pro, Business 비교
+ChatGPT holds the strongest integrated agentic platform as of mid-2026, but the right answer for any specific team depends heavily on which ecosystem they already live in. Gemini Ultra has a decisive edge if your organization runs on Google Workspace — the native integration with Docs, Sheets, Drive, and Gmail is genuinely better than anything ChatGPT can do through connectors. Microsoft Copilot is the obvious choice for Azure-heavy enterprise environments and Microsoft 365 shops, where the depth of M365 integration outweighs the ChatGPT platform's broader feature set. Claude from Anthropic is the strongest competitor for long-document analysis and workloads that require processing 100K-plus token contexts with high fidelity. Where ChatGPT has a clear lead: end-to-end coding agent capability, Atlas-style browser automation, and the breadth of agentic multi-step task execution. No other platform ships a comparable integrated coding agent and browser automation tool in a single product as of this writing. The 800M weekly active user base also means OpenAI's tooling, integrations, and plugin ecosystem are further developed than the competition's. If your work does not have a strong ecosystem dependency, ChatGPT Super App is the most capable general-purpose choice.
 
-ChatGPT Super App의 가격 구조는 여섯 개 티어로 구성된다. 가격 대비 가치를 명확히 파악하는 것이 플랜 선택의 핵심이다.
+| Capability | ChatGPT Super App | Gemini Ultra | Copilot Pro | Claude |
+|---|---|---|---|---|
+| Integrated coding agent | Best | Limited | Strong | Limited |
+| Browser automation | Yes (Atlas) | No | No | No |
+| Google Workspace integration | Connector only | Native | Partial | Connector only |
+| Microsoft 365 integration | Connector only | Partial | Native | Connector only |
+| Long-document analysis | Strong | Strong | Moderate | Best |
+| Agentic autonomy | Best | Strong | Strong | Moderate |
 
-| 플랜 | 월 가격 | 주요 기능 |
-|------|---------|-----------|
-| Free | $0 | GPT-5.5 제한적 접근, 기본 대화 |
-| Go | $10 | GPT-5.5 확장, 메모리, 기본 Codex |
-| Plus | $20 | 전체 모델 suite, Deep Research(10회/월), Sora, Codex, 에이전트 모드 |
-| Pro | $100 | 무제한 Deep Research, 고급 에이전트, 우선 처리, Atlas 완전 접근 |
-| Pro Premium | $200 | 연구자/파워유저 대상, 최고 컴퓨팅 할당, 신기능 조기 접근 |
-| Business | 커스텀 | 팀 관리, SSO, 데이터 보안, API 통합 |
+## Who Should Use the ChatGPT Super App?
 
-Plus($20/월)는 대부분의 개발자와 전문 사용자에게 최적의 진입점이다. Deep Research 월 10회와 에이전트 모드가 포함되어 있어 일반적인 업무 자동화 요구를 충족한다. Pro($100/월)는 Deep Research를 매일 사용하거나 복잡한 다단계 에이전트 작업이 빈번한 파워유저에게 정당화된다. $200 Pro Premium은 현재로서는 연구자나 헤비 API 사용자를 제외하면 대부분에게 과잉이다.
+The ChatGPT Super App delivers its highest value to professionals who regularly cross the boundary between writing, research, coding, and web interaction — because that context continuity is the thing that sets it apart from running separate best-in-class tools. Developers who already use ChatGPT for code review and explanation gain the most from Codex agent mode, which can take a task from natural language description to opened pull request without repeated prompting. Researchers and analysts who spend significant time compiling data from web sources benefit directly from Atlas automation and Deep Research, eliminating a category of low-value manual work. Content teams using AI for drafting, sourcing, and editing find the persistent memory layer substantially reduces the setup overhead on each new project. The platform is less compelling if you work exclusively inside Google or Microsoft ecosystems, because both Gemini and Copilot have integration depth that ChatGPT cannot match through third-party connectors. It is also a poor fit if your primary use case is pure long-document summarization at scale, where Claude holds a benchmark and quality lead. For everyone else — developers, independent researchers, product teams, and technical writers who move between tasks constantly — the ChatGPT Super App is the strongest unified AI workspace available in 2026.
 
-## ChatGPT Super App vs 경쟁사: Gemini, Copilot, Claude 2026 비교
+---
 
-ChatGPT Super App은 2026년 가장 완성도 높은 통합 AI 플랫폼이지만, 경쟁사들도 각각의 강점이 뚜렷하다. 플랫폼 선택은 사용 패턴과 생태계 친화성에 따라 달라진다. Google Gemini Ultra는 Google Workspace(Docs, Sheets, Gmail)와의 네이티브 통합에서 압도적이다. Microsoft Copilot은 M365와 Azure에 깊이 통합되어 있어 엔터프라이즈 Windows 환경에서 유리하다. Anthropic Claude는 안전성과 장문 분석에서 강점을 보이며, 특히 100K 토큰 이상의 문서 처리에서 탁월하다.
+## FAQ
 
-| 기준 | ChatGPT Super App | Gemini Ultra | Copilot Pro | Claude |
-|------|-------------------|--------------|-------------|--------|
-| 통합 코딩 에이전트 | ★★★★★ | ★★★☆☆ | ★★★★☆ | ★★★☆☆ |
-| AI 브라우저 | ★★★★☆ | ★★★☆☆ | ★★★☆☆ | ✗ |
-| Google 생태계 연동 | ★★☆☆☆ | ★★★★★ | ★★★☆☆ | ★★☆☆☆ |
-| Microsoft 365 연동 | ★★★☆☆ | ★★☆☆☆ | ★★★★★ | ★★☆☆☆ |
-| 장문 문서 분석 | ★★★★☆ | ★★★★☆ | ★★★☆☆ | ★★★★★ |
-| 에이전트 자율성 | ★★★★★ | ★★★★☆ | ★★★★☆ | ★★★☆☆ |
-| 가격 대비 가치 | ★★★★☆ | ★★★★☆ | ★★★★☆ | ★★★★☆ |
+**Q1: What exactly is the ChatGPT Super App and how is it different from regular ChatGPT?**
 
-ChatGPT Super App이 경쟁사 대비 실질적 우위를 갖는 영역은 통합 코딩 에이전트와 에이전트 자율성이다. 다른 기능들은 생태계 선택에 따라 달라진다. Google 헤비유저라면 Gemini가, Microsoft 기업 환경이라면 Copilot이 더 자연스러운 선택일 수 있다.
+The ChatGPT Super App is a unified desktop platform that merges three previously separate products: the ChatGPT conversation and reasoning interface, the Codex software engineering agent, and the Atlas AI browser. The core difference from regular ChatGPT is persistent shared context across all three surfaces. When Atlas retrieves data from a website, that data is immediately available to Codex and GPT-5.5 in the same session without any copy-paste step. The platform shipped on April 6, 2026, on top of GPT-5.5 and is designed to receive automatic model upgrades, including GPT-6, when it ships.
 
-## 실전 성능: 코딩, 브라우징, 에이전틱 태스크
+**Q2: Is the ChatGPT Plus plan at $20/month enough, or do I need Pro at $200/month?**
 
-실제 업무에서 ChatGPT Super App의 성능은 작업 유형에 따라 큰 차이를 보인다. 코딩 에이전트로서 Codex는 자동화 도구 평가에서 전체 7.5/10, 단일 태스크 코드 생성 8.5/10을 기록했다. 단일 기능 구현, 테스트 작성, 버그 수정에서 GitHub Copilot이나 Cursor와 대등하거나 우수한 결과를 냈다. 복잡한 시스템 아키텍처 설계나 기존 대규모 코드베이스 리팩터링에서는 인간 리뷰가 여전히 필수다. Atlas 브라우저의 AI 기능은 현재 베타 단계의 한계가 명확히 느껴진다. macOS 전용이라는 제한 때문에 Windows와 모바일 사용자는 핵심 기능 중 하나를 완전히 사용할 수 없다. 일반 브라우징에서는 Chrome 대비 불편함이 있으며, AI 기능을 활성화했을 때의 가치가 항상 프리미엄을 정당화하지는 않는다. 가장 인상적인 성능을 보인 영역은 멀티스텝 에이전틱 태스크다. "경쟁사 5개의 블로그 최신 포스트를 분석하고, 우리 콘텐츠 갭을 찾아 다음 달 콘텐츠 캘린더를 작성해줘"와 같은 복합 지시를 처리하는 능력이 다른 플랫폼과 차별화된다. 이런 멀티스텝 작업에서 Super App은 명확한 우위를 보인다.
+For most professional users, Plus at $20 per month is enough. It includes agent mode, Codex integration, Atlas browser access, and 10 Deep Research sessions per month. Pro at $200 per month is worth it only if you consistently exhaust your Deep Research quota before the month ends or run high-volume multi-agent workflows daily. The gap between Plus and Pro is large, and most developers and knowledge workers who do not run daily research pipelines never hit the Plus cap.
 
-### 코딩 에이전트 벤치마크: Codex vs Copilot vs Cursor
+**Q3: Can Atlas replace Chrome as my main browser?**
 
-세 가지 실제 작업으로 비교해봤다:
+Not yet. Atlas is in macOS-only beta as of May 2026, with no Windows or mobile release announced. Its extension ecosystem is minimal, and JavaScript-heavy sites render slower than in Chromium-based browsers. For AI-assisted research tasks, form automation, and web data extraction, Atlas is genuinely useful. For general browsing, the Chrome gap is too large to make a full switch practical. Most users will run both and use Atlas specifically for tasks that benefit from AI integration.
 
-**태스크 1: REST API 구현 (5개 엔드포인트 + 테스트)**
-- Codex: 4분 12초, 테스트 통과율 87%
-- GitHub Copilot: 인라인 제안만, 수동 통합 필요
-- Cursor: 6분 38초, 테스트 통과율 91%
+**Q4: How does Codex compare to GitHub Copilot and Cursor for software development?**
 
-**태스크 2: 레거시 코드 리팩터링 (500줄 Python)**
-- Codex: 컨텍스트 이해 우수, 전체 파일 처리 가능
-- Copilot: 라인 단위 제안, 전체 컨텍스트 이해 제한
-- Cursor: Composer 모드로 전체 파일 처리, 설명 품질 최고
+Codex has a meaningful advantage in end-to-end autonomous task execution: give it a feature description and it can generate files, write tests, run them, and iterate on failures without you intervening between steps. GitHub Copilot remains superior for inline autocomplete inside an IDE, and Cursor is still the best option if you want a full coding environment with deep file-system context and a polished IDE experience. If you are already working inside the ChatGPT Super App for research and communication, Codex's integration removes a context switch that Copilot and Cursor cannot eliminate. If you want a dedicated coding tool and nothing else, Cursor is the stronger choice.
 
-**태스크 3: 버그 수정 (로그 없는 프로덕션 이슈)**
-- Codex: 관련 파일 자율 검색, 원인 진단
-- Copilot: 현재 파일 컨텍스트만
-- Cursor: 파일 전체 분석, 수정 제안 명확
+**Q5: What happens to my ChatGPT Super App subscription when GPT-6 launches?**
 
-Cursor가 코딩 전문성에서 여전히 강점이 있지만, ChatGPT의 나머지 기능과의 통합을 고려하면 Super App 생태계 안의 Codex가 전체 워크플로우에서 우위다.
-
-## 한계, 부족한 기능, GPT-6로의 전망
-
-ChatGPT Super App의 현재 한계를 솔직하게 평가해야 한다. 가장 큰 제약은 Atlas 브라우저의 macOS 전용 베타 상태다. Windows와 모바일 사용자에게는 Super App의 핵심 구성 요소 중 하나가 차단되어 있다. Deep Research의 월 10회 제한(Plus 기준)은 연구 집약적 업무에서 빠르게 소진된다. Codex의 에이전트 모드는 샌드박스 내에서만 동작하며, 로컬 개발 환경과의 통합에는 별도 설정이 필요하다. 가격 구조가 복잡해 어떤 플랜이 자신에게 맞는지 파악하기 어렵다. Plus에서 Pro로의 가격 도약($20 → $100)은 상당히 크며, 그 사이에 합리적인 미들 티어가 없다. 오프라인 기능이 없고, 인터넷 연결에 전적으로 의존한다는 점도 기업 환경에서 리스크 요소다. GPT-6(코드명 Spud)는 2026년 4월~6월 출시가 예상되며, 예측 시장은 6월 30일까지 출시 확률을 약 90%로 평가한다. Super App은 GPT-6 출시 시 자동 업그레이드되도록 설계되어 있어, 현재 플랜 사용자는 별도 비용 없이 다음 세대 모델의 혜택을 받는다. 이것이 지금 가입하는 강력한 인센티브다.
-
-GPT-6 로드맵 측면에서는, 예측 시장이 2026년 6월 30일까지 출시 확률을 90% 이상으로 평가한다. Super App은 GPT-6가 출시되면 자동으로 업그레이드되도록 설계되어 있어, 현재 플랜을 유지하면서 다음 세대 모델의 혜택을 받을 수 있다는 점이 강력한 lock-in 인센티브다.
-
-### Atlas 브라우저: 현실적 평가
-
-Atlas가 Chrome을 대체할 수 있냐는 현재로서는 "아직은 아니다"가 솔직한 답이다. AI 기능이 필요한 특정 작업에서는 매우 유용하지만, 일반 브라우징에서는 Chrome 생태계의 익스텐션과 성숙도를 따라가지 못한다. macOS 전용이라는 제한도 대부분의 기업 환경에서 실질적 장벽이다.
-
-## ChatGPT Super App, 실제로 쓸 만한가? 최종 평가 및 추천
-
-ChatGPT Super App은 2026년 가장 완성도 높은 통합 AI 플랫폼이다. 특히 코딩, 연구, 콘텐츠 작업을 자주 전환하는 개발자와 지식 노동자에게 실질적인 생산성 향상을 제공한다. Plus($20/월)는 투자 대비 가치가 가장 높은 진입점이다. 에이전트 모드, Deep Research, Codex, Sora 접근이 모두 포함된다. Pro($100/월)는 Deep Research를 매일 또는 고강도로 사용하는 경우에만 정당화된다. 일반 사용자에게 $200 Pro Premium은 현재 시점에서는 과잉이다.
-
-Google 생태계에 깊이 묶여 있다면 Gemini Ultra가 더 자연스러운 선택이고, Microsoft 365 기업 환경이라면 Copilot이 우위다. 그러나 플랫폼 독립적으로 최고의 AI 코딩 에이전트와 통합 AI 워크플로우를 원한다면 ChatGPT Super App이 2026년 현재 최선의 선택이다.
-
-GPT-6 출시가 임박한 시점에서 지금 Plus 이상에 가입하는 것은 업그레이드 혜택을 위한 합리적인 포지셔닝이기도 하다.
-
-**추천 대상별 결론:**
-- 개발자 (코딩 중심): Plus 또는 Pro — Codex 에이전트 가치가 충분
-- 콘텐츠 크리에이터/연구자: Plus — Deep Research 10회/월로 충분
-- 기업 파워유저: Pro 또는 Business — 무제한 Deep Research 필수
-- Google/Microsoft 생태계 사용자: 자신의 생태계 제품 우선 고려
-- 일반 사용자: Free나 Go로 시작 후 필요에 따라 업그레이드
-
-## FAQ: ChatGPT Super App 자주 묻는 질문
-
-ChatGPT Super App에 대한 가장 자주 묻는 질문들을 실제 사용 경험을 바탕으로 정리했다. 가격, 기능 비교, GPT-6 전환, Atlas 브라우저 현황, 그리고 어떤 플랜이 자신에게 맞는지에 대한 질문들이 가장 많이 들어온다. Super App은 2026년 4월 6일 출시 이후 ChatGPT 주간 활성 사용자 9억 명과 엔터프라이즈 7백만 시트 기반 위에서 빠르게 확산 중이다. 그러나 플랫폼의 규모와 마케팅이 실제 기능 가치를 과장하는 경우도 있어 솔직한 답변이 필요하다. OpenAI가 월간 20억 달러 수익을 창출하는 플랫폼이지만, 모든 기능이 모든 사용자에게 적합하지는 않다. 포춘 500대 기업의 92%가 ChatGPT를 사용한다는 통계는 채택률을 보여주지만, 구체적으로 어떤 기능을 어떻게 활용하느냐가 중요하다. 아래 다섯 가지 질문은 실제 구매 결정과 업무 적용에서 가장 중요한 포인트들을 다루며, 마케팅 언어가 아닌 실제 사용 사례와 벤치마크 데이터를 기반으로 솔직하게 답한다. 각 답변은 플랜 선택, 경쟁사 비교, 미래 전망을 실용적 관점에서 다룬다.
-
-### ChatGPT Super App은 무엇이 새로운가요?
-
-ChatGPT Super App은 ChatGPT 대화, Codex 코딩 에이전트, Atlas AI 브라우저를 하나의 통합 데스크톱 플랫폼으로 묶었다는 점이 핵심 차별점입니다. 이전에는 별도 앱이었던 기능들이 하나의 컨텍스트 안에서 연결되어, 브라우징 중 발견한 정보를 즉시 코딩이나 분석 작업에 연결할 수 있습니다.
-
-### ChatGPT Plus와 Pro의 실질적인 차이는 무엇인가요?
-
-가장 큰 차이는 Deep Research 사용량입니다. Plus는 월 10회 제공되며, Pro($100/월)는 무제한입니다. 추가로 Pro는 더 높은 컴퓨팅 우선순위, 고급 에이전트 기능, Atlas 브라우저 완전 접근을 제공합니다. 월 10회 이상 심층 연구 작업을 하는 경우에만 Pro 업그레이드가 정당화됩니다.
-
-### Atlas 브라우저는 Chrome을 대체할 수 있나요?
-
-현재로서는 아닙니다. Atlas는 macOS 전용 베타 상태이며, Chrome의 익스텐션 생태계와 성숙도에는 미치지 못합니다. AI 기능이 필요한 특정 작업 (웹 리서치, 데이터 수집 에이전트 등)에서는 강점을 보이지만, 일반 브라우저로의 완전 전환은 아직 시기상조입니다.
-
-### ChatGPT Codex와 GitHub Copilot, 어느 것이 더 낫나요?
-
-작업 유형에 따라 다릅니다. 단일 기능 구현이나 독립적인 태스크에서는 Codex가 더 강력한 에이전트 자율성을 보입니다. IDE 통합과 인라인 코드 완성에서는 Copilot과 Cursor가 여전히 더 자연스러운 개발 경험을 제공합니다. ChatGPT 생태계를 이미 사용 중이라면 Codex의 통합 이점이 크고, 전용 코딩 도구를 원한다면 Cursor가 현재 최강입니다.
-
-### GPT-6 출시 후 Super App은 어떻게 바뀌나요?
-
-OpenAI는 GPT-6가 출시되면 Super App 사용자들이 자동으로 업그레이드된 모델에 접근할 수 있도록 설계했습니다. GPT-6(코드명 Spud)는 2026년 4월~6월 출시가 예상되며, 예측 시장은 6월 30일까지 출시 확률을 90% 이상으로 봅니다. 현재 플랜을 유지하면서 다음 세대 모델의 성능 향상을 자동으로 받을 수 있다는 점이 지금 가입하는 주요 인센티브 중 하나입니다.
+OpenAI has designed the super app to automatically upgrade underlying models without plan changes. GPT-6, internally codenamed Spud, is expected to be available to ChatGPT Super App users on their existing plan tiers when it ships. Prediction markets put GPT-6 release probability at roughly 90% before the end of Q2 2026. You will not need to buy a new subscription or migrate your data — the platform handles the model swap transparently, which is a meaningful advantage over point tools that require users to manually opt into new model versions.

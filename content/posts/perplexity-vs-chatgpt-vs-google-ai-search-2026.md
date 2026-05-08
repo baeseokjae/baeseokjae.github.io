@@ -43,7 +43,7 @@ The most significant behavioral shift: over 90% of users now switch between tool
 
 ## Head-to-Head Comparison: Perplexity vs ChatGPT vs Google
 
-Before diving into individual platforms, here is the complete comparison at a glance:
+Perplexity leads on accuracy at 92%, ChatGPT leads on versatility with 400 million weekly active users, and Google leads on scale with 8.5 billion daily searches — and each platform's design reflects a fundamentally different philosophy about what search should accomplish. Perplexity was built to answer questions with citations; ChatGPT was built to assist with tasks and uses search as one capability among many; Google was built to surface links and now layers AI summaries on top of its existing index. Understanding these design differences is the key to using all three effectively, because no single platform wins across every task type. Before diving into individual platforms, here is the complete comparison at a glance:
 
 | Feature | Perplexity | ChatGPT Search | Google AI Overviews |
 |---|---|---|---|
@@ -148,7 +148,7 @@ The accuracy gap matters most in high-stakes research contexts: medical informat
 
 ## Use Case Analysis: Which Tool Wins for What?
 
-The clearest framework for choosing between these three platforms is to match the tool to the task type.
+Perplexity wins on research tasks, ChatGPT wins on generative tasks, and Google wins on local and commerce queries — and over 90% of users in 2026 switch between tools based on context rather than defaulting to one engine (Humai.blog, Feb 2026). The clearest framework for choosing between these three platforms is to match the tool to the task type. Perplexity's 92% accuracy and inline citations make it irreplaceable when you need verifiable facts. ChatGPT's generative depth makes it the tool of choice when you need to produce something — content, code, analysis — rather than simply find something. Google's unmatched index and commerce integrations keep it dominant for physical-world queries that AI-first tools have not yet displaced. The breakdown below maps each task type to the platform that handles it best, drawing on 2026 benchmark data and real-world usage patterns.
 
 ### Research and Academic Work → Perplexity Wins
 
@@ -193,7 +193,7 @@ For most users, one subscription is sufficient. The 90%+ who switch between tool
 
 ## SEO Implications: Zero-Click Searches and Citation Strategies
 
-For content publishers and SEO professionals, the rise of AI search introduces challenges that legacy search optimization does not address.
+Google AI Overviews are directly causing 30-60% reductions in click-through rates on queries where they appear — a structural shift that makes legacy search optimization strategies insufficient for 2026 (OverTheTopSEO, 2026). For content publishers and SEO professionals, the rise of AI search introduces challenges that go far beyond keyword rankings. Three separate platforms now mediate how users discover and consume content, each with distinct ranking signals, citation behaviors, and traffic implications. Google's zero-click problem threatens informational content revenue. Perplexity's citation model creates new referral opportunities for factually rigorous publishers. ChatGPT Search's Bing-based index rewards domain authority over freshness. Optimizing for all three simultaneously requires understanding each platform's underlying logic — and accepting that a single unified SEO strategy no longer covers the territory.
 
 ### The Zero-Click Threat from Google AI Overviews
 

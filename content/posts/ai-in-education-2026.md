@@ -44,7 +44,7 @@ Three forces converged to make 2026 a genuine inflection point:
 
 ## What Can AI Tutors Do That Human Tutors Cannot?
 
-AI tutoring platforms have genuine and significant strengths. Understanding what they do well helps educators deploy them in the right contexts rather than dismissing them outright or adopting them uncritically.
+AI tutoring platforms deliver personalized learning at a scale that was simply impossible before: **Khanmigo now serves millions of students**, many in under-resourced schools where one-on-one human tutoring was never affordable, representing the single most significant democratization of academic support in a generation. AI tutoring platforms have genuine and significant strengths that span three core capabilities—personalization at scale, round-the-clock availability, and instant feedback—each of which addresses a longstanding structural limitation of traditional classroom instruction. Understanding what these platforms do well helps educators deploy them in the right contexts rather than dismissing them outright or adopting them uncritically. The case for AI tutoring is strongest precisely where human instruction has always been weakest: providing individualized attention to every student simultaneously, responding at midnight when a student is stuck, and giving immediate corrective feedback before confusion has time to harden into misconception.
 
 ### How Do AI Tutors Personalize Learning at Scale?
 
@@ -66,7 +66,7 @@ Platforms like Duolingo Max use AI to generate immediate, contextual feedback on
 
 ## What Can Human Tutors Do That AI Tutors Cannot?
 
-Despite the strengths above, a 2025 study by Zheng and Li (arXiv:2509.01914) comparing AI tutoring with human-led sessions found that AI systems followed predictable response patterns and struggled to adjust in real time. Human tutors, by contrast, scaffold learning through instructional questioning and tailored feedback. This finding points to fundamental limitations that current AI systems have not overcome.
+A 2025 study by Zheng and Li (arXiv:2509.01914) found that **AI systems follow predictable response patterns and struggle to adjust in real time**, while human tutors scaffold learning through instructional questioning and genuine, tailored feedback—a finding that points to fundamental limitations that no current AI tutoring system has overcome. These limitations are not engineering problems waiting to be solved with a larger model or a better training dataset; they reflect deeper differences in how human tutors and AI systems understand and respond to learners. Human tutors bring critical thinking development, emotional intelligence, and executive functioning support to their sessions—three capabilities that AI platforms do not yet meaningfully replicate. Understanding these gaps is not an argument against AI tutoring. It is the essential context for deploying AI effectively: in roles where it excels, alongside human teachers who cover the dimensions where AI consistently falls short.
 
 ### Why Do Human Tutors Outperform AI on Critical Thinking?
 
@@ -85,6 +85,8 @@ AI cannot read these signals reliably. A student who is confused and demoralized
 Learning is not just about content knowledge. It is about habits, motivation, organization, and self-regulation. Human tutors support executive functioning — helping students break large tasks into manageable steps, holding them accountable to goals, building study routines, and maintaining the kind of rapport that makes a student want to show up and try. These elements are essentially absent from current AI tutoring systems.
 
 ## Leading AI Tutoring Platforms in 2026: A Comparison
+
+Coursera holds the **top position among AI-powered learning platforms in 2026**, according to platform evaluations cited by AI-Tutor.ai, but the right platform depends almost entirely on your learner profile, subject area, and budget. The five platforms compared below represent the most widely adopted options across K-12, higher education, language learning, and professional development—each with a distinct AI capability and a different pricing model. Khanmigo leads for free K-12 access. Coursera leads for employer-recognized credentials and professional advancement. Duolingo Max leads for language practice. The table and platform profiles below provide the key dimensions you need to choose between them, including the specific AI features each platform uses and where each falls short relative to the others in this comparison.
 
 | Platform | Best For | AI Capability | Price |
 |---|---|---|---|
@@ -118,7 +120,7 @@ Implementation patterns vary significantly by institution type and resource leve
 
 ## What Challenges and Concerns Should Educators Consider?
 
-The University of Illinois identified three central challenges in a 2024 analysis: privacy, accessibility, and fairness. These have not been resolved in 2026.
+The University of Illinois identified three central challenges in a 2024 analysis — privacy, accessibility, and fairness — and none of them have been resolved in 2026, even as AI tutoring adoption has accelerated significantly. A 2024 RAND/PBS study found that 68% of teachers and guardians who expressed concerns about AI in education specifically cited data privacy and the risk of reduced human connection as their top worries. These are not abstract concerns. AI tutoring platforms collect granular behavioral data — every click, pause, and mistake — from students who are often minors. Schools operating in low-bandwidth or under-resourced environments may not be able to deliver AI tools equitably. And the question of whether AI tutoring actually improves learning outcomes, rather than simply engagement metrics, remains insufficiently answered by the research published to date. Educators considering AI adoption must weigh these three dimensions carefully before deployment.
 
 ### What Are the Privacy Risks of AI Tutoring?
 
@@ -158,6 +160,8 @@ The educators, institutions, and policymakers who will succeed in the AI era are
 ---
 
 ## FAQ: AI in Education 2026
+
+The five questions below address the concerns most frequently raised by educators, parents, and administrators evaluating AI tutoring in 2026 — with answers grounded in the latest research, platform data, and institutional guidance. A 2025 study (Zheng & Li, arXiv:2509.01914) found that AI tutors follow predictable response patterns and struggle to adjust dynamically in real time, while human tutors outperform AI on instructional dialogue and emotional scaffolding. The online education market reached $342 billion by 2025, growing at 15–16% annually, and the platforms driving that growth raise genuine questions about outcomes, privacy, and equity that no single vendor has fully answered. These FAQs synthesize the evidence to give educators and families a clear, honest starting point for any conversation about AI-assisted learning. If your question is not covered here, the individual sections above address each topic in greater depth.
 
 ### Can AI tutors fully replace human teachers?
 

@@ -19,6 +19,8 @@ schema: "mastra-ai-typescript-framework-2026"
 
 ## Introduction: Why Mastra Is the TypeScript AI Framework to Watch in 2026
 
+Mastra has accumulated 23,200+ GitHub stars and $35M in funding as of April 2026, making it the most well-resourced TypeScript-native AI agent framework available—and the adoption data suggests it has earned that position. Built by the team behind Gatsby (the React static-site generator that peaked at 50,000+ GitHub stars), Mastra brings production-grade primitives for agents, tools, workflows, RAG, evals, and observability to TypeScript developers who previously had no equivalent to Python's LangChain or CrewAI ecosystems. The timing matters: 60–70% of YC X25 agent startups are building in TypeScript, not Python, according to Mastra CEO Sam Bhagwat. That demand existed before Mastra; Mastra is simply the first framework purpose-built to meet it at a production scale.
+
 The AI agent ecosystem has a Python problem. Not with Python itself—it works fine—but with the fact that most agents ship as web services, and the teams building those services increasingly write TypeScript. Sam Bhagwat, CEO of Mastra, noted on Hacker News that 60–70% of YC X25 agent startups are building in TypeScript, not Python. The tooling hasn't caught up. LangChain, CrewAI, and AutoGen all originated in Python, leaving TypeScript developers either wrapping Python services or cobbling together their own agent infrastructure.
 
 Mastra was built to close that gap.
@@ -50,6 +52,8 @@ The customer list is worth examining because it signals production readiness, no
 That's not a "coming soon" list. Marsh McLennan's agent is in daily production use by over 100,000 people. Brex's agents contributed to a multi-billion-dollar acquisition. These are load-bearing systems.
 
 ## Getting Started: Setting Up Your First Mastra Project
+
+A Mastra project goes from zero to running agent in under five minutes with `npm create mastra@latest`—a single command that scaffolds everything including the interactive dev UI. You need Node.js 18+ and an API key from OpenAI, Anthropic, or Google; the scaffold prompts you to choose your preferred provider during setup. What you get is a TypeScript project with structured directories for agents, tools, workflows, and RAG pipelines—all expressed as typed code with no YAML DSLs or configuration files that generate unreadable output. The framework then auto-discovers and registers everything based on exports, so adding a new agent is as simple as exporting it from the agents directory. Mastra Studio, the local dev UI, starts on port 4111 and gives you a chat interface, workflow visualizer, and trace viewer without any additional configuration.
 
 ### Prerequisites and installation
 
@@ -106,6 +110,8 @@ Mastra Studio runs locally at `http://localhost:4111` and provides:
 Studio is not required in production—it's a dev-time tool. But it replaces the ad-hoc `console.log`-driven debugging loop that most agent developers fall into.
 
 ## Building Your First AI Agent with Mastra
+
+In Mastra, an agent is a typed TypeScript object—a model reference, a system prompt, and a set of tools—that can be defined in under 20 lines of code and immediately tested via Mastra Studio. The framework uses Zod schemas for tool input validation, which serves double duty: the same schema that validates runtime inputs is used to generate the JSON Schema that the LLM receives as its function-calling definition, eliminating the translation layer that causes silent mismatches in other frameworks. Mastra supports model-switching by changing a single line, since it uses the Vercel AI SDK model interface under the hood—any provider that implements that interface works without changing agent logic. Memory is built in, with two distinct primitives—working memory for structured short-term state and semantic recall for retrieving relevant past conversation turns—giving agents context-awareness that persists across a session without overloading the context window.
 
 ### Defining an agent with system prompts and tools
 
@@ -204,6 +210,8 @@ Being model-agnostic matters operationally: you can run evals across models, fal
 
 ## Tools and MCP: Connecting Your Agent to the Real World
 
+Mastra tools use the `createTool` API with Zod input and output schemas, and every tool definition doubles as both a runtime validator and an LLM function-calling specification—meaning a single schema definition covers the full round-trip without manual JSON Schema translation. More significantly, Mastra implements both the client and server sides of MCP (Model Context Protocol), Anthropic's open standard for connecting LLMs to external tools and data sources. This gives Mastra agents access to a growing ecosystem of pre-built MCP servers—GitHub, Slack, filesystem, databases—without custom API integration code. Docker's production deployment demonstrates the pattern at scale: their PR automation agents connect through Mastra's MCPClient to the GitHub MCP server, using standard MCP tools to read diffs, post comments, and manage labels, with the entire integration reducible to a few lines of TypeScript configuration.
+
 ### Built-in tool types in Mastra
 
 Mastra's `createTool` API is the foundational primitive. Every tool has an `id`, a `description` (used in the LLM's function-calling prompt), an `inputSchema` (Zod), and an `execute` function:
@@ -281,6 +289,8 @@ app.post("/webhook/github", async (req, res) => {
 ```
 
 ## Workflows: Orchestrating Complex Agent Tasks
+
+Mastra workflows provide deterministic control flow for multi-step processes, complementing agents that handle open-ended LLM reasoning—and the distinction matters in production because most real-world systems need both. A workflow in Mastra is a typed DAG of steps, each with an input schema, output schema, and execute function; steps can run sequentially, in parallel, or conditionally depending on prior step output. Docker's PR automation pipeline is a canonical example: three specialized sub-agents are orchestrated by a workflow that triggers on a GitHub webhook, with each agent handling one narrowly scoped responsibility. That design makes failures auditable—if the posted comment is wrong, you check agent 2, not the entire pipeline. Workflows also support nesting, so you can compose complex processes from smaller independently testable workflow units, and each nested workflow maintains its own state and can be run in isolation during development.
 
 ### When to use workflows vs agents
 
@@ -367,6 +377,8 @@ Workflows can also nest: a step can invoke another workflow as a sub-routine. Th
 
 ## RAG with Mastra: Giving Your Agent Knowledge
 
+Mastra's built-in RAG module ships with embedding, vector search, query transformation, hybrid search, and re-ranking—all configurable via constructor options without external integrations. This matters because most agent frameworks treat RAG as an exercise left for the developer: you wire together an embedding model, a vector store, a retrieval function, and a prompt template yourself. Mastra provides the entire pipeline as a first-class primitive, and the `rag.asTool()` method wraps any RAG pipeline as a Mastra tool that any agent can call directly. Vector store support is vendor-agnostic: Pinecone, Elasticsearch, pgvector, and other stores are swappable without changing agent code. Elastic's published walkthrough demonstrates the pattern—indexing documents into Elasticsearch with dense vector fields, querying via the Mastra RAG module, and generating answers through a RAG-enabled agent—all in a single TypeScript codebase with shared types across the data layer and the agent interface.
+
 ### Embedding and vector search support
 
 Mastra includes built-in embedding and vector search through its RAG module. You define an embedder and a vector store, then index documents:
@@ -445,6 +457,8 @@ Always cite the source document.`,
 The `rag.asTool()` method wraps the RAG pipeline as a Mastra tool, making it available to any agent. The Elastic integration demonstrates that Mastra's RAG layer is vendor-agnostic—you can swap Pinecone for Elasticsearch for pgvector without changing agent code.
 
 ## Productionizing: Evals, Observability, and Guardrails
+
+Mastra wires evals, OpenTelemetry tracing, and input/output guardrails into every framework primitive—a meaningful differentiator, since most agent frameworks leave all three as integration exercises. Every LLM call, tool invocation, and workflow step is automatically traced and surfaced in Mastra Studio with token usage, latency, tool call sequences, and memory retrieval scores. For production monitoring, Mastra exports to any OTel-compatible backend (Datadog, Grafana, Honeycomb) with a few lines of configuration. The eval framework supports two evaluation modes: model-graded assessments for open-ended quality measurement and rule-based deterministic checks for guardrails enforcement. This combination—observability built in, not bolted on—is the key reason enterprises like Marsh McLennan could confidently scale a Mastra-based agent to 100,000+ daily users, because the infrastructure to measure and monitor quality was available from day one rather than added after incidents surfaced.
 
 ### Running model-graded and rule-based evals
 
@@ -544,6 +558,8 @@ The dataset feature is particularly useful: you can capture production agent int
 
 ## Deployment: From Dev to Production
 
+Mastra auto-generates a REST API from your agent and workflow definitions with no manual route wiring—`createServer(mastra)` exposes generate, stream, and workflow endpoints directly from your Mastra instance. The deployment surface covers the full spectrum from self-hosted to fully managed: you can deploy the auto-generated server to any Node.js host, integrate it as middleware into Next.js, Express, or Hono applications, or use the Mastra Platform for a hosted memory gateway and managed deployment with persistent cross-session state. Pricing on the managed platform starts at free (3 agents, 10,000 memory records), scales to $250 per team per month for unlimited agents and 1 million memory records on the Teams tier, and offers enterprise contracts with dedicated infrastructure and SLAs. The self-hosted path has no artificial limits—you control the infrastructure, and the framework's MIT-compatible Apache 2.0 license imposes no usage restrictions.
+
 ### Mastra Server: deploying as a REST API
 
 Mastra generates a server that exposes your agents, tools, and workflows as REST endpoints:
@@ -630,6 +646,8 @@ The free tier is genuinely usable for prototyping and personal projects. The Tea
 
 ## Mastra vs Other AI Frameworks: TypeScript-First Comparison
 
+Mastra's primary competitors—LangGraph and CrewAI—are Python frameworks, which is the most fundamental distinction in 2026 when 60–70% of YC X25 agent startups choose TypeScript. The operational cost of wrapping a Python framework in a Docker service and communicating via HTTP is real: it adds serialization overhead, prevents sharing types across your stack, requires separate test infrastructure, and adds a deployment dependency that TypeScript teams typically don't want. Beyond language, Mastra includes built-in evals, a RAG module, OpenTelemetry observability, and MCP client/server support—capabilities that require third-party integrations (LangSmith, custom retrieval chains) or are simply absent in LangGraph and CrewAI. The Vercel AI SDK is a complementary rather than competing tool: Mastra uses it under the hood for LLM calls and works alongside it in stacks that use the AI SDK for frontend streaming.
+
 ### Mastra vs LangGraph vs CrewAI
 
 | Feature | Mastra | LangGraph | CrewAI |
@@ -671,6 +689,8 @@ Skip Mastra when:
 
 ## Real-World Examples and Case Studies
 
+The four most instructive Mastra deployments in production are Docker's event-driven PR automation (which processes GitHub webhooks with no human in the loop), Elastic's agentic RAG assistant (built in a single TypeScript codebase spanning frontend, backend, and vector search), Marsh McLennan's enterprise search agent (serving 100,000+ users daily in production), and Replit's Agent 3 (which can scaffold and deploy new Mastra agents from a natural-language description). Each case study illustrates a different production pattern: event-driven pipelines, full-stack TypeScript, enterprise scale, and meta-level agent composition. Together they confirm that Mastra handles the operational requirements—observability, memory management, workflow orchestration, and reliable tool execution—that separate production deployments from demos. Marsh McLennan's deployment alone serves over 100,000 users every day, making it one of the largest known Mastra-based rollouts in any industry. The details below explain what each team built and which Mastra primitives made the difference.
+
 ### Docker: Event-driven PR management agent
 
 Docker built an event-driven agent system that responds to GitHub webhooks. When a PR is opened, their Mastra workflow:
@@ -697,7 +717,7 @@ Replit's Agent 3 can scaffold and deploy Mastra agents. This meta-pattern—an A
 
 ## Conclusion and Next Steps
 
-Mastra addresses a real gap in the AI agent tooling ecosystem: a production-grade, TypeScript-native framework with first-class support for the primitives that matter—agents, tools, workflows, RAG, evals, and observability. The enterprise adoption numbers (100k+ daily users at Marsh McLennan, Brex's $5.1B acquisition involvement) confirm that it's not just developer-friendly but production-ready.
+Mastra addresses a real gap in the AI agent tooling ecosystem: a production-grade, TypeScript-native framework with first-class support for the primitives that matter—agents, tools, workflows, RAG, evals, and observability. The enterprise adoption numbers (100k+ daily users at Marsh McLennan, Brex's $5.1B acquisition involvement) confirm that it's not just developer-friendly but production-ready. The framework's 23,200+ GitHub stars and $35M in total funding reflect genuine developer adoption rather than marketing momentum—a distinction that matters when choosing infrastructure you'll depend on for years. For TypeScript teams evaluating AI agent frameworks in 2026, Mastra is the clearest option: it covers the full stack from local development through production deployment, it integrates with the tools you already use, and its growing community and enterprise backing make it a safe long-term bet.
 
 ### Key takeaways
 

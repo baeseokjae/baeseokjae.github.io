@@ -1,8 +1,8 @@
 ---
 title: "Claude Code vs Codex CLI vs Gemini CLI 2026: Terminal AI Agents Compared"
-date: 2026-04-23T01:11:40+00:00
-tags: ["claude-code", "codex-cli", "gemini-cli", "terminal-ai", "ai-coding-tools"]
-description: "Claude Code, Codex CLI, Gemini CLI — 2026년 터미널 AI 에이전트 3종을 벤치마크, 가격, 실사용 기준으로 비교합니다."
+date: 2026-05-08T00:00:00+00:00
+tags: ["claude-code","codex-cli","gemini-cli","terminal-ai","comparison"]
+description: "Claude Code, Codex CLI, and Gemini CLI compared on benchmarks, pricing, setup, and real-world performance for 2026."
 draft: false
 cover:
   image: "/images/claude-code-codex-cli-gemini-cli-2026.png"
@@ -11,179 +11,68 @@ cover:
 schema: "schema-claude-code-codex-cli-gemini-cli-2026"
 ---
 
-Claude Code, Codex CLI, Gemini CLI는 2026년 현재 가장 많이 쓰이는 터미널 AI 에이전트 세 가지다. 세 도구 모두 자연어로 코드를 작성·수정·디버깅하지만, 기반 모델·컨텍스트 창·승인 방식·가격에서 명확한 차이가 있다. 이 글은 실제 벤치마크와 엔터프라이즈 사례를 기반으로 어떤 도구가 어떤 워크플로에 맞는지 직접적으로 알려준다.
+## Claude Code vs Codex CLI vs Gemini CLI 2026: Terminal AI Agent Overview
 
-## 빠른 비교표: Claude Code vs Codex CLI vs Gemini CLI
+The terminal AI agent market crossed $8.5 billion in 2026, and three tools account for almost all developer attention: Claude Code, Codex CLI, and Gemini CLI. Claude Code commands 75% of coding-agent social media discussions compared to Codex CLI's 22% and Gemini CLI's 3%, yet raw mindshare does not determine which tool belongs in your workflow. Each agent accepts natural language to write, edit, and debug code, but they diverge sharply on underlying models, context window size, approval mechanics, licensing, and pricing. Claude Code is proprietary TypeScript built on Anthropic's Claude models. Codex CLI ships as Rust and TypeScript under Apache 2.0, defaults to GPT-5.3 Codex, and integrates natively with GitHub Actions. Gemini CLI is Apache 2.0 TypeScript backed by Gemini 2.5 Pro with a 1M-token context and a genuine free tier of 1,000 requests per day. This comparison covers benchmarks, real-world test timings, configuration files, pricing, and enterprise use cases so you can make a concrete decision without reading five separate documentation sites.
 
-Claude Code, Codex CLI, Gemini CLI는 각각 다른 강점을 지닌 터미널 AI 에이전트로, 한눈에 비교하면 어디서 차이가 나는지 즉시 파악할 수 있다. Claude Code는 Anthropic의 Claude Opus/Sonnet 모델 위에 구축된 클로즈드 소스 도구로, 200K–1M 토큰 컨텍스트와 SWE-Bench 80.8% 점수를 자랑한다. 2026년 기준 소셜 미디어 코딩 에이전트 논의의 75%를 차지하며, 출시 4개월 만에 115,000명의 개발자와 주당 1억 9,500만 줄의 코드 처리를 달성했다. Codex CLI는 OpenAI가 제공하는 Apache 2.0 오픈소스 도구로, GPT-5.3 Codex 모델 기반이며 Terminal-Bench 2.0에서 77.3%를 기록해 단일 파일 작업과 CI/CD 파이프라인에서 강점을 보인다. GitHub 스타 61,000개로 활발한 오픈소스 커뮤니티를 갖추고 있다. Gemini CLI는 Google이 제공하는 Apache 2.0 오픈소스 도구로, 1M 토큰 컨텍스트와 하루 1,000회 무료 요청을 지원하며 Google Search Grounding을 통해 최신 라이브러리 문서를 실시간으로 참조할 수 있다. 2026년 AI 코딩 어시스턴트 시장은 85억 달러 규모로 성장했으며, 개발자의 84%가 이미 이런 도구를 사용하고 있다.
+## Claude Code: Anthropic's Agentic Terminal Tool
 
-| 항목 | Claude Code | Codex CLI | Gemini CLI |
+Claude Code reached 115,000 active developers and 195 million lines of code processed per week within four months of its public launch, making it the fastest-adopted terminal AI agent on record. It is built in TypeScript, ships as a proprietary closed-source tool, and runs on Anthropic's Claude Opus 4.6 or Claude Sonnet 4.6 depending on the plan tier. The `/model` command switches between them at runtime. Opus 4.6 extends the context window up to 1M tokens, which makes it practical for navigating large monorepos without losing thread. The standard tier offers 200K context. Claude Code scored 80.8% on SWE-Bench — the benchmark that measures how accurately an agent resolves real GitHub issues — the highest published score among the three tools compared here. Its core design philosophy is defensive-first: every file modification and shell command prompts for user confirmation by default, and the `--dangerously-skip-permissions` flag that disables this is explicitly labeled as dangerous in the documentation. CLAUDE.md provides project-level instructions read on startup. Deep git integration means Claude Code can trace blame, read commit history, and understand refactoring context across branches without additional configuration. The Compaction API preserves critical context across long sessions so that a 500-file refactoring does not silently lose earlier findings as the context window fills.
+
+## Codex CLI: OpenAI's GitHub-Native Terminal Agent
+
+Codex CLI reached 61,000 GitHub stars and 8,000 forks, establishing the largest open-source contributor base among these three tools, and it achieved Terminal-Bench 2.0's top score of 77.3% — beating Claude Code's 65.4% on that specific benchmark. It is built in Rust and TypeScript, licensed under Apache 2.0, and defaults to OpenAI's GPT-5.3 Codex model, which delivers 25% faster inference than its predecessor. The 200K context window covers most single-repository workflows. Codex CLI was used in its own construction — the OpenAI team built the tool with earlier versions of the tool itself — which serves as a meaningful dogfooding credential. Native GitHub Actions support via the official `openai/codex-action` is the feature that most differentiates it from the other two. That action enables PR creation, code review, automatic patch application, and bug fixes as first-class pipeline steps. Asynchronous cloud execution lets long-running jobs run off the developer's machine and return results via webhook, which is critical for CI environments where blocking a runner for 20 minutes is unacceptable. AGENTS.md handles project-level instructions. The three-tier approval model — Suggest, Auto-Edit, and Full Auto — gives teams a structured path to increasing automation trust incrementally rather than toggling a binary on/off flag.
+
+## Gemini CLI: Google's 1M-Context Terminal Agent with Search Grounding
+
+Gemini CLI is the only tool in this comparison with a genuine free tier: as of March 2026, Google accounts receive 1,000 requests per day and 60 requests per minute at no cost, backed by the full Gemini 2.5 Pro model with a 1M-token context window. That free access makes it the lowest-friction entry point for individual developers and small teams. The tool is written in TypeScript, licensed under Apache 2.0, and has accumulated approximately 60,000 GitHub stars and 10,000 forks. Its defining technical differentiator is Google Search Grounding — the ability to pull live documentation, changelogs, and library references during a coding session. When a dependency releases a breaking API change, Gemini CLI can surface the updated docs in context rather than hallucinating against training data that may be months out of date. GEMINI.md handles project-specific instructions. Google Cloud workflows get the tightest integration: BigQuery, Vertex AI, and Cloud Build can be invoked more naturally here than through the other two tools. The tradeoff is code accuracy: independent tests show an error rate roughly 40–50% higher than Claude Code on complex multi-file tasks. For greenfield exploration, documentation-heavy queries, or any workflow where currency of information matters more than precision of code generation, Gemini CLI's search grounding is a meaningful advantage.
+
+## Benchmark Comparison: SWE-Bench, Terminal-Bench, and Real-World Tests
+
+SWE-Bench measures how well an agent resolves real GitHub issues in open-source repositories, and Claude Code holds the top published score at 80.8% — a figure that reflects its strength in multi-file codebase comprehension and long-horizon reasoning rather than raw token throughput. Terminal-Bench 2.0 measures single-command completion rate in a sandboxed terminal environment, and Codex CLI leads that ranking at 77.3% versus Claude Code's 65.4%. Gemini CLI has not published comparable scores on either benchmark. The two benchmarks test different competencies, and understanding which maps to your actual work matters more than treating either as a universal quality signal. In controlled real-world tests using an identical task — "add input validation and unit tests to this Express.js endpoint" — Claude Code took approximately 90 seconds and asked the most clarifying questions before writing code. Codex CLI completed the same task in roughly 45 seconds with fewer clarifying prompts. Gemini CLI finished in about 60 seconds and returned live Node.js documentation from npm as part of its response. Claude Code produced the fewest syntax errors across the multi-file changes. Codex CLI was fastest and handled the isolated function correctly. Gemini CLI's output reflected the most current library API signatures due to search grounding. If your primary work is large codebase refactoring, SWE-Bench is the relevant signal. If it is shell script automation and pipeline tasks, Terminal-Bench is. Neither benchmark captures the full picture alone.
+
+## Setup and Configuration: CLAUDE.md vs AGENTS.md vs GEMINI.md
+
+All three tools use a project-root markdown file to receive codebase context and standing instructions, and the quality of that file is arguably the single highest-leverage configuration decision you make — a well-written instructions file consistently improves output quality more than switching between these tools. Claude Code reads CLAUDE.md, Codex CLI reads AGENTS.md, and Gemini CLI reads GEMINI.md. Without any instructions file, each agent treats the codebase as unfamiliar territory and will ask redundant questions or make assumptions about conventions that contradict your team's standards. CLAUDE.md is best structured around architecture overview, file naming conventions, forbidden commands (for example, never `git push --force`), and test-run commands. AGENTS.md should define the scope of tasks the agent is authorized to complete autonomously versus tasks that require human review — this boundary becomes critical in Full Auto mode where an imprecise boundary leads to unintended changes. GEMINI.md benefits from explicitly scoping which external sources the agent should query through search grounding; without that constraint it may pull irrelevant documentation. All three tools are installed via npm (`npm install -g @anthropic-ai/claude-code`, `npm install -g @openai/codex`, `npm install -g @google/gemini-cli`), require Node.js 18 or later, and run on macOS, Linux, and Windows under WSL2. Authentication differs: Claude Code requires an Anthropic Pro plan and `ANTHROPIC_API_KEY` or `claude login`. Codex CLI needs a ChatGPT Plus subscription or `OPENAI_API_KEY`. Gemini CLI authenticates with a Google account via `gemini auth login` and grants free-tier access immediately, or accepts `GEMINI_API_KEY` for API key mode. In multi-tool environments, maintaining all three instruction files and sourcing shared content from a common file reduces drift between them.
+
+## Pricing: Free Tier, Subscriptions, and API Costs
+
+Gemini CLI's free tier — 1,000 requests per day using a full Gemini 2.5 Pro model with 1M context — has no real equivalent among the three tools, and for individual developers or teams doing exploratory work it changes the cost calculus entirely. Claude Code Pro costs $20 per month and does not include a free tier. Codex CLI requires a ChatGPT Plus subscription at $20 per month, also without a free tier. Both Claude Code and Codex CLI support API-key mode with usage-based billing, which is cheaper for low-volume use and more expensive for high-volume use compared to the flat subscription. Claude Code's Max plan enables higher usage limits and direct API billing for teams that exceed Pro plan quotas. Enterprise tiers exist across all three: Claude for Enterprise (Anthropic), ChatGPT Enterprise (OpenAI), and Google Workspace AI (Google). Each enterprise tier adds data isolation guarantees and removes the training-data usage that applies to some consumer plans. For a ten-person engineering team using Claude Code Pro, the monthly cost is $200. The same team using Gemini CLI's free tier for exploration tasks and Claude Code selectively for complex refactoring can cut that cost significantly. Codex CLI's API-key mode billed per token is the most cost-predictable option for CI/CD usage patterns where volume is measurable in advance. The decision framework is straightforward: start with Gemini CLI free tier to evaluate terminal AI agents with no financial commitment, move to Claude Code Pro when multi-file accuracy becomes the bottleneck, and add Codex CLI when GitHub Actions integration is the priority.
+
+| Plan | Claude Code | Codex CLI | Gemini CLI |
 |------|------------|-----------|------------|
-| 기반 모델 | Claude Opus 4.6 / Sonnet 4.6 | GPT-5.3 Codex | Gemini 2.5 Pro |
-| 컨텍스트 창 | 200K–1M 토큰 | 400K 입력 / 128K 출력 | 1M 토큰 |
-| 라이선스 | 독점(클로즈드) | Apache 2.0 오픈소스 | Apache 2.0 오픈소스 |
-| 무료 티어 | 없음 | 없음(ChatGPT Plus 필요) | 1,000 req/일 |
-| 가격 | $20/월 Pro | $20/월 Plus | 무료 / $20/월 AI Pro |
-| SWE-Bench | 80.8% | 미측정 | 미측정 |
-| Terminal-Bench 2.0 | 65.4% | 77.3% | 미측정 |
-| MCP 지원 | 예 | 예 | 예 |
-| CI/CD 통합 | 제한적 | GitHub Actions 네이티브 | 제한적 |
-| 설정 파일 | CLAUDE.md | AGENTS.md | GEMINI.md |
+| Free tier | None | None | 1,000 req/day |
+| Base paid | $20/month (Pro) | $20/month (Plus) | $20/month (AI Pro) |
+| Enterprise | Claude for Enterprise | ChatGPT Enterprise | Google Workspace AI |
+| API billing | Anthropic API | OpenAI API | Google AI Studio |
+| Usage-based | Yes (Max plan) | Yes (API key) | Yes (API key) |
 
-## 기반 AI 모델과 컨텍스트 창
+## Which Terminal AI Agent Should You Choose?
 
-각 터미널 AI 에이전트는 서로 다른 기반 모델을 사용하며, 이 선택이 코드 품질과 긴 세션 성능에 직접적인 영향을 미친다. Claude Code는 Anthropic의 Claude Opus 4.6 또는 Sonnet 4.6 모델을 사용하며 `/model` 명령으로 전환할 수 있다. Opus 4.6은 1M 토큰 컨텍스트를 지원해 대규모 모노레포 탐색에 유리하고, Compaction API를 통해 긴 대화 세션에서도 중요 컨텍스트를 잃지 않는다. Codex CLI는 OpenAI의 GPT-5.3 Codex를 기본값으로 사용하며, 400K 입력 / 128K 출력 창을 제공한다. Terminal-Bench 2.0에서 77.3%로 Claude Code(65.4%)를 앞서며 단일 파일 작업과 빠른 실행에 강점을 보인다. Gemini CLI는 Gemini 2.5 Pro 기반으로 1M 토큰 컨텍스트를 기본 제공하며, 세 도구 중 유일하게 Google Search Grounding을 통해 최신 라이브러리 문서를 실시간으로 참조할 수 있어 빠르게 변화하는 기술 스택에서 유리하다. 컨텍스트 창 크기만으로 도구를 선택하면 안 된다. 실제 코드 품질은 모델 아키텍처와 훈련 데이터에 더 크게 좌우되며, 자신의 주요 작업 유형에 맞는 벤치마크 점수가 더 신뢰할 수 있는 지표다.
-
-## 설치, 설정, 시작하기
-
-세 터미널 AI 에이전트 모두 Node.js 환경에서 npm으로 설치하며, 각각 다른 인증 방식과 설정 파일을 사용한다. Claude Code는 Anthropic Pro 플랜($20/월)이 필요하고, Codex CLI는 OpenAI ChatGPT Plus 구독 또는 API 키가 필요하며, Gemini CLI는 구글 계정만 있으면 무료로 즉시 시작할 수 있다. Node.js 18 이상이 설치되어 있어야 하며, 세 도구 모두 macOS, Linux, Windows(WSL2)를 공식 지원한다. 설치 후 각 도구는 프로젝트 루트에서 실행하는 것을 권장하며, 프로젝트별 설정 파일(CLAUDE.md, AGENTS.md, GEMINI.md)을 미리 준비해두면 첫 실행부터 더 나은 결과를 얻을 수 있다. Gemini CLI는 세 도구 중 진입 장벽이 가장 낮아 학습 목적이나 소규모 프로젝트에 적합하고, Claude Code는 설정이 간단하면서도 엔터프라이즈 수준의 기능을 즉시 제공한다. 2026년 현재 세 도구 모두 활발하게 업데이트되며, npm 패키지 버전을 최신 상태로 유지하는 것이 새 기능과 버그 수정을 가장 빠르게 받는 방법이다. 세 도구의 설치와 초기 설정 방법을 단계별로 설명한다.
-
-### Claude Code 설치
-
-Claude Code는 `npm install -g @anthropic-ai/claude-code`로 설치한다. Pro($20/월) 또는 Max 플랜이 필요하며, `ANTHROPIC_API_KEY` 환경 변수를 설정하거나 `claude login`으로 인증한다. 프로젝트 루트에 `CLAUDE.md` 파일을 만들면 코드베이스 컨텍스트와 커스텀 지시사항을 제공할 수 있다.
-
-```bash
-npm install -g @anthropic-ai/claude-code
-claude login
-# 또는
-export ANTHROPIC_API_KEY=sk-ant-...
-claude
-```
-
-### Codex CLI 설치
-
-Codex CLI는 `npm install -g @openai/codex`로 설치하며, ChatGPT Plus($20/월) 구독 또는 OpenAI API 키가 필요하다. `OPENAI_API_KEY` 환경 변수를 설정하면 된다. `AGENTS.md` 파일로 커스텀 지시사항을 제공할 수 있으며, GitHub Actions 통합은 공식 `openai/codex-action`으로 바로 설정 가능하다.
-
-```bash
-npm install -g @openai/codex
-export OPENAI_API_KEY=sk-...
-codex
-```
-
-### Gemini CLI 설치
-
-Gemini CLI는 `npm install -g @google/gemini-cli`로 설치하며, Google 계정으로 로그인하면 무료 티어(하루 1,000 req)를 즉시 사용할 수 있다. `GEMINI_API_KEY`를 설정하면 API 키 모드로 전환되고, `GEMINI.md`로 커스텀 지시사항을 추가한다.
-
-```bash
-npm install -g @google/gemini-cli
-gemini auth login
-# 또는
-export GEMINI_API_KEY=AIza...
-gemini
-```
-
-## 승인 모드와 안전성: 세 가지 철학
-
-터미널 AI 에이전트의 승인 모드는 단순한 UX 설정이 아니라 보안과 자율성 사이의 핵심 트레이드오프를 반영하며, 세 도구는 서로 다른 철학을 채택하고 있다. Claude Code는 기본적으로 모든 파일 수정과 셸 명령에 대해 사용자 확인을 요청하는 방어적 접근 방식을 취한다. 위험도에 따라 각 작업을 개별 승인하며, `--dangerously-skip-permissions` 플래그로 완전 자동 모드를 활성화할 수 있지만 프로덕션 환경에서는 강력히 권장하지 않는다. Codex CLI는 `Suggest`(제안만), `Auto-Edit`(파일 편집 자동, 명령 승인 필요), `Full Auto`(모든 작업 자동) 세 단계의 점진적 신뢰 모델을 제공해 사용자가 신뢰 수준을 단계적으로 높일 수 있다. Gemini CLI는 구성 가능한 신뢰 모드와 함께 `--yolo` 플래그로 완전 자동 실행이 가능하며, 개인 개발자나 실험 환경에서 빠른 반복이 필요할 때 유용하다. AI 코딩 도구를 사용하는 개발자의 84%가 실제로 신뢰하는 비율은 29%에 불과하다는 2026년 조사 결과는, 편리성보다 신중한 승인 모드 설계가 실제 신뢰 구축에 더 중요하다는 사실을 보여준다. 팀에서 처음 도입할 때는 Claude Code의 방어적 기본값 또는 Codex CLI의 `Suggest` 모드에서 시작해 점진적으로 자동화 수준을 높이는 것이 안전하다.
-
-## 코드 품질과 벤치마크: SWE-Bench, Terminal-Bench, 실전 테스트
-
-터미널 AI 에이전트의 코드 품질을 평가하는 가장 신뢰할 수 있는 지표는 SWE-Bench(실제 GitHub 이슈 해결)와 Terminal-Bench(터미널 작업 완수율)이며, 두 벤치마크는 서로 다른 능력을 측정하기 때문에 함께 봐야 완전한 그림이 나온다. Claude Code는 SWE-Bench 버그 수정에서 80.8%로 세 도구 중 가장 높은 점수를 기록하며, 복잡한 다단계 워크플로에서 문법 오류가 가장 적다. 이는 다중 파일 코드베이스를 이해하고 일관된 변경을 적용하는 능력을 반영한다. Codex CLI는 Terminal-Bench 2.0에서 77.3%를 기록해 Claude Code(65.4%)를 앞선다. 단일 파일 작업과 빠른 실행(~45초)에서 강점을 보이며, CI/CD 파이프라인에서 반복적인 단순 작업 자동화에 최적화되어 있다. Gemini CLI는 Claude 대비 약 40–50% 높은 오류율을 보이지만, 원시 처리량과 속도에서 호평을 받는다. Google Search Grounding 덕분에 최신 API 변경이나 새 라이브러리 문서를 실시간으로 참조해 최신성이 중요한 작업에서 돋보인다. 실전 테스트에서 Claude Code는 가장 꼼꼼하게 질문을 던지며 약 90초, Codex CLI는 가장 빠른 45초, Gemini CLI는 약 60초가 소요된다.
-
-### 어떤 벤치마크를 믿어야 하는가?
-
-SWE-Bench는 다중 파일 코드베이스 이해도를 측정하므로 Claude Code에 유리하고, Terminal-Bench는 단일 명령 완수율을 측정하므로 Codex CLI에 유리하다. 실제 워크플로는 두 가지를 모두 포함하므로 자신의 주요 작업 유형에 맞는 벤치마크를 기준으로 삼아야 한다. 다중 파일 리팩토링이 주 업무라면 SWE-Bench, 터미널 스크립트 자동화가 주 업무라면 Terminal-Bench를 우선 참고하라.
-
-## 다중 파일 편집과 코드베이스 이해
-
-다중 파일 편집과 대규모 코드베이스 이해는 세 도구 중 Claude Code가 가장 강점을 보이는 영역으로, 전체 레포지토리를 탐색하고 관련 파일을 자동으로 찾아 일관된 변경을 적용하는 능력에서 경쟁 도구를 앞선다. 1M 토큰 컨텍스트(Opus 4.6)와 Compaction API를 결합해 수백 개 파일에 걸친 리팩토링에서도 맥락을 잃지 않는다. Stripe는 Claude Code를 1,370명의 엔지니어에게 배포해 10,000줄 규모의 Scala→Java 마이그레이션을 4일 만에 완료했다. 수동 작업으로는 약 10인·주가 필요한 작업이었다. Wiz는 50,000줄 규모의 Python→Go 마이그레이션을 약 20 활성 시간 만에 처리했다. Ramp는 Claude Code를 인시던트 대응 워크플로에 통합해 해결 시간을 80% 단축했다. Codex CLI는 단일 파일 변경과 격리된 함수 수정에서 가장 효율적이다. Gemini CLI의 1M 컨텍스트는 대형 파일 분석에 유리하지만, 다중 파일 코드베이스 탐색에서는 Claude Code보다 일관성이 낮다는 평가가 많다. 대규모 마이그레이션이나 레거시 코드 현대화가 필요한 팀이라면 Claude Code를 우선 고려해야 한다.
-
-## CI/CD 통합과 배포 워크플로
-
-CI/CD 통합은 세 도구 중 Codex CLI가 가장 성숙한 지원을 제공하며, 공식 GitHub Action과 비동기 클라우드 실행 모드를 통해 코딩 작업을 배포 파이프라인에 직접 내장할 수 있는 유일한 도구다. Codex CLI의 `openai/codex-action`은 풀 리퀘스트 생성, 코드 리뷰, 자동 수정, 버그 패치를 GitHub Actions 워크플로에 단계로 추가할 수 있게 해준다. 비동기 클라우드 실행 모드는 CI 환경에서 장시간 작업을 블로킹 없이 처리하며, 결과를 웹훅으로 받는다. Claude Code는 공식 CI/CD 액션이 없지만 API를 통한 스크립트 기반 통합이 가능하며, Ramp처럼 인시던트 대응 자동화에 활용하는 사례가 많다. Gemini CLI는 Google Cloud Build와 연동할 수 있지만 GitHub Actions 수준의 네이티브 지원은 아직 없다. 실제 팀에서는 Codex CLI를 PR 자동 검토·수정에, Claude Code를 복잡한 버그 추적에 병행 사용하는 하이브리드 전략이 가장 효율적으로 평가받는다. GitHub 기반 팀이라면 Codex CLI의 네이티브 CI/CD 통합이 가장 빠른 자동화 경로를 제공한다.
-
-### Codex CLI GitHub Actions 설정 예시
-
-```yaml
-name: Codex Review
-on: [pull_request]
-jobs:
-  codex:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: openai/codex-action@v1
-        with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          prompt: "Review this PR for bugs and suggest fixes"
-          approval-mode: auto-edit
-```
-
-## MCP 지원과 확장성
-
-Model Context Protocol(MCP)은 AI 에이전트가 외부 데이터 소스와 도구를 통합하는 표준 방식으로, Claude Code, Codex CLI, Gemini CLI 세 도구 모두 MCP를 공식 지원한다. MCP를 사용하면 데이터베이스, Slack, GitHub, Jira, Notion, 사내 API 등 어떤 외부 시스템도 AI 에이전트의 컨텍스트에 실시간으로 공급할 수 있으며, 2026년 기준 수백 개의 공개 MCP 서버가 npm에 게시되어 개발팀이 즉시 활용할 수 있다. Claude Code는 `.claude/settings.json`의 `mcpServers` 섹션에서 MCP 서버를 등록하며, Slack 메시지 읽기·GitHub PR 조회·데이터베이스 쿼리를 자연어 명령으로 트리거할 수 있다. Codex CLI는 `codex.config.json`에서, Gemini CLI는 `gemini.config.json`에서 동일한 방식으로 MCP 서버를 설정한다. 세 도구가 동일한 MCP 표준을 구현하므로 한 번 구축한 MCP 서버는 세 도구 모두에서 재사용할 수 있다는 점이 핵심 장점이다. 팀에서 이미 MCP 서버를 운영 중이라면, 도구를 전환하더라도 MCP 서버를 다시 구축할 필요가 없다. MCP 생태계는 커뮤니티 기여를 통해 빠르게 성장 중이다.
-
-## 커스텀 지시사항: CLAUDE.md vs AGENTS.md vs GEMINI.md
-
-CLAUDE.md, AGENTS.md, GEMINI.md는 각 터미널 AI 에이전트에 프로젝트별 컨텍스트와 지시사항을 제공하는 마크다운 파일로, 이 파일의 품질이 에이전트 출력 품질을 결정하는 데 가장 큰 단일 변수 중 하나다. CLAUDE.md는 Claude Code용으로, 코드베이스 아키텍처·코딩 컨벤션·금지 명령어·테스트 실행 방법을 기술하는 데 최적화되어 있다. 파일이 없으면 Claude Code는 코드베이스를 처음 만나는 외부 컨설턴트처럼 작동한다. AGENTS.md는 Codex CLI용으로, 에이전트가 수행할 작업의 범위와 제약을 명시하는 데 초점을 맞춘다. 자동화 가능한 작업과 반드시 사람이 검토해야 하는 작업의 경계를 명확히 기술하면 Full Auto 모드에서 발생하는 의도치 않은 변경을 줄일 수 있다. GEMINI.md는 Gemini CLI용으로, Google Search Grounding과 함께 사용할 컨텍스트를 제공하는 데 유리하다. 다중 도구 환경에서는 세 파일을 모두 유지하고, 공통 내용은 별도 파일에서 참조하는 패턴을 권장한다.
-
-```markdown
-# CLAUDE.md 예시
-
-**아키텍처**
-- 모노레포: packages/api, packages/web, packages/shared
-- 주요 언어: TypeScript, Python
-- 테스트: `pnpm test` (전체), `pnpm test:unit` (단위)
-
-**금지 사항**
-- `git push --force` 절대 금지
-- `.env` 파일 수정 전 확인 필수
-
-**코딩 컨벤션**
-- 함수명: camelCase
-- 상수: SCREAMING_SNAKE_CASE
-```
-
-## 가격 및 무료 티어 비교
-
-가격 정책은 팀 규모와 사용 패턴에 따라 총소유비용(TCO)에 큰 차이를 만들며, 세 도구의 요금 구조는 상당히 다르다. Gemini CLI는 세 도구 중 유일하게 진정한 무료 티어를 제공한다. Google 계정만 있으면 하루 1,000 req, 분당 60 req를 무료로 사용할 수 있으며, 1M 토큰 컨텍스트를 갖춘 Gemini 2.5 Pro가 기반이다. 개인 개발자나 소규모 팀이 비용 없이 시작하기에 가장 낮은 진입 장벽을 제공한다. Claude Code Pro와 Codex CLI Plus는 모두 월 $20로 동일한 기본 가격이지만, Claude Code는 API 직접 호출과 Max 플랜을 통한 사용량 기반 청구가 가능해 고강도 사용자에게 더 유연하다. 10명 팀이 모두 Claude Code Pro를 사용하면 월 $200이지만, Gemini CLI 무료 티어로 소규모 프로젝트를 처리하고 Claude Code를 복잡한 작업에만 활용하는 하이브리드 전략으로 비용을 최적화할 수 있다.
-
-| 플랜 | Claude Code | Codex CLI | Gemini CLI |
-|------|------------|-----------|------------|
-| 무료 | 없음 | 없음 | 1,000 req/일 |
-| 기본 유료 | $20/월(Pro) | $20/월(Plus) | $20/월(AI Pro) |
-| 엔터프라이즈 | Claude for Enterprise | ChatGPT Enterprise | Google Workspace AI |
-| API 직접 | Anthropic API | OpenAI API | Google AI Studio |
-| 사용량 기반 | 예(Max 플랜) | 예(API 키) | 예(API 키) |
-
-## 보안, 샌드박싱, 개인정보 보호
-
-보안은 터미널 AI 에이전트 선택에서 기업이 가장 민감하게 고려하는 요소 중 하나로, 세 도구 모두 샌드박스 실행 환경을 지원하지만 구현 방식과 기본 보호 수준이 다르다. 터미널 AI 에이전트는 파일 시스템 쓰기와 임의의 셸 명령 실행 권한을 갖기 때문에, 샌드박싱은 선택이 아닌 필수 사항이며 특히 CI/CD 환경에서 더욱 중요하다. Claude Code는 macOS에서 `sandbox-exec`, Linux에서 Docker 또는 네임스페이스 격리를 활용한다. 기본적으로 파일 시스템 접근 범위를 현재 프로젝트 디렉토리로 제한하며, 엔터프라이즈 플랜에서는 코드가 Anthropic 모델 훈련에 사용되지 않음을 계약으로 보장한다. Codex CLI는 Docker 컨테이너 기반 샌드박싱을 기본 제공하며, 네트워크 접근도 명시적으로 허용해야 한다. Apache 2.0 라이선스이므로 소스코드를 직접 감사할 수 있어 규정 준수가 까다로운 금융·의료 산업에서 유리하다. Gemini CLI의 샌드박싱은 구성 가능하며, Google Workspace 엔터프라이즈 계정에서는 데이터 격리와 지역 데이터 처리가 보장된다. 오픈소스(Apache 2.0) 도구인 Codex CLI와 Gemini CLI는 코드 감사가 가능해 공급망 보안이 중요한 팀에게 유리하다.
-
-## 엔터프라이즈 도입 사례: Stripe, Ramp, Wiz
-
-실제 엔터프라이즈 사례는 어떤 도구가 대규모 팀에서 검증되어 있는지를 보여주는 가장 강력한 증거로, 현재 공개된 사례의 대부분은 Claude Code를 중심으로 집중되어 있다. Stripe는 Claude Code를 1,370명의 엔지니어에게 배포해 10,000줄 규모의 Scala→Java 마이그레이션을 4일 만에 완료했다. 수동 작업으로는 약 10인·주가 필요한 작업을 AI가 처리했으며, 이는 약 12.5배의 생산성 향상에 해당한다. Ramp는 Claude Code를 인시던트 대응 워크플로에 통합해 해결 시간을 80% 단축했다. 장애 발생 시 관련 코드베이스를 신속하게 탐색하고 근본 원인을 파악하는 데 Claude Code의 다중 파일 이해 능력이 핵심 역할을 했다. Wiz는 50,000줄 규모의 Python→Go 마이그레이션을 약 20 활성 시간 만에 처리했으며, 이는 수개월이 걸릴 수 있는 작업을 며칠로 단축한 사례다. Codex CLI 엔터프라이즈 사례는 주로 CI/CD 자동화와 코드 리뷰 가속화에 집중되며, 비동기 클라우드 실행이 핵심 가치였다. Gemini CLI는 Google Cloud 워크로드와 BigQuery, Vertex AI 통합이 필요한 팀에서 활용 사례가 빠르게 늘고 있다.
-
-## 커뮤니티와 시장 점유율
-
-커뮤니티 규모와 시장 점유율은 장기적 도구 선택에서 중요한 요소로, 생태계가 클수록 MCP 서버·플러그인·튜토리얼이 풍부하고 버그 수정과 새 기능 추가도 빠르다. Claude Code는 2026년 소셜 미디어 코딩 에이전트 논의에서 75%의 점유율을 차지하며 압도적인 마음 점유율을 보인다. 2025년 중반 출시 4개월 만에 115,000명의 개발자와 주당 1억 9,500만 줄의 코드 처리를 달성했으며, 연간 수익 런레이트는 10억 달러를 초과했다. 복잡한 작업을 주로 담당하는 44%의 팀이 Claude Code를 선택해 전문 개발자 사이에서 신뢰가 높다. Codex CLI GitHub 리포지토리는 61,000개 스타와 8,000개 포크를 기록하며 활발한 오픈소스 커뮤니티를 보유하고 있다. 소셜 미디어 언급에서 22%를 차지하며 Claude Code에 이어 2위다. Gemini CLI는 60,000개 스타와 약 10,000개 포크를 보유하며, 소셜 미디어 언급 점유율은 3%로 낮지만 무료 티어 덕분에 빠르게 성장 중이다. 전체 AI 코딩 어시스턴트 시장은 2026년 약 85억 달러로 22% CAGR로 성장하고 있으며, 2028년까지 75%의 기업이 도입할 것으로 전망된다.
-
-## 결론: 어떤 터미널 AI 에이전트가 내 워크플로에 맞나?
-
-세 도구 중 하나를 선택하는 기준은 주요 작업 유형·기술 스택·예산에 따라 다르며, 실제로 많은 시니어 개발자들은 하나의 도구만 고집하지 않는다. 2026년 현재 AI 코딩 어시스턴트를 매일 사용하는 팀의 44%가 복잡한 작업에 Claude Code를 선택한다는 설문 결과는 단일 도구보다 작업 유형별 최적 도구를 선택하는 실용적 접근법이 확산되고 있음을 보여준다. Claude Code는 대규모 다중 파일 코드베이스 이해, 복잡한 리팩토링, 엔터프라이즈 규모의 마이그레이션에 최적이다. SWE-Bench 80.8%와 Stripe·Ramp·Wiz의 검증된 사례가 이를 뒷받침한다. Codex CLI는 빠른 단일 파일 수정, CI/CD 파이프라인 자동화, GitHub Actions 기반 워크플로에 최적이다. Gemini CLI는 무료로 시작하고 싶은 개발자, 최신 라이브러리 문서가 자주 필요한 팀, Google Cloud 생태계를 주로 사용하는 팀에 최적이다. Claude Code로 복잡한 리팩토링을, Codex CLI로 CI/CD 자동화를, Gemini CLI로 빠른 탐색을 분담하는 다중 도구 전략이 2026년 현실에서 가장 효율적인 접근법이다.
+The decision depends on your primary task type, not on benchmark rankings viewed in isolation: 44% of teams doing primarily complex, multi-file work choose Claude Code, while teams with heavy CI/CD automation needs gravitate toward Codex CLI, and cost-constrained or Google Cloud-heavy teams start with Gemini CLI. Claude Code is the correct default for large-scale codebase understanding, multi-file refactoring, and enterprise migrations. The evidence is concrete: Stripe deployed Claude Code to 1,370 engineers and completed a 10,000-line Scala-to-Java migration in four days — a task that would have required approximately ten engineer-weeks manually. Ramp integrated Claude Code into incident response workflows and cut resolution time by 80%. Wiz processed a 50,000-line Python-to-Go migration in roughly 20 active hours. If your work resembles these patterns, Claude Code's SWE-Bench score and multi-file coherence justify the $20/month cost. Codex CLI is the right choice when GitHub Actions integration is non-negotiable, when you need asynchronous cloud execution in CI pipelines, or when Terminal-Bench-style single-file speed matters more than deep codebase reasoning. Its Apache 2.0 license also makes it auditable for compliance-sensitive environments in finance and healthcare. Gemini CLI is the practical starting point for any team not yet committed to a terminal AI agent budget, for workflows where up-to-date library documentation is the primary need, and for Google Cloud-native stacks. The most efficient real-world configuration used by senior developers in 2026 is not a single tool but a deliberate split: Claude Code for complex refactoring and bug investigation, Codex CLI for automated PR review and pipeline tasks, and Gemini CLI for fast documentation lookups and initial exploration. All three support MCP, meaning external integrations — Slack, GitHub, Jira, databases, internal APIs — built for one tool port to the others without rebuilding.
 
 ---
 
 ## FAQ
 
-아래는 Claude Code vs Codex CLI vs Gemini CLI 비교에서 개발자들이 2026년 현재 가장 자주 묻는 질문 다섯 가지를 정리한 것이다. 터미널 AI 에이전트 선택은 단순한 기능 비교가 아니라 팀의 주요 작업 유형·예산·보안 요구사항에 따라 달라지는 결정이다. 개발자 84%가 AI 코딩 툴을 사용하지만 실제로 신뢰하는 비율이 29%에 불과하다는 2026년 조사 결과는, 어떤 도구를 선택하든 점진적 신뢰 구축이 필요함을 보여준다. Claude Code는 SWE-Bench 80.8%로 버그 수정 능력이 입증됐고, Codex CLI는 Terminal-Bench 77.3%로 터미널 자동화에 강하며, Gemini CLI는 무료 진입점과 1M 토큰 컨텍스트를 제공한다. 각 도구는 빠르게 업데이트되므로 벤치마크 점수와 가격은 공식 문서에서 최신 상태를 확인하고, 자신의 실제 워크플로에서 짧은 파일럿 테스트를 거쳐 최종 선택하는 것이 가장 실용적인 접근법이다. 아래 질문들은 그 파일럿 단계에서 가장 많이 등장하는 항목들이며, 각 답변은 이 글에서 다룬 벤치마크와 엔터프라이즈 사례를 기반으로 작성했다. 하나의 도구만 써야 한다는 고정관념은 버려도 좋다 — 복잡한 리팩토링에는 Claude Code, CI/CD 파이프라인 자동화에는 Codex CLI, 빠른 탐색과 무료 사용에는 Gemini CLI로 역할을 나누는 팀이 많다.
+The three major terminal AI agents — Claude Code, Codex CLI, and Gemini CLI — each serve different workflows, and the right choice depends on your primary use case, existing toolchain, and budget. Claude Code leads on SWE-Bench with 80.8% and excels at multi-file codebase work with its 1M-token context on Opus 4.6. Codex CLI scores 77.3% on Terminal-Bench 2.0 and is the strongest choice for GitHub Actions CI/CD integration with its native `openai/codex-action`. Gemini CLI offers a 1M-token context window and a free tier (Gemini Flash), making it the lowest-cost entry point for Google Cloud-aligned teams. All three support MCP, CLAUDE.md-style instruction files, and sandboxed execution. The questions below address the most common practical decisions teams face when choosing between them. Whether you are optimizing for benchmark performance, CI/CD integration, cost, or context size, this FAQ covers the key trade-offs directly.
 
-### Claude Code와 Codex CLI 중 어느 것이 더 정확한가?
+### Is Claude Code worth $20 per month compared to the free Gemini CLI tier?
 
-작업 유형에 따라 다르다. Claude Code는 SWE-Bench 버그 수정에서 80.8%로 다중 파일 코드베이스 이해와 복잡한 리팩토링에 강하다. Codex CLI는 Terminal-Bench 2.0에서 77.3%로 단일 파일 작업과 빠른 명령 실행에 강점을 보인다. 복잡한 코드베이스 탐색이 주 업무라면 Claude Code, 터미널 명령 자동화가 주 업무라면 Codex CLI가 더 정확하다.
+For individual developers, it depends on how much multi-file refactoring you do. Gemini CLI's free tier delivers genuine value for documentation queries, single-file edits, and Google Cloud workflows. Claude Code's 80.8% SWE-Bench score and multi-file coherence start to show their advantage when you are navigating codebases with more than a few hundred files, doing cross-service refactoring, or debugging issues that span multiple modules. Run Gemini CLI free for two weeks on real tasks first; if you are consistently hitting accuracy or coherence limits, that is the signal to upgrade.
 
-### Gemini CLI는 정말 무료인가?
+### Does Codex CLI actually beat Claude Code on benchmarks?
 
-구글 계정만 있으면 하루 1,000 req, 분당 60 req까지 무료다. 1M 토큰 컨텍스트의 Gemini 2.5 Pro가 기반이다. 다만 무료 티어는 응답 속도가 느릴 수 있으며, 상업적 프로젝트에서 대용량으로 사용하려면 $20/월 AI Pro 플랜이나 API 키 방식이 필요하다.
+It depends entirely on which benchmark. Codex CLI scores 77.3% on Terminal-Bench 2.0 versus Claude Code's 65.4%, meaning it completes sandboxed terminal tasks faster and more reliably. Claude Code scores 80.8% on SWE-Bench, measuring resolution of real GitHub issues in open-source repositories — a test that favors multi-file reasoning. The tools are genuinely better at different things. Terminal-Bench performance predicts CI/CD and scripting quality; SWE-Bench performance predicts large-codebase refactoring quality.
 
-### 세 도구 모두 MCP를 지원하는가?
+### Do all three tools support MCP (Model Context Protocol)?
 
-예, Claude Code, Codex CLI, Gemini CLI 모두 Model Context Protocol(MCP)을 지원한다. 각 도구의 설정 파일에서 MCP 서버를 등록하면 데이터베이스, Slack, GitHub, Jira 등 외부 시스템과 연결할 수 있다. 한 번 구축한 MCP 서버는 세 도구 모두에서 재사용할 수 있다.
+Yes. Claude Code, Codex CLI, and Gemini CLI all support Model Context Protocol as of 2026. MCP lets you connect external systems — databases, Slack, GitHub, Jira, internal APIs — to the agent's context at runtime. Configuration lives in tool-specific files (`settings.json` for Claude Code, `codex.config.json` for Codex CLI, `gemini.config.json` for Gemini CLI), but MCP servers themselves are reusable across all three. Building an MCP server once means it works regardless of which terminal agent your team uses.
 
-### CLAUDE.md, AGENTS.md, GEMINI.md의 차이는 무엇인가?
+### What is the difference between CLAUDE.md, AGENTS.md, and GEMINI.md?
 
-모두 프로젝트 루트에 두는 마크다운 파일로, 각 도구에 코드베이스 컨텍스트와 지시사항을 제공한다. CLAUDE.md는 아키텍처·컨벤션·금지 명령에 최적화됐고, AGENTS.md는 에이전트 작업 범위와 제약 명시에 초점을 맞추며, GEMINI.md는 Google Search Grounding과 함께 사용할 컨텍스트 제공에 유리하다. 다중 도구 환경이라면 세 파일을 모두 유지하는 것을 권장한다.
+All three are markdown files placed in the project root that give the agent standing instructions before any conversation starts. CLAUDE.md is best used for architecture overview, coding conventions, forbidden commands, and test-run instructions. AGENTS.md focuses on task scope and authorization boundaries — what the agent can do autonomously versus what requires human sign-off, which matters most in Full Auto mode. GEMINI.md benefits from specifying which external sources search grounding should prioritize to prevent irrelevant documentation from surfacing. In multi-tool environments, maintain all three files and reference a shared conventions file from each to reduce duplication.
 
-### 어떤 도구가 CI/CD에 가장 적합한가?
+### Which tool is best for CI/CD pipeline integration?
 
-Codex CLI가 CI/CD 통합에서 가장 뛰어나다. 공식 `openai/codex-action` GitHub Action을 통해 PR 생성, 코드 리뷰, 자동 수정을 파이프라인에 직접 통합할 수 있으며, 비동기 클라우드 실행 모드가 장시간 작업을 지원한다. Claude Code는 API 기반 스크립트 통합이 가능하고, Gemini CLI는 Google Cloud Build와 연동된다. 순수 GitHub Actions 기반 워크플로라면 Codex CLI가 최선의 선택이다.
+Codex CLI is the clearest choice for GitHub Actions-based pipelines. The official `openai/codex-action` supports PR creation, code review, automatic patching, and bug fixes as native pipeline steps, and asynchronous cloud execution handles long-running jobs without blocking a runner. Claude Code can be integrated through API-based scripting and is well-suited for complex incident-response automation as Ramp demonstrated, but it lacks a first-party GitHub Action. Gemini CLI connects to Google Cloud Build but does not match Codex CLI's GitHub Actions depth. If your CI/CD infrastructure is GitHub-native, Codex CLI is the practical default.
