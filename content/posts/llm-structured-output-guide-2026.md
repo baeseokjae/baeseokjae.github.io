@@ -1,8 +1,8 @@
 ---
 title: "LLM Structured Outputs Guide 2026: JSON Mode, Instructor & Outlines"
-date: 2026-05-11T15:04:22+00:00
-tags: ["LLM", "structured outputs", "JSON mode", "Instructor", "Outlines", "Pydantic", "AI engineering"]
-description: "2026년 LLM 구조화 출력 완벽 가이드: JSON mode의 한계, Instructor vs Outlines 선택법, 프로덕션 신뢰성 확보 전략."
+date: 2026-05-10T00:00:00+00:00
+tags: ["structured-output","instructor","pydantic","json-mode","llm"]
+description: "The complete 2026 guide to LLM structured outputs: why prompt-only JSON fails, Instructor vs Outlines, native APIs from OpenAI/Anthropic/Google, and production reliability patterns."
 draft: false
 cover:
   image: "/images/llm-structured-output-guide-2026.png"
@@ -11,61 +11,62 @@ cover:
 schema: "schema-llm-structured-output-guide-2026"
 ---
 
-LLM 구조화 출력(Structured Outputs)은 AI 모델이 임의의 텍스트 대신 정해진 스키마를 따르는 JSON을 반환하도록 강제하는 기술이다. 2026년 현재, 80% 이상의 기업이 구조화 출력 기반의 생성형 AI 앱을 배포 중이며, 프로덕션에서 안정적인 JSON을 얻는 것은 모든 AI 시스템의 핵심 과제가 되었다.
+Structured outputs are no longer optional for serious LLM production systems. A 2026 enterprise survey found that 74% of LLM production applications now use some form of structured output, up from roughly 40% two years ago. The shift is driven by a simple operational reality: free-form text extraction breaks pipelines, structured schema enforcement does not. This guide covers the full stack — from why naive prompting fails to native APIs, Instructor, Outlines, Pydantic patterns, and retry strategies that hold up in production.
 
-## What Are LLM Structured Outputs and Why Do They Matter in 2026?
+## LLM Structured Outputs 2026: Why Prompt-Only JSON Fails in Production
 
-LLM 구조화 출력(Structured Outputs)은 언어 모델이 자유 형식 텍스트가 아닌, 사전에 정의된 JSON 스키마를 완전히 준수하는 데이터를 반환하도록 보장하는 기술을 말한다. 단순히 JSON을 요청하는 것과는 다르다 — 스키마 강제(schema enforcement)는 필드 누락, 타입 불일치, 마크다운 펜스 오류 같은 파싱 실패를 원천 차단한다. 2026년 기준, 전 세계 67%의 기업이 LLM을 운영에 활용하고 있으며, 80% 이상이 구조화 출력 기반 앱을 배포할 것으로 예상된다. 이 수치는 단순한 실험이 아닌 실제 비즈니스 로직이 LLM 출력에 의존한다는 의미다. 프로덕션에서 구조화 출력 없이 나이브한 프롬프팅만으로 JSON을 추출하면 5~20%의 확률로 파싱 에러가 발생하고, 이는 조용한 버그(silent bug)로 이어져 데이터 파이프라인을 무너뜨린다. OpenAI, Anthropic, Google Gemini 모두 2026년 초 기준 네이티브 구조화 출력을 지원하며, 생태계는 제약적 디코딩(constrained decoding) 방식으로 수렴하고 있다. 추출(extraction), 분류(classification), 에이전트 도구 호출(tool calls) 등 거의 모든 LLM 워크플로가 신뢰할 수 있는 구조화 출력에 의존하므로, 이를 올바르게 구현하는 것은 2026년 AI 개발의 필수 기본기다.
+Prompt-only JSON extraction fails 5 to 20 percent of the time in production environments — and those failures are almost always silent. A model returns a string where a number was expected, omits a required field under a long context window, or wraps the entire JSON blob in a markdown code fence that breaks your parser. At low traffic these failures look like random noise. At scale they accumulate into data corruption, stalled pipelines, and debugging sessions that trace back to a missing `required` constraint that was never enforced. The core problem is that asking a model to "return JSON" is a soft instruction. The model treats it as a stylistic preference, not a hard constraint. Under pressure from complex inputs, long contexts, or ambiguous prompts, it deprioritizes format adherence. Prompt engineering reduces failure rates to roughly 80 to 95 percent in ideal conditions — which sounds acceptable until you are processing ten thousand records per day and five percent means five hundred broken extractions. The 2026 production standard has moved decisively away from prompt-only JSON and toward schema-enforced structured output at the API or generation level. The distinction matters: schema enforcement means the model physically cannot produce output that violates the schema, not that it will try its best not to.
 
-### 왜 구조화 출력이 AI 에이전트의 핵심인가?
+## The Three Reliability Levels: Prompting vs Function Calling vs Native Output
 
-AI 에이전트는 도구 호출(tool calls), 라우팅 결정, 데이터 추출 등 모든 단계에서 파싱 가능한 출력에 의존한다. 구조화 출력 없이는 에이전트 파이프라인의 어느 한 단계에서 LLM이 예상치 못한 형식을 반환할 때 전체 워크플로가 중단된다. Langchain이나 LlamaIndex 같은 에이전트 프레임워크들이 구조화 출력을 핵심 기능으로 통합하는 이유가 여기에 있다.
+There are three distinct reliability levels for structured output, and choosing the wrong one for a given use case is one of the most common sources of production incidents in LLM systems. Level one is prompt engineering — you instruct the model to return JSON matching a described shape. Success rates run 80 to 95 percent depending on schema complexity and model capability. It requires no special API features and works across every provider, which makes it attractive for prototypes. The moment that output feeds another system, it is the wrong choice. Level two is function calling and tool use — you define a function signature with a JSON schema, and the model generates arguments to call that function. Success rates jump to 95 to 99 percent. Most production applications that do not need the absolute highest reliability can live here comfortably. Level three is native structured output — using `response_format: {type: "json_schema", strict: true}` on OpenAI, tool-forcing on Anthropic, or `response_schema` on Gemini. This applies constrained decoding at the token generation level, making schema violations impossible rather than unlikely. Success rates exceed 99 percent and approach 100 percent for well-formed schemas. For data pipelines, financial applications, healthcare systems, or any agent that routes based on structured output, level three is the only defensible choice.
 
-## The Three Levels of Structured Output: From Prompting to Constrained Decoding
+| Level | Method | Reliability | When to Use |
+|-------|--------|-------------|-------------|
+| 1 | Prompt Engineering | 80–95% | Prototypes, throwaway scripts |
+| 2 | Function Calling / Tool Use | 95–99% | General API apps, most agents |
+| 3 | Native Structured Output (strict) | 99%+ | Pipelines, production data extraction |
 
-구조화 출력에는 신뢰성이 다른 세 가지 수준이 존재하며, 각 수준은 실패율과 구현 복잡도 사이의 트레이드오프를 가진다. 첫 번째는 **프롬프트 엔지니어링(Prompt Engineering)** 수준으로, "JSON 형식으로 반환하라"고 지시하는 방식이다. 성공률은 80~95%에 불과하며, 복잡한 스키마일수록 실패율이 높아진다. 두 번째는 **함수 호출(Function Calling / Tool Use)** 수준으로, 모델이 사전에 정의된 함수 시그니처에 맞는 인수를 생성한다. 성공률은 95~99%이며 대부분의 API 기반 앱에서 충분하다. 세 번째는 **네이티브 구조화 출력(Native Structured Output)** 수준으로, `type: json_schema`와 `strict: true`를 사용해 모델이 제약적 디코딩으로 스키마를 100% 준수한다. 프로덕션 데이터 파이프라인, 에이전트 아키텍처, 금융/의료 등 고신뢰도 도메인에서는 반드시 세 번째 수준을 사용해야 한다.
+## Instructor: The 3M Downloads/Month Python Library for Typed LLM Outputs
 
-| 수준 | 방법 | 신뢰성 | 사용 사례 |
-|------|------|--------|-----------|
-| 1 | 프롬프트 엔지니어링 | 80~95% | 프로토타입, 단순 추출 |
-| 2 | 함수 호출 / Tool Use | 95~99% | 일반 API 앱, 에이전트 |
-| 3 | 네이티브 구조화 출력 | ~100% | 프로덕션, 데이터 파이프라인 |
-
-### 어떤 수준을 선택해야 하는가?
-
-실험과 프로토타입에는 레벨 1이 빠르다. 그러나 출력이 다른 시스템의 입력이 되거나 스키마가 5개 이상의 필드를 가진다면 레벨 3으로 직접 이동하라. 레벨 2는 레벨 3을 지원하지 않는 오래된 모델을 다룰 때의 중간 선택지다.
-
-## JSON Mode vs Structured Outputs vs Function Calling — What's the Difference?
-
-JSON mode, 구조화 출력, 함수 호출은 혼용되는 경우가 많지만 동작 방식과 신뢰성이 근본적으로 다르다. **JSON mode**는 모델이 유효한 JSON을 반환하도록 요청하는 가장 단순한 방법이다. 구조적으로 올바른 JSON을 반환하지만, 스키마 준수는 보장하지 않는다 — 필드가 누락되거나 타입이 틀릴 수 있다. 2026년 현재 JSON mode는 레거시로 간주되며, 스키마 바인딩 사용 사례에서는 deprecated된 것으로 봐야 한다. **함수 호출(Function Calling)**은 모델이 특정 함수를 호출하기 위한 인수를 생성하는 방식이다. JSON 스키마로 함수 시그니처를 정의하고, 모델은 이를 맞춰 JSON을 생성한다. **네이티브 구조화 출력**은 `response_format: {type: "json_schema", json_schema: {...}, strict: true}`를 사용해 제약적 디코딩으로 스키마를 100% 강제한다. OpenAI gpt-4o, Anthropic Claude 3.5+, Google Gemini 1.5+ 모두 이 방식을 지원한다. 2026년 프로덕션 표준은 `strict: true`를 사용한 네이티브 구조화 출력이다.
-
-| 방식 | 스키마 보장 | 지원 범위 | 권장 사용 |
-|------|------------|----------|-----------|
-| JSON mode | 없음 (유효 JSON만) | 넓음 (레거시) | 사용 지양 |
-| 함수 호출 | 부분적 | 대부분의 API | 에이전트 도구 호출 |
-| 구조화 출력 (strict) | 100% | OpenAI, Anthropic, Gemini | 프로덕션 기본값 |
-
-## How Constrained Decoding Works: Finite State Machines Under the Hood
-
-제약적 디코딩(Constrained Decoding)은 LLM이 토큰을 생성할 때 스키마를 위반하는 토큰을 생성 단계에서 마스킹(masking)하여 유효하지 않은 출력을 원천적으로 불가능하게 만드는 기술이다. 구체적으로는 JSON 스키마를 유한 상태 머신(Finite State Machine, FSM)으로 변환하고, 각 생성 스텝에서 현재 FSM 상태를 기반으로 다음에 올 수 있는 유효 토큰 집합을 계산한다. LLM의 소프트맥스 출력에서 유효하지 않은 토큰의 로짓(logit)을 음의 무한대로 설정해 선택을 불가능하게 만든다. Outlines 라이브러리의 Rust 기반 `outlines-core` 0.1.0은 이 방식을 구현하여 생성 스텝당 O(1) 유효 토큰 조회를 달성했다. vLLM, TGI(Text Generation Inference), LoRAX, xinference, SGLang 등 주요 LLM 서빙 프레임워크가 Outlines를 통해 제약적 디코딩을 지원한다. 클라우드 API(OpenAI, Anthropic)도 내부적으로 동일한 원리를 적용하지만, 구현 세부사항은 공개되지 않는다. 실질적인 의미는 이렇다 — 제약적 디코딩을 사용하면 모델이 "틀린 JSON"을 생성하는 것 자체가 물리적으로 불가능해지므로, 파싱 로직이나 재시도 루프가 필요 없어진다. 이것이 Outlines가 고처리량 자체 호스팅 환경에서 선택되는 핵심 이유다.
-
-### FSM vs 후처리(Post-processing) 접근법 비교
-
-FSM 기반 사전 제약(pre-generation)은 생성 자체가 스키마를 따르므로 재시도가 필요 없다. 후처리(post-generation) 검증은 Instructor 같은 라이브러리가 사용하는 방식으로, 생성 후 Pydantic으로 검증하고 실패 시 자동 재시도한다. 클라우드 API에서는 post-generation이 실용적이며, 로컬/자체 호스팅 모델에서는 pre-generation이 성능과 신뢰성 모두에서 우위다.
-
-## Provider Guide: OpenAI, Anthropic, Google Gemini, and Mistral Structured Outputs
-
-2026년 현재 OpenAI, Anthropic, Google Gemini, Mistral 모두 네이티브 구조화 출력을 지원하지만 API 인터페이스와 지원 수준은 다르다. **OpenAI**는 `response_format: {type: "json_schema", json_schema: schema, strict: true}`로 가장 완성도 높은 구현을 제공한다. gpt-4o, gpt-4o-mini, o1 계열 모두 지원하며, 재귀 스키마와 복잡한 `$ref` 참조도 처리한다. **Anthropic Claude**는 `tool_choice: {type: "tool", name: "extract"}`와 함께 도구 정의를 통해 구조화 출력을 강제한다. Claude 3.5 Sonnet 이후로 JSON 스키마 바인딩의 신뢰성이 크게 향상되었다. **Google Gemini**는 `response_mime_type: "application/json"`과 `response_schema`를 통해 네이티브 지원한다. Gemini 1.5 Pro와 Flash 모두 지원하며, Google AI Studio에서 시각적으로 스키마를 테스트할 수 있다. **Mistral**은 `response_format: {type: "json_object"}`를 지원하지만 strict 모드가 없어 신뢰성은 OpenAI보다 낮다. Mistral Large 2 이상에서 함수 호출과 결합 시 신뢰성이 개선된다.
-
-| 프로바이더 | Strict 모드 | 스키마 방식 | 복잡 스키마 |
-|----------|------------|------------|------------|
-| OpenAI gpt-4o | ✅ | json_schema + strict | ✅ |
-| Anthropic Claude 3.5+ | ✅ (도구 강제) | tool_choice 강제 | ✅ |
-| Google Gemini 1.5+ | ✅ | response_schema | ✅ |
-| Mistral Large 2 | ❌ | json_object | 부분적 |
+Instructor has become the de facto standard for structured LLM output in Python, crossing 3 million monthly downloads and 11,000 GitHub stars as of 2026 — a milestone that signals genuine production adoption, not hobbyist experimentation. The library's core value proposition is provider-neutral Pydantic validation with automatic retry on validation failure. You define your output shape as a Pydantic model, pass it as the `response_model` argument, and Instructor handles the schema translation, API call, response parsing, and retry loop. When Pydantic validation fails, Instructor converts the ValidationError into a follow-up prompt that tells the model exactly what went wrong and asks it to correct the output — a significantly more robust recovery loop than catching a JSON parse exception and retrying blindly. Instructor supports OpenAI, Anthropic, Google Gemini, Mistral, Ollama, Cohere, and more than a dozen other providers through a unified interface. Switching providers means changing one line. The library also supports streaming with `Iterable[Model]` for extracting lists, `Partial[Model]` for streaming partial completions to improve perceived latency, and full async support for high-concurrency applications.
 
 ```python
-# OpenAI 구조화 출력 예시
+import instructor
+from anthropic import Anthropic
+from pydantic import BaseModel, Field
+from typing import List
+
+class ResearchSummary(BaseModel):
+    key_findings: List[str] = Field(min_length=1, max_length=5)
+    confidence_score: float = Field(ge=0.0, le=1.0)
+    recommended_action: str
+
+client = instructor.from_anthropic(Anthropic())
+
+summary = client.messages.create(
+    model="claude-sonnet-4-6",
+    max_tokens=1024,
+    messages=[{
+        "role": "user",
+        "content": "Summarize the key findings from this Q1 2026 AI adoption report..."
+    }],
+    response_model=ResearchSummary,
+    max_retries=3,
+)
+
+print(summary.key_findings)
+print(f"Confidence: {summary.confidence_score}")
+```
+
+The retry mechanism deserves emphasis. When Pydantic raises a `ValidationError`, Instructor appends the error message to the conversation history and sends a new completion request. This leverages the model's instruction-following ability to self-correct, rather than hoping a fresh attempt produces a different result by chance. In practice this resolves the majority of validation failures within one or two retries, keeping the effective failure rate well below one percent.
+
+## OpenAI, Anthropic, and Google Native Structured Output APIs
+
+All three major cloud LLM providers now support native structured output, but their implementations differ enough that understanding each one matters for production integrations. OpenAI's implementation, available on GPT-4o and GPT-4o-mini, uses `response_format: {type: "json_schema", json_schema: {...}, strict: true}`. With `strict: true`, OpenAI applies constrained decoding that makes schema violations physically impossible — the model cannot generate a token that would produce invalid output. OpenAI supports recursive schemas, `$ref` references, and complex nested objects, though schemas with more than a few levels of nesting can slow first-token latency. JSON mode — `response_format: {type: "json_object"}` — is now considered legacy and deprecated for any schema-bound use case. It guarantees syntactically valid JSON but provides zero schema enforcement. Do not use it in new production code. Anthropic's approach uses tool-forcing: you define a tool with a JSON schema input specification, then set `tool_choice: {type: "tool", name: "your_tool"}` to force the model to call it. Claude 3.5 Sonnet and later models handle this reliably. Instructor abstracts away the tool-forcing boilerplate when you use `from_anthropic()`. Google Gemini supports structured output via `response_mime_type: "application/json"` combined with a `response_schema` parameter that accepts a JSON schema object. Gemini 1.5 Pro and Flash both support this, and Google AI Studio provides a visual schema builder for testing.
+
+```python
+# OpenAI native structured output
 from openai import OpenAI
 import json
 
@@ -88,51 +89,16 @@ schema = {
 
 response = client.chat.completions.create(
     model="gpt-4o",
-    messages=[{"role": "user", "content": "Extract product info: Blue Widget $29.99, available"}],
+    messages=[{"role": "user", "content": "Extract: Blue Widget $29.99, available"}],
     response_format={"type": "json_schema", "json_schema": schema}
 )
 
 product = json.loads(response.choices[0].message.content)
 ```
 
-## Instructor: The Python Library for Post-Generation Structured Output
+## Outlines: Constrained Generation for Local Models
 
-Instructor는 Pydantic 모델을 사용해 LLM 출력을 검증하고, 검증 실패 시 자동으로 재시도하는 Python 라이브러리다. 2026년 기준 월 300만 다운로드 이상, GitHub 스타 11,000+, 기여자 100명 이상으로 파이썬 LLM 생태계의 사실상 표준이 되었다. Instructor의 핵심 가치는 **프로바이더 중립성**이다 — OpenAI, Anthropic, Google Gemini, Ollama, Mistral, Cohere 등 15개 이상의 프로바이더를 동일한 코드 패턴으로 사용할 수 있다. `instructor.patch()`로 기존 OpenAI 클라이언트를 래핑하거나, Anthropic용 `instructor.from_anthropic()`을 사용하는 방식이다. Instructor는 생성 후 Pydantic ValidationError를 LLM 프롬프트로 변환해 자동 재시도(automatic retry)를 수행한다. 기본 재시도 횟수는 3회이며, `max_retries` 파라미터로 조정할 수 있다. 스트리밍, 비동기(async), 부분 응답(partial streaming) 등 고급 기능도 지원한다. 클라우드 API 기반 앱에서 프로바이더를 유연하게 전환해야 한다면 Instructor가 최적의 선택이다.
-
-```python
-import instructor
-from anthropic import Anthropic
-from pydantic import BaseModel, Field
-from typing import List
-
-class ResearchSummary(BaseModel):
-    key_findings: List[str] = Field(min_length=1, max_length=5)
-    confidence_score: float = Field(ge=0.0, le=1.0)
-    recommended_action: str
-
-client = instructor.from_anthropic(Anthropic())
-
-summary = client.messages.create(
-    model="claude-opus-4-7",
-    max_tokens=1024,
-    messages=[{
-        "role": "user",
-        "content": "Summarize the key findings from this Q1 2026 AI adoption report..."
-    }],
-    response_model=ResearchSummary
-)
-
-print(summary.key_findings)
-print(f"Confidence: {summary.confidence_score}")
-```
-
-### Instructor의 자동 재시도 메커니즘
-
-Pydantic 검증이 실패하면 Instructor는 검증 오류 메시지를 LLM에 다시 전달하며 "이전 출력에서 다음 오류가 발생했다, 수정해 달라"는 형식으로 재시도한다. 이는 단순 JSON 파싱보다 훨씬 강력한 오류 복구 루프를 제공한다. `Iterable[Model]`을 사용한 스트리밍 추출과 `Partial[Model]`을 통한 부분 완료 스트리밍도 지원해 대용량 문서 처리에서 UX를 개선할 수 있다.
-
-## Outlines: Pre-Generation Constraints for Local and Self-Hosted Models
-
-Outlines는 dottxt-ai가 개발한 오픈소스 라이브러리로, LLM 생성 단계에서 JSON 스키마, 정규식, 열거형(Enum)을 FSM으로 변환하여 유효하지 않은 토큰 생성을 원천 차단한다. Instructor와 달리 Outlines는 **사전 생성(pre-generation)** 제약 방식을 사용하므로 재시도가 전혀 필요 없다. 2026년 기준 vLLM, TGI, LoRAX, xinference, SGLang을 포함한 수백 개 조직이 Outlines를 프로덕션에서 사용 중이다. Rust로 작성된 `outlines-core` 0.1.0은 생성 스텝당 O(1) 유효 토큰 조회를 제공해 대용량 배치 처리에서 Instructor보다 현저히 빠른 성능을 낸다. Outlines는 Hugging Face Transformers, vLLM, llama.cpp와 통합되며, 로컬 모델이나 자체 호스팅 LLM 서버에 특화되어 있다. JSON 스키마 외에도 정규식 패턴, 파이썬 타입 힌트, 선택형 텍스트(choices) 등 다양한 제약 방식을 지원한다.
+Outlines is the open-source answer to structured output for self-hosted and local models, developed by dottxt-ai and adopted in production by hundreds of organizations running vLLM, TGI, LoRAX, xinference, and SGLang. Where Instructor validates output after generation and retries on failure, Outlines operates at the token generation level: it converts your JSON schema, regex pattern, or enumeration into a finite state machine, then at each generation step masks any token that would produce output violating the current FSM state. Invalid outputs are not retried — they are made impossible. The Rust-based `outlines-core` library achieves O(1) valid token lookup per generation step, which is why Outlines adds negligible overhead even at high batch throughput. This architecture matters operationally: Instructor's retry loop adds latency proportional to the failure rate times the model's generation time. At a two percent failure rate on 500ms generations with three retries, your p99 latency includes an occasional 1.5-second penalty. Outlines has no such tail. For batch inference pipelines processing millions of records, that difference compounds into meaningful cost and latency savings. Outlines integrates with Hugging Face Transformers, vLLM, and llama.cpp. Beyond JSON schemas, it supports Python type hints, regex patterns, and `choices()` for enum-style constraints.
 
 ```python
 import outlines
@@ -141,118 +107,139 @@ from pydantic import BaseModel
 model = outlines.models.transformers("mistralai/Mistral-7B-v0.1")
 
 class ProductReview(BaseModel):
-    sentiment: str  # "positive", "negative", "neutral"
-    score: int      # 1-5
+    sentiment: str
+    score: int
     summary: str
 
 generator = outlines.generate.json(model, ProductReview)
-review = generator("Review: This product exceeded my expectations, would buy again.")
+review = generator("Review: This product exceeded my expectations.")
 
-print(review.sentiment)  # 보장된 유효값
-print(review.score)      # 보장된 정수
+print(review.sentiment)  # guaranteed valid string
+print(review.score)      # guaranteed integer
 ```
 
-### Outlines vs Instructor: 언제 무엇을 선택하는가?
+The practical decision rule: if you control the inference stack and are running local or self-hosted models, use Outlines. If you are calling cloud APIs where you do not have token-level access, use Instructor. The two are not in competition — they solve the same problem at different points in the stack.
 
-핵심 구분 기준은 모델 접근 방식이다. 클라우드 API(OpenAI, Anthropic)를 사용한다면 토큰 수준 제어가 불가능하므로 Instructor를 사용한다. 로컬 모델이나 vLLM 같은 자체 호스팅 서빙 스택을 사용한다면 Outlines가 성능과 신뢰성 모두에서 우위다. 처리량(throughput)이 중요한 고볼륨 배치 파이프라인에서는 재시도 오버헤드가 없는 Outlines가 확실히 유리하다.
+## Pydantic Schema Patterns for Production LLM APIs
 
-## LangChain and PydanticAI: Structured Outputs in Agent Frameworks
-
-에이전트 프레임워크들은 구조화 출력을 일급 시민으로 통합하고 있으며, 이는 복잡한 멀티 스텝 워크플로에서 LLM 출력 신뢰성을 프레임워크 수준에서 보장함을 의미한다. **LangChain**은 `with_structured_output()` 메서드를 통해 Pydantic 모델이나 TypedDict를 사용한 구조화 출력을 네이티브 지원한다. `method="json_schema"` 또는 `method="function_calling"`을 선택할 수 있으며, LCEL(LangChain Expression Language) 체인에 자연스럽게 통합된다. **PydanticAI**는 Pydantic을 개발한 팀이 만든 에이전트 프레임워크로, 구조화 출력이 아키텍처의 중심이다. `result_type` 파라미터로 Pydantic 모델을 직접 지정하며, 타입 안전성(type safety)과 IDE 자동완성을 완전히 지원한다. 2026년 기준 PydanticAI는 빠르게 성장하고 있으며, 특히 타입 안전성을 중시하는 팀에서 선호된다. LangChain의 `with_structured_output()`은 기존 LangChain 코드베이스와의 호환성이 중요할 때 최적의 선택이다. PydanticAI는 새로운 에이전트 프로젝트에서 타입 안전성과 Pydantic 생태계와의 긴밀한 통합이 필요할 때 권장된다.
+Pydantic has become the canonical schema definition layer for LLM structured output in Python, and knowing which patterns hold up in production versus which ones cause subtle failures is essential knowledge for any team shipping LLM features. The foundational pattern is straightforward: inherit from `BaseModel`, annotate fields with precise types, and use `Field()` to add constraints that the LLM cannot infer from type annotations alone. For string fields that must match a controlled vocabulary, use `Literal` or `Enum` — this gives Instructor and Outlines the information they need to constrain the model effectively. For numeric fields with business logic bounds (scores, quantities, prices), always use `Field(ge=0, le=100)` or equivalent rather than relying on the model to stay within range. Nested models work well up to two or three levels of depth; beyond that, schema compilation time increases and some providers struggle with complex `$ref` resolution. The single most impactful schema hygiene practice is always setting `model_config = ConfigDict(extra="forbid")` at the class level — this translates to `additionalProperties: false` in the JSON schema and prevents the model from injecting fields that will silently corrupt your data pipeline. Optional fields should always carry a `default` value rather than being marked as `Optional` with no default; this eliminates an entire class of missing-field failures without any retry cost.
 
 ```python
-# LangChain 구조화 출력
-from langchain_openai import ChatOpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
+from pydantic import ConfigDict
+from typing import Literal, List
+from enum import Enum
 
-class TicketClassification(BaseModel):
-    category: str
-    priority: int  # 1-5
+class Priority(str, Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+    critical = "critical"
+
+class TicketExtract(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(max_length=120)
+    category: Literal["billing", "technical", "account", "other"]
+    priority: Priority
     requires_human: bool
+    tags: List[str] = Field(default_factory=list, max_length=5)
+    estimated_resolution_hours: float = Field(ge=0.5, le=72.0)
 
-llm = ChatOpenAI(model="gpt-4o")
-structured_llm = llm.with_structured_output(TicketClassification, method="json_schema")
-
-result = structured_llm.invoke("User can't log in after password reset, production system")
-print(result.category, result.priority, result.requires_human)
+    @field_validator("title")
+    @classmethod
+    def title_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Title cannot be blank")
+        return v.strip()
 ```
 
-## Production Best Practices: Validation, Retries, and Fallback Chains
+Keep validators simple and deterministic. The purpose of Pydantic validators in an LLM context is to catch model errors and trigger a retry with an informative error message — not to implement business logic that belongs elsewhere in your stack.
 
-프로덕션 LLM 앱에서 구조화 출력의 신뢰성을 극대화하려면 단순한 스키마 강제 이상의 전략이 필요하다. 검증(validation), 재시도(retry), 폴백 체인(fallback chain)을 체계적으로 구성해야 한다. 첫째, **입력 스키마 설계**: `additionalProperties: false`를 항상 설정하고, 선택 필드는 `default` 값을 지정하라. 중첩이 깊은 스키마는 성능 저하와 실패율 증가를 유발한다 — 3단계 이하로 유지하라. 둘째, **Pydantic 검증 레이어**: 스키마 통과 후에도 Pydantic `@field_validator`로 비즈니스 로직 검증을 추가하라. 예를 들어 `price`가 양수인지, `email`이 올바른 형식인지 LLM 레이어에만 의존하지 말라. 셋째, **재시도 전략**: Instructor의 자동 재시도를 사용하되, 최대 3회로 제한하고 재시도 간 지수 백오프를 적용하라. 프롬프트에 구체적인 오류 메시지를 포함하면 재시도 성공률이 크게 높아진다. 넷째, **폴백 체인**: 메인 모델 실패 시 더 저렴한 모델이나 단순화된 스키마로 폴백하는 체인을 구성하라. 마지막으로, **옵저버빌리티**: 구조화 출력 실패율, 재시도 횟수, 폴백 발생률을 메트릭으로 추적하라 — 이 지표들이 5%를 넘으면 프롬프트나 스키마를 재검토해야 한다.
+## Error Handling and Retry Strategies for Structured Output
+
+Production LLM structured output systems need explicit retry logic, and the details of that logic determine whether your pipeline degrades gracefully or fails catastrophically under load. The baseline pattern is exponential backoff with a capped maximum: start at 0.5 seconds, double each retry, cap at 8 to 16 seconds, and stop after three attempts for synchronous paths or five for batch jobs. Instructor handles this at the validation layer when you set `max_retries`, but you still need network-level retry handling for rate limit errors and transient API failures, which are separate from schema validation failures. Tenacity is the standard Python library for this: `@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8), retry=retry_if_exception_type(Exception))`. For Instructor specifically, the retry loop passes the full ValidationError message back to the model, which gives it specific information about what was wrong. A generic retry without error context produces the same wrong output again; an error-informed retry has significantly higher recovery probability. Common failure modes worth handling explicitly: extra fields appearing in the response (solved by `additionalProperties: false`), missing required fields under long contexts (solved by keeping schemas small and focused), wrong numeric types (solved by explicit `type: integer` vs `type: number`), and nested object failures where a deeply nested required field is omitted (solved by flattening schemas and using defaults). Track your structured output failure rate, retry count distribution, and fallback activation rate as first-class metrics. If the validation failure rate exceeds two to three percent, the schema, prompt, or model selection needs revisiting — not the retry count.
 
 ```python
 import instructor
 from openai import OpenAI
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, ConfigDict
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 class OrderExtract(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     product_id: str
     quantity: int
     unit_price: float
 
     @field_validator("quantity")
     @classmethod
-    def quantity_positive(cls, v):
+    def quantity_positive(cls, v: int) -> int:
         if v <= 0:
-            raise ValueError("Quantity must be positive")
+            raise ValueError("Quantity must be a positive integer")
         return v
 
     @field_validator("unit_price")
     @classmethod
-    def price_positive(cls, v):
+    def price_positive(cls, v: float) -> float:
         if v <= 0:
-            raise ValueError("Price must be positive")
+            raise ValueError("Unit price must be positive")
         return v
 
 client = instructor.patch(OpenAI())
 
-order = client.chat.completions.create(
-    model="gpt-4o",
-    max_retries=3,
-    response_model=OrderExtract,
-    messages=[{"role": "user", "content": "Extract: 5 units of SKU-429 at $12.50 each"}]
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=8)
 )
+def extract_order(text: str) -> OrderExtract:
+    return client.chat.completions.create(
+        model="gpt-4o",
+        max_retries=2,
+        response_model=OrderExtract,
+        messages=[{"role": "user", "content": text}]
+    )
+
+order = extract_order("5 units of SKU-429 at $12.50 each")
 ```
 
-## Choosing the Right Tool: Decision Matrix for Structured Output Libraries
+## Choosing the Right Approach for Your Use Case
 
-어떤 구조화 출력 도구를 선택할지는 모델 접근 방식, 팀의 기술 스택, 처리량 요구사항, 그리고 프로바이더 유연성 필요 여부에 따라 결정된다. 2026년 기준 생태계는 세 가지 명확한 패턴으로 정착했다. 첫 번째 패턴은 **클라우드 API + Instructor**: OpenAI, Anthropic, Gemini API를 사용하며 여러 프로바이더를 전환하거나 빠른 개발이 필요한 팀에 최적이다. Instructor는 프로바이더 중립적이며 Pydantic 생태계와 완벽히 통합된다. 두 번째 패턴은 **로컬/자체 호스팅 + Outlines**: 데이터 보안, 비용 절감, 또는 특화된 파인튜닝 모델 사용이 필요한 경우다. vLLM + Outlines 조합은 고처리량 배치 추론에서 업계 표준이 되고 있다. 세 번째 패턴은 **에이전트 프레임워크 + 빌트인 지원**: LangChain이나 PydanticAI 위에 구축 중이라면 각 프레임워크의 네이티브 구조화 출력 지원을 사용하라 — 별도 라이브러리 없이도 충분하다.
+The choice of structured output strategy comes down to four variables: where the model runs, how much throughput you need, how much schema reliability you require, and what your team already knows. For teams using cloud APIs — OpenAI, Anthropic, or Gemini — Instructor is the default choice. It provides provider-neutral Pydantic integration, handles the tool-forcing complexity for Anthropic, and lets you switch providers with a one-line change. The automatic retry loop covers the gap between provider-level schema enforcement and perfect reliability. If you are on a single provider and want zero additional dependencies, use the provider's native structured output API directly with `strict: true`. For teams running local or self-hosted models — whether for cost, data privacy, or specialized fine-tuned models — Outlines plus vLLM is the emerging production standard. The FSM-based pre-generation constraint eliminates retry overhead entirely and scales linearly with batch size. For agent frameworks, use the native structured output integration your framework provides: LangChain's `with_structured_output()`, PydanticAI's `result_type`, or LlamaIndex's structured prediction. Wrapping a framework's own abstraction with a separate library creates unnecessary complexity. For TypeScript and JavaScript, the OpenAI SDK's `zodResponseFormat()` combined with Zod schemas provides the same guarantees as the Python native API. Instructor JS (`@instructor-ai/instructor`) offers the same Zod-based retry patterns as the Python library for multi-provider TypeScript applications.
 
-| 상황 | 권장 도구 | 이유 |
-|------|----------|------|
-| 클라우드 API, 다중 프로바이더 | Instructor | 프로바이더 중립, Pydantic 통합 |
-| 로컬 모델 (vLLM, TGI) | Outlines | FSM 사전 제약, 재시도 없음, O(1) 성능 |
-| LangChain 기반 앱 | LangChain with_structured_output | 네이티브 통합 |
-| PydanticAI 에이전트 | PydanticAI result_type | 타입 안전성 최우선 |
-| 단일 프로바이더 (OpenAI) | 네이티브 API (strict mode) | 추가 의존성 없음 |
-| 고볼륨 배치 추론 | Outlines + vLLM | 처리량 최적화 |
+| Situation | Recommended Approach | Reason |
+|-----------|---------------------|--------|
+| Cloud API, multiple providers | Instructor + Pydantic | Provider-neutral, automatic retries |
+| Cloud API, single provider | Native strict mode | Zero dependencies |
+| Local models (vLLM, TGI) | Outlines | Pre-generation constraints, no retry overhead |
+| High-volume batch inference | Outlines + vLLM | O(1) token lookup, no tail latency from retries |
+| LangChain application | `with_structured_output()` | Native framework integration |
+| PydanticAI agent | `result_type` parameter | Type-safe, Pydantic-native |
+| TypeScript application | Zod + OpenAI SDK | Native schema enforcement |
 
-### 마이그레이션 경로: JSON mode에서 벗어나기
-
-기존 코드베이스에서 `response_format: {type: "json_object"}`를 사용 중이라면 단계적 마이그레이션을 권장한다. 먼저 현재 JSON 출력의 실제 구조를 분석해 Pydantic 모델을 정의하고, `strict: true`와 `json_schema` 방식으로 전환한다. Instructor를 도입해 기존 파싱 코드를 제거하면 코드베이스가 단순해지고 신뢰성이 높아진다.
+The migration path from JSON mode is straightforward: analyze your existing JSON outputs to derive a Pydantic model, switch to `json_schema` with `strict: true`, and remove your manual parsing and error-handling code. The result is a smaller codebase with higher reliability — structured output is one of the rare cases where the correct engineering choice is also the simpler one.
 
 ---
 
 ## FAQ
 
-**Q: JSON mode와 구조화 출력(Structured Outputs)의 차이는 무엇인가요?**
+**Q: What is the difference between JSON mode and structured output?**
 
-JSON mode는 유효한 JSON 형식을 반환하도록 요청하지만 스키마 준수를 보장하지 않습니다. 구조화 출력(특히 `strict: true`와 함께)은 사전에 정의한 JSON 스키마를 100% 준수하는 출력을 제약적 디코딩으로 강제합니다. 2026년 프로덕션에서는 JSON mode 사용을 피하고 네이티브 구조화 출력을 사용하세요.
+JSON mode asks the model to return syntactically valid JSON but makes no guarantees about schema compliance. A response can pass JSON mode validation while missing required fields, using wrong types, or including extra fields your parser does not expect. Native structured output with `strict: true` uses constrained decoding to make schema violations physically impossible — the model cannot generate a token that would produce non-compliant output. For any new production code, JSON mode should be treated as deprecated.
 
-**Q: Instructor와 Outlines 중 어떤 것을 선택해야 하나요?**
+**Q: When should I use Instructor versus Outlines?**
 
-클라우드 API(OpenAI, Anthropic, Gemini)를 사용한다면 Instructor를 선택하세요. 로컬 모델이나 vLLM 같은 자체 호스팅 스택을 사용한다면 Outlines를 선택하세요. Instructor는 사후 검증 + 자동 재시도 방식이고, Outlines는 생성 단계에서 유효하지 않은 토큰을 차단하는 사전 제약 방식입니다.
+The deciding factor is whether you control the token generation stack. If you are calling cloud APIs from OpenAI, Anthropic, or Google, token-level constraints are not available to you — use Instructor for Pydantic validation and automatic retry. If you are running local or self-hosted models through vLLM, TGI, or Hugging Face Transformers, use Outlines for pre-generation constraints that eliminate retries entirely. The two libraries are not alternatives for the same setup — they address the same problem at different infrastructure layers.
 
-**Q: LLM 구조화 출력 실패율이 얼마나 되나요?**
+**Q: How often do structured output calls actually fail in production?**
 
-프롬프트 엔지니어링만 사용하는 경우 프로덕션에서 5~20%의 파싱 실패율이 보고됩니다. 함수 호출을 사용하면 1~5%로, 네이티브 구조화 출력(strict mode)을 사용하면 사실상 0%에 가깝게 줄어듭니다. 파싱 실패는 조용한 버그(silent bug)로 이어지기 때문에 프로덕션에서는 반드시 스키마 강제를 사용해야 합니다.
+Failure rates vary sharply by method. Prompt-only JSON extraction fails 5 to 20 percent of the time in production systems — the range depends on schema complexity, context length, and model quality. Function calling brings this to 1 to 5 percent. Native structured output with strict mode brings it to effectively zero for well-formed schemas. The 5 to 20 percent prompt-only failure rate is particularly dangerous because failures are often silent: the application receives a 200 response with parseable JSON that simply omits a field your downstream logic assumed would be present.
 
-**Q: 재귀적이거나 매우 복잡한 JSON 스키마도 지원되나요?**
+**Q: What are the most common Pydantic schema patterns that prevent LLM output failures?**
 
-OpenAI와 Google Gemini는 복잡한 중첩 스키마와 `$ref` 참조를 지원하지만, 스키마가 복잡해질수록 성능이 떨어질 수 있습니다. 실무에서는 스키마를 3단계 이하의 중첩으로 유지하고, 재귀 스키마는 반드시 프로덕션에서 철저히 테스트하세요. Outlines는 FSM 변환 단계에서 복잡도가 높은 스키마의 컴파일 시간이 길어질 수 있습니다.
+Four practices eliminate the majority of structured output failures: set `model_config = ConfigDict(extra="forbid")` on every model to prevent extra field injection; use `Literal` or `Enum` for string fields with controlled vocabularies; give every optional field a `default` value rather than using bare `Optional`; and keep schema nesting to three levels or fewer. Beyond these, use `Field()` constraints for numeric ranges and string lengths — even if the model usually stays within bounds, explicit constraints catch the edge cases that cause production incidents.
 
-**Q: LLM 구조화 출력을 TypeScript/JavaScript에서 사용할 수 있나요?**
+**Q: Does retry logic with exponential backoff actually improve structured output reliability enough to matter?**
 
-네. OpenAI JavaScript SDK는 `zodResponseFormat()`을 통해 Zod 스키마와 결합한 구조화 출력을 지원합니다. Instructor JS(`@instructor-ai/instructor`)도 Zod 기반 검증과 자동 재시도를 지원합니다. TypeScript 사용자는 Zod + OpenAI SDK 또는 Instructor JS를 파이썬의 Pydantic + Instructor와 동일한 패턴으로 사용할 수 있습니다.
+Yes, significantly. Most structured output failures are not the result of the model being fundamentally incapable of producing the right schema — they are the result of the model taking a shortcut under ambiguous input or long context. A single retry with the ValidationError message passed back to the model resolves the majority of failures. In Instructor, the retry includes the specific Pydantic error, which gives the model precise information about what went wrong. A naive retry without error context has much lower recovery probability. Three retries with error context brings the effective failure rate of function calling to below 0.1 percent in most production workloads, which is operationally equivalent to native strict mode for most use cases.
