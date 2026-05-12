@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Pydantic on RockB</title><link>https://baeseokjae.github.io/tags/pydantic/</link><description>Recent content in Pydantic on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sun, 10 May 2026 00:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/pydantic/index.xml" rel="self" type="application/rss+xml"/><item><title>LLM Structured Outputs Guide 2026: JSON Mode, Instructor &amp; Outlines</title><link>https://baeseokjae.github.io/posts/llm-structured-output-guide-2026/</link><pubDate>Sun, 10 May 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/llm-structured-output-guide-2026/</guid><description>The complete 2026 guide to LLM structured outputs: why prompt-only JSON fails, Instructor vs Outlines, native APIs from OpenAI/Anthropic/Google, and production reliability patterns.</description><content:encoded><![CDATA[<p>Structured outputs are no longer optional for serious LLM production systems. A 2026 enterprise survey found that 74% of LLM production applications now use some form of structured output, up from roughly 40% two years ago. The shift is driven by a simple operational reality: free-form text extraction breaks pipelines, structured schema enforcement does not. This guide covers the full stack — from why naive prompting fails to native APIs, Instructor, Outlines, Pydantic patterns, and retry strategies that hold up in production.</p>
+<h2 id="llm-structured-outputs-2026-why-prompt-only-json-fails-in-production">LLM Structured Outputs 2026: Why Prompt-Only JSON Fails in Production</h2>
+<p>Prompt-only JSON extraction fails 5 to 20 percent of the time in production environments — and those failures are almost always silent. A model returns a string where a number was expected, omits a required field under a long context window, or wraps the entire JSON blob in a markdown code fence that breaks your parser. At low traffic these failures look like random noise. At scale they accumulate into data corruption, stalled pipelines, and debugging sessions that trace back to a missing <code>required</code> constraint that was never enforced. The core problem is that asking a model to &ldquo;return JSON&rdquo; is a soft instruction. The model treats it as a stylistic preference, not a hard constraint. Under pressure from complex inputs, long contexts, or ambiguous prompts, it deprioritizes format adherence. Prompt engineering reduces failure rates to roughly 80 to 95 percent in ideal conditions — which sounds acceptable until you are processing ten thousand records per day and five percent means five hundred broken extractions. The 2026 production standard has moved decisively away from prompt-only JSON and toward schema-enforced structured output at the API or generation level. The distinction matters: schema enforcement means the model physically cannot produce output that violates the schema, not that it will try its best not to.</p>
+<h2 id="the-three-reliability-levels-prompting-vs-function-calling-vs-native-output">The Three Reliability Levels: Prompting vs Function Calling vs Native Output</h2>
+<p>There are three distinct reliability levels for structured output, and choosing the wrong one for a given use case is one of the most common sources of production incidents in LLM systems. Level one is prompt engineering — you instruct the model to return JSON matching a described shape. Success rates run 80 to 95 percent depending on schema complexity and model capability. It requires no special API features and works across every provider, which makes it attractive for prototypes. The moment that output feeds another system, it is the wrong choice. Level two is function calling and tool use — you define a function signature with a JSON schema, and the model generates arguments to call that function. Success rates jump to 95 to 99 percent. Most production applications that do not need the absolute highest reliability can live here comfortably. Level three is native structured output — using <code>response_format: {type: &quot;json_schema&quot;, strict: true}</code> on OpenAI, tool-forcing on Anthropic, or <code>response_schema</code> on Gemini. This applies constrained decoding at the token generation level, making schema violations impossible rather than unlikely. Success rates exceed 99 percent and approach 100 percent for well-formed schemas. For data pipelines, financial applications, healthcare systems, or any agent that routes based on structured output, level three is the only defensible choice.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Level</th>
+          <th>Method</th>
+          <th>Reliability</th>
+          <th>When to Use</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>1</td>
+          <td>Prompt Engineering</td>
+          <td>80–95%</td>
+          <td>Prototypes, throwaway scripts</td>
+      </tr>
+      <tr>
+          <td>2</td>
+          <td>Function Calling / Tool Use</td>
+          <td>95–99%</td>
+          <td>General API apps, most agents</td>
+      </tr>
+      <tr>
+          <td>3</td>
+          <td>Native Structured Output (strict)</td>
+          <td>99%+</td>
+          <td>Pipelines, production data extraction</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="instructor-the-3m-downloadsmonth-python-library-for-typed-llm-outputs">Instructor: The 3M Downloads/Month Python Library for Typed LLM Outputs</h2>
+<p>Instructor has become the de facto standard for structured LLM output in Python, crossing 3 million monthly downloads and 11,000 GitHub stars as of 2026 — a milestone that signals genuine production adoption, not hobbyist experimentation. The library&rsquo;s core value proposition is provider-neutral Pydantic validation with automatic retry on validation failure. You define your output shape as a Pydantic model, pass it as the <code>response_model</code> argument, and Instructor handles the schema translation, API call, response parsing, and retry loop. When Pydantic validation fails, Instructor converts the ValidationError into a follow-up prompt that tells the model exactly what went wrong and asks it to correct the output — a significantly more robust recovery loop than catching a JSON parse exception and retrying blindly. Instructor supports OpenAI, Anthropic, Google Gemini, Mistral, Ollama, Cohere, and more than a dozen other providers through a unified interface. Switching providers means changing one line. The library also supports streaming with <code>Iterable[Model]</code> for extracting lists, <code>Partial[Model]</code> for streaming partial completions to improve perceived latency, and full async support for high-concurrency applications.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> instructor
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> anthropic <span style="color:#f92672">import</span> Anthropic
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> pydantic <span style="color:#f92672">import</span> BaseModel, Field
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> typing <span style="color:#f92672">import</span> List
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">ResearchSummary</span>(BaseModel):
+</span></span><span style="display:flex;"><span>    key_findings: List[str] <span style="color:#f92672">=</span> Field(min_length<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>, max_length<span style="color:#f92672">=</span><span style="color:#ae81ff">5</span>)
+</span></span><span style="display:flex;"><span>    confidence_score: float <span style="color:#f92672">=</span> Field(ge<span style="color:#f92672">=</span><span style="color:#ae81ff">0.0</span>, le<span style="color:#f92672">=</span><span style="color:#ae81ff">1.0</span>)
+</span></span><span style="display:flex;"><span>    recommended_action: str
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>client <span style="color:#f92672">=</span> instructor<span style="color:#f92672">.</span>from_anthropic(Anthropic())
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>summary <span style="color:#f92672">=</span> client<span style="color:#f92672">.</span>messages<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>    model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;claude-sonnet-4-6&#34;</span>,
+</span></span><span style="display:flex;"><span>    max_tokens<span style="color:#f92672">=</span><span style="color:#ae81ff">1024</span>,
+</span></span><span style="display:flex;"><span>    messages<span style="color:#f92672">=</span>[{
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;role&#34;</span>: <span style="color:#e6db74">&#34;user&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;content&#34;</span>: <span style="color:#e6db74">&#34;Summarize the key findings from this Q1 2026 AI adoption report...&#34;</span>
+</span></span><span style="display:flex;"><span>    }],
+</span></span><span style="display:flex;"><span>    response_model<span style="color:#f92672">=</span>ResearchSummary,
+</span></span><span style="display:flex;"><span>    max_retries<span style="color:#f92672">=</span><span style="color:#ae81ff">3</span>,
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>print(summary<span style="color:#f92672">.</span>key_findings)
+</span></span><span style="display:flex;"><span>print(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Confidence: </span><span style="color:#e6db74">{</span>summary<span style="color:#f92672">.</span>confidence_score<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>)
+</span></span></code></pre></div><p>The retry mechanism deserves emphasis. When Pydantic raises a <code>ValidationError</code>, Instructor appends the error message to the conversation history and sends a new completion request. This leverages the model&rsquo;s instruction-following ability to self-correct, rather than hoping a fresh attempt produces a different result by chance. In practice this resolves the majority of validation failures within one or two retries, keeping the effective failure rate well below one percent.</p>
+<h2 id="openai-anthropic-and-google-native-structured-output-apis">OpenAI, Anthropic, and Google Native Structured Output APIs</h2>
+<p>All three major cloud LLM providers now support native structured output, but their implementations differ enough that understanding each one matters for production integrations. OpenAI&rsquo;s implementation, available on GPT-4o and GPT-4o-mini, uses <code>response_format: {type: &quot;json_schema&quot;, json_schema: {...}, strict: true}</code>. With <code>strict: true</code>, OpenAI applies constrained decoding that makes schema violations physically impossible — the model cannot generate a token that would produce invalid output. OpenAI supports recursive schemas, <code>$ref</code> references, and complex nested objects, though schemas with more than a few levels of nesting can slow first-token latency. JSON mode — <code>response_format: {type: &quot;json_object&quot;}</code> — is now considered legacy and deprecated for any schema-bound use case. It guarantees syntactically valid JSON but provides zero schema enforcement. Do not use it in new production code. Anthropic&rsquo;s approach uses tool-forcing: you define a tool with a JSON schema input specification, then set <code>tool_choice: {type: &quot;tool&quot;, name: &quot;your_tool&quot;}</code> to force the model to call it. Claude 3.5 Sonnet and later models handle this reliably. Instructor abstracts away the tool-forcing boilerplate when you use <code>from_anthropic()</code>. Google Gemini supports structured output via <code>response_mime_type: &quot;application/json&quot;</code> combined with a <code>response_schema</code> parameter that accepts a JSON schema object. Gemini 1.5 Pro and Flash both support this, and Google AI Studio provides a visual schema builder for testing.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># OpenAI native structured output</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> openai <span style="color:#f92672">import</span> OpenAI
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> json
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>client <span style="color:#f92672">=</span> OpenAI()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>schema <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;name&#34;</span>: <span style="color:#e6db74">&#34;product_extract&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;strict&#34;</span>: <span style="color:#66d9ef">True</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;schema&#34;</span>: {
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;object&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;properties&#34;</span>: {
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;name&#34;</span>: {<span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;string&#34;</span>},
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;price&#34;</span>: {<span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;number&#34;</span>},
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;in_stock&#34;</span>: {<span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;boolean&#34;</span>}
+</span></span><span style="display:flex;"><span>        },
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;required&#34;</span>: [<span style="color:#e6db74">&#34;name&#34;</span>, <span style="color:#e6db74">&#34;price&#34;</span>, <span style="color:#e6db74">&#34;in_stock&#34;</span>],
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;additionalProperties&#34;</span>: <span style="color:#66d9ef">False</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>response <span style="color:#f92672">=</span> client<span style="color:#f92672">.</span>chat<span style="color:#f92672">.</span>completions<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>    model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;gpt-4o&#34;</span>,
+</span></span><span style="display:flex;"><span>    messages<span style="color:#f92672">=</span>[{<span style="color:#e6db74">&#34;role&#34;</span>: <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#e6db74">&#34;content&#34;</span>: <span style="color:#e6db74">&#34;Extract: Blue Widget $29.99, available&#34;</span>}],
+</span></span><span style="display:flex;"><span>    response_format<span style="color:#f92672">=</span>{<span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;json_schema&#34;</span>, <span style="color:#e6db74">&#34;json_schema&#34;</span>: schema}
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>product <span style="color:#f92672">=</span> json<span style="color:#f92672">.</span>loads(response<span style="color:#f92672">.</span>choices[<span style="color:#ae81ff">0</span>]<span style="color:#f92672">.</span>message<span style="color:#f92672">.</span>content)
+</span></span></code></pre></div><h2 id="outlines-constrained-generation-for-local-models">Outlines: Constrained Generation for Local Models</h2>
+<p>Outlines is the open-source answer to structured output for self-hosted and local models, developed by dottxt-ai and adopted in production by hundreds of organizations running vLLM, TGI, LoRAX, xinference, and SGLang. Where Instructor validates output after generation and retries on failure, Outlines operates at the token generation level: it converts your JSON schema, regex pattern, or enumeration into a finite state machine, then at each generation step masks any token that would produce output violating the current FSM state. Invalid outputs are not retried — they are made impossible. The Rust-based <code>outlines-core</code> library achieves O(1) valid token lookup per generation step, which is why Outlines adds negligible overhead even at high batch throughput. This architecture matters operationally: Instructor&rsquo;s retry loop adds latency proportional to the failure rate times the model&rsquo;s generation time. At a two percent failure rate on 500ms generations with three retries, your p99 latency includes an occasional 1.5-second penalty. Outlines has no such tail. For batch inference pipelines processing millions of records, that difference compounds into meaningful cost and latency savings. Outlines integrates with Hugging Face Transformers, vLLM, and llama.cpp. Beyond JSON schemas, it supports Python type hints, regex patterns, and <code>choices()</code> for enum-style constraints.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> outlines
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> pydantic <span style="color:#f92672">import</span> BaseModel
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>model <span style="color:#f92672">=</span> outlines<span style="color:#f92672">.</span>models<span style="color:#f92672">.</span>transformers(<span style="color:#e6db74">&#34;mistralai/Mistral-7B-v0.1&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">ProductReview</span>(BaseModel):
+</span></span><span style="display:flex;"><span>    sentiment: str
+</span></span><span style="display:flex;"><span>    score: int
+</span></span><span style="display:flex;"><span>    summary: str
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>generator <span style="color:#f92672">=</span> outlines<span style="color:#f92672">.</span>generate<span style="color:#f92672">.</span>json(model, ProductReview)
+</span></span><span style="display:flex;"><span>review <span style="color:#f92672">=</span> generator(<span style="color:#e6db74">&#34;Review: This product exceeded my expectations.&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>print(review<span style="color:#f92672">.</span>sentiment)  <span style="color:#75715e"># guaranteed valid string</span>
+</span></span><span style="display:flex;"><span>print(review<span style="color:#f92672">.</span>score)      <span style="color:#75715e"># guaranteed integer</span>
+</span></span></code></pre></div><p>The practical decision rule: if you control the inference stack and are running local or self-hosted models, use Outlines. If you are calling cloud APIs where you do not have token-level access, use Instructor. The two are not in competition — they solve the same problem at different points in the stack.</p>
+<h2 id="pydantic-schema-patterns-for-production-llm-apis">Pydantic Schema Patterns for Production LLM APIs</h2>
+<p>Pydantic has become the canonical schema definition layer for LLM structured output in Python, and knowing which patterns hold up in production versus which ones cause subtle failures is essential knowledge for any team shipping LLM features. The foundational pattern is straightforward: inherit from <code>BaseModel</code>, annotate fields with precise types, and use <code>Field()</code> to add constraints that the LLM cannot infer from type annotations alone. For string fields that must match a controlled vocabulary, use <code>Literal</code> or <code>Enum</code> — this gives Instructor and Outlines the information they need to constrain the model effectively. For numeric fields with business logic bounds (scores, quantities, prices), always use <code>Field(ge=0, le=100)</code> or equivalent rather than relying on the model to stay within range. Nested models work well up to two or three levels of depth; beyond that, schema compilation time increases and some providers struggle with complex <code>$ref</code> resolution. The single most impactful schema hygiene practice is always setting <code>model_config = ConfigDict(extra=&quot;forbid&quot;)</code> at the class level — this translates to <code>additionalProperties: false</code> in the JSON schema and prevents the model from injecting fields that will silently corrupt your data pipeline. Optional fields should always carry a <code>default</code> value rather than being marked as <code>Optional</code> with no default; this eliminates an entire class of missing-field failures without any retry cost.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> pydantic <span style="color:#f92672">import</span> BaseModel, Field, field_validator
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> pydantic <span style="color:#f92672">import</span> ConfigDict
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> typing <span style="color:#f92672">import</span> Literal, List
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> enum <span style="color:#f92672">import</span> Enum
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Priority</span>(str, Enum):
+</span></span><span style="display:flex;"><span>    low <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;low&#34;</span>
+</span></span><span style="display:flex;"><span>    medium <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;medium&#34;</span>
+</span></span><span style="display:flex;"><span>    high <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;high&#34;</span>
+</span></span><span style="display:flex;"><span>    critical <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;critical&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">TicketExtract</span>(BaseModel):
+</span></span><span style="display:flex;"><span>    model_config <span style="color:#f92672">=</span> ConfigDict(extra<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;forbid&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    title: str <span style="color:#f92672">=</span> Field(max_length<span style="color:#f92672">=</span><span style="color:#ae81ff">120</span>)
+</span></span><span style="display:flex;"><span>    category: Literal[<span style="color:#e6db74">&#34;billing&#34;</span>, <span style="color:#e6db74">&#34;technical&#34;</span>, <span style="color:#e6db74">&#34;account&#34;</span>, <span style="color:#e6db74">&#34;other&#34;</span>]
+</span></span><span style="display:flex;"><span>    priority: Priority
+</span></span><span style="display:flex;"><span>    requires_human: bool
+</span></span><span style="display:flex;"><span>    tags: List[str] <span style="color:#f92672">=</span> Field(default_factory<span style="color:#f92672">=</span>list, max_length<span style="color:#f92672">=</span><span style="color:#ae81ff">5</span>)
+</span></span><span style="display:flex;"><span>    estimated_resolution_hours: float <span style="color:#f92672">=</span> Field(ge<span style="color:#f92672">=</span><span style="color:#ae81ff">0.5</span>, le<span style="color:#f92672">=</span><span style="color:#ae81ff">72.0</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">@field_validator</span>(<span style="color:#e6db74">&#34;title&#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">@classmethod</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">title_not_empty</span>(cls, v: str) <span style="color:#f92672">-&gt;</span> str:
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> <span style="color:#f92672">not</span> v<span style="color:#f92672">.</span>strip():
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">raise</span> <span style="color:#a6e22e">ValueError</span>(<span style="color:#e6db74">&#34;Title cannot be blank&#34;</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> v<span style="color:#f92672">.</span>strip()
+</span></span></code></pre></div><p>Keep validators simple and deterministic. The purpose of Pydantic validators in an LLM context is to catch model errors and trigger a retry with an informative error message — not to implement business logic that belongs elsewhere in your stack.</p>
+<h2 id="error-handling-and-retry-strategies-for-structured-output">Error Handling and Retry Strategies for Structured Output</h2>
+<p>Production LLM structured output systems need explicit retry logic, and the details of that logic determine whether your pipeline degrades gracefully or fails catastrophically under load. The baseline pattern is exponential backoff with a capped maximum: start at 0.5 seconds, double each retry, cap at 8 to 16 seconds, and stop after three attempts for synchronous paths or five for batch jobs. Instructor handles this at the validation layer when you set <code>max_retries</code>, but you still need network-level retry handling for rate limit errors and transient API failures, which are separate from schema validation failures. Tenacity is the standard Python library for this: <code>@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8), retry=retry_if_exception_type(Exception))</code>. For Instructor specifically, the retry loop passes the full ValidationError message back to the model, which gives it specific information about what was wrong. A generic retry without error context produces the same wrong output again; an error-informed retry has significantly higher recovery probability. Common failure modes worth handling explicitly: extra fields appearing in the response (solved by <code>additionalProperties: false</code>), missing required fields under long contexts (solved by keeping schemas small and focused), wrong numeric types (solved by explicit <code>type: integer</code> vs <code>type: number</code>), and nested object failures where a deeply nested required field is omitted (solved by flattening schemas and using defaults). Track your structured output failure rate, retry count distribution, and fallback activation rate as first-class metrics. If the validation failure rate exceeds two to three percent, the schema, prompt, or model selection needs revisiting — not the retry count.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> instructor
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> openai <span style="color:#f92672">import</span> OpenAI
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> pydantic <span style="color:#f92672">import</span> BaseModel, field_validator, ConfigDict
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> tenacity <span style="color:#f92672">import</span> retry, stop_after_attempt, wait_exponential
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">OrderExtract</span>(BaseModel):
+</span></span><span style="display:flex;"><span>    model_config <span style="color:#f92672">=</span> ConfigDict(extra<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;forbid&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    product_id: str
+</span></span><span style="display:flex;"><span>    quantity: int
+</span></span><span style="display:flex;"><span>    unit_price: float
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">@field_validator</span>(<span style="color:#e6db74">&#34;quantity&#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">@classmethod</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">quantity_positive</span>(cls, v: int) <span style="color:#f92672">-&gt;</span> int:
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> v <span style="color:#f92672">&lt;=</span> <span style="color:#ae81ff">0</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">raise</span> <span style="color:#a6e22e">ValueError</span>(<span style="color:#e6db74">&#34;Quantity must be a positive integer&#34;</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> v
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">@field_validator</span>(<span style="color:#e6db74">&#34;unit_price&#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">@classmethod</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">price_positive</span>(cls, v: float) <span style="color:#f92672">-&gt;</span> float:
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> v <span style="color:#f92672">&lt;=</span> <span style="color:#ae81ff">0</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">raise</span> <span style="color:#a6e22e">ValueError</span>(<span style="color:#e6db74">&#34;Unit price must be positive&#34;</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> v
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>client <span style="color:#f92672">=</span> instructor<span style="color:#f92672">.</span>patch(OpenAI())
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">@retry</span>(
+</span></span><span style="display:flex;"><span>    stop<span style="color:#f92672">=</span>stop_after_attempt(<span style="color:#ae81ff">3</span>),
+</span></span><span style="display:flex;"><span>    wait<span style="color:#f92672">=</span>wait_exponential(multiplier<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>, min<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>, max<span style="color:#f92672">=</span><span style="color:#ae81ff">8</span>)
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">extract_order</span>(text: str) <span style="color:#f92672">-&gt;</span> OrderExtract:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> client<span style="color:#f92672">.</span>chat<span style="color:#f92672">.</span>completions<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>        model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;gpt-4o&#34;</span>,
+</span></span><span style="display:flex;"><span>        max_retries<span style="color:#f92672">=</span><span style="color:#ae81ff">2</span>,
+</span></span><span style="display:flex;"><span>        response_model<span style="color:#f92672">=</span>OrderExtract,
+</span></span><span style="display:flex;"><span>        messages<span style="color:#f92672">=</span>[{<span style="color:#e6db74">&#34;role&#34;</span>: <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#e6db74">&#34;content&#34;</span>: text}]
+</span></span><span style="display:flex;"><span>    )
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>order <span style="color:#f92672">=</span> extract_order(<span style="color:#e6db74">&#34;5 units of SKU-429 at $12.50 each&#34;</span>)
+</span></span></code></pre></div><h2 id="choosing-the-right-approach-for-your-use-case">Choosing the Right Approach for Your Use Case</h2>
+<p>The choice of structured output strategy comes down to four variables: where the model runs, how much throughput you need, how much schema reliability you require, and what your team already knows. For teams using cloud APIs — OpenAI, Anthropic, or Gemini — Instructor is the default choice. It provides provider-neutral Pydantic integration, handles the tool-forcing complexity for Anthropic, and lets you switch providers with a one-line change. The automatic retry loop covers the gap between provider-level schema enforcement and perfect reliability. If you are on a single provider and want zero additional dependencies, use the provider&rsquo;s native structured output API directly with <code>strict: true</code>. For teams running local or self-hosted models — whether for cost, data privacy, or specialized fine-tuned models — Outlines plus vLLM is the emerging production standard. The FSM-based pre-generation constraint eliminates retry overhead entirely and scales linearly with batch size. For agent frameworks, use the native structured output integration your framework provides: LangChain&rsquo;s <code>with_structured_output()</code>, PydanticAI&rsquo;s <code>result_type</code>, or LlamaIndex&rsquo;s structured prediction. Wrapping a framework&rsquo;s own abstraction with a separate library creates unnecessary complexity. For TypeScript and JavaScript, the OpenAI SDK&rsquo;s <code>zodResponseFormat()</code> combined with Zod schemas provides the same guarantees as the Python native API. Instructor JS (<code>@instructor-ai/instructor</code>) offers the same Zod-based retry patterns as the Python library for multi-provider TypeScript applications.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Situation</th>
+          <th>Recommended Approach</th>
+          <th>Reason</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Cloud API, multiple providers</td>
+          <td>Instructor + Pydantic</td>
+          <td>Provider-neutral, automatic retries</td>
+      </tr>
+      <tr>
+          <td>Cloud API, single provider</td>
+          <td>Native strict mode</td>
+          <td>Zero dependencies</td>
+      </tr>
+      <tr>
+          <td>Local models (vLLM, TGI)</td>
+          <td>Outlines</td>
+          <td>Pre-generation constraints, no retry overhead</td>
+      </tr>
+      <tr>
+          <td>High-volume batch inference</td>
+          <td>Outlines + vLLM</td>
+          <td>O(1) token lookup, no tail latency from retries</td>
+      </tr>
+      <tr>
+          <td>LangChain application</td>
+          <td><code>with_structured_output()</code></td>
+          <td>Native framework integration</td>
+      </tr>
+      <tr>
+          <td>PydanticAI agent</td>
+          <td><code>result_type</code> parameter</td>
+          <td>Type-safe, Pydantic-native</td>
+      </tr>
+      <tr>
+          <td>TypeScript application</td>
+          <td>Zod + OpenAI SDK</td>
+          <td>Native schema enforcement</td>
+      </tr>
+  </tbody>
+</table>
+<p>The migration path from JSON mode is straightforward: analyze your existing JSON outputs to derive a Pydantic model, switch to <code>json_schema</code> with <code>strict: true</code>, and remove your manual parsing and error-handling code. The result is a smaller codebase with higher reliability — structured output is one of the rare cases where the correct engineering choice is also the simpler one.</p>
+<hr>
+<h2 id="faq">FAQ</h2>
+<p><strong>Q: What is the difference between JSON mode and structured output?</strong></p>
+<p>JSON mode asks the model to return syntactically valid JSON but makes no guarantees about schema compliance. A response can pass JSON mode validation while missing required fields, using wrong types, or including extra fields your parser does not expect. Native structured output with <code>strict: true</code> uses constrained decoding to make schema violations physically impossible — the model cannot generate a token that would produce non-compliant output. For any new production code, JSON mode should be treated as deprecated.</p>
+<p><strong>Q: When should I use Instructor versus Outlines?</strong></p>
+<p>The deciding factor is whether you control the token generation stack. If you are calling cloud APIs from OpenAI, Anthropic, or Google, token-level constraints are not available to you — use Instructor for Pydantic validation and automatic retry. If you are running local or self-hosted models through vLLM, TGI, or Hugging Face Transformers, use Outlines for pre-generation constraints that eliminate retries entirely. The two libraries are not alternatives for the same setup — they address the same problem at different infrastructure layers.</p>
+<p><strong>Q: How often do structured output calls actually fail in production?</strong></p>
+<p>Failure rates vary sharply by method. Prompt-only JSON extraction fails 5 to 20 percent of the time in production systems — the range depends on schema complexity, context length, and model quality. Function calling brings this to 1 to 5 percent. Native structured output with strict mode brings it to effectively zero for well-formed schemas. The 5 to 20 percent prompt-only failure rate is particularly dangerous because failures are often silent: the application receives a 200 response with parseable JSON that simply omits a field your downstream logic assumed would be present.</p>
+<p><strong>Q: What are the most common Pydantic schema patterns that prevent LLM output failures?</strong></p>
+<p>Four practices eliminate the majority of structured output failures: set <code>model_config = ConfigDict(extra=&quot;forbid&quot;)</code> on every model to prevent extra field injection; use <code>Literal</code> or <code>Enum</code> for string fields with controlled vocabularies; give every optional field a <code>default</code> value rather than using bare <code>Optional</code>; and keep schema nesting to three levels or fewer. Beyond these, use <code>Field()</code> constraints for numeric ranges and string lengths — even if the model usually stays within bounds, explicit constraints catch the edge cases that cause production incidents.</p>
+<p><strong>Q: Does retry logic with exponential backoff actually improve structured output reliability enough to matter?</strong></p>
+<p>Yes, significantly. Most structured output failures are not the result of the model being fundamentally incapable of producing the right schema — they are the result of the model taking a shortcut under ambiguous input or long context. A single retry with the ValidationError message passed back to the model resolves the majority of failures. In Instructor, the retry includes the specific Pydantic error, which gives the model precise information about what went wrong. A naive retry without error context has much lower recovery probability. Three retries with error context brings the effective failure rate of function calling to below 0.1 percent in most production workloads, which is operationally equivalent to native strict mode for most use cases.</p>
+]]></content:encoded></item></channel></rss>
