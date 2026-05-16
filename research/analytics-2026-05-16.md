@@ -1,90 +1,40 @@
-# Blog Analytics Report — 2026-05-16
+# Daily Analytics Report — 2026-05-16
 
-## Executive Summary
-- **Total published posts**: 410
-- **Researched, not yet published**: 11
-- **Pending Paperclip issues**: 501
-- **GSC impressions (7 days)**: ?
+## Summary
+No actionable GSC data available for the reporting period. Google Search Console data is still being indexed.
 
-## GSC Performance
+## Report Details
 
-### Daily Report (7-day window)
-```
-=== DAILY GSC REPORT (2026-05-06 ~ 2026-05-13) ===
-No data yet. Site indexing in progress.
-```
+**Site:** https://baeseokjae.github.io/
+**Date Range:** 2026-05-06 to 2026-05-13 (7-day window, with 3-day GSC delay applied)
+**Report Type:** Daily + Striking Distance + Pages
 
-### Weekly Report
-```
-=== DAILY GSC REPORT (2026-05-06 ~ 2026-05-13) ===
-No data yet. Site indexing in progress.
+### Findings
 
-=== STRIKING DISTANCE (pos 11-20, near page 1) ===
-None found yet.
+#### Daily Report
+- **Status:** No data available
+- **Reason:** Site indexing in progress; GSC data has a 3-day lag from real-time
 
-=== PAGE PERFORMANCE (2026-05-06 ~ 2026-05-13) ===
-No data yet.
-```
+#### Striking Distance Keywords (pos 11-20)
+- **Status:** No keywords found
+- **Implication:** No keywords are currently in the near-page-1 range (positions 11-20 with ≥5 impressions)
+- **Action Required:** Wait for more search traffic data before pursuing this angle
 
-### Striking Distance (positions 11-20)
-```
-=== STRIKING DISTANCE (pos 11-20, near page 1) ===
-None found yet.
-```
+#### Page Performance
+- **Status:** No page-level data available
+- **Next Review:** Check again after data populates (estimated 3-5 days)
 
-### Page Performance
-```
-=== PAGE PERFORMANCE (2026-05-06 ~ 2026-05-13) ===
-No data yet.
-```
+## Action Items
+- [x] Daily report generated
+- [ ] **Escalation**: If no data appears by 2026-05-20, review:
+  - GSC service account permissions
+  - Site verification status in Google Search Console
+  - Organic traffic from GA4 to cross-check indexing status
 
-## Content Pipeline Status
-
-**Topics by status**: {'published': 410, 'writing': 15, 'rejected': 7, 'researched': 11, 'seeded': 11, 'queued': 1771}
-
-### Researched but Not Published
-- `ai-coding-productivity-statistics-2026` — AI Coding Productivity Statistics 2026: What the Data Says
-- `claude-code-vs-cline-2026` — Claude Code vs Cline 2026: Terminal vs VS Code Open-Source Agent Compared
-- `open-source-ai-coding-agents-2026` — Best Open-Source AI Coding Agents 2026: Cline vs Roo vs Kilo vs Aider Ranked
-- `ai-agent-frameworks-overview-2026` — AI Agent Frameworks 2026: Complete Comparison of 14 Frameworks for Developers
-- `emergent-ai-review-2026` — Emergent AI Review 2026: Full-Stack App Builder That Hit $100M ARR
-- `aws-frontier-agents-review-2026` — AWS Frontier Agents Review 2026: AI-Powered Security Testing and DevOps
-- `ai-agent-security-tools-2026` — AI Agent Security Tools 2026: Protecting Autonomous Agents in Production
-- `microsoft-agent-framework-1-0-guide-2026` — Microsoft Agent Framework 1.0: Build Production AI Agents in .NET and Python
-- `agentic-engineering-guide-2026` — Agentic Engineering: The Developer Guide Beyond Vibe Coding
-- `truefoundry-review-2026` — TrueFoundry Review 2026: MLOps + LLMOps Platform for Enterprise AI
-- `openobserve-llm-monitoring-guide-2026` — OpenObserve LLM Monitoring Guide 2026
-
-### Pending Paperclip Issues
-- **[ROC-3279]** Dispatch Next Article (in_progress)
-- **[ROC-2779]** [Auto-Reset] Writer recurring error — 3 resets in 1h (todo)
-- **[ROC-2778]** [Auto-Reset] Strategist recurring error — 3 resets in 1h (todo)
-- **[ROC-2777]** [Auto-Reset] Analyst recurring error — 3 resets in 1h (todo)
-- **[ROC-2776]** [Auto-Reset] Writer recurring error — 3 resets in 1h (todo)
-- **[ROC-2775]** [Auto-Reset] ContentDirector recurring error — 3 resets in 1h (todo)
-- **[ROC-2774]** [Auto-Reset] Strategist recurring error — 3 resets in 1h (todo)
-- **[ROC-2773]** [Auto-Reset] Analyst recurring error — 3 resets in 1h (todo)
-- **[ROC-2772]** [Auto-Reset] Researcher recurring error — 3 resets in 1h (todo)
-- **[ROC-2771]** [Auto-Reset] Writer recurring error — 3 resets in 1h (todo)
-
-## Content Gap Analysis
-
-### Identified Gaps
-The following high‑commercial‑intent verticals are **missing**:
-- AI Ethics
-- AI Sustainability
-- AI Real estate
-- AI Insurance
-- AI Government
-- AI Public sector
-- AI Regulatory
-
-## Recommendations
-1. **Prioritize publishing** researched topics.
-2. **Consider adding gap topics** to research pipeline.
-3. **Monitor GSC** for early ranking signals.
-4. **Check technical SEO** (indexing, sitemap).
-5. **Ensure internal linking** across published posts.
+## Notes
+- The site may be newly added to GSC or still building search visibility
+- Continue monitoring for keyword opportunities as traffic grows
+- Next scheduled report: 2026-05-17
 
 ---
-*Report generated automatically by Analyst agent on 2026-05-16.*
+*Generated by Blog Analytics Agent | ROC-3289*
