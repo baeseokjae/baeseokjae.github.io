@@ -1,0 +1,561 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>CI-Automation on RockB</title><link>https://baeseokjae.github.io/tags/ci-automation/</link><description>Recent content in CI-Automation on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Fri, 22 May 2026 03:02:46 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/ci-automation/index.xml" rel="self" type="application/rss+xml"/><item><title>Composio Agent Orchestrator: Parallel Coding Agents for CI and PR Reviews</title><link>https://baeseokjae.github.io/posts/composio-agent-orchestrator-guide-2026/</link><pubDate>Fri, 22 May 2026 03:02:46 +0000</pubDate><guid>https://baeseokjae.github.io/posts/composio-agent-orchestrator-guide-2026/</guid><description>Composio Agent Orchestrator runs 5+ parallel coding agents that autonomously fix CI failures and merge PRs — a practical guide and comparison with OpenAI Symphony.</description><content:encoded><![CDATA[<p>Composio Agent Orchestrator (AO) is an open-source framework that runs multiple coding agents in parallel across your Git worktrees, automatically routes CI failures back to the responsible agent, and handles the full PR lifecycle from task assignment to merged code — without a human in the loop.</p>
+<h2 id="what-is-composio-agent-orchestrator">What Is Composio Agent Orchestrator?</h2>
+<p>Composio Agent Orchestrator is an open-source TypeScript framework, released by Composio in February 2026, that coordinates multiple AI coding agents working simultaneously on separate Git worktrees. Unlike single-agent tools that queue tasks sequentially, AO spawns up to 30+ parallel agents (default: 5 per project) and assigns each agent an isolated branch. When a CI pipeline fails, AO detects the failure within ~30 seconds via lifecycle polling and routes the error context back to the specific agent session that introduced the regression. The system comprises 40,000 lines of TypeScript, 17 plugins, and 3,288 tests — and was mostly built by the agents it now orchestrates. Since open-sourcing, it has accumulated 4.9k GitHub stars. The core value proposition: development teams can offload the full feedback loop of &ldquo;write code → CI fails → fix → re-review → merge&rdquo; to AI, reducing the time humans spend on routine CI triage and PR shepherding.</p>
+<h2 id="how-it-works-the-dual-layer-plannerexecutor-architecture">How It Works: The Dual-Layer Planner/Executor Architecture</h2>
+<p>Composio Agent Orchestrator replaces the traditional ReAct loop — where a single agent reasons, acts, observes, and repeats in a sequential chain — with a stateful dual-layer architecture that separates strategic planning from code execution. The <strong>Planner layer</strong> ingests tickets from a tracker (GitHub Issues, Linear, Jira) and decomposes them into bounded tasks, each with a clear success criterion and estimated blast radius. The <strong>Executor layer</strong> picks up these tasks, each in an isolated Git worktree, and drives a coding agent (Claude Code, OpenAI Codex, Aider, or a custom adapter) to completion. The Planner retains global state — which branches are active, which CI runs are pending, which PRs are blocked on review — so it can rebalance work dynamically without any task dropping through the cracks.</p>
+<h3 id="why-this-beats-react-loops-in-production">Why This Beats ReAct Loops in Production</h3>
+<p>ReAct loops accumulate tool noise as context grows. A single agent working on a ten-file refactor will have hundreds of tool calls in its context by the time it opens the fifth file, degrading output quality and inflating token costs. AO&rsquo;s Just-in-Time context management routes only the tool definitions relevant to the current execution step to each agent session. An agent writing a database migration never sees the GitHub PR review tools; an agent fixing a failing Cypress test never receives the Linear ticket-creation schema. This selective routing keeps each agent session lean and focused — typically under 200k tokens even on large codebases — and eliminates the &ldquo;confused by irrelevant tools&rdquo; failure mode that plagues general-purpose agents handling 100+ API integrations.</p>
+<h3 id="the-8-plugin-slots">The 8 Plugin Slots</h3>
+<p>AO&rsquo;s plugin architecture exposes eight standardized slots that control every layer of the orchestration: <strong>runtime</strong> (tmux, Docker, bare Node), <strong>agent</strong> (Claude Code, Codex, Aider), <strong>workspace</strong> (local Git, remote volume), <strong>tracker</strong> (GitHub, Linear), <strong>SCM</strong> (GitHub, GitLab), <strong>notifier</strong> (Slack, email), <strong>terminal</strong> (xterm, headless), and <strong>lifecycle</strong> (CI polling adapters for GitHub Actions, CircleCI, Jenkins). Each slot accepts a single plugin; swapping the tracker from GitHub Issues to Linear requires changing one config key and restarting — no code changes needed.</p>
+<h2 id="key-features-autonomous-ci-fixes-pr-reviews-and-merge-handling">Key Features: Autonomous CI Fixes, PR Reviews, and Merge Handling</h2>
+<p>Composio Agent Orchestrator&rsquo;s headline capability is end-to-end PR autonomy: the framework handles every stage between &ldquo;task assigned&rdquo; and &ldquo;PR merged&rdquo; without requiring human action at any intermediate step. Here is how each stage works in practice. When a tracker plugin surfaces a new ticket, the Planner layer creates a task record with acceptance criteria parsed from the ticket body. An Executor agent claims the task, creates a branch (<code>ao/task-&lt;id&gt;</code>), and begins implementing. When the agent pushes a commit, the lifecycle plugin polls the CI system every 15 seconds. If a run fails within 30 seconds of detection, AO injects the structured CI log — only the failing step&rsquo;s output, not the full 10,000-line log — back into the agent&rsquo;s session as a tool result. The agent corrects the issue and pushes again. Once CI passes, the SCM plugin opens a PR (or marks a draft PR ready for review), optionally assigns reviewers based on CODEOWNERS, and monitors the review thread. If a reviewer requests changes, AO surfaces the diff comments to the agent as structured input. Approvals trigger an auto-merge if branch protection rules allow it.</p>
+<h3 id="ci-failure-routing-the-key-differentiator">CI Failure Routing: The Key Differentiator</h3>
+<p>Most CI failure workflows today rely on a human reading the failure log and deciding which engineer (or which agent session) should fix it. AO eliminates this coordination cost entirely. Its lifecycle plugin maintains a map of <code>commit SHA → agent session ID</code>, so when a CI run fails on commit <code>abc123</code>, AO knows exactly which tmux pane (or Docker container) owns that work and injects the failure context there. Teams running 10 parallel agents report that this routing resolves 70–80% of CI failures without any human involvement, because most failures are deterministic (missing import, type error, wrong env var) and the same agent that introduced the bug has full context to fix it in under two minutes.</p>
+<h3 id="automatic-pr-review-handling">Automatic PR Review Handling</h3>
+<p>PR review automation in AO works through the SCM plugin, which subscribes to the repository&rsquo;s webhook events. When a reviewer posts an inline comment, the plugin extracts the comment, the file path, and the surrounding diff context, and queues it as a structured input event for the responsible agent. The agent processes each review comment as an individual task: read the comment, locate the code, apply the fix, push a commit. The reviewer sees a resolved conversation and a new commit within minutes. This loop continues until all review threads are resolved and approvals are received, at which point the SCM plugin triggers the merge.</p>
+<h2 id="getting-started-installation-and-setup-in-under-10-minutes">Getting Started: Installation and Setup in Under 10 Minutes</h2>
+<p>Composio Agent Orchestrator installs as a single global pnpm package and requires four system-level prerequisites: Node.js 20+, pnpm, tmux, and Git 2.25+. Git 2.25 introduced the <code>git worktree add</code> subcommand that AO depends on to isolate each agent in its own working tree — older Git versions will fail silently during task startup. Beyond those prerequisites, you need an API key for your chosen coding agent (Anthropic for Claude Code, OpenAI for Codex) and a GitHub or Linear personal access token with <code>repo</code> and <code>issues</code> scopes. The entire setup — from <code>pnpm add -g</code> to a running orchestrator watching your repository — takes under 10 minutes on a fresh machine. There are no databases to provision, no persistent services beyond the tmux session itself, and no cloud accounts to create beyond what you already use for CI. This low operational footprint is one of AO&rsquo;s strongest advantages over Symphony, which requires a running PostgreSQL instance and an Elixir release before it can process a single ticket.</p>
+<h3 id="prerequisites">Prerequisites</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Verify prerequisites</span>
+</span></span><span style="display:flex;"><span>node --version   <span style="color:#75715e"># must be ≥ 20</span>
+</span></span><span style="display:flex;"><span>pnpm --version   <span style="color:#75715e"># any recent version</span>
+</span></span><span style="display:flex;"><span>tmux -V          <span style="color:#75715e"># must be installed</span>
+</span></span><span style="display:flex;"><span>git --version    <span style="color:#75715e"># must be ≥ 2.25</span>
+</span></span></code></pre></div><h3 id="installation">Installation</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Install the CLI globally</span>
+</span></span><span style="display:flex;"><span>pnpm add -g @composio/agent-orchestrator
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify</span>
+</span></span><span style="display:flex;"><span>ao --version
+</span></span></code></pre></div><h3 id="initialize-a-project">Initialize a Project</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>cd your-repo
+</span></span><span style="display:flex;"><span>ao init
+</span></span></code></pre></div><p><code>ao init</code> generates an <code>ao.config.ts</code> in the project root. The default config uses tmux as the runtime, Claude Code as the agent, GitHub as both the tracker and SCM, and GitHub Actions as the CI lifecycle adapter. Edit the config to swap any slot:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#75715e">// ao.config.ts
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">defineConfig</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#39;@composio/agent-orchestrator&#39;</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">default</span> <span style="color:#a6e22e">defineConfig</span>({
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">agent</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;claude-code&#39;</span>,          <span style="color:#75715e">// or &#39;codex&#39;, &#39;aider&#39;
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#a6e22e">runtime</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;tmux&#39;</span>,               <span style="color:#75715e">// or &#39;docker&#39;
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#a6e22e">tracker</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;github&#39;</span>,             <span style="color:#75715e">// or &#39;linear&#39;, &#39;jira&#39;
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#a6e22e">scm</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;github&#39;</span>,                 <span style="color:#75715e">// or &#39;gitlab&#39;
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#a6e22e">lifecycle</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;github-actions&#39;</span>,   <span style="color:#75715e">// or &#39;circleci&#39;, &#39;jenkins&#39;
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#a6e22e">concurrency</span>: <span style="color:#66d9ef">5</span>,                <span style="color:#75715e">// parallel agent sessions
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#a6e22e">autoMerge</span>: <span style="color:#66d9ef">true</span>,               <span style="color:#75715e">// merge when CI passes + approved
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>});
+</span></span></code></pre></div><h3 id="start-the-orchestrator">Start the Orchestrator</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ao start
+</span></span></code></pre></div><p>AO opens a tmux session with a dashboard pane showing active tasks, agent status, and CI states. New tasks are picked up automatically from the configured tracker.</p>
+<h2 id="running-parallel-agents-a-step-by-step-walkthrough">Running Parallel Agents: A Step-by-Step Walkthrough</h2>
+<p>Running your first set of parallel agents requires three steps after initial setup: labeling issues for AO to pick up, watching the dashboard, and optionally intervening at review gates. AO&rsquo;s default concurrency is 5 parallel agents, configurable up to 30+ via the <code>concurrency</code> key in <code>ao.config.ts</code>. Each agent runs in its own tmux pane with an isolated Git worktree, meaning five agents can simultaneously edit five different parts of your codebase without any shared file state or merge conflicts during the coding phase. In practice, teams starting with AO for the first time should label 5–10 issues from their backlog — picking bounded, well-scoped tasks with clear acceptance criteria in the ticket body — and observe one full cycle before increasing concurrency. This first run surfaces any misconfigured plugin settings (wrong API token scopes, incorrect CI adapter URLs) in a controlled way, while giving you a realistic picture of per-agent token costs before you scale to 20 or 30 parallel sessions. This walkthrough shows what happens for a batch of five issues processed simultaneously by five parallel agents.</p>
+<h3 id="step-1-label-issues-for-pickup">Step 1: Label Issues for Pickup</h3>
+<p>AO monitors the configured tracker for issues with the label <code>ao:ready</code> (configurable). Apply this label to five open issues:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Using GitHub CLI</span>
+</span></span><span style="display:flex;"><span>gh issue edit <span style="color:#ae81ff">101</span> --add-label <span style="color:#e6db74">&#34;ao:ready&#34;</span>
+</span></span><span style="display:flex;"><span>gh issue edit <span style="color:#ae81ff">102</span> --add-label <span style="color:#e6db74">&#34;ao:ready&#34;</span>
+</span></span><span style="display:flex;"><span>gh issue edit <span style="color:#ae81ff">103</span> --add-label <span style="color:#e6db74">&#34;ao:ready&#34;</span>
+</span></span><span style="display:flex;"><span>gh issue edit <span style="color:#ae81ff">104</span> --add-label <span style="color:#e6db74">&#34;ao:ready&#34;</span>
+</span></span><span style="display:flex;"><span>gh issue edit <span style="color:#ae81ff">105</span> --add-label <span style="color:#e6db74">&#34;ao:ready&#34;</span>
+</span></span></code></pre></div><h3 id="step-2-watch-the-dashboard">Step 2: Watch the Dashboard</h3>
+<p>Within seconds of labeling, AO&rsquo;s Planner layer ingests all five issues and distributes them across five Executor agents. Each agent gets its own tmux pane, its own Git worktree (<code>ao/task-101</code> through <code>ao/task-105</code>), and its own CI run. The dashboard shows:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 736 121"
+      >
+      <g transform='translate(8,16)'>
+<path d='M 480,48 L 488,32' fill='none' stroke='currentColor'></path>
+<path d='M 480,64 L 488,48' fill='none' stroke='currentColor'></path>
+<path d='M 480,80 L 488,64' fill='none' stroke='currentColor'></path>
+<path d='M 480,96 L 488,80' fill='none' stroke='currentColor'></path>
+<circle cx='480' cy='48' r='6' stroke='currentColor' fill='#fff'></circle>
+<circle cx='480' cy='64' r='6' stroke='currentColor' fill='#fff'></circle>
+<circle cx='480' cy='80' r='6' stroke='currentColor' fill='#fff'></circle>
+<circle cx='480' cy='96' r='6' stroke='currentColor' fill='#fff'></circle>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>G</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>E</text>
+<text text-anchor='middle' x='16' y='36' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='16' y='52' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='16' y='68' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='16' y='84' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='16' y='100' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>N</text>
+<text text-anchor='middle' x='24' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='24' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='24' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='24' y='84' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='24' y='100' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='32' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='32' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='32' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='32' y='84' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='32' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='40' y='36' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='40' y='52' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='40' y='68' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='40' y='84' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='40' y='100' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>O</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>R</text>
+<text text-anchor='middle' x='56' y='36' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='56' y='52' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='56' y='68' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='56' y='84' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='56' y='100' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='64' y='36' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='64' y='52' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='64' y='68' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='64' y='84' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='64' y='100' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>H</text>
+<text text-anchor='middle' x='72' y='36' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='72' y='52' fill='currentColor' style='font-size:1em'>2</text>
+<text text-anchor='middle' x='72' y='68' fill='currentColor' style='font-size:1em'>3</text>
+<text text-anchor='middle' x='72' y='84' fill='currentColor' style='font-size:1em'>4</text>
+<text text-anchor='middle' x='72' y='100' fill='currentColor' style='font-size:1em'>5</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>E</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='88' y='36' fill='currentColor' style='font-size:1em'>[</text>
+<text text-anchor='middle' x='88' y='52' fill='currentColor' style='font-size:1em'>[</text>
+<text text-anchor='middle' x='88' y='68' fill='currentColor' style='font-size:1em'>[</text>
+<text text-anchor='middle' x='88' y='84' fill='currentColor' style='font-size:1em'>[</text>
+<text text-anchor='middle' x='88' y='100' fill='currentColor' style='font-size:1em'>[</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='96' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='96' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='96' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='96' y='84' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='96' y='100' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>R</text>
+<text text-anchor='middle' x='104' y='36' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='104' y='52' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='104' y='68' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='104' y='84' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='104' y='100' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='112' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='112' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='112' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='112' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='112' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='120' y='4' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='120' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='120' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='120' y='68' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='120' y='84' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='120' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>O</text>
+<text text-anchor='middle' x='128' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='128' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='128' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='128' y='84' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='128' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>R</text>
+<text text-anchor='middle' x='136' y='36' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='136' y='52' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='136' y='68' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='136' y='84' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='136' y='100' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='144' y='36' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='144' y='52' fill='currentColor' style='font-size:1em'>2</text>
+<text text-anchor='middle' x='144' y='68' fill='currentColor' style='font-size:1em'>3</text>
+<text text-anchor='middle' x='144' y='84' fill='currentColor' style='font-size:1em'>4</text>
+<text text-anchor='middle' x='144' y='100' fill='currentColor' style='font-size:1em'>5</text>
+<text text-anchor='middle' x='152' y='4' fill='currentColor' style='font-size:1em'>—</text>
+<text text-anchor='middle' x='152' y='36' fill='currentColor' style='font-size:1em'>]</text>
+<text text-anchor='middle' x='152' y='52' fill='currentColor' style='font-size:1em'>]</text>
+<text text-anchor='middle' x='152' y='68' fill='currentColor' style='font-size:1em'>]</text>
+<text text-anchor='middle' x='152' y='84' fill='currentColor' style='font-size:1em'>]</text>
+<text text-anchor='middle' x='152' y='100' fill='currentColor' style='font-size:1em'>]</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>5</text>
+<text text-anchor='middle' x='176' y='36' fill='currentColor' style='font-size:1em'>█</text>
+<text text-anchor='middle' x='176' y='52' fill='currentColor' style='font-size:1em'>█</text>
+<text text-anchor='middle' x='176' y='68' fill='currentColor' style='font-size:1em'>█</text>
+<text text-anchor='middle' x='176' y='84' fill='currentColor' style='font-size:1em'>█</text>
+<text text-anchor='middle' x='176' y='100' fill='currentColor' style='font-size:1em'>█</text>
+<text text-anchor='middle' x='184' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='184' y='36' fill='currentColor' style='font-size:1em'>█</text>
+<text text-anchor='middle' x='184' y='52' fill='currentColor' style='font-size:1em'>█</text>
+<text text-anchor='middle' x='184' y='68' fill='currentColor' style='font-size:1em'>█</text>
+<text text-anchor='middle' x='184' y='84' fill='currentColor' style='font-size:1em'>█</text>
+<text text-anchor='middle' x='184' y='100' fill='currentColor' style='font-size:1em'>█</text>
+<text text-anchor='middle' x='192' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='192' y='36' fill='currentColor' style='font-size:1em'>█</text>
+<text text-anchor='middle' x='192' y='52' fill='currentColor' style='font-size:1em'>█</text>
+<rect x='188' y='56' width='8' height='16' fill='rgb(191,191,191)'></rect><text text-anchor='middle' x='192' y='84' fill='currentColor' style='font-size:1em'>█</text>
+<text text-anchor='middle' x='192' y='100' fill='currentColor' style='font-size:1em'>█</text>
+<text text-anchor='middle' x='200' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='200' y='36' fill='currentColor' style='font-size:1em'>█</text>
+<text text-anchor='middle' x='200' y='52' fill='currentColor' style='font-size:1em'>█</text>
+<rect x='196' y='56' width='8' height='16' fill='rgb(191,191,191)'></rect><text text-anchor='middle' x='200' y='84' fill='currentColor' style='font-size:1em'>█</text>
+<text text-anchor='middle' x='200' y='100' fill='currentColor' style='font-size:1em'>█</text>
+<text text-anchor='middle' x='208' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='208' y='36' fill='currentColor' style='font-size:1em'>█</text>
+<text text-anchor='middle' x='208' y='52' fill='currentColor' style='font-size:1em'>█</text>
+<rect x='204' y='56' width='8' height='16' fill='rgb(191,191,191)'></rect><text text-anchor='middle' x='208' y='84' fill='currentColor' style='font-size:1em'>█</text>
+<rect x='204' y='88' width='8' height='16' fill='rgb(191,191,191)'></rect><text text-anchor='middle' x='216' y='4' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='216' y='36' fill='currentColor' style='font-size:1em'>█</text>
+<text text-anchor='middle' x='216' y='52' fill='currentColor' style='font-size:1em'>█</text>
+<rect x='212' y='56' width='8' height='16' fill='rgb(191,191,191)'></rect><text text-anchor='middle' x='216' y='84' fill='currentColor' style='font-size:1em'>█</text>
+<rect x='212' y='88' width='8' height='16' fill='rgb(191,191,191)'></rect><text text-anchor='middle' x='224' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<rect x='220' y='24' width='8' height='16' fill='rgb(191,191,191)'></rect><text text-anchor='middle' x='224' y='52' fill='currentColor' style='font-size:1em'>█</text>
+<rect x='220' y='56' width='8' height='16' fill='rgb(191,191,191)'></rect><text text-anchor='middle' x='224' y='84' fill='currentColor' style='font-size:1em'>█</text>
+<rect x='220' y='88' width='8' height='16' fill='rgb(191,191,191)'></rect><rect x='228' y='24' width='8' height='16' fill='rgb(191,191,191)'></rect><text text-anchor='middle' x='232' y='52' fill='currentColor' style='font-size:1em'>█</text>
+<rect x='228' y='56' width='8' height='16' fill='rgb(191,191,191)'></rect><text text-anchor='middle' x='232' y='84' fill='currentColor' style='font-size:1em'>█</text>
+<rect x='228' y='88' width='8' height='16' fill='rgb(191,191,191)'></rect><text text-anchor='middle' x='240' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<rect x='236' y='24' width='8' height='16' fill='rgb(191,191,191)'></rect><rect x='236' y='40' width='8' height='16' fill='rgb(191,191,191)'></rect><rect x='236' y='56' width='8' height='16' fill='rgb(191,191,191)'></rect><text text-anchor='middle' x='240' y='84' fill='currentColor' style='font-size:1em'>█</text>
+<rect x='236' y='88' width='8' height='16' fill='rgb(191,191,191)'></rect><rect x='244' y='24' width='8' height='16' fill='rgb(191,191,191)'></rect><rect x='244' y='40' width='8' height='16' fill='rgb(191,191,191)'></rect><rect x='244' y='56' width='8' height='16' fill='rgb(191,191,191)'></rect><text text-anchor='middle' x='248' y='84' fill='currentColor' style='font-size:1em'>█</text>
+<rect x='244' y='88' width='8' height='16' fill='rgb(191,191,191)'></rect><text text-anchor='middle' x='256' y='4' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='264' y='84' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='272' y='4' fill='currentColor' style='font-size:1em'>q</text>
+<text text-anchor='middle' x='272' y='36' fill='currentColor' style='font-size:1em'>6</text>
+<text text-anchor='middle' x='272' y='52' fill='currentColor' style='font-size:1em'>8</text>
+<text text-anchor='middle' x='272' y='68' fill='currentColor' style='font-size:1em'>2</text>
+<text text-anchor='middle' x='272' y='84' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='272' y='100' fill='currentColor' style='font-size:1em'>4</text>
+<text text-anchor='middle' x='280' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='280' y='36' fill='currentColor' style='font-size:1em'>3</text>
+<text text-anchor='middle' x='280' y='52' fill='currentColor' style='font-size:1em'>2</text>
+<text text-anchor='middle' x='280' y='68' fill='currentColor' style='font-size:1em'>4</text>
+<text text-anchor='middle' x='280' y='84' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='280' y='100' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='288' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='288' y='36' fill='currentColor' style='font-size:1em'>%</text>
+<text text-anchor='middle' x='288' y='52' fill='currentColor' style='font-size:1em'>%</text>
+<text text-anchor='middle' x='288' y='68' fill='currentColor' style='font-size:1em'>%</text>
+<text text-anchor='middle' x='288' y='84' fill='currentColor' style='font-size:1em'>%</text>
+<text text-anchor='middle' x='288' y='100' fill='currentColor' style='font-size:1em'>%</text>
+<text text-anchor='middle' x='296' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='304' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='312' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='312' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='312' y='52' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='312' y='68' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='312' y='84' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='312' y='100' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='320' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='320' y='52' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='320' y='68' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='320' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='320' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='328' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='328' y='36' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='328' y='52' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='328' y='68' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='328' y='84' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='328' y='100' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='336' y='36' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='336' y='52' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='336' y='68' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='336' y='84' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='336' y='100' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='344' y='4' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='344' y='36' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='344' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='344' y='68' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='344' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='344' y='100' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='352' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='352' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='352' y='68' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='352' y='84' fill='currentColor' style='font-size:1em'>w</text>
+<text text-anchor='middle' x='352' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='360' y='4' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='360' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='360' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='360' y='84' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='360' y='100' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='368' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='368' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='368' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='368' y='84' fill='currentColor' style='font-size:1em'>2</text>
+<text text-anchor='middle' x='368' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='376' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='376' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='376' y='52' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='376' y='100' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='384' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='384' y='36' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='392' y='4' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='400' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='408' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='416' y='36' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='416' y='52' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='416' y='68' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='416' y='84' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='416' y='100' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='424' y='36' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='424' y='52' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='424' y='68' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='424' y='84' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='424' y='100' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='432' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='432' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='432' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='432' y='84' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='432' y='100' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='440' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='440' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='440' y='68' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='440' y='84' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='440' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='448' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='448' y='52' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='448' y='68' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='448' y='84' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='448' y='100' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='456' y='36' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='456' y='52' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='456' y='68' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='456' y='84' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='456' y='100' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='464' y='36' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='464' y='52' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='464' y='68' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='464' y='84' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='464' y='100' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='472' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='472' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='472' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='472' y='84' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='472' y='100' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='480' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='488' y='100' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='496' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='496' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='496' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='496' y='84' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='496' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='504' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='504' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='504' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='504' y='84' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='504' y='100' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='512' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='512' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='512' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='512' y='84' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='512' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='520' y='36' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='520' y='52' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='520' y='68' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='520' y='84' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='520' y='100' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='528' y='36' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='528' y='52' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='528' y='68' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='528' y='84' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='528' y='100' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='536' y='36' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='536' y='52' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='536' y='68' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='536' y='84' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='536' y='100' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='544' y='36' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='544' y='52' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='544' y='68' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='544' y='84' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='544' y='100' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='552' y='36' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='552' y='52' fill='currentColor' style='font-size:1em'>2</text>
+<text text-anchor='middle' x='552' y='68' fill='currentColor' style='font-size:1em'>3</text>
+<text text-anchor='middle' x='552' y='84' fill='currentColor' style='font-size:1em'>4</text>
+<text text-anchor='middle' x='552' y='100' fill='currentColor' style='font-size:1em'>5</text>
+<text text-anchor='middle' x='576' y='52' fill='currentColor' style='font-size:1em'>←</text>
+<text text-anchor='middle' x='576' y='84' fill='currentColor' style='font-size:1em'>←</text>
+<text text-anchor='middle' x='576' y='100' fill='currentColor' style='font-size:1em'>←</text>
+<text text-anchor='middle' x='592' y='52' fill='currentColor' style='font-size:1em'>P</text>
+<text text-anchor='middle' x='592' y='84' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='592' y='100' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='600' y='52' fill='currentColor' style='font-size:1em'>R</text>
+<text text-anchor='middle' x='600' y='84' fill='currentColor' style='font-size:1em'>w</text>
+<text text-anchor='middle' x='600' y='100' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='608' y='84' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='608' y='100' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='616' y='52' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='616' y='84' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='616' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='624' y='52' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='624' y='84' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='624' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='632' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='632' y='84' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='632' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='640' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='640' y='84' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='640' y='100' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='648' y='84' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='656' y='100' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='664' y='84' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='664' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='672' y='84' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='672' y='100' fill='currentColor' style='font-size:1em'>x</text>
+<text text-anchor='middle' x='680' y='84' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='688' y='84' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='696' y='84' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='704' y='84' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='712' y='84' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='720' y='84' fill='currentColor' style='font-size:1em'>l</text>
+</g>
+
+    </svg>
+  
+</div>
+<h3 id="step-3-review-gates-optional">Step 3: Review Gates (Optional)</h3>
+<p>If <code>autoMerge: false</code>, AO pauses at the &ldquo;PR approved&rdquo; state and waits for a human merge click. With <code>autoMerge: true</code>, the SCM plugin merges automatically once CI is green and required approvals are received. Teams typically enable auto-merge for low-risk tasks (dependency bumps, doc updates, minor refactors) and disable it for tasks touching authentication, payments, or data migrations.</p>
+<h3 id="handling-ci-failures-automatically">Handling CI Failures Automatically</h3>
+<p>Task 105 in the example above shows <code>ci:failed</code> with &ldquo;routing fix&rdquo; in progress. AO has already injected the failure context back to agent-5. Within 60–90 seconds, agent-5 will push a fix commit, CI will re-run, and the dashboard will update to <code>ci:running</code>. No human action required unless the fix fails twice in a row, at which point AO marks the task <code>blocked</code> and sends a Slack notification (via the notifier plugin) with the CI log summary.</p>
+<h2 id="composio-ao-vs-openai-symphony-vs-t3-code-which-should-you-use">Composio AO vs OpenAI Symphony vs T3 Code: Which Should You Use?</h2>
+<p>The parallel coding agent space has three serious contenders as of mid-2026: Composio Agent Orchestrator, OpenAI Symphony, and T3 Code. Each makes different trade-offs on autonomy, setup complexity, and ecosystem lock-in. AO is the most production-ready option for teams that want full PR lifecycle automation without committing to a specific AI provider or infrastructure stack. Symphony offers superior fault tolerance (Erlang/OTP supervision trees) but requires Elixir, PostgreSQL, and a Linear workspace — a significant operational bet. T3 Code is the best fit for teams that want interactive, per-edit review rather than autonomous batch processing.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Feature</th>
+          <th>Composio AO</th>
+          <th>OpenAI Symphony</th>
+          <th>T3 Code</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Language</strong></td>
+          <td>TypeScript</td>
+          <td>Elixir</td>
+          <td>TypeScript</td>
+      </tr>
+      <tr>
+          <td><strong>Default concurrency</strong></td>
+          <td>5 (up to 30+)</td>
+          <td>10</td>
+          <td>1 (interactive)</td>
+      </tr>
+      <tr>
+          <td><strong>Agent support</strong></td>
+          <td>Claude, Codex, Aider</td>
+          <td>Codex (primary)</td>
+          <td>Claude, Codex</td>
+      </tr>
+      <tr>
+          <td><strong>CI auto-fix</strong></td>
+          <td>Yes (30s detection)</td>
+          <td>Partial</td>
+          <td>No</td>
+      </tr>
+      <tr>
+          <td><strong>PR auto-merge</strong></td>
+          <td>Yes</td>
+          <td>Yes</td>
+          <td>No</td>
+      </tr>
+      <tr>
+          <td><strong>Tracker integration</strong></td>
+          <td>GitHub, Linear, Jira</td>
+          <td>Linear (required)</td>
+          <td>GitHub</td>
+      </tr>
+      <tr>
+          <td><strong>Setup complexity</strong></td>
+          <td>Low (Node + pnpm + tmux)</td>
+          <td>High (Elixir + PostgreSQL)</td>
+          <td>Low</td>
+      </tr>
+      <tr>
+          <td><strong>Production status</strong></td>
+          <td>Production-ready</td>
+          <td>Engineering preview</td>
+          <td>Beta</td>
+      </tr>
+      <tr>
+          <td><strong>Open source</strong></td>
+          <td>Yes (MIT)</td>
+          <td>Yes (Apache 2.0)</td>
+          <td>Yes (MIT)</td>
+      </tr>
+      <tr>
+          <td><strong>Self-hosted</strong></td>
+          <td>Yes</td>
+          <td>Yes</td>
+          <td>Yes</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="when-to-choose-composio-ao">When to Choose Composio AO</h3>
+<p>Choose AO if you want autonomous PR lifecycle management without infrastructure overhead, if your team uses Claude Code as its primary coding agent, or if you need agent-agnosticism to hedge against provider lock-in. AO&rsquo;s plugin system makes it the most adaptable option: you can wire it to an on-premise GitLab instance, a self-hosted Jenkins server, and a custom Linear workspace in under an hour.</p>
+<h3 id="when-to-choose-openai-symphony">When to Choose OpenAI Symphony</h3>
+<p>Symphony is worth considering if your team already runs Elixir infrastructure, relies on Linear as its primary tracker, and needs battle-tested process supervision for extremely long-running agent sessions. Symphony&rsquo;s Erlang/OTP foundation means an agent process crash doesn&rsquo;t lose task state — the supervisor tree restarts it and resumes from the last checkpoint. This is a genuine advantage for multi-day tasks. The trade-off: Symphony is still an engineering preview as of May 2026, and its dependency on Linear means tracker portability is limited.</p>
+<h3 id="when-to-choose-t3-code">When to Choose T3 Code</h3>
+<p>T3 Code targets a different workflow: interactive, human-in-the-loop editing where a developer reviews each suggested change via a JSON-RPC protocol before it is applied. This is not autonomous batch processing — it is more like an advanced pair-programming tool. Choose T3 Code if your team values granular control over every line change and is skeptical of autonomous merges.</p>
+<h2 id="plugin-ecosystem-and-extensibility">Plugin Ecosystem and Extensibility</h2>
+<p>Composio Agent Orchestrator&rsquo;s plugin system is what makes it practical for real-world engineering teams, whose CI stacks, trackers, and SCM platforms rarely match the defaults of any open-source tool. AO exposes 8 standardized plugin slots — runtime, agent, workspace, tracker, SCM, notifier, terminal, and lifecycle — each backed by a TypeScript interface with 3–5 methods. The community registry at <code>registry.composio.dev/plugins</code> already lists 23 plugins as of May 2026, covering CircleCI, Jenkins, GitLab, Jira, Bitbucket, Azure DevOps, and Buildkite. Writing a new plugin requires implementing a single interface, typically in 50–150 lines of TypeScript, with no changes to AO&rsquo;s core. This design was a deliberate architectural choice: Composio&rsquo;s own team swapped the tracker plugin from GitHub Issues to Linear mid-project during AO&rsquo;s self-bootstrapping build phase, and the ability to do so without touching orchestration logic validated the plugin boundary design. For enterprise teams running on-premise SCM or proprietary CI systems, the plugin model means AO can integrate without requiring access to Composio&rsquo;s hosted services — the entire stack runs inside your own infrastructure.</p>
+<h3 id="writing-a-custom-lifecycle-plugin">Writing a Custom Lifecycle Plugin</h3>
+<p>The lifecycle plugin interface has three methods: <code>subscribe(commitSHA: string): void</code> to register a CI run for monitoring, <code>poll(): CIStatus[]</code> to return the current state of all tracked runs, and <code>unsubscribe(commitSHA: string): void</code> to stop monitoring a run. A minimal CircleCI adapter:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">LifecyclePlugin</span>, <span style="color:#a6e22e">CIStatus</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#39;@composio/agent-orchestrator&#39;</span>;
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">CircleCI</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#39;circleci-client&#39;</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">CircleCIPlugin</span> <span style="color:#66d9ef">implements</span> <span style="color:#a6e22e">LifecyclePlugin</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">private</span> <span style="color:#a6e22e">client</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">CircleCI</span>({ <span style="color:#a6e22e">token</span>: <span style="color:#66d9ef">process.env.CIRCLECI_TOKEN</span> });
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">private</span> <span style="color:#a6e22e">tracked</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">Map</span>&lt;<span style="color:#f92672">string</span>, <span style="color:#a6e22e">string</span>&gt;(); <span style="color:#75715e">// sha → workflow_id
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">async</span> <span style="color:#a6e22e">subscribe</span>(<span style="color:#a6e22e">sha</span>: <span style="color:#66d9ef">string</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">run</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">client</span>.<span style="color:#a6e22e">getWorkflowBySHA</span>(<span style="color:#a6e22e">sha</span>);
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">tracked</span>.<span style="color:#66d9ef">set</span>(<span style="color:#a6e22e">sha</span>, <span style="color:#a6e22e">run</span>.<span style="color:#a6e22e">id</span>);
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">async</span> <span style="color:#a6e22e">poll</span>()<span style="color:#f92672">:</span> <span style="color:#a6e22e">Promise</span>&lt;<span style="color:#f92672">CIStatus</span><span style="color:#960050;background-color:#1e0010">[]</span>&gt; {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">Promise</span>.<span style="color:#a6e22e">all</span>([...<span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">tracked</span>.<span style="color:#a6e22e">entries</span>()].<span style="color:#a6e22e">map</span>(<span style="color:#66d9ef">async</span> ([<span style="color:#a6e22e">sha</span>, <span style="color:#a6e22e">id</span>]) <span style="color:#f92672">=&gt;</span> {
+</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">status</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">client</span>.<span style="color:#a6e22e">getWorkflow</span>(<span style="color:#a6e22e">id</span>);
+</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">return</span> { <span style="color:#a6e22e">sha</span>, <span style="color:#a6e22e">status</span>: <span style="color:#66d9ef">status.state</span>, <span style="color:#a6e22e">log</span>: <span style="color:#66d9ef">status.failedStepOutput</span> <span style="color:#f92672">??</span> <span style="color:#66d9ef">null</span> };
+</span></span><span style="display:flex;"><span>    }));
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">async</span> <span style="color:#a6e22e">unsubscribe</span>(<span style="color:#a6e22e">sha</span>: <span style="color:#66d9ef">string</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">tracked</span>.<span style="color:#66d9ef">delete</span>(<span style="color:#a6e22e">sha</span>);
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>Register it in <code>ao.config.ts</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">CircleCIPlugin</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#39;./plugins/circleci&#39;</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">default</span> <span style="color:#a6e22e">defineConfig</span>({
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">lifecycle</span>: <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">CircleCIPlugin</span>(),
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e">// ... other config
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>});
+</span></span></code></pre></div><h3 id="community-plugin-registry">Community Plugin Registry</h3>
+<p>The Composio team maintains a plugin registry at <code>registry.composio.dev/plugins</code>. As of May 2026, the registry includes 23 community-maintained plugins covering Bitbucket, Azure DevOps, Buildkite, PagerDuty (as a notifier), and a Docker-based runtime plugin for teams that prefer container isolation over tmux sessions.</p>
+<h2 id="limitations-and-when-not-to-use-agent-orchestrator">Limitations and When Not to Use Agent Orchestrator</h2>
+<p>Composio Agent Orchestrator is a strong tool for autonomous PR automation, but it is not a universal solution — and teams that deploy it outside its design envelope will be frustrated within a week. The primary limitation is task granularity: AO works best on bounded, self-contained tasks that can be fully described in a ticket with clear acceptance criteria and a verifiable success condition (tests pass, specific UI behavior, linter clean). Open-ended tasks like &ldquo;improve the performance of the search API&rdquo; or &ldquo;refactor the authentication module&rdquo; routinely produce unsatisfying results because the agent lacks the product judgment to decide when &ldquo;done&rdquo; is good enough. A second structural limitation is test coverage: AO&rsquo;s auto-merge path assumes that a green CI run equals correctness. In codebases where test coverage is below 50%, this assumption breaks down badly — agents can make API-breaking changes, introduce silent data regressions, or delete features entirely if no test catches the deviation. The framework does not compensate for weak test suites; it amplifies the consequences of having one. Teams should audit their test coverage and enforce minimum thresholds before enabling <code>autoMerge: true</code> on anything beyond trivial tasks.</p>
+<h3 id="tasks-ao-handles-poorly">Tasks AO Handles Poorly</h3>
+<ul>
+<li><strong>Cross-cutting architectural changes</strong> that touch 30+ files with deep semantic dependencies — agents frequently break interfaces they cannot see</li>
+<li><strong>Tasks requiring human judgment on product direction</strong> — AO will implement the literal ticket description even when the right answer is to change the spec</li>
+<li><strong>Tasks in legacy codebases with poor test coverage</strong> — CI passing does not mean correctness, and AO&rsquo;s auto-merge will happily ship a behavior regression if no test catches it</li>
+<li><strong>Security-sensitive changes</strong> — automated code review cannot replace a human security audit for auth flows, cryptography, or access control</li>
+</ul>
+<h3 id="operational-overhead">Operational Overhead</h3>
+<p>AO requires persistent infrastructure: a tmux-capable server (or Docker host), reliable network access to your SCM and tracker, and API keys for each service. For teams running on ephemeral CI runners without persistent sessions, the tmux-based runtime is impractical. The Docker runtime plugin mitigates this, but adds container management overhead. Teams using managed CI (e.g., GitHub Actions as their primary dev environment) will find AO&rsquo;s operational model a poor fit.</p>
+<h3 id="cost-considerations">Cost Considerations</h3>
+<p>Five parallel Claude Code sessions running continuously generate significant API costs. A single agent session resolving a medium-complexity ticket (10–20 file changes, 2–3 CI retry loops) consumes approximately 500k–1M tokens. At five concurrent agents, a busy day of 20 resolved tickets can cost $200–$400 in API fees. Teams should profile costs carefully before enabling high-concurrency AO runs on large backlogs.</p>
+<h2 id="verdict-is-composio-agent-orchestrator-production-ready-in-2026">Verdict: Is Composio Agent Orchestrator Production-Ready in 2026?</h2>
+<p>Composio Agent Orchestrator is production-ready for teams whose development workflow matches its design assumptions: well-scoped tickets, good test coverage, and a tolerance for occasional agent errors requiring human cleanup. For those teams, AO delivers on its promise: parallel coding agents that handle CI failures and PR lifecycle management autonomously, reducing engineering hours spent on routine triage by 60–80% in early adopter reports. The fact that Composio built 40,000 lines of its own codebase using AO — in 8 days — is the most compelling proof point in the product&rsquo;s favor. It is not a demo; it is the engineering team&rsquo;s primary development workflow.</p>
+<p>For teams with open-ended tasks, weak test coverage, or security-critical codebases, AO is better used as an accelerator for low-risk work (dependency upgrades, documentation, test generation) while humans retain control over the full-stack changes that matter most.</p>
+<hr>
+<h2 id="faq">FAQ</h2>
+<p><strong>Q1: Does Composio Agent Orchestrator require a specific AI model?</strong></p>
+<p>No. AO is model-agnostic. The agent plugin slot accepts Claude Code, OpenAI Codex, Aider, and custom adapters. You can run different agents on different tasks by configuring per-task overrides in <code>ao.config.ts</code>. Most teams default to Claude Code (claude-sonnet-4-6) for its strong code editing performance and long context window.</p>
+<p><strong>Q2: How does AO handle merge conflicts between parallel agent branches?</strong></p>
+<p>AO does not automatically resolve merge conflicts. When a conflict is detected at PR creation or merge time, the SCM plugin marks the task <code>blocked:conflict</code> and notifies via the configured notifier (Slack, email). A human must resolve the conflict manually or instruct the agent via a ticket comment. Future roadmap items include automatic rebase-and-retry for simple conflicts.</p>
+<p><strong>Q3: Can AO run on Windows?</strong></p>
+<p>The default tmux runtime requires a Unix-like environment, so bare Windows is not supported. Windows users can run AO inside WSL2 or use the Docker runtime plugin. The development team has indicated that a native Windows terminal runtime plugin is planned but not yet available.</p>
+<p><strong>Q4: How do I limit AO to specific repositories or branches?</strong></p>
+<p>In <code>ao.config.ts</code>, set the <code>allowedBranches</code> and <code>trackerFilter</code> options. <code>trackerFilter</code> accepts a JMESPath expression evaluated against ticket metadata, so you can restrict AO to tickets with specific labels, milestones, or assignees. The <code>allowedBranches</code> pattern (glob) controls which base branches AO will open PRs against.</p>
+<p><strong>Q5: What happens if an agent session crashes mid-task?</strong></p>
+<p>AO&rsquo;s Planner layer monitors all active Executor sessions via the runtime plugin. If a session exits unexpectedly (process crash, network timeout, API error), the Planner marks the task <code>interrupted</code>, releases the worktree, and re-queues the task for a new agent session after a configurable backoff (default: 5 minutes). The new session receives the full task context plus the last 50 lines of the interrupted session&rsquo;s terminal output to aid recovery.</p>
+]]></content:encoded></item></channel></rss>

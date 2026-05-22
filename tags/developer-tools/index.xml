@@ -230,6 +230,466 @@
 <p>No. By design, agents always create a feature branch and open a pull request — they cannot bypass branch protection rules or push directly to protected branches. Organization admins can enforce this policy globally via the Agent Control Plane, and it cannot be overridden at the repository level.</p>
 <p><strong>What happens if an agent session fails or produces bad code?</strong></p>
 <p>Agent sessions that fail (e.g., due to ambiguous requirements or exceeding the session timeout) show a &ldquo;Failed&rdquo; status in Mission Control with an error summary. Failed sessions do not consume AI credits. If an agent produces a PR with incorrect code, simply comment on the PR with corrections — the agent resumes the session, addresses your feedback, and pushes additional commits. You can also close the PR and re-assign the issue to a different agent to start fresh.</p>
+]]></content:encoded></item><item><title>MCP v2.1 Server Cards: Auto-Discovery for AI Agent Tool Registries (2026 Guide)</title><link>https://baeseokjae.github.io/posts/mcp-v2-1-server-cards-guide-2026/</link><pubDate>Thu, 21 May 2026 19:24:37 +0000</pubDate><guid>https://baeseokjae.github.io/posts/mcp-v2-1-server-cards-guide-2026/</guid><description>How to implement MCP v2.1 Server Cards and .well-known/mcp.json for automatic AI agent tool discovery — with Python and Node.js examples.</description><content:encoded><![CDATA[<p>MCP v2.1 Server Cards are standardized JSON documents hosted at <code>/.well-known/mcp/server-card.json</code> that let AI clients like Claude and Cursor discover your server&rsquo;s capabilities before making a single connection — no manual configuration required. If you&rsquo;re running an MCP server in 2026 without one, you&rsquo;re invisible to half the ecosystem.</p>
+<h2 id="what-is-an-mcp-server-card-and-why-it-matters-in-2026">What Is an MCP Server Card and Why It Matters in 2026</h2>
+<p>An MCP Server Card is a machine-readable metadata document that describes an MCP server&rsquo;s identity, transport options, available tool categories, authentication requirements, and capability flags — all served from a well-known URL path so any compliant AI client can discover the server automatically. Think of it as the <code>robots.txt</code> of AI tooling, except instead of telling crawlers what to ignore, it tells agents exactly what your server offers and how to connect. The specification is formalized in SEP-2127, a proposal submitted to the Model Context Protocol working group in early 2026. With 97 million monthly MCP SDK downloads as of January 2026, and more than 10,000 active public MCP servers now in the ecosystem, the discovery problem is acute: agents can&rsquo;t reason about tools they don&rsquo;t know exist. Server Cards solve this by decoupling tool discovery from tool execution — a client can read your server card, decide whether your tools are relevant, and only then initiate the full MCP handshake. Enterprise adoption is driving urgency: 78% of enterprise AI teams report at least one MCP-backed agent in production as of Q1 2026, up from 31% a year earlier. Without a standardized discovery layer, scaling that to hundreds of internal servers requires the kind of manual inventory that breaks under organizational velocity.</p>
+<h3 id="why-auto-discovery-changes-the-architecture">Why Auto-Discovery Changes the Architecture</h3>
+<p>The traditional approach — hardcoding MCP server URLs in agent configuration — works at a handful of servers. It fails at fifty. Server Cards introduce a pull model: when an agent encounters a new domain or service, it checks <code>/.well-known/mcp/server-card.json</code> first. If the document exists, the agent knows the transport type (HTTP, WebSocket, stdio), the auth flow (OAuth 2.0, API key, none), and which tool namespaces are available before spending a single network round-trip on the MCP protocol itself. This is exactly how HTTPS certificate discovery works — a pattern the web has relied on for decades.</p>
+<h2 id="how-the-well-knownmcpserver-cardjson-auto-discovery-endpoint-works">How the .well-known/mcp/server-card.json Auto-Discovery Endpoint Works</h2>
+<p>The <code>.well-known</code> directory is an IETF-standardized path prefix (RFC 5785) that web services use to host machine-readable metadata at predictable URLs. MCP v2.1 follows this convention by specifying that any HTTP-based MCP server should serve its server card at <code>https://&lt;your-domain&gt;/.well-known/mcp/server-card.json</code>. When an MCP-compatible AI client — Claude Desktop, Cursor, or a custom agent built on the MCP SDK — encounters a new server URL, it performs a pre-flight GET request to this endpoint before attempting any tool call. If the server returns a valid server card with a 200 status and <code>Content-Type: application/json</code>, the client parses the document to determine connection parameters and capability scope. If the endpoint returns 404 or is missing, the client falls back to legacy handshake behavior. The discovery sequence takes fewer than 100 milliseconds on a warm connection and eliminates the round-trip cost of attempting an MCP handshake against a server that doesn&rsquo;t support the required transport or auth model. Public MCP server registries including Smithery, Glama, and the official MCP registry maintained by Anthropic now index server cards automatically by crawling <code>.well-known</code> endpoints — meaning publishing your server card is the single action that makes your server discoverable across the entire ecosystem.</p>
+<h3 id="the-discovery-lifecycle-step-by-step">The Discovery Lifecycle Step by Step</h3>
+<ol>
+<li>Agent or client receives a base URL (e.g., <code>https://api.yourservice.com</code>)</li>
+<li>Client GETs <code>https://api.yourservice.com/.well-known/mcp/server-card.json</code></li>
+<li>Server returns the card; client validates against the SEP-2127 schema</li>
+<li>Client checks <code>transport</code> field — confirms HTTP/SSE or WebSocket match its capabilities</li>
+<li>Client checks <code>auth</code> field — initiates OAuth flow or injects API key header</li>
+<li>Client reads <code>tools.namespaces</code> to pre-filter relevance before calling <code>tools/list</code></li>
+<li>Full MCP handshake begins only if all preconditions are satisfied</li>
+</ol>
+<h2 id="mcp-server-card-json-schema-required-fields-and-full-structure">MCP Server Card JSON Schema: Required Fields and Full Structure</h2>
+<p>An MCP Server Card is a JSON document conforming to the SEP-2127 schema. The specification defines a small set of required fields and a larger set of optional fields that registries and clients use for ranking and filtering. The required fields are <code>name</code>, <code>version</code>, <code>description</code>, <code>transport</code>, and <code>mcp_version</code>. Everything else — authentication details, tool namespace declarations, contact info, license, rate limits — is optional but strongly recommended by every major registry. Missing optional fields don&rsquo;t prevent discovery, but they do lower your server&rsquo;s ranking in registry search results and may cause some governance-aware enterprise clients to reject the server automatically. The <code>mcp_version</code> field should be set to <code>&quot;2.1&quot;</code> for servers implementing the current spec. The <code>transport</code> object is where clients determine how to connect: valid types are <code>&quot;http&quot;</code>, <code>&quot;websocket&quot;</code>, and <code>&quot;stdio&quot;</code>. HTTP servers should also include <code>streaming: true</code> if they support Server-Sent Events for streamed responses. A well-formed server card for a production HTTP server weighs between 800 bytes and 3 KB — small enough to be served from a CDN edge cache with zero compute cost.</p>
+<h3 id="complete-server-card-example">Complete Server Card Example</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;$schema&#34;</span>: <span style="color:#e6db74">&#34;https://schema.mcp.run/server-card/v1.json&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;name&#34;</span>: <span style="color:#e6db74">&#34;acme-data-tools&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;display_name&#34;</span>: <span style="color:#e6db74">&#34;ACME Data Tools&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;version&#34;</span>: <span style="color:#e6db74">&#34;2.3.1&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;mcp_version&#34;</span>: <span style="color:#e6db74">&#34;2.1&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;description&#34;</span>: <span style="color:#e6db74">&#34;SQL query execution, schema inspection, and data export tools for ACME&#39;s internal data warehouse.&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;url&#34;</span>: <span style="color:#e6db74">&#34;https://mcp.acme.internal/v2&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;transport&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;http&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;streaming&#34;</span>: <span style="color:#66d9ef">true</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;endpoint&#34;</span>: <span style="color:#e6db74">&#34;https://mcp.acme.internal/v2/mcp&#34;</span>
+</span></span><span style="display:flex;"><span>  },
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;auth&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;oauth2&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;authorization_url&#34;</span>: <span style="color:#e6db74">&#34;https://auth.acme.internal/oauth/authorize&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;token_url&#34;</span>: <span style="color:#e6db74">&#34;https://auth.acme.internal/oauth/token&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;scopes&#34;</span>: [<span style="color:#e6db74">&#34;mcp:read&#34;</span>, <span style="color:#e6db74">&#34;mcp:execute&#34;</span>]
+</span></span><span style="display:flex;"><span>  },
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;tools&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;count&#34;</span>: <span style="color:#ae81ff">14</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;namespaces&#34;</span>: [<span style="color:#e6db74">&#34;sql&#34;</span>, <span style="color:#e6db74">&#34;schema&#34;</span>, <span style="color:#e6db74">&#34;export&#34;</span>],
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;tags&#34;</span>: [<span style="color:#e6db74">&#34;database&#34;</span>, <span style="color:#e6db74">&#34;analytics&#34;</span>, <span style="color:#e6db74">&#34;warehouse&#34;</span>]
+</span></span><span style="display:flex;"><span>  },
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;rate_limits&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;requests_per_minute&#34;</span>: <span style="color:#ae81ff">60</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;tokens_per_minute&#34;</span>: <span style="color:#ae81ff">100000</span>
+</span></span><span style="display:flex;"><span>  },
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;contact&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;email&#34;</span>: <span style="color:#e6db74">&#34;platform@acme.internal&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;support_url&#34;</span>: <span style="color:#e6db74">&#34;https://internal.acme.com/platform/mcp&#34;</span>
+</span></span><span style="display:flex;"><span>  },
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;license&#34;</span>: <span style="color:#e6db74">&#34;proprietary&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;visibility&#34;</span>: <span style="color:#e6db74">&#34;private&#34;</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><h3 id="required-vs-optional-fields-at-a-glance">Required vs. Optional Fields at a Glance</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Field</th>
+          <th>Required</th>
+          <th>Purpose</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>name</code></td>
+          <td>Yes</td>
+          <td>Machine-readable server identifier (slug format)</td>
+      </tr>
+      <tr>
+          <td><code>version</code></td>
+          <td>Yes</td>
+          <td>Server software version (semver)</td>
+      </tr>
+      <tr>
+          <td><code>mcp_version</code></td>
+          <td>Yes</td>
+          <td>MCP spec version this server implements</td>
+      </tr>
+      <tr>
+          <td><code>description</code></td>
+          <td>Yes</td>
+          <td>Human-readable summary (max 256 chars)</td>
+      </tr>
+      <tr>
+          <td><code>transport</code></td>
+          <td>Yes</td>
+          <td>Connection type and endpoint URL</td>
+      </tr>
+      <tr>
+          <td><code>auth</code></td>
+          <td>No</td>
+          <td>Authentication method and parameters</td>
+      </tr>
+      <tr>
+          <td><code>tools.namespaces</code></td>
+          <td>No</td>
+          <td>High-level tool categories for pre-filtering</td>
+      </tr>
+      <tr>
+          <td><code>rate_limits</code></td>
+          <td>No</td>
+          <td>Throttling parameters for capacity planning</td>
+      </tr>
+      <tr>
+          <td><code>visibility</code></td>
+          <td>No</td>
+          <td><code>public</code>, <code>private</code>, or <code>organization</code></td>
+      </tr>
+      <tr>
+          <td><code>license</code></td>
+          <td>No</td>
+          <td>SPDX identifier or <code>proprietary</code></td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="step-by-step-adding-a-server-card-to-your-mcp-server-python-and-nodejs">Step-by-Step: Adding a Server Card to Your MCP Server (Python and Node.js)</h2>
+<p>Adding a server card to an existing MCP server takes under 30 minutes for a typical deployment and requires no changes to your tool implementations — it&rsquo;s purely additive. The server card endpoint is a static JSON file served from a fixed path, which means you can implement it as a simple static file route in any web framework. The main decision is whether to generate the card dynamically at startup (allowing it to reflect the current tool count and version automatically) or to maintain it as a static file committed to your repository. Dynamic generation is better for servers where tool count changes frequently; static files work well for stable servers and let you version-control the discovery metadata alongside your code. The examples below show both the Python (FastAPI) and Node.js (Express) approaches, covering the minimal implementation that satisfies all major registries and AI clients including Claude Desktop, Cursor, and the MCP Inspector developer tool.</p>
+<h3 id="python-fastapi-implementation">Python (FastAPI) Implementation</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> fastapi <span style="color:#f92672">import</span> FastAPI
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> fastapi.responses <span style="color:#f92672">import</span> JSONResponse
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> json<span style="color:#f92672">,</span> importlib.metadata
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>app <span style="color:#f92672">=</span> FastAPI()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>SERVER_CARD <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;$schema&#34;</span>: <span style="color:#e6db74">&#34;https://schema.mcp.run/server-card/v1.json&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;name&#34;</span>: <span style="color:#e6db74">&#34;my-mcp-server&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;display_name&#34;</span>: <span style="color:#e6db74">&#34;My MCP Server&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;version&#34;</span>: importlib<span style="color:#f92672">.</span>metadata<span style="color:#f92672">.</span>version(<span style="color:#e6db74">&#34;my-mcp-server&#34;</span>),
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;mcp_version&#34;</span>: <span style="color:#e6db74">&#34;2.1&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;description&#34;</span>: <span style="color:#e6db74">&#34;Tools for interacting with the My Service API.&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;url&#34;</span>: <span style="color:#e6db74">&#34;https://api.myservice.com&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;transport&#34;</span>: {
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;http&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;streaming&#34;</span>: <span style="color:#66d9ef">True</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;endpoint&#34;</span>: <span style="color:#e6db74">&#34;https://api.myservice.com/mcp&#34;</span>
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;auth&#34;</span>: {
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;api_key&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;header&#34;</span>: <span style="color:#e6db74">&#34;X-API-Key&#34;</span>
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;tools&#34;</span>: {
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;count&#34;</span>: <span style="color:#ae81ff">8</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;namespaces&#34;</span>: [<span style="color:#e6db74">&#34;search&#34;</span>, <span style="color:#e6db74">&#34;create&#34;</span>, <span style="color:#e6db74">&#34;update&#34;</span>],
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;tags&#34;</span>: [<span style="color:#e6db74">&#34;productivity&#34;</span>, <span style="color:#e6db74">&#34;api&#34;</span>]
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;visibility&#34;</span>: <span style="color:#e6db74">&#34;public&#34;</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">@app.get</span>(<span style="color:#e6db74">&#34;/.well-known/mcp/server-card.json&#34;</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">server_card</span>():
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> JSONResponse(
+</span></span><span style="display:flex;"><span>        content<span style="color:#f92672">=</span>SERVER_CARD,
+</span></span><span style="display:flex;"><span>        headers<span style="color:#f92672">=</span>{
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;Cache-Control&#34;</span>: <span style="color:#e6db74">&#34;public, max-age=3600&#34;</span>,
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;Access-Control-Allow-Origin&#34;</span>: <span style="color:#e6db74">&#34;*&#34;</span>
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    )
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Mount your existing MCP handler at /mcp</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># app.mount(&#34;/mcp&#34;, your_mcp_app)</span>
+</span></span></code></pre></div><h3 id="nodejs-express-implementation">Node.js (Express) Implementation</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-javascript" data-lang="javascript"><span style="display:flex;"><span><span style="color:#66d9ef">import</span> <span style="color:#a6e22e">express</span> <span style="color:#a6e22e">from</span> <span style="color:#e6db74">&#39;express&#39;</span>;
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">readFileSync</span> } <span style="color:#a6e22e">from</span> <span style="color:#e6db74">&#39;fs&#39;</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">app</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">express</span>();
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">pkg</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">JSON</span>.<span style="color:#a6e22e">parse</span>(<span style="color:#a6e22e">readFileSync</span>(<span style="color:#e6db74">&#39;./package.json&#39;</span>, <span style="color:#e6db74">&#39;utf8&#39;</span>));
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">serverCard</span> <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">$schema</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;https://schema.mcp.run/server-card/v1.json&#39;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">name</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">pkg</span>.<span style="color:#a6e22e">name</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">display_name</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;My MCP Server&#39;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">version</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">pkg</span>.<span style="color:#a6e22e">version</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">mcp_version</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;2.1&#39;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">description</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;Tools for interacting with the My Service API.&#39;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">url</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;https://api.myservice.com&#39;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">transport</span><span style="color:#f92672">:</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">type</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;http&#39;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">streaming</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">true</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">endpoint</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;https://api.myservice.com/mcp&#39;</span>
+</span></span><span style="display:flex;"><span>  },
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">auth</span><span style="color:#f92672">:</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">type</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;oauth2&#39;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">authorization_url</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;https://auth.myservice.com/oauth/authorize&#39;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">token_url</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;https://auth.myservice.com/oauth/token&#39;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">scopes</span><span style="color:#f92672">:</span> [<span style="color:#e6db74">&#39;mcp:read&#39;</span>, <span style="color:#e6db74">&#39;mcp:execute&#39;</span>]
+</span></span><span style="display:flex;"><span>  },
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">tools</span><span style="color:#f92672">:</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">count</span><span style="color:#f92672">:</span> <span style="color:#ae81ff">8</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">namespaces</span><span style="color:#f92672">:</span> [<span style="color:#e6db74">&#39;search&#39;</span>, <span style="color:#e6db74">&#39;create&#39;</span>, <span style="color:#e6db74">&#39;update&#39;</span>],
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">tags</span><span style="color:#f92672">:</span> [<span style="color:#e6db74">&#39;productivity&#39;</span>, <span style="color:#e6db74">&#39;api&#39;</span>]
+</span></span><span style="display:flex;"><span>  },
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">visibility</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;public&#39;</span>
+</span></span><span style="display:flex;"><span>};
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">app</span>.<span style="color:#a6e22e">get</span>(<span style="color:#e6db74">&#39;/.well-known/mcp/server-card.json&#39;</span>, (<span style="color:#a6e22e">req</span>, <span style="color:#a6e22e">res</span>) =&gt; {
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">res</span>.<span style="color:#a6e22e">set</span>({
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#39;Content-Type&#39;</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;application/json&#39;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#39;Cache-Control&#39;</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;public, max-age=3600&#39;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#39;Access-Control-Allow-Origin&#39;</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;*&#39;</span>
+</span></span><span style="display:flex;"><span>  });
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">res</span>.<span style="color:#a6e22e">json</span>(<span style="color:#a6e22e">serverCard</span>);
+</span></span><span style="display:flex;"><span>});
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Attach your MCP handler here
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#a6e22e">app</span>.<span style="color:#a6e22e">listen</span>(<span style="color:#ae81ff">3000</span>);
+</span></span></code></pre></div><h3 id="cors-and-caching-headers">CORS and Caching Headers</h3>
+<p>Two headers matter for registry crawlers and browser-based AI clients:</p>
+<ul>
+<li><strong><code>Access-Control-Allow-Origin: *</code></strong> — Required for browser-based AI clients and registry scanners that run in a browser context. Without it, cross-origin requests to your server card will fail.</li>
+<li><strong><code>Cache-Control: public, max-age=3600</code></strong> — Allows CDN edges and registry crawlers to cache the document for up to one hour, reducing origin load for popular servers.</li>
+</ul>
+<h2 id="registering-your-server-card-with-major-mcp-registries-github-kong-azure-smithery">Registering Your Server Card with Major MCP Registries (GitHub, Kong, Azure, Smithery)</h2>
+<p>Once your <code>.well-known/mcp/server-card.json</code> endpoint is live, you can register it with public and enterprise registries to maximize discoverability. The public MCP server registry expanded from 1,200 servers in Q1 2025 to over 9,400 in April 2026 — 18% month-over-month growth — driven almost entirely by the standardization of server cards as the submission format. Each major registry has slightly different submission requirements, but all of them require a valid server card as the minimum entry point. The table below summarizes the current state of the four most widely used registries as of May 2026, including which additional fields they require beyond the SEP-2127 baseline. Submitting to multiple registries is additive: they don&rsquo;t conflict, and each one reaches a different population of AI clients and developer teams.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Registry</th>
+          <th>Submission Method</th>
+          <th>Additional Required Fields</th>
+          <th>Visibility Options</th>
+          <th>Enterprise Features</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Smithery</strong> (smithery.ai)</td>
+          <td>URL submission via web UI or API</td>
+          <td><code>contact.email</code>, <code>license</code></td>
+          <td>Public only</td>
+          <td>Paid verified badge</td>
+      </tr>
+      <tr>
+          <td><strong>Glama</strong> (glama.ai)</td>
+          <td>GitHub PR to registry repo</td>
+          <td><code>tools.tags</code>, <code>display_name</code></td>
+          <td>Public only</td>
+          <td>None</td>
+      </tr>
+      <tr>
+          <td><strong>Kong MCP Registry</strong></td>
+          <td>Kong Gateway plugin config</td>
+          <td><code>auth</code>, <code>rate_limits</code></td>
+          <td>Public + private</td>
+          <td>RBAC, policy enforcement</td>
+      </tr>
+      <tr>
+          <td><strong>Azure API Center</strong></td>
+          <td>Azure Portal or ARM template</td>
+          <td><code>visibility: &quot;organization&quot;</code></td>
+          <td>Private/org only</td>
+          <td>Azure RBAC, Entra ID</td>
+      </tr>
+      <tr>
+          <td><strong>Official MCP Registry</strong> (mcp.run)</td>
+          <td>CLI: <code>mcp registry publish</code></td>
+          <td><code>$schema</code>, semver <code>version</code></td>
+          <td>Public</td>
+          <td>Anthropic-verified badge</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="submitting-to-the-official-mcp-registry">Submitting to the Official MCP Registry</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Install the MCP CLI</span>
+</span></span><span style="display:flex;"><span>npm install -g @anthropic-ai/mcp-cli
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Publish (reads .well-known/mcp/server-card.json from your live URL)</span>
+</span></span><span style="display:flex;"><span>mcp registry publish --url https://api.yourservice.com
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify registration</span>
+</span></span><span style="display:flex;"><span>mcp registry lookup acme-data-tools
+</span></span></code></pre></div><p>The CLI performs a live fetch of your server card, validates it against the SEP-2127 schema, and submits it to <code>registry.mcp.run</code>. Registration completes in under 60 seconds. Your server then appears in <code>mcp registry search</code> results and in Claude Desktop&rsquo;s built-in server browser.</p>
+<h2 id="enterprise-governance--controlling-which-tools-ai-agents-can-discover">Enterprise Governance — Controlling Which Tools AI Agents Can Discover</h2>
+<p>Enterprise MCP deployments face a governance problem that consumer tooling doesn&rsquo;t: unregistered, unapproved MCP servers represent a shadow IT risk equivalent to unauthorized SaaS subscriptions. If any developer can expose a tool via MCP and agents can discover it automatically, sensitive internal systems can become inadvertently accessible to AI agents operating under broad permissions. The Server Cards specification addresses this with the <code>visibility</code> field (<code>public</code>, <code>private</code>, <code>organization</code>) and by design — auto-discovery only works when a client is configured to trust a given domain or registry. The real governance layer, however, sits in enterprise MCP registries like Kong and Azure API Center, which act as curated allow-lists. An enterprise agent configured to discover tools only from <code>registry.acme.internal</code> will never discover an unapproved server at <code>rogue.acme.internal</code>, even if it has a valid server card. Kong&rsquo;s MCP Registry implements this via gateway policy: only servers whose cards are approved by a platform team appear in the discovery API, and every tool call routes through Kong&rsquo;s gateway for logging, rate limiting, and policy enforcement. Microsoft&rsquo;s Azure API Center approach is complementary — servers are registered through the same governance workflows as traditional REST APIs, with Azure Entra ID controlling which agents can discover and use which servers.</p>
+<h3 id="recommended-enterprise-server-card-configuration">Recommended Enterprise Server Card Configuration</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;name&#34;</span>: <span style="color:#e6db74">&#34;internal-hr-tools&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;mcp_version&#34;</span>: <span style="color:#e6db74">&#34;2.1&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;visibility&#34;</span>: <span style="color:#e6db74">&#34;organization&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;auth&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;oauth2&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;authorization_url&#34;</span>: <span style="color:#e6db74">&#34;https://login.microsoftonline.com/tenant-id/oauth2/v2.0/authorize&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;token_url&#34;</span>: <span style="color:#e6db74">&#34;https://login.microsoftonline.com/tenant-id/oauth2/v2.0/token&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;scopes&#34;</span>: [<span style="color:#e6db74">&#34;api://hr-mcp-server/mcp.execute&#34;</span>]
+</span></span><span style="display:flex;"><span>  },
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;governance&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;owner_team&#34;</span>: <span style="color:#e6db74">&#34;platform-engineering&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;data_classification&#34;</span>: <span style="color:#e6db74">&#34;confidential&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;approved_agents&#34;</span>: [<span style="color:#e6db74">&#34;hr-assistant&#34;</span>, <span style="color:#e6db74">&#34;onboarding-bot&#34;</span>]
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>The <code>governance</code> block is not part of the SEP-2127 core spec but is supported as an extension field by Kong, Azure, and several internal tooling frameworks. Clients that don&rsquo;t understand it safely ignore it; enterprise gateways that do understand it use it to enforce policy.</p>
+<h2 id="testing-and-validating-your-mcp-server-card-implementation">Testing and Validating Your MCP Server Card Implementation</h2>
+<p>Validating your server card before submission to a registry prevents the most common causes of discovery failure: malformed JSON, missing required fields, incorrect CORS headers, and schema version mismatches. The MCP ecosystem provides three tiers of validation tooling: the official MCP Inspector (browser-based), the <code>mcp</code> CLI validator, and the community-maintained <code>mcp-card-lint</code> package for CI pipelines. Running all three before your first registry submission catches 95% of issues that would otherwise result in a failed crawl or a rejected submission. Pay particular attention to the <code>transport.endpoint</code> field — it must be a fully qualified HTTPS URL that actually responds to MCP handshake requests, not just the base domain. Registries crawl both the <code>.well-known</code> path and the declared endpoint URL as part of submission validation.</p>
+<h3 id="validation-commands">Validation Commands</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Official MCP CLI validation</span>
+</span></span><span style="display:flex;"><span>mcp card validate --url https://api.yourservice.com
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># mcp-card-lint for CI (npm)</span>
+</span></span><span style="display:flex;"><span>npx mcp-card-lint --url https://api.yourservice.com --strict
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Manual curl check (confirm headers and content)</span>
+</span></span><span style="display:flex;"><span>curl -si https://api.yourservice.com/.well-known/mcp/server-card.json | head -30
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># MCP Inspector (browser)</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Open: https://inspector.mcp.run and paste your server URL</span>
+</span></span></code></pre></div><h3 id="common-validation-failures-and-fixes">Common Validation Failures and Fixes</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Error</th>
+          <th>Cause</th>
+          <th>Fix</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>CORS_MISSING</code></td>
+          <td>No <code>Access-Control-Allow-Origin</code> header</td>
+          <td>Add <code>Access-Control-Allow-Origin: *</code> to the route</td>
+      </tr>
+      <tr>
+          <td><code>SCHEMA_VERSION_MISMATCH</code></td>
+          <td><code>$schema</code> URL points to an old version</td>
+          <td>Update to <code>https://schema.mcp.run/server-card/v1.json</code></td>
+      </tr>
+      <tr>
+          <td><code>TRANSPORT_UNREACHABLE</code></td>
+          <td><code>transport.endpoint</code> returns non-200</td>
+          <td>Confirm MCP handler is deployed and route matches</td>
+      </tr>
+      <tr>
+          <td><code>MCP_VERSION_UNSUPPORTED</code></td>
+          <td><code>mcp_version</code> is <code>&quot;1.0&quot;</code> or missing</td>
+          <td>Set <code>mcp_version: &quot;2.1&quot;</code></td>
+      </tr>
+      <tr>
+          <td><code>CONTENT_TYPE_WRONG</code></td>
+          <td>Response <code>Content-Type</code> is <code>text/plain</code></td>
+          <td>Set <code>Content-Type: application/json</code> explicitly</td>
+      </tr>
+      <tr>
+          <td><code>DISPLAY_NAME_MISSING</code></td>
+          <td>Smithery requires <code>display_name</code></td>
+          <td>Add <code>display_name</code> field to your card</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="setting-up-ci-validation">Setting Up CI Validation</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># .github/workflows/validate-server-card.yml</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">name</span>: <span style="color:#ae81ff">Validate MCP Server Card</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">on</span>: [<span style="color:#ae81ff">push, pull_request]</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">jobs</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">validate</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">runs-on</span>: <span style="color:#ae81ff">ubuntu-latest</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">steps</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">uses</span>: <span style="color:#ae81ff">actions/checkout@v4</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Validate server card JSON schema</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">run</span>: |<span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">          cat static/.well-known/mcp/server-card.json | \
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">            npx ajv-cli validate \
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">              -s https://schema.mcp.run/server-card/v1.json \
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">              -d /dev/stdin</span>
+</span></span></code></pre></div><p>For servers that generate their card dynamically, run the <code>mcp-card-lint</code> check as a post-deploy step in your CD pipeline rather than in CI, pointing it at your staging environment URL.</p>
+<hr>
+<h2 id="faq">FAQ</h2>
+<p>MCP Server Cards and the <code>.well-known</code> auto-discovery pattern answer the most common questions developers and architects ask when first encountering MCP v2.1. The questions below cover the core concepts — what a server card is, whether it&rsquo;s mandatory, how it relates to earlier spec versions, how registries use it, and whether it works for private internal deployments. These are the same recurring questions that surface in the <code>#mcp</code> channel on the official Anthropic Discord, in GitHub issues on the MCP SDK repos, and in enterprise platform-engineering discussions on Kong and Azure forums. If your question isn&rsquo;t covered here, the official SEP-2127 proposal on GitHub (modelcontextprotocol/modelcontextprotocol pull #2127) contains the full specification with worked examples, and the MCP Inspector at inspector.mcp.run provides interactive, browser-based debugging for any server card implementation.</p>
+<h3 id="what-is-an-mcp-server-card">What is an MCP Server Card?</h3>
+<p>An MCP Server Card is a JSON metadata document that describes an MCP server — its name, version, transport type, authentication method, and available tool namespaces. It&rsquo;s served at <code>/.well-known/mcp/server-card.json</code> and allows AI clients to discover and connect to your server automatically without manual configuration.</p>
+<h3 id="is-the-well-knownmcpjson-endpoint-required-for-mcp-v21">Is the .well-known/mcp.json endpoint required for MCP v2.1?</h3>
+<p>The <code>.well-known/mcp/server-card.json</code> endpoint is strongly recommended but not strictly required for MCP v2.1 compliance. However, without it, your server won&rsquo;t appear in public registries like Smithery or the official MCP registry, and AI clients that support auto-discovery (including Claude Desktop) won&rsquo;t be able to find it without an explicit URL entry in client configuration.</p>
+<h3 id="whats-the-difference-between-sep-2127-and-the-older-server-cardjson-formats">What&rsquo;s the difference between SEP-2127 and the older server-card.json formats?</h3>
+<p>SEP-2127 is the current standardized proposal that unifies earlier experimental formats, including SEP-1649 (the original <code>server-card.json</code> concept) and SEP-1960 (the manifest format). The key differences are the <code>mcp_version</code> field (new), the nested <code>transport</code> object (replaces flat <code>transport_type</code>), and the <code>$schema</code> reference which enables automatic JSON Schema validation. If you implemented an earlier format, the migration is straightforward — mainly restructuring the <code>transport</code> field.</p>
+<h3 id="how-often-do-registries-crawl-server-cards">How often do registries crawl server cards?</h3>
+<p>Crawl frequency varies by registry. The official MCP registry (<code>mcp.run</code>) crawls registered servers every 24 hours. Smithery crawls every 6 hours. Kong MCP Registry relies on push-based webhooks rather than crawling — you notify Kong when your card changes. For most production servers, setting <code>Cache-Control: public, max-age=3600</code> (one hour) is a good balance: fresh enough for registries to pick up version updates within a reasonable time, cached enough to avoid unnecessary origin hits.</p>
+<h3 id="can-i-use-mcp-server-cards-for-private-internal-servers">Can I use MCP Server Cards for private internal servers?</h3>
+<p>Yes. Set <code>&quot;visibility&quot;: &quot;private&quot;</code> or <code>&quot;visibility&quot;: &quot;organization&quot;</code> in your server card. Private servers can still serve the card (so authorized clients can validate before connecting) but won&rsquo;t be indexed by public registries. Enterprise MCP registries like Kong and Azure API Center support private registries where only approved clients can discover internal servers, giving you the benefits of auto-discovery while maintaining governance controls over which agents can see which tools.</p>
+]]></content:encoded></item><item><title>GitHub Trending AI Projects April 2026: What's Worth Watching</title><link>https://baeseokjae.github.io/posts/github-trending-ai-projects-april-2026/</link><pubDate>Thu, 21 May 2026 04:29:32 +0000</pubDate><guid>https://baeseokjae.github.io/posts/github-trending-ai-projects-april-2026/</guid><description>Five GitHub trending AI projects from April 2026 that are actually worth your time — Superpowers, llama-stack, Google ADK, MemPalace, and Archon.</description><content:encoded><![CDATA[<p>April 2026 was a breakout month for AI developer tooling on GitHub. Five repositories hit the trending page simultaneously: a TDD framework for AI agents, Meta&rsquo;s unified Llama 4 deployment stack, Google&rsquo;s agent SDK, an open-source memory system that beat every paid alternative, and a reproducibility harness for AI coding benchmarks. Collectively, they crossed 200,000 new stars in under a month.</p>
+<h2 id="what-actually-trended-on-github-in-april-2026">What Actually Trended on GitHub in April 2026</h2>
+<p>April 2026&rsquo;s GitHub trending page for AI was unusual — not because one project went viral, but because five distinct categories of developer tooling all spiked at the same time. The AI developer tools category grew 47% in Q1 2026 versus Q4 2025 (GitHub Octoverse 2026 Preview), and April represented the peak of that curve. Superpowers hit 89K+ stars by late March and kept climbing. MemPalace crossed 23,000 stars and 3,000 forks by April 8, briefly becoming the #1 trending repository across all categories. Google&rsquo;s Agent Development Kit reached 8,200+ stars within weeks of its 1.0 GA release. Meta&rsquo;s llama-stack became the default way to run Llama 4 in production. Archon, the smallest of the five, started picking up research adoption because it solved a specific pain point: nobody could reproduce AI coding benchmarks. What makes April 2026 notable is the breadth — memory systems, deployment stacks, agent frameworks, TDD tooling, and benchmarking all went mainstream in the same month. Each project fills a different gap in the AI developer stack.</p>
+<h2 id="superpowers-tdd-for-ai-coding-agents">Superpowers: TDD for AI Coding Agents</h2>
+<p>Superpowers is a framework that enforces test-driven development discipline on AI coding agents. At 89K+ GitHub stars by March 2026, it&rsquo;s the most-starred framework in the AI coding category that isn&rsquo;t directly affiliated with a foundation model lab. The core premise is that AI agents left unconstrained tend to write code that works once but doesn&rsquo;t generalize — Superpowers addresses this by imposing a strict five-phase workflow: clarify → design → plan → code → verify. This isn&rsquo;t optional guidance; the framework uses 14 skill modules that auto-trigger based on context, enforcing YAGNI and DRY principles throughout. In practice, this means an agent can&rsquo;t jump to writing implementation code without first producing a design artifact, and can&rsquo;t submit code without running tests. The GitHub Octoverse data suggests Superpowers&rsquo; explosive growth correlates with teams adopting agentic coding tools and immediately running into the problem of agents that hallucinate confidently but break existing functionality. Superpowers is the first widely-adopted answer to &ldquo;how do you make an AI agent actually accountable?&rdquo; — and the stars reflect that it&rsquo;s solving a real production problem, not just a demo problem.</p>
+<h3 id="how-the-five-phase-discipline-works-in-practice">How the Five-Phase Discipline Works in Practice</h3>
+<p>The five-phase loop (clarify → design → plan → code → verify) maps directly to the pull request lifecycle most teams already use. Clarify produces a spec that the agent can be held to. Design requires explicit architecture decisions before touching files. Plan generates a diff-level task list. Code executes with scope constraints. Verify runs tests and confirms no regression. The agent cannot skip phases. This structure eliminates the most common failure mode in AI coding: the agent that makes 30 changes across 15 files to fix a one-line bug, breaking three other things in the process.</p>
+<h2 id="llama-stack-metas-unified-llama-4-deployment">llama-stack: Meta&rsquo;s Unified Llama 4 Deployment</h2>
+<p>llama-stack is Meta&rsquo;s official framework for running Llama 4 models in production — Scout, Maverick, and the larger variants — with a unified API across cloud providers, AMD GPUs, NVIDIA GPUs, and on-prem hardware. The key design decision is that the deployment target shouldn&rsquo;t change the application code. You write your inference logic once against the llama-stack API, and the framework handles the provider-specific plumbing. For production deployments this matters because GPU availability shifts based on price and region — lock yourself into one provider&rsquo;s SDK and you&rsquo;re stuck renegotiating contracts instead of spinning up cheaper capacity elsewhere. llama-stack 1.0 ships with Red Hat guardrails and enterprise safety shields baked in, which removes a major blocker for regulated industries. The AMD ROCm support is notable: ROCm-based GPUs are significantly cheaper than NVIDIA alternatives for inference workloads, and most Llama deployment guides until now assumed NVIDIA. One-command deployment to AWS, GCP, and Azure is functional in 1.0, covering the 80% case without custom infrastructure code. For teams running Llama 4 in production rather than experimenting in notebooks, llama-stack has become the default starting point.</p>
+<h3 id="what-llama-stack-gets-right-for-enterprise-deployments">What llama-stack Gets Right for Enterprise Deployments</h3>
+<p>Enterprise AI deployments fail at the compliance and safety layer more often than the model layer. llama-stack&rsquo;s built-in Red Hat guardrails handle input/output filtering, PII detection, and audit logging — features that enterprises would otherwise have to build or buy separately. The enterprise safety shields integrate with existing security infrastructure rather than replacing it. For a team deploying Llama 4 in a financial services context, this means the compliance team can audit the guardrails configuration without needing to understand the underlying model.</p>
+<h2 id="google-adk-agent-development-kit-with-a2a-protocol">Google ADK: Agent Development Kit with A2A Protocol</h2>
+<p>Google&rsquo;s Agent Development Kit (ADK) is a framework for building multi-agent systems with native support for the A2A (Agent-to-Agent) protocol. At 8,200+ GitHub stars, its growth reflects how many teams are now building agent pipelines that need multiple specialized agents to hand off tasks to each other. Most agent frameworks treat multi-agent communication as an afterthought — you write custom message-passing code and hope the agents understand each other. ADK makes A2A a first-class citizen, standardizing how agents discover capabilities, negotiate task handoffs, and report results. Graduating to 1.0 GA in 2026 means the API is stable for production use. ADK supports Python, TypeScript, Go, and Java, which is broader than most competitors. The Gemini integration is the differentiator for multimodal pipelines: ADK agents can natively process images, audio, and video inputs without additional wrapping code. One-command deployment to Google Cloud works via Cloud Run, and the framework integrates with Vertex AI for model serving. Built-in memory is included, which matters because most agent frameworks require you to choose and wire up your own memory backend. ADK&rsquo;s memory module handles session context, long-term storage, and retrieval without external dependencies.</p>
+<h3 id="a2a-protocol-why-agent-to-agent-communication-matters">A2A Protocol: Why Agent-to-Agent Communication Matters</h3>
+<p>Building an agent pipeline without a standardized communication protocol is like building microservices without REST or gRPC — every pair of services has a custom integration. A2A defines a common schema for capability declaration, task delegation, status reporting, and error propagation between agents. In practice, this means an ADK orchestrator agent can discover what a specialized research agent can do, assign a task, monitor progress, and handle failure — without custom code for each pair. The protocol is open, so non-ADK agents can participate if they implement the spec.</p>
+<h2 id="mempalace-the-highest-scoring-free-ai-memory-system">MemPalace: The Highest-Scoring Free AI Memory System</h2>
+<p>MemPalace is an open-source AI memory system that scored 96.6% on LongMemEval&rsquo;s Recall@5 benchmark — higher than Mem0, Zep, and every paid alternative in the category. It hit 23,000 GitHub stars and ~3,000 forks by April 8, 2026, spending time as the #1 trending repository on GitHub across all categories. The architecture that enables the benchmark results is AAAK (Adaptive Associative Attention with Keys) compression, which achieves a 30x compression ratio on stored memories while preserving retrieval accuracy. The practical result: MemPalace requires only 170 tokens at startup to initialize its memory context, compared to Mem0&rsquo;s 2,000 tokens. For applications running thousands of concurrent sessions, this difference is significant. The system stores memories as a graph structure rather than flat embeddings, which preserves relational context that embedding-only systems lose. MemPalace is MIT licensed with no hosted service component — everything runs locally or on your own infrastructure. For teams that can&rsquo;t send user conversation history to third-party services due to privacy requirements, this is the only high-accuracy option. The benchmark results are independently verifiable and the evaluation code is in the repository.</p>
+<h3 id="aaak-compression-what-30x-compression-actually-means">AAAK Compression: What 30x Compression Actually Means</h3>
+<p>A 30x compression ratio on memories means a conversation that would require 3,000 tokens of stored context uses 100 tokens in MemPalace. At scale, this translates to cost reduction at the inference layer — shorter context windows cost less — and latency improvement because the model processes less input per call. The AAAK mechanism preserves semantic relationships that naive compression (truncation, summarization) loses, which is why the Recall@5 score stays high despite the compression.</p>
+<h2 id="archon-reproducible-benchmarks-for-ai-coding">Archon: Reproducible Benchmarks for AI Coding</h2>
+<p>Archon is an open-source harness builder for AI coding benchmarks, designed to make AI coding results reproducible across research teams and organizations. The problem it solves is specific and underappreciated: SWE-bench scores published by different teams for the same model vary by 10-15 percentage points depending on how the evaluation was run. Prompt formatting, tool call order, retry logic, and environment setup all affect outcomes in ways that aren&rsquo;t captured in the benchmark number. Archon standardizes the harness configuration so two teams running the same evaluation get results that can actually be compared. For research teams, this means results are publishable without extensive methodology sections explaining custom evaluation setups. For enterprises evaluating AI coding tools, it means vendor-supplied benchmark numbers can be independently verified. The tool is growing adoption in the research community, and several teams have published reproductions of existing AI coding benchmarks using Archon. It&rsquo;s not glamorous software — no 23,000-star moment — but it&rsquo;s filling a real gap in the ecosystem&rsquo;s ability to make evidence-based decisions.</p>
+<h2 id="comparative-analysis-stars-adoption-and-real-use-cases">Comparative Analysis: Stars, Adoption, and Real Use Cases</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Project</th>
+          <th>GitHub Stars (April 2026)</th>
+          <th>License</th>
+          <th>Primary Use Case</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Superpowers</td>
+          <td>89,000+</td>
+          <td>MIT</td>
+          <td>TDD discipline for AI coding agents</td>
+      </tr>
+      <tr>
+          <td>llama-stack</td>
+          <td>~15,000</td>
+          <td>Apache 2.0</td>
+          <td>Production Llama 4 deployment</td>
+      </tr>
+      <tr>
+          <td>Google ADK</td>
+          <td>8,200+</td>
+          <td>Apache 2.0</td>
+          <td>Multi-agent pipelines with A2A</td>
+      </tr>
+      <tr>
+          <td>MemPalace</td>
+          <td>23,000+</td>
+          <td>MIT</td>
+          <td>High-accuracy local AI memory</td>
+      </tr>
+      <tr>
+          <td>Archon</td>
+          <td>~2,000</td>
+          <td>MIT</td>
+          <td>Reproducible AI benchmark evaluation</td>
+      </tr>
+  </tbody>
+</table>
+<p>Star counts correlate loosely with adoption but not perfectly. Superpowers&rsquo; 89K stars reflect a broad developer audience — everyone building with AI agents has the TDD problem. MemPalace&rsquo;s rapid star growth reflects a specific pain point (memory cost and privacy) hitting many teams simultaneously. ADK and llama-stack serve more specialized deployment needs, so their stars represent a smaller but more intentional adopter base. Archon&rsquo;s smaller count reflects its research-focused audience.</p>
+<h2 id="why-these-five-projects-trended-at-the-same-time">Why These Five Projects Trended at the Same Time</h2>
+<p>The April 2026 concentration of AI tool launches isn&rsquo;t coincidental. Three factors converged. First, Llama 4&rsquo;s March 2026 release created immediate demand for deployment tooling (llama-stack, ADK). Second, enterprise AI adoption shifted from exploration to production, surfacing memory (MemPalace) and compliance (llama-stack guardrails) requirements that didn&rsquo;t matter in demo contexts. Third, the AI agent maturity gap — the gap between what agents can do in demos versus production — became visible enough that TDD tooling (Superpowers) and benchmark reproducibility (Archon) went from niche to mainstream concerns. The GitHub star counts are a lagging indicator: each project had been in development for months. April was when the confluence of Llama 4 availability, enterprise production requirements, and agent adoption created the right conditions for all five to break through simultaneously.</p>
+<h2 id="how-to-evaluate-and-adopt-these-tools">How to Evaluate and Adopt These Tools</h2>
+<p>When evaluating any of these tools, start with the simplest possible use case before adopting the full framework. For Superpowers, run a single five-phase cycle on a contained feature and check whether the output is meaningfully better than unconstrained agent output. For llama-stack, deploy a single model endpoint and measure latency and cost against your current setup before migrating your full pipeline. For ADK, build a two-agent pipeline with a handoff before designing a complex multi-agent topology. For MemPalace, benchmark it on a sample of your actual retrieval patterns rather than the LongMemEval benchmark alone — benchmark performance and production performance can diverge based on data characteristics. For Archon, reproduce one published benchmark result before using it to evaluate new tools. Each tool solves a real problem but introduces complexity — validate that the problem it solves is actually your problem before committing.</p>
+<h2 id="faq">FAQ</h2>
+<p><strong>Which of these April 2026 trending projects is most production-ready?</strong>
+llama-stack is at 1.0 GA with explicit enterprise support (Red Hat guardrails, documented upgrade path). Google ADK is also at 1.0 GA. MemPalace and Superpowers are mature but don&rsquo;t yet have commercial support tiers. Archon is appropriate for research use; treat it as beta for enterprise benchmark automation.</p>
+<p><strong>Is MemPalace actually free, or is there a paid tier?</strong>
+MemPalace is MIT licensed with no hosted service. Everything runs on your own infrastructure. There is no paid tier as of April 2026. This is a deliberate design choice by the maintainers — the business model is consulting and support, not SaaS.</p>
+<p><strong>Does Superpowers work with Claude Code and Cursor, or only specific tools?</strong>
+Superpowers is framework-agnostic at the application level — the five-phase methodology and 14 skill modules can be applied through any AI coding tool that supports custom instructions or system prompts. Claude Code, Cursor, and Windsurf all work with Superpowers in practice.</p>
+<p><strong>How does Google ADK compare to OpenAI Agents SDK for multi-agent pipelines?</strong>
+ADK has stronger multi-agent communication via the A2A protocol and better multimodal support through Gemini. OpenAI Agents SDK has tighter integration with GPT-4o and the broader OpenAI ecosystem. If you&rsquo;re already on Google Cloud infrastructure or need multimodal agent pipelines, ADK is the better fit. For existing OpenAI users, the switching cost is high without a specific feature requirement that OpenAI can&rsquo;t meet.</p>
+<p><strong>Can llama-stack deploy models other than Llama 4?</strong>
+llama-stack is designed for the Llama model family. It supports Llama 4 Scout, Maverick, and larger variants. Running non-Llama models through llama-stack is not the intended use case, though some community forks extend it to other models. For a multi-model deployment stack, a different tool (LiteLLM, for example) is more appropriate.</p>
 ]]></content:encoded></item><item><title>Windsurf vs Claude Code vs Cursor: Full Developer Workflow Comparison 2026</title><link>https://baeseokjae.github.io/posts/windsurf-vs-claude-code-vs-cursor-workflow-2026/</link><pubDate>Wed, 20 May 2026 18:32:23 +0000</pubDate><guid>https://baeseokjae.github.io/posts/windsurf-vs-claude-code-vs-cursor-workflow-2026/</guid><description>Cursor, Windsurf, Claude Code 세 가지 AI 코딩 도구를 실제 워크플로우 기준으로 비교 — 벤치마크, 가격, 에이전트 기능 완전 분석.</description><content:encoded><![CDATA[<p>2026년 기준, 대부분의 시니어 개발자는 세 가지 도구 중 하나를 선택하는 게 아니라 조합해서 쓴다. 일상적인 편집엔 Cursor, 복잡한 리팩터링엔 Claude Code, 팀 예산이 빠듯할 땐 Windsurf — 이 세 도구의 차이를 정확히 이해해야 적절히 조합할 수 있다.</p>
 <h2 id="tldr--2026년-최종-판정-cursor-windsurf-아니면-claude-code">TL;DR — 2026년 최종 판정: Cursor, Windsurf, 아니면 Claude Code?</h2>
 <p>Cursor는 AI 코드 에디터 카테고리의 시장 지배자다. 2026년 2월 기준 연간 반복 매출(ARR) 20억 달러를 돌파했고, Fortune 500 기업의 50% 이상이 도입했다. Windsurf는 2026년 2월 LogRocket AI Dev Tool Power Rankings에서 Cursor와 GitHub Copilot을 제치고 1위를 차지했으며, Pro 플랜 $20/월로 Cursor 기능의 90%를 커버한다. Claude Code는 에디터가 아니다 — Anthropic이 만든 터미널 기반 AI 엔지니어링 에이전트로, Opus 4.7 기준 SWE-bench Verified 87.6%로 세 도구 중 가장 높은 벤치마크 점수를 기록한다. 결론부터 말하면: <strong>빠른 일상 코딩엔 Cursor, 대규모 코드베이스 작업엔 Claude Code, 가성비와 팀 협업엔 Windsurf</strong>가 맞는 선택이다.</p>
