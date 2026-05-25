@@ -1,9 +1,13 @@
 # Pipeline Health Check
-Date: 2026-05-21 00:00 UTC
+Date: 2026-05-21 21:00 UTC
 
 ## Actions Taken
-- RECOVERED: ROC-3507 → done (all files present)
-- RE-QUEUED: ROC-3495 → todo (missing: post schema cover)
+- RE-QUEUED: ROC-3813 → todo (missing: post schema cover)
+- RECOVERED: ROC-3666 → done (all files present)
+- RE-QUEUED: ROC-3662 → todo (missing: post schema cover)
+- RECOVERED: ROC-3495 → done (all files present)
+- RECOVERED: ROC-3515 → done (all files present)
+- RECOVERED: ROC-3519 → done (all files present)
 
 ## Warnings
 - Missing cover image: ai-coding-stack-2026.png (expected at /home/ubuntu/blog/static/images/ai-coding-stack-2026.png)
@@ -20,6 +24,7 @@ Date: 2026-05-21 00:00 UTC
 - Missing cover image: zeropath-review-2026.png (expected at /home/ubuntu/blog/static/images/zeropath-review-2026.png)
 - Missing cover image: 1password-ai-agent-security-2026.png (expected at /home/ubuntu/blog/static/images/1password-ai-agent-security-2026.png)
 - Missing cover image: azure-openai-assistants-foundry-migration-2026.png (expected at /home/ubuntu/blog/static/images/azure-openai-assistants-foundry-migration-2026.png)
+- Missing cover image: github-trending-ai-projects-april-2026.png (expected at /home/ubuntu/blog/static/images/github-trending-ai-projects-april-2026.png)
 - Missing schema: schema-ai-coding-stack-2026.html
 - Missing schema: schema-gemini-cli-vs-claude-code-vs-opencode-2026.html
 - Missing schema: schema-ai-documentation-generators-2026.html
@@ -37,94 +42,113 @@ Date: 2026-05-21 00:00 UTC
 
 ## Full Log
 ```
-[2026-05-21 00:00:55 UTC] [INFO] ============================================================
-[2026-05-21 00:00:55 UTC] [INFO] Pipeline Health Check starting 
-[2026-05-21 00:00:55 UTC] [INFO] Fetching Paperclip data...
-[2026-05-21 00:00:56 UTC] [INFO] Pipeline: done=2357 backlog=174 todo=262 in_progress=2 cancelled=791
-[2026-05-21 00:00:56 UTC] [INFO] 
-[2026-05-21 00:00:56 UTC] [INFO] Check 1: Stuck subtask issues (>6h, no active run)
-[2026-05-21 00:00:56 UTC] [INFO] Stuck subtasks cancelled: 0
-[2026-05-21 00:00:56 UTC] [INFO] 
-[2026-05-21 00:00:56 UTC] [INFO] Check 2: Zombie subtask issues (null executionRunId >30 min)
-[2026-05-21 00:00:56 UTC] [INFO] Zombie subtasks cancelled: 0
-[2026-05-21 00:00:56 UTC] [INFO] 
-[2026-05-21 00:00:56 UTC] [INFO] Check 3: Topic queue watermark
-[2026-05-21 00:00:56 UTC] [INFO] Queued topics: 1993 (watermark: 10)
-[2026-05-21 00:00:56 UTC] [INFO] Topic queue healthy, no action needed
-[2026-05-21 00:00:56 UTC] [INFO] 
-[2026-05-21 00:00:56 UTC] [INFO] Check 4: Missing cover images for published posts
-[2026-05-21 00:00:56 UTC] [WARN] Missing cover image: ai-coding-stack-2026.png (expected at /home/ubuntu/blog/static/images/ai-coding-stack-2026.png)
-[2026-05-21 00:00:56 UTC] [WARN] Missing cover image: gemini-cli-vs-claude-code-vs-opencode-2026.png (expected at /home/ubuntu/blog/static/images/gemini-cli-vs-claude-code-vs-opencode-2026.png)
-[2026-05-21 00:00:56 UTC] [WARN] Missing cover image: ai-documentation-generators-2026.png (expected at /home/ubuntu/blog/static/images/ai-documentation-generators-2026.png)
-[2026-05-21 00:00:56 UTC] [WARN] Missing cover image: langsmith-vs-langfuse-vs-helicone-2026.png (expected at /home/ubuntu/blog/static/images/langsmith-vs-langfuse-vs-helicone-2026.png)
-[2026-05-21 00:00:56 UTC] [WARN] Missing cover image: rag-pipeline-best-practices-2026.png (expected at /home/ubuntu/blog/static/images/rag-pipeline-best-practices-2026.png)
-[2026-05-21 00:00:56 UTC] [WARN] Missing cover image: github-models-api-guide-2026.png (expected at /home/ubuntu/blog/static/images/github-models-api-guide-2026.png)
-[2026-05-21 00:00:56 UTC] [WARN] Missing cover image: cursor-advanced-tips-2026.png (expected at /home/ubuntu/blog/static/images/cursor-advanced-tips-2026.png)
-[2026-05-21 00:00:56 UTC] [WARN] Missing cover image: ai-tools-python-developers-2026.png (expected at /home/ubuntu/blog/static/images/ai-tools-python-developers-2026.png)
-[2026-05-21 00:00:56 UTC] [WARN] Missing cover image: langfuse-guide-2026.png (expected at /home/ubuntu/blog/static/images/langfuse-guide-2026.png)
-[2026-05-21 00:00:56 UTC] [WARN] Missing cover image: openai-batch-api-guide-2026.png (expected at /home/ubuntu/blog/static/images/openai-batch-api-guide-2026.png)
-[2026-05-21 00:00:56 UTC] [WARN] Missing cover image: claude-opus-4-7-vs-4-6-comparison-2026.png (expected at /home/ubuntu/blog/static/images/claude-opus-4-7-vs-4-6-comparison-2026.png)
-[2026-05-21 00:00:56 UTC] [WARN] Missing cover image: zeropath-review-2026.png (expected at /home/ubuntu/blog/static/images/zeropath-review-2026.png)
-[2026-05-21 00:00:56 UTC] [WARN] Missing cover image: 1password-ai-agent-security-2026.png (expected at /home/ubuntu/blog/static/images/1password-ai-agent-security-2026.png)
-[2026-05-21 00:00:56 UTC] [WARN] Missing cover image: azure-openai-assistants-foundry-migration-2026.png (expected at /home/ubuntu/blog/static/images/azure-openai-assistants-foundry-migration-2026.png)
-[2026-05-21 00:00:56 UTC] [INFO] Missing cover images: 14
-[2026-05-21 00:00:56 UTC] [INFO] 
-[2026-05-21 00:00:56 UTC] [INFO] Check 5: Missing schema files
-[2026-05-21 00:00:56 UTC] [WARN] Missing schema: schema-ai-coding-stack-2026.html
-[2026-05-21 00:00:56 UTC] [WARN] Missing schema: schema-gemini-cli-vs-claude-code-vs-opencode-2026.html
-[2026-05-21 00:00:56 UTC] [WARN] Missing schema: schema-ai-documentation-generators-2026.html
-[2026-05-21 00:00:56 UTC] [WARN] Missing schema: schema-langsmith-vs-langfuse-vs-helicone-2026.html
-[2026-05-21 00:00:56 UTC] [WARN] Missing schema: schema-rag-pipeline-best-practices-2026.html
-[2026-05-21 00:00:56 UTC] [WARN] Missing schema: schema-github-models-api-guide-2026.html
-[2026-05-21 00:00:56 UTC] [WARN] Missing schema: schema-cursor-advanced-tips-2026.html
-[2026-05-21 00:00:56 UTC] [WARN] Missing schema: schema-ai-tools-python-developers-2026.html
-[2026-05-21 00:00:56 UTC] [WARN] Missing schema: schema-langfuse-guide-2026.html
-[2026-05-21 00:00:56 UTC] [WARN] Missing schema: schema-openai-batch-api-guide-2026.html
-[2026-05-21 00:00:56 UTC] [WARN] Missing schema: schema-claude-opus-4-7-vs-4-6-comparison-2026.html
-[2026-05-21 00:00:56 UTC] [WARN] Missing schema: schema-zeropath-review-2026.html
-[2026-05-21 00:00:56 UTC] [WARN] Missing schema: schema-1password-ai-agent-security-2026.html
-[2026-05-21 00:00:56 UTC] [WARN] Missing schema: schema-azure-openai-assistants-foundry-migration-2026.html
-[2026-05-21 00:00:56 UTC] [INFO] Missing schema files: 14
-[2026-05-21 00:00:56 UTC] [INFO] 
-[2026-05-21 00:00:56 UTC] [INFO] Check 6: Issues assigned to disabled agents (SEO/Thumbnail)
-[2026-05-21 00:00:56 UTC] [INFO] Disabled-agent issues cancelled: 0
-[2026-05-21 00:00:56 UTC] [INFO] 
-[2026-05-21 00:00:56 UTC] [INFO] Check 6b: Blocked issue auto-recovery
-[2026-05-21 00:00:56 UTC] [INFO] Found 22 blocked issues to evaluate
-[2026-05-21 00:00:56 UTC] [INFO] BLOCKED: ROC-3634 — no slug found, likely non-blog issue, skipping
-[2026-05-21 00:00:56 UTC] [INFO] BLOCKED: ROC-3616 — no slug found, likely non-blog issue, skipping
-[2026-05-21 00:00:56 UTC] [INFO] BLOCKED: ROC-3593 — no slug found, likely non-blog issue, skipping
-[2026-05-21 00:00:56 UTC] [INFO] BLOCKED: ROC-3531 — no slug found, likely non-blog issue, skipping
-[2026-05-21 00:00:56 UTC] [INFO] BLOCKED: ROC-3298 — no slug found, likely non-blog issue, skipping
-[2026-05-21 00:00:56 UTC] [INFO] BLOCKED: ROC-1724 — no slug found, likely non-blog issue, skipping
-[2026-05-21 00:00:56 UTC] [INFO] BLOCKED ROC-3507: slug=free-ai-coding-tools-comparison-2026 post=True schema=True cover=True
-[2026-05-21 00:00:56 UTC] [ACTION] RECOVERED: ROC-3507 → done (all files present)
-[2026-05-21 00:00:56 UTC] [INFO] BLOCKED ROC-3495: slug=nous-hermes-agent-review-2026 post=False schema=False cover=False
-[2026-05-21 00:00:56 UTC] [ACTION] RE-QUEUED: ROC-3495 → todo (missing: post schema cover)
-[2026-05-21 00:00:56 UTC] [INFO] BLOCKED: ROC-3635 — no slug found, likely non-blog issue, skipping
-[2026-05-21 00:00:56 UTC] [INFO] BLOCKED: ROC-3619 — no slug found, likely non-blog issue, skipping
-[2026-05-21 00:00:56 UTC] [INFO] BLOCKED: ROC-3594 — no slug found, likely non-blog issue, skipping
-[2026-05-21 00:00:56 UTC] [INFO] BLOCKED: ROC-3591 — no slug found, likely non-blog issue, skipping
-[2026-05-21 00:00:56 UTC] [INFO] BLOCKED: ROC-3497 — no slug found, likely non-blog issue, skipping
-[2026-05-21 00:00:56 UTC] [INFO] BLOCKED: ROC-3534 — no slug found, likely non-blog issue, skipping
-[2026-05-21 00:00:56 UTC] [INFO] BLOCKED: ROC-3458 — no slug found, likely non-blog issue, skipping
-[2026-05-21 00:00:56 UTC] [INFO] BLOCKED: ROC-3454 — no slug found, likely non-blog issue, skipping
-[2026-05-21 00:00:56 UTC] [INFO] BLOCKED: ROC-3442 — no slug found, likely non-blog issue, skipping
-[2026-05-21 00:00:56 UTC] [INFO] BLOCKED: ROC-3438 — no slug found, likely non-blog issue, skipping
-[2026-05-21 00:00:56 UTC] [INFO] BLOCKED: ROC-3082 — no slug found, likely non-blog issue, skipping
-[2026-05-21 00:00:56 UTC] [INFO] BLOCKED: ROC-2911 — no slug found, likely non-blog issue, skipping
-[2026-05-21 00:00:56 UTC] [INFO] BLOCKED: ROC-2762 — no slug found, likely non-blog issue, skipping
-[2026-05-21 00:00:56 UTC] [INFO] BLOCKED: ROC-1842 — no slug found, likely non-blog issue, skipping
-[2026-05-21 00:00:56 UTC] [INFO] Blocked issues recovered/re-queued: 2
-[2026-05-21 00:00:56 UTC] [INFO] 
-[2026-05-21 00:00:56 UTC] [INFO] ============================================================
-[2026-05-21 00:00:56 UTC] [INFO] Summary: 2 actions taken
-[2026-05-21 00:00:56 UTC] [INFO]   Stuck subtasks cancelled: 0
-[2026-05-21 00:00:56 UTC] [INFO]   Zombie subtasks cancelled: 0
-[2026-05-21 00:00:56 UTC] [INFO]   Strategist wakes: 0
-[2026-05-21 00:00:56 UTC] [INFO]   Disabled-agent issues cancelled: 0
-[2026-05-21 00:00:56 UTC] [INFO]   Blocked issues recovered/re-queued: 2
-[2026-05-21 00:00:56 UTC] [INFO]   Missing cover images (warnings): 14
-[2026-05-21 00:00:56 UTC] [INFO]   Missing schema files (warnings): 14
-[2026-05-21 00:00:56 UTC] [INFO] Pipeline Health Check complete
+[2026-05-21 21:00:35 UTC] [INFO] ============================================================
+[2026-05-21 21:00:35 UTC] [INFO] Pipeline Health Check starting 
+[2026-05-21 21:00:35 UTC] [INFO] Fetching Paperclip data...
+[2026-05-21 21:00:35 UTC] [INFO] Pipeline: done=2372 backlog=159 todo=389 in_progress=3 cancelled=791
+[2026-05-21 21:00:35 UTC] [INFO] 
+[2026-05-21 21:00:35 UTC] [INFO] Check 1: Stuck subtask issues (>6h, no active run)
+[2026-05-21 21:00:35 UTC] [INFO] Stuck subtasks cancelled: 0
+[2026-05-21 21:00:35 UTC] [INFO] 
+[2026-05-21 21:00:35 UTC] [INFO] Check 2: Zombie subtask issues (null executionRunId >30 min)
+[2026-05-21 21:00:35 UTC] [INFO] Zombie subtasks cancelled: 0
+[2026-05-21 21:00:35 UTC] [INFO] 
+[2026-05-21 21:00:35 UTC] [INFO] Check 3: Topic queue watermark
+[2026-05-21 21:00:35 UTC] [INFO] Queued topics: 2007 (watermark: 10)
+[2026-05-21 21:00:35 UTC] [INFO] Topic queue healthy, no action needed
+[2026-05-21 21:00:35 UTC] [INFO] 
+[2026-05-21 21:00:35 UTC] [INFO] Check 4: Missing cover images for published posts
+[2026-05-21 21:00:35 UTC] [WARN] Missing cover image: ai-coding-stack-2026.png (expected at /home/ubuntu/blog/static/images/ai-coding-stack-2026.png)
+[2026-05-21 21:00:35 UTC] [WARN] Missing cover image: gemini-cli-vs-claude-code-vs-opencode-2026.png (expected at /home/ubuntu/blog/static/images/gemini-cli-vs-claude-code-vs-opencode-2026.png)
+[2026-05-21 21:00:35 UTC] [WARN] Missing cover image: ai-documentation-generators-2026.png (expected at /home/ubuntu/blog/static/images/ai-documentation-generators-2026.png)
+[2026-05-21 21:00:35 UTC] [WARN] Missing cover image: langsmith-vs-langfuse-vs-helicone-2026.png (expected at /home/ubuntu/blog/static/images/langsmith-vs-langfuse-vs-helicone-2026.png)
+[2026-05-21 21:00:35 UTC] [WARN] Missing cover image: rag-pipeline-best-practices-2026.png (expected at /home/ubuntu/blog/static/images/rag-pipeline-best-practices-2026.png)
+[2026-05-21 21:00:35 UTC] [WARN] Missing cover image: github-models-api-guide-2026.png (expected at /home/ubuntu/blog/static/images/github-models-api-guide-2026.png)
+[2026-05-21 21:00:35 UTC] [WARN] Missing cover image: cursor-advanced-tips-2026.png (expected at /home/ubuntu/blog/static/images/cursor-advanced-tips-2026.png)
+[2026-05-21 21:00:35 UTC] [WARN] Missing cover image: ai-tools-python-developers-2026.png (expected at /home/ubuntu/blog/static/images/ai-tools-python-developers-2026.png)
+[2026-05-21 21:00:35 UTC] [WARN] Missing cover image: langfuse-guide-2026.png (expected at /home/ubuntu/blog/static/images/langfuse-guide-2026.png)
+[2026-05-21 21:00:35 UTC] [WARN] Missing cover image: openai-batch-api-guide-2026.png (expected at /home/ubuntu/blog/static/images/openai-batch-api-guide-2026.png)
+[2026-05-21 21:00:35 UTC] [WARN] Missing cover image: claude-opus-4-7-vs-4-6-comparison-2026.png (expected at /home/ubuntu/blog/static/images/claude-opus-4-7-vs-4-6-comparison-2026.png)
+[2026-05-21 21:00:35 UTC] [WARN] Missing cover image: zeropath-review-2026.png (expected at /home/ubuntu/blog/static/images/zeropath-review-2026.png)
+[2026-05-21 21:00:35 UTC] [WARN] Missing cover image: 1password-ai-agent-security-2026.png (expected at /home/ubuntu/blog/static/images/1password-ai-agent-security-2026.png)
+[2026-05-21 21:00:35 UTC] [WARN] Missing cover image: azure-openai-assistants-foundry-migration-2026.png (expected at /home/ubuntu/blog/static/images/azure-openai-assistants-foundry-migration-2026.png)
+[2026-05-21 21:00:35 UTC] [WARN] Missing cover image: github-trending-ai-projects-april-2026.png (expected at /home/ubuntu/blog/static/images/github-trending-ai-projects-april-2026.png)
+[2026-05-21 21:00:35 UTC] [INFO] Missing cover images: 15
+[2026-05-21 21:00:35 UTC] [INFO] 
+[2026-05-21 21:00:35 UTC] [INFO] Check 5: Missing schema files
+[2026-05-21 21:00:35 UTC] [WARN] Missing schema: schema-ai-coding-stack-2026.html
+[2026-05-21 21:00:35 UTC] [WARN] Missing schema: schema-gemini-cli-vs-claude-code-vs-opencode-2026.html
+[2026-05-21 21:00:35 UTC] [WARN] Missing schema: schema-ai-documentation-generators-2026.html
+[2026-05-21 21:00:35 UTC] [WARN] Missing schema: schema-langsmith-vs-langfuse-vs-helicone-2026.html
+[2026-05-21 21:00:35 UTC] [WARN] Missing schema: schema-rag-pipeline-best-practices-2026.html
+[2026-05-21 21:00:35 UTC] [WARN] Missing schema: schema-github-models-api-guide-2026.html
+[2026-05-21 21:00:35 UTC] [WARN] Missing schema: schema-cursor-advanced-tips-2026.html
+[2026-05-21 21:00:35 UTC] [WARN] Missing schema: schema-ai-tools-python-developers-2026.html
+[2026-05-21 21:00:35 UTC] [WARN] Missing schema: schema-langfuse-guide-2026.html
+[2026-05-21 21:00:35 UTC] [WARN] Missing schema: schema-openai-batch-api-guide-2026.html
+[2026-05-21 21:00:35 UTC] [WARN] Missing schema: schema-claude-opus-4-7-vs-4-6-comparison-2026.html
+[2026-05-21 21:00:35 UTC] [WARN] Missing schema: schema-zeropath-review-2026.html
+[2026-05-21 21:00:35 UTC] [WARN] Missing schema: schema-1password-ai-agent-security-2026.html
+[2026-05-21 21:00:35 UTC] [WARN] Missing schema: schema-azure-openai-assistants-foundry-migration-2026.html
+[2026-05-21 21:00:35 UTC] [INFO] Missing schema files: 14
+[2026-05-21 21:00:35 UTC] [INFO] 
+[2026-05-21 21:00:35 UTC] [INFO] Check 6: Issues assigned to disabled agents (SEO/Thumbnail)
+[2026-05-21 21:00:35 UTC] [INFO] Disabled-agent issues cancelled: 0
+[2026-05-21 21:00:35 UTC] [INFO] 
+[2026-05-21 21:00:35 UTC] [INFO] Check 6b: Blocked issue auto-recovery
+[2026-05-21 21:00:35 UTC] [INFO] Found 36 blocked issues to evaluate
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED ROC-3813: slug=github-agent-hq-guide-2026 post=False schema=False cover=False
+[2026-05-21 21:00:35 UTC] [ACTION] RE-QUEUED: ROC-3813 → todo (missing: post schema cover)
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3809 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3789 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3764 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3728 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3703 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3683 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3634 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3616 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3593 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3531 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3298 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-1724 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED ROC-3666: slug=qwen-3-6-plus-agentic-coding-2026 post=True schema=True cover=True
+[2026-05-21 21:00:35 UTC] [ACTION] RECOVERED: ROC-3666 → done (all files present)
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED ROC-3662: slug=github-agent-hq-guide-2026 post=False schema=False cover=False
+[2026-05-21 21:00:35 UTC] [ACTION] RE-QUEUED: ROC-3662 → todo (missing: post schema cover)
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED ROC-3495: slug=nous-hermes-agent-review-2026 post=True schema=True cover=True
+[2026-05-21 21:00:35 UTC] [ACTION] RECOVERED: ROC-3495 → done (all files present)
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED ROC-3515: slug=copilot-to-agent-workflow-shift-2026 post=True schema=True cover=True
+[2026-05-21 21:00:35 UTC] [ACTION] RECOVERED: ROC-3515 → done (all files present)
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED ROC-3519: slug=llama-stack-vs-ollama-vs-vllm-2026 post=True schema=True cover=True
+[2026-05-21 21:00:35 UTC] [ACTION] RECOVERED: ROC-3519 → done (all files present)
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3792 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3765 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3731 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3704 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3686 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3635 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3619 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3594 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3591 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3534 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3458 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3454 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3442 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3438 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-3082 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-2911 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-2762 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] BLOCKED: ROC-1842 — no slug found, likely non-blog issue, skipping
+[2026-05-21 21:00:35 UTC] [INFO] Blocked issues recovered/re-queued: 6
+[2026-05-21 21:00:35 UTC] [INFO] 
+[2026-05-21 21:00:35 UTC] [INFO] ============================================================
+[2026-05-21 21:00:35 UTC] [INFO] Summary: 6 actions taken
+[2026-05-21 21:00:35 UTC] [INFO]   Stuck subtasks cancelled: 0
+[2026-05-21 21:00:35 UTC] [INFO]   Zombie subtasks cancelled: 0
+[2026-05-21 21:00:35 UTC] [INFO]   Strategist wakes: 0
+[2026-05-21 21:00:35 UTC] [INFO]   Disabled-agent issues cancelled: 0
+[2026-05-21 21:00:35 UTC] [INFO]   Blocked issues recovered/re-queued: 6
+[2026-05-21 21:00:35 UTC] [INFO]   Missing cover images (warnings): 15
+[2026-05-21 21:00:35 UTC] [INFO]   Missing schema files (warnings): 14
+[2026-05-21 21:00:35 UTC] [INFO] Pipeline Health Check complete
 ```

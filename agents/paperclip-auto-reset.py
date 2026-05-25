@@ -11,6 +11,7 @@ Root causes addressed:
   - Agent error states with no auto-recovery (Supervisor lacks permission)
   - Stale execution locks (in_progress >4h with no executionRunId)
   - Zombie in_progress cluttering the pipeline
+  - Platform-wide rate limit events (Anthropic weekly/session limits)
 
 Usage:
   python3 ~/blog/agents/paperclip-auto-reset.py [--dry-run]
@@ -21,6 +22,7 @@ import urllib.request
 import urllib.error
 import sys
 import os
+import re
 from datetime import datetime, timezone, timedelta
 
 # ============================================================
@@ -46,6 +48,16 @@ DISABLED_AGENT_IDS = {
     "6dab6808-c362-4e11-819b-1f1647e84d40",  # SEO (Writer generates schema)
     "16f0b09a-d3f8-4885-aa2a-52e7d67d2267",  # Thumbnail (Writer runs gen_cover.py)
 }
+
+# Platform-wide rate limit detection
+# Substrings that identify a rate/session limit error from Anthropic
+PLATFORM_LIMIT_TRIGGERS = [
+    "session limit", "weekly limit", "monthly limit",
+    "you've hit your", "rate limit exceeded",
+]
+
+# Minimum fraction of error-state agents sharing the same rate-limit error to suppress
+PLATFORM_LIMIT_THRESHOLD = 0.6  # 60%
 
 # Log file
 LOG_FILE = os.path.expanduser("~/blog/logs/auto-reset.log")
@@ -99,6 +111,69 @@ def save_state(state):
     os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
     with open(STATE_FILE, "w") as f:
         json.dump(state, f, indent=2)
+
+# ============================================================
+# Platform-Wide Rate Limit Detection
+# ============================================================
+
+def detect_platform_rate_limit(agents_in_error):
+    """Check if 60%+ of error-state agents share the same rate-limit error.
+    
+    Uses heartbeat-run history to identify platform-wide Anthropic limit events
+    (weekly/session/rate limits). When detected, suppresses individual agent resets
+    that would be pointless and produce noise escalation issues.
+    
+    Handles both multi-agent (60% threshold) and single-agent (80% of own runs)
+    rate-limit scenarios.
+    
+    Returns (is_platform_wide: bool, error_message: str|None, reset_time: str|None)
+    """
+    # Allow single-agent path to fall through to individual check below
+    
+    try:
+        runs = api("GET", f"{BASE_URL}/companies/{COMPANY_ID}/heartbeat-runs?limit=20")
+        if not isinstance(runs, list) or len(runs) < 3:
+            return (False, None, None)
+        
+        agent_ids_in_error = {a.get('id') for a in agents_in_error}
+        relevant = [r for r in runs if r.get('agentId') in agent_ids_in_error and r.get('error')]
+        
+        if len(relevant) < 3:
+            return (False, None, None)
+        
+        # Count occurrences of each distinct rate-limit error
+        error_counts = {}
+        for r in relevant:
+            err = r.get('error', '')
+            if not err:
+                continue
+            err_lower = err.lower()
+            is_limit = any(t in err_lower for t in PLATFORM_LIMIT_TRIGGERS)
+            if is_limit:
+                error_counts[err] = error_counts.get(err, 0) + 1
+        
+        if not error_counts:
+            return (False, None, None)
+        
+        # Find the most common rate-limit error
+        most_common = max(error_counts.items(), key=lambda x: x[1])
+        common_err, count = most_common
+
+        total_err = len(agent_ids_in_error)
+        # For single-agent scenarios, use 80% of own runs threshold
+        # For multi-agent scenarios, use 60% threshold
+        threshold = 0.8 if total_err == 1 else PLATFORM_LIMIT_THRESHOLD
+        relevant_count = len(relevant)
+        if count >= int(relevant_count * threshold):
+            # Fix: match times like "4:50am" (with colon) or "6pm" (without)
+            reset_match = re.search(r'resets\s+(\d+(?::\d+)?[ap]m)\s*\(UTC\)', common_err)
+            reset_time = reset_match.group(1) if reset_match else None
+            return (True, common_err, reset_time)
+        
+        return (False, None, None)
+    except Exception as e:
+        log(f"Rate-limit check error: {e}", "DEBUG")
+        return (False, None, None)
 
 # ============================================================
 # Core Functions
@@ -177,66 +252,81 @@ def run(dry_run=False):
     log(f"Auto-reset check starting {'(DRY RUN)' if dry_run else ''}")
     
     # --------------------------------------------------------
-    # 1. Reset error-state agents
+    # 0. Detect platform-wide rate limit BEFORE any reset actions
     # --------------------------------------------------------
-    log("Step 1: Checking for error-state agents...")
     agents = get_agents()
+    error_agents = [a for a in agents if a.get('status') == 'error' and a.get('id') not in DISABLED_AGENT_IDS]
     
-    # Skip disabled (decommissioned) agents entirely
-    active_agents = [a for a in agents if a.get('id') not in DISABLED_AGENT_IDS]
-    disabled_in_error = [a for a in agents if a.get('id') in DISABLED_AGENT_IDS and a.get('status') == 'error']
-    if disabled_in_error:
-        for da in disabled_in_error:
-            log(f"Skipping disabled agent {da.get('name')} — forcing to idle", "INFO")
-            reset_agent(da['id'], da['name'])
+    is_platform_limit, limit_error, limit_reset_time = detect_platform_rate_limit(error_agents)
     
-    error_agents = [a for a in active_agents if a.get('status') == 'error']
-    
-    if not error_agents:
-        log("No agents in error state. Clean!")
+    if is_platform_limit:
+        reset_msg = f"resets {limit_reset_time} UTC" if limit_reset_time else "at unknown time"
+        log(f"Platform-wide rate limit detected! {len(error_agents)} agent(s) hitting same error. "
+            f"Suppressing resets until {reset_msg}.", "WARN")
+        log(f"Limit error: {limit_error[:200]}", "WARN")
+        
+        # Skip directly to steps that don't involve resetting:
+        # Step 2 (cleanup) + Step 3 (reporting)
+        # But do NOT reset any agents or create escalation issues
     else:
-        log(f"Found {len(error_agents)} agent(s) in error state")
-        for agent in error_agents:
-            name = agent.get('name', 'Unknown')
-            aid = agent.get('id')
-            
-            # Check reset cooldown
-            reset_history = state.get("resets", {}).get(aid, [])
-            recent_resets = [r for r in reset_history 
-                           if datetime.fromisoformat(r["time"].replace("Z", "+00:00")) > now - timedelta(hours=RESET_COOLDOWN_HOURS)]
-            
-            if len(recent_resets) >= MAX_RESETS_PER_AGENT:
-                log(f"ESCALATE: {name} has been reset {len(recent_resets)} times in {RESET_COOLDOWN_HOURS}h. Manual intervention needed!", "ESCALATE")
-                # Create a Paperclip issue for escalation
-                if not dry_run:
-                    escalation = api("POST", f"{BASE_URL}/companies/{COMPANY_ID}/issues", {
-                        "title": f"[Auto-Reset] {name} recurring error — {len(recent_resets)} resets in {RESET_COOLDOWN_HOURS}h",
-                        "description": f"Agent {name} ({aid}) has been auto-reset {len(recent_resets)} times in the last {RESET_COOLDOWN_HOURS} hours. "
-                                     f"This indicates a persistent underlying issue that cannot be resolved by automatic reset. "
-                                     f"Last reset times: {json.dumps(recent_resets[-3:])}",
-                        "priority": "high",
-                        "status": "todo"
+        # --------------------------------------------------------
+        # 1. Reset error-state agents (normal path)
+        # --------------------------------------------------------
+        log("Step 1: Checking for error-state agents...")
+        
+        # Skip disabled (decommissioned) agents entirely
+        active_agents = [a for a in agents if a.get('id') not in DISABLED_AGENT_IDS]
+        disabled_in_error = [a for a in agents if a.get('id') in DISABLED_AGENT_IDS and a.get('status') == 'error']
+        if disabled_in_error:
+            for da in disabled_in_error:
+                log(f"Skipping disabled agent {da.get('name')} — forcing to idle", "INFO")
+                reset_agent(da['id'], da['name'])
+        
+        if not error_agents:
+            log("No agents in error state. Clean!")
+        else:
+            log(f"Found {len(error_agents)} agent(s) in error state")
+            for agent in error_agents:
+                name = agent.get('name', 'Unknown')
+                aid = agent.get('id')
+                
+                # Check reset cooldown
+                reset_history = state.get("resets", {}).get(aid, [])
+                recent_resets = [r for r in reset_history 
+                               if datetime.fromisoformat(r["time"].replace("Z", "+00:00")) > now - timedelta(hours=RESET_COOLDOWN_HOURS)]
+                
+                if len(recent_resets) >= MAX_RESETS_PER_AGENT:
+                    log(f"ESCALATE: {name} has been reset {len(recent_resets)} times in {RESET_COOLDOWN_HOURS}h. Manual intervention needed!", "ESCALATE")
+                    # Create a Paperclip issue for escalation
+                    if not dry_run:
+                        escalation = api("POST", f"{BASE_URL}/companies/{COMPANY_ID}/issues", {
+                            "title": f"[Auto-Reset] {name} recurring error — {len(recent_resets)} resets in {RESET_COOLDOWN_HOURS}h",
+                            "description": f"Agent {name} ({aid}) has been auto-reset {len(recent_resets)} times in the last {RESET_COOLDOWN_HOURS} hours. "
+                                         f"This indicates a persistent underlying issue that cannot be resolved by automatic reset. "
+                                         f"Last reset times: {json.dumps(recent_resets[-3:])}",
+                            "priority": "high",
+                            "status": "todo"
+                        })
+                        if "error" not in escalation:
+                            log(f"Created escalation issue: {escalation.get('identifier', 'N/A')}", "ACTION")
+                    continue
+                
+                if dry_run:
+                    log(f"[DRY RUN] Would reset {name} from error to idle")
+                    continue
+                
+                success = reset_agent(aid, name)
+                if success:
+                    # Wake up the agent after reset
+                    wakeup_agent(aid, name)
+                    # Record reset
+                    state.setdefault("resets", {}).setdefault(aid, []).append({
+                        "time": now.isoformat(),
+                        "agent": name,
+                        "from_status": "error"
                     })
-                    if "error" not in escalation:
-                        log(f"Created escalation issue: {escalation.get('identifier', 'N/A')}", "ACTION")
-                continue
-            
-            if dry_run:
-                log(f"[DRY RUN] Would reset {name} from error to idle")
-                continue
-            
-            success = reset_agent(aid, name)
-            if success:
-                # Wake up the agent after reset
-                wakeup_agent(aid, name)
-                # Record reset
-                state.setdefault("resets", {}).setdefault(aid, []).append({
-                    "time": now.isoformat(),
-                    "agent": name,
-                    "from_status": "error"
-                })
-                actions_taken += 1
-
+                    actions_taken += 1
+    
     # --------------------------------------------------------
     # 2. Cancel issues assigned to disabled agents + clean up zombies
     # --------------------------------------------------------
@@ -297,7 +387,7 @@ def run(dry_run=False):
                 title = (issue.get('title') or '')[:50]
                 
                 if dry_run:
-                    log(f"[DRY RUN] Would cancel stuck: {identifier} ({hours_stale:.1h}h stale, has exec run) - {title}")
+                    log(f"[DRY RUN] Would cancel stuck: {identifier} ({hours_stale:.1f}h stale, has exec run) - {title}")
                     continue
                 
                 success = cancel_issue(issue['id'], identifier)
@@ -317,12 +407,16 @@ def run(dry_run=False):
     from collections import Counter
     status_count = Counter(i.get('status') for i in issues)
     error_issues = [i for i in issues if i.get('status') == 'error']
-    error_agents_count = len(error_agents)
     
+    # If platform-wide limit, note it in the report
+    if is_platform_limit:
+        reset_msg = f"resets {limit_reset_time} UTC" if limit_reset_time else "at unknown time"
+        log(f"PLATFORM-WIDE LIMIT: {len(error_agents)} agent(s) down — {reset_msg}", "WARN")
+
     log(f"Pipeline: done={status_count.get('done',0)} backlog={status_count.get('backlog',0)} "
         f"todo={status_count.get('todo',0)} in_progress={status_count.get('in_progress',0)} "
         f"cancelled={status_count.get('cancelled',0)} error={status_count.get('error',0)}")
-    log(f"Agents: {len(agents)} total, {error_agents_count} in error state")
+    log(f"Agents: {len(agents)} total, {len(error_agents)} in error state")
     
     if error_issues:
         log(f"ERROR ISSUES FOUND: {len(error_issues)}", "WARN")
