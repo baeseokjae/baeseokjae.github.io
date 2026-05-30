@@ -1,102 +1,48 @@
-# Blog Analytics Report — 2026-05-30
+# GSC 분석 리포트 - 2026-05-30
 
-## Executive Summary
-- **Total published posts**: 463
-- **Researched, not yet published**: 23
-- **Pending Paperclip issues**: 77
-- **GSC impressions (7 days)**: ?
+## 조사 기간
+2026-05-20 ~ 2026-05-27 (GSC 데이터 기준)
 
-## GSC Performance
+## 주요 발견사항
 
-### Daily Report (7-day window)
-```
-=== DAILY GSC REPORT (2026-05-20 ~ 2026-05-27) ===
-No data yet. Site indexing in progress.
-```
+### 현재 상태
+- **사이트 상태**: 인덱싱 진행 중 (Site indexing in progress)
+- **검색 성과**: 최소한의 데이터만 수집
+  - 홈페이지(/): 0 클릭, 16 노출
+  - 다른 페이지: 아직 GSC 데이터 없음
 
-### Weekly Report
-```
-=== DAILY GSC REPORT (2026-05-20 ~ 2026-05-27) ===
-No data yet. Site indexing in progress.
+### 콘텐츠 최적화 기회
+- **Striking Distance 키워드** (11-20위치): 없음
+- **최적화 가능 콘텐츠**: 현재 식별 불가 (충분한 데이터 부족)
 
-=== STRIKING DISTANCE (pos 11-20, near page 1) ===
-None found yet.
+## 진행 상황 분석
 
-=== PAGE PERFORMANCE (2026-05-20 ~ 2026-05-27) ===
-  [0c/16i] /
-```
+### 인덱싱 단계
+블로그 사이트가 Google Search Console에 최근 등록되어 인덱싱 프로세스가 진행 중입니다.
+- 홈페이지는 16개 노출 기록 (클릭 0건 - 순위 25위 이하)
+- 내부 페이지들은 아직 충분한 데이터 미수집
 
-### Striking Distance (positions 11-20)
-```
-=== STRIKING DISTANCE (pos 11-20, near page 1) ===
-None found yet.
-```
+## 권장 다음 단계
 
-### Page Performance
-```
-=== PAGE PERFORMANCE (2026-05-20 ~ 2026-05-27) ===
-  [0c/16i] /
-```
+### 즉시 실행 (병행)
+1. **기술적 SEO 점검**
+   - sitemap.xml 제출 확인
+   - robots.txt 설정 검토
+   - Core Web Vitals 최적화 점검
+   - 메타 태그 및 구조화된 데이터 개선
 
-## Content Pipeline Status
+2. **콘텐츠 준비**
+   - 주요 키워드 타겟 게시물 목록 작성
+   - 각 게시물의 SEO 체크리스트 준비
+   - 내부 링크 구조 최적화
 
-**Topics by status**: {'published': 463, 'writing': 44, 'rejected': 7, 'researched': 23, 'in_progress': 1, 'seeded': 10, 'queued': 2303}
+### 데이터 수집 대기
+- **충분한 데이터 축적 예상**: 2026-06-13 (약 2주)
+- **Striking Distance 키워드 식별**: 데이터 축적 후
 
-### Researched but Not Published
-- `ai-coding-productivity-statistics-2026` — AI Coding Productivity Statistics 2026: What the Data Says
-- `claude-code-vs-cline-2026` — Claude Code vs Cline 2026: Terminal vs VS Code Open-Source Agent Compared
-- `ai-agent-frameworks-overview-2026` — AI Agent Frameworks 2026: Complete Comparison of 14 Frameworks for Developers
-- `emergent-ai-review-2026` — Emergent AI Review 2026: Full-Stack App Builder That Hit $100M ARR
-- `microsoft-agent-framework-1-0-guide-2026` — Microsoft Agent Framework 1.0: Build Production AI Agents in .NET and Python
-- `truefoundry-review-2026` — TrueFoundry Review 2026: MLOps + LLMOps Platform for Enterprise AI
-- `openobserve-llm-monitoring-guide-2026` — OpenObserve LLM Monitoring Guide 2026
-- `claude-code-vulnerability-detection-guide-2026` — Claude Code Security: Finding 500+ Vulnerabilities with AI in Production Codebases
-- `llm-gateway-comparison-2026` — LLM Gateway Comparison 2026: Portkey vs Helicone vs LiteLLM
-- `ai-agent-protocols-mcp-a2a-acp-2026` — AI Agent Protocols in 2026: MCP vs A2A vs ACP — When to Use Each
-- `superpowers-claude-code-tdd-guide-2026` — Superpowers + Claude Code: TDD Workflow Setup Guide
-- `google-adk-vs-openai-agents-sdk-vs-mastra-2026` — Google ADK vs OpenAI Agents SDK vs Mastra: Agent Framework Showdown 2026
-- `github-trending-ai-projects-april-2026` — GitHub Trending AI Projects April 2026: What's Worth Watching
-- `linux-foundation-agentic-ai-foundation-2026` — Linux Foundation Agentic AI Foundation: MCP + A2A Governance Explained
-- `github-copilot-semantic-code-search-2026` — GitHub Copilot Semantic Code Search: Find Code by Concept, Not Keyword
-- `multi-agent-coding-workflow-2026` — Multi-Agent Coding Workflow Guide 2026: Claude + Copilot + Codex in Parallel
-- `mcp-97-million-installs-2026` — MCP Hits 97 Million Installs: The AI Protocol War Is Over
-- `ai-coding-statistics-2026` — AI Coding Statistics 2026: 51% of GitHub Code Is Now AI-Assisted
-- `devin-2-review-2026` — Devin 2.2 Review: AI Software Engineer Gets 3x Faster, Adds PR Review Mode
-- `openai-codex-desktop-control-guide-2026` — OpenAI Codex Desktop Control Guide 2026: Parallel Agents and GPT-5-Codex
-- `codex-memory-feature-guide-2026` — OpenAI Codex Memory Feature Guide: Persistent Work Sessions for Developers
-- `claude-design-review-2026` — Claude Design Review 2026: Prompt to Prototype with Live HTML
-- `ai-coding-acceleration-whiplash-2026` — AI Coding Acceleration Whiplash: Why More AI Means More Bugs
-
-### Pending Paperclip Issues
-- **[ROC-4631]** Dispatch Next Article (in_progress)
-- **[ROC-4621]** Publish: GPT-6 (Spud) Developer API Preparation Guide (backlog)
-- **[ROC-4620]** Research: GPT-6 (Spud) Developer API Preparation Guide (backlog)
-- **[ROC-4619]** Write: GPT-6 (Spud) Developer API Preparation Guide (backlog)
-- **[ROC-4618]** Research: Tokenmaxxing: The Hidden AI Coding Productivity Trap (backlog)
-- **[ROC-4617]** Publish: Tokenmaxxing: The Hidden AI Coding Productivity Trap (backlog)
-- **[ROC-4616]** Write: Tokenmaxxing: The Hidden AI Coding Productivity Trap (backlog)
-- **[ROC-4615]** Publish: AI Coding Workflow Best Practices 2026: 12 Patterns From Senior Engineers (backlog)
-- **[ROC-4614]** Write: AI Coding Workflow Best Practices 2026: 12 Patterns From Senior Engineers (backlog)
-- **[ROC-4613]** Research: AI Coding Workflow Best Practices 2026: 12 Patterns From Senior Engineers (backlog)
-
-## Content Gap Analysis
-
-### Identified Gaps
-The following high‑commercial‑intent verticals are **missing**:
-- AI Ethics
-- AI Sustainability
-- AI Real estate
-- AI Insurance
-- AI Government
-- AI Public sector
-- AI Regulatory
-
-## Recommendations
-1. **Prioritize publishing** researched topics.
-2. **Consider adding gap topics** to research pipeline.
-3. **Monitor GSC** for early ranking signals.
-4. **Check technical SEO** (indexing, sitemap).
-5. **Ensure internal linking** across published posts.
+## 재검사 일정
+- **다음 정기 보고**: 2026-06-06 (주간)
+- **집중 분석**: striking distance 키워드 식별 시
 
 ---
-*Report generated automatically by Analyst agent on 2026-05-30.*
+**보고서 생성**: 2026-05-30 | **데이터 지연**: GSC 3일 지연

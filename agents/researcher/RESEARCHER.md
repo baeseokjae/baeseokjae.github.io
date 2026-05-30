@@ -15,8 +15,8 @@ api_url = os.environ.get("PAPERCLIP_API_URL", "http://127.0.0.1:3100")
 api_key = os.environ.get("PAPERCLIP_API_KEY", "")
 
 if not task_id:
-    print("FATAL: PAPERCLIP_TASK_ID not set — aborting", file=sys.stderr)
-    sys.exit(1)
+    print("No PAPERCLIP_TASK_ID set — no task assigned, exiting gracefully.")
+    sys.exit(0)
 
 try:
     req = urllib.request.Request(

@@ -49,15 +49,10 @@ DISABLED_AGENT_IDS = {
     "16f0b09a-d3f8-4885-aa2a-52e7d67d2267",  # Thumbnail (Writer runs gen_cover.py)
 }
 
-# Platform-wide rate limit detection
-# Substrings that identify a rate/session limit error from Anthropic
-PLATFORM_LIMIT_TRIGGERS = [
-    "session limit", "weekly limit", "monthly limit",
-    "you've hit your", "rate limit exceeded",
-]
-
-# Minimum fraction of error-state agents sharing the same rate-limit error to suppress
-PLATFORM_LIMIT_THRESHOLD = 0.6  # 60%
+# Platform-wide rate limit detection — Claude has session + weekly limits
+PLATFORM_LIMIT_ENABLED = True
+PLATFORM_LIMIT_TRIGGERS = ["session limit", "weekly limit", "monthly limit", "rate limit exceeded", "You've hit your"]
+PLATFORM_LIMIT_THRESHOLD = 0.6
 
 # Log file
 LOG_FILE = os.path.expanduser("~/blog/logs/auto-reset.log")
@@ -119,15 +114,13 @@ def save_state(state):
 def detect_platform_rate_limit(agents_in_error):
     """Check if 60%+ of error-state agents share the same rate-limit error.
     
-    Uses heartbeat-run history to identify platform-wide Anthropic limit events
-    (weekly/session/rate limits). When detected, suppresses individual agent resets
-    that would be pointless and produce noise escalation issues.
-    
-    Handles both multi-agent (60% threshold) and single-agent (80% of own runs)
-    rate-limit scenarios.
+    Currently DISABLED - using Ollama Cloud which has no weekly limits.
+    Set PLATFORM_LIMIT_ENABLED = True and populate PLATFORM_LIMIT_TRIGGERS to re-enable.
     
     Returns (is_platform_wide: bool, error_message: str|None, reset_time: str|None)
     """
+    if not PLATFORM_LIMIT_ENABLED:
+        return (False, None, None)
     # Allow single-agent path to fall through to individual check below
     
     try:
@@ -166,8 +159,49 @@ def detect_platform_rate_limit(agents_in_error):
         relevant_count = len(relevant)
         if count >= int(relevant_count * threshold):
             # Fix: match times like "4:50am" (with colon) or "6pm" (without)
-            reset_match = re.search(r'resets\s+(\d+(?::\d+)?[ap]m)\s*\(UTC\)', common_err)
-            reset_time = reset_match.group(1) if reset_match else None
+            # Match both formats: "resets 6pm (UTC)" (session limit) and "resets May 30, 5pm (UTC)" (weekly limit)
+            reset_match = re.search(r'resets\s+(?:\w+\s+(\d+),\s+)?(\d+(?::\d+)?[ap]m)\s*\(UTC\)', common_err)
+            reset_time = reset_match.group(2) if reset_match else None
+            reset_date_day = reset_match.group(1) if reset_match else None
+
+            if reset_time:
+                # Check if the reset time has already passed.
+                # If so, the limit is no longer active and we should NOT suppress resets,
+                # preventing the post-limit stranded-agent bug.
+                try:
+                    now = datetime.now(timezone.utc)
+                    fmt = "%I:%M%p" if ":" in reset_time else "%I%p"
+                    parsed = datetime.strptime(reset_time.upper(), fmt)
+                    reset_dt = now.replace(hour=parsed.hour, minute=parsed.minute, second=0, microsecond=0)
+
+                    # Handle weekly limits with a date prefix (e.g. "resets May 30, 5pm (UTC)")
+                    if reset_date_day:
+                        # Current month name for building the full date
+                        month_names = ["january", "february", "march", "april", "may", "june",
+                                       "july", "august", "september", "october", "november", "december"]
+                        month_part = common_err.split("resets")[1].strip().split()[0].lower()
+                        if month_part in month_names:
+                            month_num = month_names.index(month_part) + 1
+                            year = now.year
+                            # If the reset month is earlier than current month, it's next year
+                            if month_num < now.month:
+                                year += 1
+                            reset_dt = now.replace(
+                                year=year, month=month_num,
+                                day=int(reset_date_day),
+                                hour=parsed.hour, minute=parsed.minute,
+                                second=0, microsecond=0
+                            )
+
+                    if now >= reset_dt:
+                        log(f"Rate-limit reset time ({reset_time} UTC"
+                            + (f" on day {reset_date_day}" if reset_date_day else "")
+                            + ") has already passed. Proceeding with normal recovery.", "INFO")
+                        return (False, None, None)
+                except Exception as e:
+                    log(f"Failed to parse reset time '{reset_time}': {e}. Proceeding cautiously.", "DEBUG")
+                    # On parse failure, return True to suppress — safer to under-recover than over-reset
+            
             return (True, common_err, reset_time)
         
         return (False, None, None)
@@ -195,16 +229,46 @@ def get_issues():
         return []
     return issues
 
+# Claude models for use with claude_local adapter (the only working adapter)
+SONNET_MODEL = "claude-sonnet-4-6"
+HAIKU_MODEL = "claude-haiku-4-5-20251001"
+
+# Map agent IDs to their correct model
+AGENT_MODEL_MAP = {
+    "d88ae332-76ca-464a-98fd-ace75d19c4fe": SONNET_MODEL,    # Researcher
+    "2621e372-2118-4186-9070-0d62b7a2f332": SONNET_MODEL,    # ContentDirector
+    "b796bb1c-a6ef-4249-bfa2-554acfc61726": SONNET_MODEL,    # Writer
+    "458d5ac7-e504-4b95-af7a-a9fdf7151895": SONNET_MODEL,    # Strategist
+    "915ce8cd-4608-48f2-9b53-b15288ab4676": HAIKU_MODEL,     # Publisher
+    "1833525a-1cf5-43b9-a4ce-e31a9b412880": HAIKU_MODEL,     # Analyst
+}
+
 def reset_agent(agent_id, agent_name):
-    """Reset an agent from error to idle state using Board API."""
+    """Reset an agent from error to idle using Board API.
+    Uses per-agent Claude models with claude_local adapter.
+    Corrects the model if it was corrupted to deepseek-v3.2 (incompatible with claude_local)."""
+    model = AGENT_MODEL_MAP.get(agent_id, SONNET_MODEL)
+    payload = {
+        "status": "idle",
+        "adapterType": "claude_local",
+        "adapterConfig": AGENT_MODEL_MAP.get(agent_id) and {
+            "model": model,
+            "search": True,
+            "graceSec": 5,
+            "maxTurns": 30,
+            "timeoutSec": 600,
+            "bypassSandbox": True,
+            "dangerouslySkipPermissions": True
+        } or {"model": model}
+    }
     # Try /api/agents/{id} first (Board-level access)
-    result = api("PATCH", f"{BASE_URL}/agents/{agent_id}", {"status": "idle"})
+    result = api("PATCH", f"{BASE_URL}/agents/{agent_id}", payload)
     if "error" not in result:
         log(f"Reset agent {agent_name} ({agent_id[:8]}...) from error to idle", "ACTION")
         return True
     
     # Fallback: try company-scoped
-    result2 = api("PATCH", f"{BASE_URL}/companies/{COMPANY_ID}/agents/{agent_id}", {"status": "idle"})
+    result2 = api("PATCH", f"{BASE_URL}/companies/{COMPANY_ID}/agents/{agent_id}", payload)
     if "error" not in result2:
         log(f"Reset agent {agent_name} via company route", "ACTION")
         return True
