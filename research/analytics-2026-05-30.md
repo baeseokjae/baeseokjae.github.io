@@ -1,59 +1,102 @@
-# GSC Analytics Report - 2026-05-30
+# Blog Analytics Report — 2026-05-30
 
-## 보고 기간
-- 데이터 범위: 2026-05-20 ~ 2026-05-27 (GSC 3일 지연)
+## Executive Summary
+- **Total published posts**: 463
+- **Researched, not yet published**: 23
+- **Pending Paperclip issues**: 77
+- **GSC impressions (7 days)**: ?
 
-## 주요 결과
+## GSC Performance
 
-### 일일 리포트 (Daily)
-- **상태**: 데이터 없음, 사이트 인덱싱 진행 중
+### Daily Report (7-day window)
+```
+=== DAILY GSC REPORT (2026-05-20 ~ 2026-05-27) ===
+No data yet. Site indexing in progress.
+```
 
-### 주간 리포트 (Weekly)
-- **데이터**: 제한적 (사이트 초기 단계)
-- **Striking Distance (위치 11-20)**: 없음
-- **페이지 성능**: 홈페이지 (0클릭, 16인덱스)
+### Weekly Report
+```
+=== DAILY GSC REPORT (2026-05-20 ~ 2026-05-27) ===
+No data yet. Site indexing in progress.
 
-### 페이지별 성능
-| 페이지 | 클릭 | 인덱스 페이지 |
-|--------|------|----------|
-| / | 0 | 16 |
+=== STRIKING DISTANCE (pos 11-20, near page 1) ===
+None found yet.
 
-## 인사이트
+=== PAGE PERFORMANCE (2026-05-20 ~ 2026-05-27) ===
+  [0c/16i] /
+```
 
-### 현황
-1. 블로그 사이트가 아직 초기 인덱싱 단계
-2. GSC 데이터가 충분하지 않아 의미 있는 분석 불가
-3. Striking distance 키워드 없음 (SEO 개선 대상 없음)
+### Striking Distance (positions 11-20)
+```
+=== STRIKING DISTANCE (pos 11-20, near page 1) ===
+None found yet.
+```
 
-### 권장사항
-- **대기**: GSC가 충분한 데이터를 수집할 때까지 기다림 (2주 이상)
-- **모니터링**: 주간 리포트를 통해 인덱싱 진행 상황 추적
-- **콘텐츠 생성**: 기본 포스트 작성으로 인덱싱 가능한 콘텐츠 확보
+### Page Performance
+```
+=== PAGE PERFORMANCE (2026-05-20 ~ 2026-05-27) ===
+  [0c/16i] /
+```
 
-## 다음 조치
-- [ ] 충분한 GSC 데이터 수집 대기 (약 2주)
-- [ ] 주간 분석 반복 (striking distance 키워드 모니터링)
-- [ ] 콘텐츠 기회 식별 시 Paperclip 이슈 생성
+## Content Pipeline Status
 
-## 분석 타임라인
+**Topics by status**: {'published': 463, 'writing': 44, 'rejected': 7, 'researched': 23, 'in_progress': 1, 'seeded': 10, 'queued': 2303}
 
-- **2026-04-09**: 블로그 URL 이동 완료 (/blog → root)
-- **2026-04-13**: GSC sitemap fix 적용
-- **2026-05-30**: 재분석 (여전히 사이트 인덱싱 진행 중)
+### Researched but Not Published
+- `ai-coding-productivity-statistics-2026` — AI Coding Productivity Statistics 2026: What the Data Says
+- `claude-code-vs-cline-2026` — Claude Code vs Cline 2026: Terminal vs VS Code Open-Source Agent Compared
+- `ai-agent-frameworks-overview-2026` — AI Agent Frameworks 2026: Complete Comparison of 14 Frameworks for Developers
+- `emergent-ai-review-2026` — Emergent AI Review 2026: Full-Stack App Builder That Hit $100M ARR
+- `microsoft-agent-framework-1-0-guide-2026` — Microsoft Agent Framework 1.0: Build Production AI Agents in .NET and Python
+- `truefoundry-review-2026` — TrueFoundry Review 2026: MLOps + LLMOps Platform for Enterprise AI
+- `openobserve-llm-monitoring-guide-2026` — OpenObserve LLM Monitoring Guide 2026
+- `claude-code-vulnerability-detection-guide-2026` — Claude Code Security: Finding 500+ Vulnerabilities with AI in Production Codebases
+- `llm-gateway-comparison-2026` — LLM Gateway Comparison 2026: Portkey vs Helicone vs LiteLLM
+- `ai-agent-protocols-mcp-a2a-acp-2026` — AI Agent Protocols in 2026: MCP vs A2A vs ACP — When to Use Each
+- `superpowers-claude-code-tdd-guide-2026` — Superpowers + Claude Code: TDD Workflow Setup Guide
+- `google-adk-vs-openai-agents-sdk-vs-mastra-2026` — Google ADK vs OpenAI Agents SDK vs Mastra: Agent Framework Showdown 2026
+- `github-trending-ai-projects-april-2026` — GitHub Trending AI Projects April 2026: What's Worth Watching
+- `linux-foundation-agentic-ai-foundation-2026` — Linux Foundation Agentic AI Foundation: MCP + A2A Governance Explained
+- `github-copilot-semantic-code-search-2026` — GitHub Copilot Semantic Code Search: Find Code by Concept, Not Keyword
+- `multi-agent-coding-workflow-2026` — Multi-Agent Coding Workflow Guide 2026: Claude + Copilot + Codex in Parallel
+- `mcp-97-million-installs-2026` — MCP Hits 97 Million Installs: The AI Protocol War Is Over
+- `ai-coding-statistics-2026` — AI Coding Statistics 2026: 51% of GitHub Code Is Now AI-Assisted
+- `devin-2-review-2026` — Devin 2.2 Review: AI Software Engineer Gets 3x Faster, Adds PR Review Mode
+- `openai-codex-desktop-control-guide-2026` — OpenAI Codex Desktop Control Guide 2026: Parallel Agents and GPT-5-Codex
+- `codex-memory-feature-guide-2026` — OpenAI Codex Memory Feature Guide: Persistent Work Sessions for Developers
+- `claude-design-review-2026` — Claude Design Review 2026: Prompt to Prototype with Live HTML
+- `ai-coding-acceleration-whiplash-2026` — AI Coding Acceleration Whiplash: Why More AI Means More Bugs
 
-## 결론
+### Pending Paperclip Issues
+- **[ROC-4631]** Dispatch Next Article (in_progress)
+- **[ROC-4621]** Publish: GPT-6 (Spud) Developer API Preparation Guide (backlog)
+- **[ROC-4620]** Research: GPT-6 (Spud) Developer API Preparation Guide (backlog)
+- **[ROC-4619]** Write: GPT-6 (Spud) Developer API Preparation Guide (backlog)
+- **[ROC-4618]** Research: Tokenmaxxing: The Hidden AI Coding Productivity Trap (backlog)
+- **[ROC-4617]** Publish: Tokenmaxxing: The Hidden AI Coding Productivity Trap (backlog)
+- **[ROC-4616]** Write: Tokenmaxxing: The Hidden AI Coding Productivity Trap (backlog)
+- **[ROC-4615]** Publish: AI Coding Workflow Best Practices 2026: 12 Patterns From Senior Engineers (backlog)
+- **[ROC-4614]** Write: AI Coding Workflow Best Practices 2026: 12 Patterns From Senior Engineers (backlog)
+- **[ROC-4613]** Research: AI Coding Workflow Best Practices 2026: 12 Patterns From Senior Engineers (backlog)
 
-**현재 상태**: GSC 데이터 부족으로 의미 있는 SEO 개선 기회 식별 불가.
+## Content Gap Analysis
 
-**기다려야 할 것**:
-- 블로그 도메인 변경 후 Google Search Console 데이터 안정화 (약 4-6주)
-- Striking distance keywords 출현 시점 (최소 10-20개 포스트 필요)
+### Identified Gaps
+The following high‑commercial‑intent verticals are **missing**:
+- AI Ethics
+- AI Sustainability
+- AI Real estate
+- AI Insurance
+- AI Government
+- AI Public sector
+- AI Regulatory
 
-**모니터링 계획**:
-- 주간 분석 반복 (매주 금요일)
-- Striking distance keywords 모니터링 (pos 11-20 추적)
-- 첫 기회 발견 시 Paperclip issue 생성 및 SEO 에이전트에 할당
+## Recommendations
+1. **Prioritize publishing** researched topics.
+2. **Consider adding gap topics** to research pipeline.
+3. **Monitor GSC** for early ranking signals.
+4. **Check technical SEO** (indexing, sitemap).
+5. **Ensure internal linking** across published posts.
 
 ---
-*분석 작성일: 2026-05-30 KST 04:36*
-*다음 분석 예정: 2026-06-06*
+*Report generated automatically by Analyst agent on 2026-05-30.*
