@@ -1,12 +1,36 @@
-# Daily Analytics Report — 2026-05-30
+# GSC Analytics Report - 2026-05-30
 
-**Report Period**: Latest GSC data
+## 상태 요약
 
-## 📊 Status
-Monitoring active. No new data yet.
+**리포트 기간:** 2026-05-20 ~ 2026-05-27  
+**분석 날짜:** 2026-05-30 (KST)
 
-## 🔍 Striking Distance
-0 keywords found (pos 11-20)
+## 주요 발견
 
-## Report
-Generated on 2026-05-30.
+### 1. 데이터 가용성
+- **전체 GSC 데이터:** 수집 진행 중 (인덱싱 프로세스 실행 중)
+- **3일 지연:** GSC는 3일 데이터 지연을 가지므로 최신 데이터는 2026-05-27까지
+
+### 2. Striking Distance Keywords (포지션 11-20)
+- **현황:** 아직 찾지 못함
+- **의미:** 포지션 11-20에 있는 키워드가 없음 = 포지션 10 이내의 콘텐츠가 부족하거나, 현재 사이트의 검색 순위가 전반적으로 낮은 상태
+
+### 3. 페이지 성능
+**홈페이지 (/):**
+- 클릭: 0
+- 노출: 16
+
+**분석:**
+- 사이트가 검색 결과에 표시되기 시작했지만 클릭이 없음
+- 16개 노출 = 검색 결과에서 16번 나타났지만 클릭이 없는 상태
+- 낮은 CTR (클릭률) - 제목/설명 최적화 필요
+
+## 다음 단계
+
+1. **GSC 데이터 안정화 대기** - 인덱싱이 완료될 때까지 추적
+2. **컨텐츠 기회 분석 대기** - 더 많은 데이터 수집 후 striking distance 키워드 파악
+3. **메타 최적화** - 홈페이지 CTR 개선 필요
+
+## 기술 노트
+- 스크립트 실행: `python3 /home/ubuntu/blog/agents/analyst/gsc_report.py weekly`
+- GSC 서비스 계정: `/home/ubuntu/.secrets/gsc-service-account.json`
