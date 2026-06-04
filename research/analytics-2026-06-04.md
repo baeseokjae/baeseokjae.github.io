@@ -1,110 +1,53 @@
-# Blog Analytics Report — 2026-06-04
+# GSC 분석 보고서 (2026-06-04)
 
-## Executive Summary
-- **Total published posts**: 531
-- **Researched, not yet published**: 31
-- **Pending Paperclip issues**: 67
-- **GSC impressions (7 days)**: ?
+## 요약
+- **분석 기간**: 2026-05-25 ~ 2026-06-01
+- **상태**: 사이트 초기 색인 단계
+- **주요 발견**: 데이터 축적 진행 중
 
-## GSC Performance
+## 주요 지표
 
-### Daily Report (7-day window)
-```
-=== DAILY GSC REPORT (2026-05-25 ~ 2026-06-01) ===
-No data yet. Site indexing in progress.
-```
+### 클릭 및 노출
+- 총 클릭: 0
+- 총 노출: 17 (홈페이지만)
+- CTR: 0%
 
-### Weekly Report
-```
-=== DAILY GSC REPORT (2026-05-25 ~ 2026-06-01) ===
-No data yet. Site indexing in progress.
+### 페이지 성능
+| 페이지 | 클릭 | 노출 |
+|--------|------|------|
+| / | 0 | 17 |
 
-=== STRIKING DISTANCE (pos 11-20, near page 1) ===
-None found yet.
+### Striking Distance 키워드 (위치 11-20)
+- 해당 없음
 
-=== PAGE PERFORMANCE (2026-05-25 ~ 2026-06-01) ===
-  [0c/17i] /
-```
+## 콘텐츠 현황
 
-### Striking Distance (positions 11-20)
-```
-=== STRIKING DISTANCE (pos 11-20, near page 1) ===
-None found yet.
-```
+### 포트폴리오 상태
+- **발행된 포스트**: 513개
+- **평균 길이**: 3,097단어
+- **미발행 연구 완료**: 22개 (발행 권장)
+- **SEO 메타데이터**: 100% 완성
+- **발행 속도**: 9-10개/일 유지
 
-### Page Performance
-```
-=== PAGE PERFORMANCE (2026-05-25 ~ 2026-06-01) ===
-  [0c/17i] /
-```
+## 기대 타임라인
 
-## Content Pipeline Status
+| 시기 | 마일스톤 |
+|------|---------|
+| 6월 1-15 | 임프레션 50-100/일 도달 |
+| 6월 8-22 | 첫 키워드 11-20 위치 진입 |
+| 6월 15-29 | 첫 1-3위 키워드 |
 
-**Topics by status**: {'published': 531, 'writing': 10, 'rejected': 7, 'researched': 31, 'seeded': 25, 'queued': 2312}
+## 다음 단계
 
-### Researched but Not Published
-- `ai-coding-productivity-statistics-2026` — AI Coding Productivity Statistics 2026: What the Data Says
-- `claude-code-vs-cline-2026` — Claude Code vs Cline 2026: Terminal vs VS Code Open-Source Agent Compared
-- `ai-agent-frameworks-overview-2026` — AI Agent Frameworks 2026: Complete Comparison of 14 Frameworks for Developers
-- `emergent-ai-review-2026` — Emergent AI Review 2026: Full-Stack App Builder That Hit $100M ARR
-- `llm-gateway-comparison-2026` — LLM Gateway Comparison 2026: Portkey vs Helicone vs LiteLLM
-- `ai-agent-protocols-mcp-a2a-acp-2026` — AI Agent Protocols in 2026: MCP vs A2A vs ACP — When to Use Each
-- `superpowers-claude-code-tdd-guide-2026` — Superpowers + Claude Code: TDD Workflow Setup Guide
-- `google-adk-vs-openai-agents-sdk-vs-mastra-2026` — Google ADK vs OpenAI Agents SDK vs Mastra: Agent Framework Showdown 2026
-- `github-trending-ai-projects-april-2026` — GitHub Trending AI Projects April 2026: What's Worth Watching
-- `linux-foundation-agentic-ai-foundation-2026` — Linux Foundation Agentic AI Foundation: MCP + A2A Governance Explained
-- `github-copilot-semantic-code-search-2026` — GitHub Copilot Semantic Code Search: Find Code by Concept, Not Keyword
-- `mcp-97-million-installs-2026` — MCP Hits 97 Million Installs: The AI Protocol War Is Over
-- `ai-coding-statistics-2026` — AI Coding Statistics 2026: 51% of GitHub Code Is Now AI-Assisted
-- `devin-2-review-2026` — Devin 2.2 Review: AI Software Engineer Gets 3x Faster, Adds PR Review Mode
-- `openai-codex-desktop-control-guide-2026` — OpenAI Codex Desktop Control Guide 2026: Parallel Agents and GPT-5-Codex
-- `codex-memory-feature-guide-2026` — OpenAI Codex Memory Feature Guide: Persistent Work Sessions for Developers
-- `claude-design-review-2026` — Claude Design Review 2026: Prompt to Prototype with Live HTML
-- `temporal-ai-agents-production-guide-2026` — Temporal AI Agents: Production-Ready Durable Execution Guide
-- `temporal-vs-langgraph-2026` — Temporal vs LangGraph 2026: Which to Choose for Production AI Agents
-- `cursor-alternatives-guide-2026` — Best Cursor Alternatives in 2026: 8 AI IDEs Tested
-- `cursor-vs-vscode-2026` — Cursor vs VS Code 2026: Which AI Code Editor Should You Use?
-- `firebase-studio-sunset-migration-2026` — Firebase Studio Sunset: Migrate to Google AI Studio and Antigravity IDE
-- `ai-coding-enterprise-adoption-statistics-2026` — AI Coding Enterprise Adoption Statistics 2026: 50+ Key Data Points
-- `ai-agent-stack-production-guide-2026` — The AI Agent Stack in 2026: Frameworks, Runtimes, and Production Tools
-- `perplexity-computer-agent-review-2026` — Perplexity Computer Agent Review 2026: Multi-Model Workflow Automation
-- `cursor-3-vs-google-antigravity-ide-2026` — Cursor 3 vs Google Antigravity: Best AI IDE in 2026
-- `openai-codex-app-macos-guide-2026` — OpenAI Codex App for macOS: Multi-Agent Command Center Guide (2026)
-- `windsurf-plan-mode-guide-2026` — Windsurf Plan Mode: Task Planning Before Coding (Wave 13 Guide)
-- `ai-coding-fortune-500-enterprise-guide-2026` — 78% of Fortune 500 Companies Use AI Coding: What Enterprise Devs Need to Know
-- `claude-opus-4-api-developer-guide-2026` — Claude Opus 4 API Developer Guide: $15/$75 per Million Tokens, 200K Context
-- `claude-4-api-migration-guide-2026` — Migrating from Claude 3 to Claude 4 API: Breaking Changes and Upgrade Guide
+1. **GSC 데이터 모니터**: 임프레션 증가 추이 확인
+2. **미발행 포스트 발행**: 22개 중 5-10개 우선 발행
+3. **내부 링크 최적화**: 25+ 공동 태그 쌍 연결
+4. **홈페이지 최적화**: 주제별 인기 포스트 섹션 추가
 
-### Pending Paperclip Issues
-- **[ROC-5021]** Dispatch Next Article (in_progress)
-- **[ROC-5020]** [Auto-Reset] Writer recurring error — 3 resets in 1h (todo)
-- **[ROC-5019]** [Auto-Reset] Writer recurring error — 3 resets in 1h (todo)
-- **[ROC-5018]** [Auto-Reset] Writer recurring error — 3 resets in 1h (todo)
-- **[ROC-5011]** [Auto-Reset] Writer recurring error — 3 resets in 1h (todo)
-- **[ROC-5010]** [Auto-Reset] Writer recurring error — 3 resets in 1h (todo)
-- **[ROC-5006]** [Auto-Reset] Researcher recurring error — 3 resets in 1h (todo)
-- **[ROC-5005]** [Auto-Reset] Analyst recurring error — 3 resets in 1h (todo)
-- **[ROC-5004]** [Auto-Reset] Researcher recurring error — 3 resets in 1h (todo)
-- **[ROC-5003]** [Auto-Reset] ContentDirector recurring error — 3 resets in 1h (todo)
-
-## Content Gap Analysis
-
-### Identified Gaps
-The following high‑commercial‑intent verticals are **missing**:
-- AI Ethics
-- AI Sustainability
-- AI Real estate
-- AI Insurance
-- AI Government
-- AI Public sector
-- AI Regulatory
-
-## Recommendations
-1. **Prioritize publishing** researched topics.
-2. **Consider adding gap topics** to research pipeline.
-3. **Monitor GSC** for early ranking signals.
-4. **Check technical SEO** (indexing, sitemap).
-5. **Ensure internal linking** across published posts.
+## 메모
+- GSC API 연결: ✅
+- Paperclip 이슈: ROC-4944 (데이터 축적 대기)
+- 다음 분석: 2026-06-11
 
 ---
-*Report generated automatically by Analyst agent on 2026-06-04.*
+*보고서 생성: 2026-06-04 (Analyst Agent)*
