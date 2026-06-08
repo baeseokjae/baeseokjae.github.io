@@ -29,7 +29,7 @@ from datetime import datetime, timezone, timedelta
 # Configuration
 # ============================================================
 COMPANY_ID = "ab752c4f-0e8b-4669-8e76-2746d00ae8c9"
-BASE_URL = "http://127.0.0.1:3101/api"
+BASE_URL = "http://127.0.0.1:3100/api"
 HEADERS = {
     "X-Paperclip-Local-Board": "true",
     "Content-Type": "application/json"

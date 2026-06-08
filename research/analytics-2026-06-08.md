@@ -1,121 +1,69 @@
-# Blog Analytics Report — 2026-06-08
+# GSC Analytics Report - 2026-06-08
 
-## Executive Summary
-- **Total published posts**: 539
-- **Researched, not yet published**: 32
-- **Pending Paperclip issues**: 68
-- **GSC impressions (7 days)**: 5
+## Summary
+**Reporting Period:** 2026-05-29 ~ 2026-06-05 (7 days)
 
-## GSC Performance
+- **Clicks:** 0
+- **Impressions:** 5
+- **CTR:** 0.00%
+- **Avg Position:** 20.7
 
-### Daily Report (7-day window)
-```
-=== DAILY GSC REPORT (2026-05-29 ~ 2026-06-05) ===
-Clicks: 0 | Impressions: 5 | CTR: 0.00%
-
-Top Queries:
-  [0c/3i pos:9.0] blakemartin-subhub trojan-horse github cursor-for-bim
-  [0c/1i pos:28.0] cursorbench 3.1
-  [0c/1i pos:25.0] gptaku
-```
-
-### Weekly Report
-```
-=== DAILY GSC REPORT (2026-05-29 ~ 2026-06-05) ===
-Clicks: 0 | Impressions: 5 | CTR: 0.00%
-
-Top Queries:
-  [0c/3i pos:9.0] blakemartin-subhub trojan-horse github cursor-for-bim
-  [0c/1i pos:28.0] cursorbench 3.1
-  [0c/1i pos:25.0] gptaku
-
-=== STRIKING DISTANCE (pos 11-20, near page 1) ===
-None found yet.
-
-=== PAGE PERFORMANCE (2026-05-29 ~ 2026-06-05) ===
-  [0c/45i] /
-```
-
-### Striking Distance (positions 11-20)
-```
-=== STRIKING DISTANCE (pos 11-20, near page 1) ===
-None found yet.
-```
-
-### Page Performance
-```
-=== PAGE PERFORMANCE (2026-05-29 ~ 2026-06-05) ===
-  [0c/45i] /
-```
-
-## Content Pipeline Status
-
-**Topics by status**: {'published': 539, 'writing': 6, 'rejected': 7, 'researched': 32, 'seeded': 46, 'queued': 2308}
-
-### Researched but Not Published
-- `ai-coding-productivity-statistics-2026` — AI Coding Productivity Statistics 2026: What the Data Says
-- `claude-code-vs-cline-2026` — Claude Code vs Cline 2026: Terminal vs VS Code Open-Source Agent Compared
-- `ai-agent-frameworks-overview-2026` — AI Agent Frameworks 2026: Complete Comparison of 14 Frameworks for Developers
-- `emergent-ai-review-2026` — Emergent AI Review 2026: Full-Stack App Builder That Hit $100M ARR
-- `ai-agent-protocols-mcp-a2a-acp-2026` — AI Agent Protocols in 2026: MCP vs A2A vs ACP — When to Use Each
-- `superpowers-claude-code-tdd-guide-2026` — Superpowers + Claude Code: TDD Workflow Setup Guide
-- `google-adk-vs-openai-agents-sdk-vs-mastra-2026` — Google ADK vs OpenAI Agents SDK vs Mastra: Agent Framework Showdown 2026
-- `github-trending-ai-projects-april-2026` — GitHub Trending AI Projects April 2026: What's Worth Watching
-- `linux-foundation-agentic-ai-foundation-2026` — Linux Foundation Agentic AI Foundation: MCP + A2A Governance Explained
-- `github-copilot-semantic-code-search-2026` — GitHub Copilot Semantic Code Search: Find Code by Concept, Not Keyword
-- `mcp-97-million-installs-2026` — MCP Hits 97 Million Installs: The AI Protocol War Is Over
-- `ai-coding-statistics-2026` — AI Coding Statistics 2026: 51% of GitHub Code Is Now AI-Assisted
-- `devin-2-review-2026` — Devin 2.2 Review: AI Software Engineer Gets 3x Faster, Adds PR Review Mode
-- `openai-codex-desktop-control-guide-2026` — OpenAI Codex Desktop Control Guide 2026: Parallel Agents and GPT-5-Codex
-- `codex-memory-feature-guide-2026` — OpenAI Codex Memory Feature Guide: Persistent Work Sessions for Developers
-- `claude-design-review-2026` — Claude Design Review 2026: Prompt to Prototype with Live HTML
-- `temporal-ai-agents-production-guide-2026` — Temporal AI Agents: Production-Ready Durable Execution Guide
-- `temporal-vs-langgraph-2026` — Temporal vs LangGraph 2026: Which to Choose for Production AI Agents
-- `cursor-alternatives-guide-2026` — Best Cursor Alternatives in 2026: 8 AI IDEs Tested
-- `cursor-vs-vscode-2026` — Cursor vs VS Code 2026: Which AI Code Editor Should You Use?
-- `firebase-studio-sunset-migration-2026` — Firebase Studio Sunset: Migrate to Google AI Studio and Antigravity IDE
-- `ai-coding-enterprise-adoption-statistics-2026` — AI Coding Enterprise Adoption Statistics 2026: 50+ Key Data Points
-- `ai-agent-stack-production-guide-2026` — The AI Agent Stack in 2026: Frameworks, Runtimes, and Production Tools
-- `perplexity-computer-agent-review-2026` — Perplexity Computer Agent Review 2026: Multi-Model Workflow Automation
-- `cursor-3-vs-google-antigravity-ide-2026` — Cursor 3 vs Google Antigravity: Best AI IDE in 2026
-- `openai-codex-app-macos-guide-2026` — OpenAI Codex App for macOS: Multi-Agent Command Center Guide (2026)
-- `windsurf-plan-mode-guide-2026` — Windsurf Plan Mode: Task Planning Before Coding (Wave 13 Guide)
-- `ai-coding-fortune-500-enterprise-guide-2026` — 78% of Fortune 500 Companies Use AI Coding: What Enterprise Devs Need to Know
-- `claude-opus-4-api-developer-guide-2026` — Claude Opus 4 API Developer Guide: $15/$75 per Million Tokens, 200K Context
-- `claude-4-api-migration-guide-2026` — Migrating from Claude 3 to Claude 4 API: Breaking Changes and Upgrade Guide
-- `ai-dev-tool-power-rankings-2026` — AI Dev Tool Power Rankings: Pragmatic Engineer's 2026 Analysis
-- `ai-coding-productivity-metrics-2026` — AI Coding Productivity Metrics: 7 Metrics That Actually Work (2026)
-
-### Pending Paperclip Issues
-- **[ROC-5142]** Dispatch Next Article (in_progress)
-- **[ROC-5061]** Dispatch Next Article (blocked)
-- **[ROC-5020]** [Auto-Reset] Writer recurring error — 3 resets in 1h (todo)
-- **[ROC-5019]** [Auto-Reset] Writer recurring error — 3 resets in 1h (todo)
-- **[ROC-5018]** [Auto-Reset] Writer recurring error — 3 resets in 1h (todo)
-- **[ROC-5011]** [Auto-Reset] Writer recurring error — 3 resets in 1h (todo)
-- **[ROC-5010]** [Auto-Reset] Writer recurring error — 3 resets in 1h (todo)
-- **[ROC-5006]** [Auto-Reset] Researcher recurring error — 3 resets in 1h (todo)
-- **[ROC-5005]** [Auto-Reset] Analyst recurring error — 3 resets in 1h (todo)
-- **[ROC-5004]** [Auto-Reset] Researcher recurring error — 3 resets in 1h (todo)
-
-## Content Gap Analysis
-
-### Identified Gaps
-The following high‑commercial‑intent verticals are **missing**:
-- AI Ethics
-- AI Sustainability
-- AI Real estate
-- AI Insurance
-- AI Government
-- AI Public sector
-- AI Regulatory
-
-## Recommendations
-1. **Prioritize publishing** researched topics.
-2. **Consider adding gap topics** to research pipeline.
-3. **Monitor GSC** for early ranking signals.
-4. **Check technical SEO** (indexing, sitemap).
-5. **Ensure internal linking** across published posts.
+## Status
+**Striking Distance Keywords (pos 11-20):** None found yet
+**Priority Opportunities:** Limited - Current performance is very low. Focus on foundational SEO optimization.
 
 ---
-*Report generated automatically by Analyst agent on 2026-06-08.*
+
+## Top Queries (All-time)
+| Query | Clicks | Impressions | Avg Position |
+|-------|--------|-------------|--------------|
+| blakemartin-subhub trojan-horse github cursor-for-bim | 0 | 3 | 9.0 |
+| cursorbench 3.1 | 0 | 1 | 28.0 |
+| gptaku | 0 | 1 | 25.0 |
+
+### Insights
+1. **Near-Winner Query (pos 9.0):** "blakemartin-subhub trojan-horse github cursor-for-bim" is showing up in search results but not getting clicks. This complex compound query indicates potential brand/niche interest. Check if content exists for these topics and improve relevance.
+
+2. **Long-tail Opportunities:** "cursorbench 3.1" and "gptaku" are brand/tool-specific queries with very low volume. Monitor for growth patterns.
+
+---
+
+## Page Performance
+- **Homepage (/):** 45 impressions, 0 clicks → Very low CTR despite visibility
+
+### Content Gap Analysis
+- No deep page visibility yet - suggests limited indexed content
+- Homepage is only page showing impressions
+- Need to audit: content depth, on-page SEO, internal linking strategy
+
+---
+
+## Recommended Actions (Priority Order)
+
+### 🔴 Critical
+1. **GSC Audit:** Verify property connection and ensure all posts are properly indexed
+2. **Homepage CTR:** Current 0% CTR suggests title/meta description may not be compelling
+   - Review search appearance in GSC
+   - Test title/description improvements
+
+### 🟠 High Priority  
+3. **Content Expansion:** Create content around identified queries:
+   - Cursor for BIM / GitHub integration angle
+   - Cursorbench tools/benchmarks
+   - GPT/Aiku related content
+   
+4. **Internal Linking Strategy:** Link new posts to homepage to distribute ranking potential
+
+### 🟡 Medium Priority
+5. **Monitor Striking Distance:** Set alerts for queries approaching positions 11-20 as they reach near-page-1 threshold
+
+---
+
+## Next Steps
+- [ ] Rerun report on 2026-06-15 to check progress
+- [ ] Audit indexation status via GSC Coverage report
+- [ ] Review and optimize homepage meta elements
+- [ ] Create 2-3 new posts targeting identified opportunities
+
+**Last Updated:** 2026-06-08 (KST)  
+**Agent:** Analyst
