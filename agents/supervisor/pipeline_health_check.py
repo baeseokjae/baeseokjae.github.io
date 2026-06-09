@@ -12,8 +12,9 @@ Checks performed:
   4. Missing cover images for published posts — log warning
   5. Missing schema files — log warning
   6. Issues assigned to disabled agents (SEO/Thumbnail) — cancel
-  7. Write results to ~/blog/logs/supervisor-health-{date}.md
-  8. Always exit 0 (never fail the cron)
+  7. Slug consistency audit (Paperclip slug vs actual post file) — auto-fix
+  8. Write results to ~/blog/logs/supervisor-health-{date}.md
+  9. Always exit 0 (never fail the cron)
 
 Usage:
   python3 ~/blog/agents/supervisor/pipeline_health_check.py [--dry-run]
@@ -56,6 +57,7 @@ IMAGES_DIR = os.path.join(BLOG_DIR, "static", "images")
 SCHEMAS_DIR = os.path.join(BLOG_DIR, "layouts", "partials")
 STATE_DIR = os.path.join(BLOG_DIR, "state", "supervisor")
 LOG_DIR = os.path.join(BLOG_DIR, "logs")
+RESEARCH_DIR = os.path.join(BLOG_DIR, "research")
 
 # State file for circuit breakers
 STATE_FILE = os.path.join(STATE_DIR, "health-check-state.json")
@@ -565,6 +567,199 @@ def check_blocked_auto_recovery(issues, dry_run):
 
 
 # ============================================================
+# Check 7: Slug consistency audit — Paperclip slug vs actual post slug
+# ============================================================
+
+def _extract_slug_from_issue(issue):
+    """Extract a slug from a Paperclip issue. Returns (slug, source) or (None, None)."""
+    import re
+    title = issue.get("title") or ""
+    desc = (issue.get("description") or "").lower()
+
+    # 1. Title pattern: "Write: Something (slug-2026)"
+    m = re.search(r'\(([a-z0-9][-a-z0-9]+[a-z0-9])\)', title)
+    if m:
+        return m.group(1), "title"
+
+    # 2. Description slug: pattern
+    m = re.search(r'slug[:\s]+([a-z0-9][-a-z0-9]+[a-z0-9])', desc)
+    if m:
+        return m.group(1), "desc_slug"
+
+    # 3. Description path pattern
+    m = re.search(r'content/posts/([a-z0-9][-a-z0-9]+[a-z0-9])', desc)
+    if m:
+        return m.group(1), "desc_path"
+
+    return None, None
+
+
+def _find_actual_post_slug(expected_slug):
+    """Find the actual post slug if expected_slug doesn't match any post file.
+    
+    Tries:
+    1. Direct match (expected_slug.md exists)
+    2. Token overlap search (words common to both expected_slug and actual slugs)
+    3. Fuzzy year match
+    Returns (actual_slug, method) or (None, None).
+    """
+    # Direct match
+    post_path = os.path.join(POSTS_DIR, f"{expected_slug}.md")
+    if os.path.exists(post_path):
+        return expected_slug, "direct"
+
+    # Also check if the expected slug appears in topics.json status=published
+    try:
+        with open(TOPICS_FILE, "r") as f:
+            topics = json.load(f)
+        for t in topics:
+            if t.get("slug") == expected_slug:
+                # It's in topics — check if a post file exists for it
+                alt_path = os.path.join(POSTS_DIR, f"{expected_slug}.md")
+                if os.path.exists(alt_path):
+                    return expected_slug, "topics_direct"
+    except Exception:
+        pass
+
+    # No direct match — search by overlapping tokens
+    expected_tokens = set(expected_slug.replace("-", " ").split())
+    best_match = None
+    best_score = 0
+
+    try:
+        for filename in os.listdir(POSTS_DIR):
+            if not filename.endswith(".md"):
+                continue
+            actual_slug = filename[:-3]
+            # Must share year
+            year_token = [t for t in expected_tokens if t.isdigit()]
+            if year_token and not any(yt in actual_slug for yt in year_token):
+                continue
+            actual_tokens = set(actual_slug.replace("-", " ").split())
+            overlap = len(expected_tokens & actual_tokens)
+            if overlap > best_score:
+                best_score = overlap
+                best_match = actual_slug
+    except Exception:
+        pass
+
+    if best_match and best_score >= 2:
+        return best_match, f"token_overlap({best_score})"
+
+    # Last resort: try stripping tokens from expected that don't exist as posts
+    try:
+        post_slugs_on_disk = set()
+        for filename in os.listdir(POSTS_DIR):
+            if filename.endswith(".md"):
+                post_slugs_on_disk.add(filename[:-3])
+
+        # Check research briefs that partially match
+        if os.path.isdir(RESEARCH_DIR):
+            for rf in os.listdir(RESEARCH_DIR):
+                if not rf.endswith(".json") or rf == "topics.json":
+                    continue
+                research_slug = rf[:-5]
+                research_tokens = set(research_slug.replace("-", " ").split())
+                overlap = len(expected_tokens & research_tokens)
+                year_token = [t for t in expected_tokens if t.isdigit()]
+                has_year_match = not year_token or any(yt in research_slug for yt in year_token)
+                if overlap >= 2 and has_year_match:
+                    post_path = os.path.join(POSTS_DIR, f"{research_slug}.md")
+                    if os.path.exists(post_path):
+                        if best_score is None or overlap > best_score:
+                            best_score = overlap
+                            best_match = research_slug
+    except Exception:
+        pass
+
+    return best_match, f"research_overlap({best_score})" if best_match else None
+
+
+def check_slug_consistency(issues, dry_run):
+    """Check Paperclip issue slugs against actual post files on disk.
+    
+    For each issue with an embedded slug:
+    - If slug matches an existing post → OK
+    - If slug does NOT match → find actual slug, update Paperclip issue
+    """
+    report.log("Check 7: Slug consistency audit (Paperclip slug vs actual post slug)")
+    import re
+    fixed = 0
+    mismatches = []
+
+    for issue in issues:
+        # Only check issues with a live status (skip done/cancelled — those are historical)
+        status = issue.get("status", "")
+        if status in ("done", "cancelled"):
+            continue
+
+        slug, source = _extract_slug_from_issue(issue)
+        if not slug:
+            continue
+
+        identifier = issue.get("identifier", "N/A")
+        title_short = (issue.get("title") or "")[:60]
+
+        # Check if the post file exists
+        post_path = os.path.join(POSTS_DIR, f"{slug}.md")
+        if os.path.exists(post_path):
+            # Slug matches — perfect
+            continue
+
+        # Slug doesn't match a post file — find the actual slug
+        actual_slug, match_method = _find_actual_post_slug(slug)
+
+        if not actual_slug:
+            report.log(f"SLUG-UNKNOWN: {identifier} — expected slug '{slug}' has no matching post, "
+                       f"and auto-search found nothing (title: {title_short})", "WARN")
+            continue
+
+        mismatches.append((identifier, slug, actual_slug))
+        report.log(f"SLUG-MISMATCH: {identifier} — Paperclip says '{slug}' but actual post is "
+                   f"'{actual_slug}' (found via: {match_method})", "ACTION")
+
+        if dry_run:
+            report.log(f"[DRY RUN] Would update Paperclip issue {identifier}: "
+                       f"slug '{slug}' → '{actual_slug}'")
+            continue
+
+        # Update the Paperclip issue: replace old slug with new slug in title and description
+        issue_id = issue.get("id")
+        title = issue.get("title") or ""
+        desc = issue.get("description") or ""
+
+        new_title = title
+        new_desc = desc
+
+        # Replace in title: "(old-slug)" → "(new-slug)"
+        if slug in title:
+            new_title = title.replace(slug, actual_slug)
+
+        # Replace in description: "slug: old-slug" → "slug: new-slug"
+        if slug in desc:
+            new_desc = desc.replace(slug, actual_slug)
+
+        # Only patch if something changed
+        if new_title != title or new_desc != desc:
+            patch_data = {}
+            if new_title != title:
+                patch_data["title"] = new_title
+            if new_desc != desc:
+                patch_data["description"] = new_desc
+
+            result = api("PATCH", f"{BASE_URL}/issues/{issue_id}", patch_data)
+            if isinstance(result, dict) and "error" not in result:
+                report.log(f"FIXED: {identifier} — updated slug '{slug}' → '{actual_slug}'", "ACTION")
+                fixed += 1
+            else:
+                report.log(f"FAILED: {identifier} — could not update slug: "
+                           f"{result.get('error', 'unknown')}", "WARN")
+
+    report.log(f"Slug mismatches found: {len(mismatches)}, auto-fixed: {fixed}")
+    return fixed
+
+
+# ============================================================
 # Check 6: Issues assigned to disabled agents (SEO/Thumbnail)
 # ============================================================
 
@@ -669,9 +864,11 @@ def run(dry_run=False):
     report.log("")
     blocked_recovered = check_blocked_auto_recovery(issues, dry_run)
     report.log("")
+    slug_fixed = check_slug_consistency(issues, dry_run)
+    report.log("")
 
     # Summary
-    total_actions = stuck_cancelled + zombie_cancelled + strategist_wakes + disabled_cancelled + blocked_recovered
+    total_actions = stuck_cancelled + zombie_cancelled + strategist_wakes + disabled_cancelled + blocked_recovered + slug_fixed
     report.log("=" * 60)
     report.log(f"Summary: {total_actions} actions taken")
     report.log(f"  Stuck subtasks cancelled: {stuck_cancelled}")
@@ -679,6 +876,7 @@ def run(dry_run=False):
     report.log(f"  Strategist wakes: {strategist_wakes}")
     report.log(f"  Disabled-agent issues cancelled: {disabled_cancelled}")
     report.log(f"  Blocked issues recovered/re-queued: {blocked_recovered}")
+    report.log(f"  Slug mismatches auto-fixed: {slug_fixed}")
     report.log(f"  Missing cover images (warnings): {missing_images}")
     report.log(f"  Missing schema files (warnings): {missing_schemas}")
     report.log("Pipeline Health Check complete")
