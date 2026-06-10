@@ -229,12 +229,12 @@ def get_issues():
         return []
     return issues
 
-# Ollama model for use with codex_local adapter (Ollama Cloud / deepseek)
-CODEX_MODEL = "deepseek-v3.2"
+# Default model for codex_local adapter in ChatGPT-backed environments.
+CODEX_MODEL = os.environ.get("CODEX_MODEL", "gpt-4.1")
 
 def reset_agent(agent_id, agent_name):
     """Reset an agent from error to idle using Board API.
-    Uses codex_local adapter with deepseek-v3.2 via Ollama Cloud."""
+    Uses codex_local adapter with a ChatGPT-compatible model (default: gpt-4.1)."""
     payload = {
         "status": "idle",
         "adapterType": "codex_local",
