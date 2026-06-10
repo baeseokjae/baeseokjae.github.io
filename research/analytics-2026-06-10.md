@@ -1,62 +1,47 @@
-# GSC 분석 리포트 - 2026-06-10
+# Daily GSC Analytics - 2026-06-10
 
-## 요약
+## Report Scope
 
-**기간:** 2026-05-31 ~ 2026-06-07 (7일)
-**성과:**
-- 클릭: 0건
-- 인상: 6건  
+- Site: https://baeseokjae.github.io/
+- Report type: daily
+- Data window: 2026-05-31 to 2026-06-07
+- Run time: 2026-06-10 13:01:08 UTC
+- Source: Google Search Console, expected 3-day delay
+
+## Summary
+
+- Clicks: 0
+- Impressions: 6
 - CTR: 0.00%
 
-## 주요 발견사항
+## Top Queries
 
-### 순위 가까운 키워드 (11-20위 대기 중)
-현재 striking distance(포지션 11-20) 키워드가 없습니다. 이는 포지션 1-10에 도달할 준비가 된 키워드가 없다는 의미이므로 긴급 개선 필요 콘텐츠가 없는 상태입니다.
+| Query | Clicks | Impressions | Avg position | Readout |
+| --- | ---: | ---: | ---: | --- |
+| blakemartin-subhub trojan-horse github cursor-for-bim | 0 | 3 | 9.0 | Page-one visibility, no clicks yet |
+| continue.dev github stars 2026 | 0 | 1 | 10.0 | Page-one edge, no clicks yet |
+| cursorbench 3.1 | 0 | 1 | 28.0 | Low visibility |
+| gptaku | 0 | 1 | 25.0 | Low visibility |
 
-### 상위 검색 쿼리
-1. **blakemartin-subhub trojan-horse github cursor-for-bim**
-   - 위치: 9위
-   - 클릭: 0 | 인상: 3
-   - 상태: 상위권이지만 클릭 전환 없음
+## Opportunities
 
-2. **continue.dev github stars 2026**
-   - 위치: 10위
-   - 클릭: 0 | 인상: 1
-   - 상태: 바로 앞에 있지만 클릭 전환 없음
+1. Improve CTR on the two page-one queries. Both visible queries have zero clicks, so title and meta snippet relevance are the near-term opportunity.
+2. Review matching content for `continue.dev github stars 2026`. Existing Continue.dev posts are likely candidates for a small freshness or comparison update.
+3. Monitor `cursorbench 3.1` and `gptaku`; each has only one impression and sits in positions 25-28, so they are not yet high-priority refresh candidates.
 
-3. **cursorbench 3.1**
-   - 위치: 28위
-   - 클릭: 0 | 인상: 1
+## Striking Distance
 
-4. **gptaku**
-   - 위치: 25위
-   - 클릭: 0 | 인상: 1
+No striking-distance keywords were found in this daily output. Per the workflow, no SEO refresh issue was created because the daily report did not surface any keyword in positions 11-20.
 
-### 페이지 성능
-- 홈페이지(/): 53 인상
+## Raw Report Output
 
-## 개선 기회
+```text
+=== DAILY GSC REPORT (2026-05-31 ~ 2026-06-07) ===
+Clicks: 0 | Impressions: 6 | CTR: 0.00%
 
-### 즉시 개선 필요
-1. **CTR 개선 (현재 0%)**: 모든 인상이 클릭으로 전환되지 않음
-   - 메타 설명(Meta Description) 최적화
-   - 제목 태그 개선
-   - 스니펫 개선
-
-2. **9-10위 키워드 최적화**: 거의 페이지 1에 진입한 키워드들
-   - "blakemartin-subhub trojan-horse github cursor-for-bim" 관련 콘텐츠 검토
-   - "continue.dev github stars 2026" 콘텐츠 개선
-
-### 중기 전략
-- 호스트 도메인 권위성 증대
-- 백링크 품질 개선
-- 관련성 높은 콘텐츠 클러스터 구축
-
-## 다음 단계
-1. 9-10위 키워드에 대한 콘텐츠 품질 검토
-2. CTR 개선을 위한 메타 데이터 최적화
-3. 일주일 뒤 다시 분석하여 진행상황 추적
-
----
-**분석일:** 2026-06-10 (KST)  
-**데이터 소스:** Google Search Console (3일 지연)
+Top Queries:
+  [0c/3i pos:9.0] blakemartin-subhub trojan-horse github cursor-for-bim
+  [0c/1i pos:10.0] continue.dev github stars 2026
+  [0c/1i pos:28.0] cursorbench 3.1
+  [0c/1i pos:25.0] gptaku
+```
