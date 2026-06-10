@@ -229,37 +229,24 @@ def get_issues():
         return []
     return issues
 
-# Claude models for use with claude_local adapter (the only working adapter)
-SONNET_MODEL = "claude-sonnet-4-6"
-HAIKU_MODEL = "claude-haiku-4-5-20251001"
-
-# Map agent IDs to their correct model
-AGENT_MODEL_MAP = {
-    "d88ae332-76ca-464a-98fd-ace75d19c4fe": SONNET_MODEL,    # Researcher
-    "2621e372-2118-4186-9070-0d62b7a2f332": SONNET_MODEL,    # ContentDirector
-    "b796bb1c-a6ef-4249-bfa2-554acfc61726": SONNET_MODEL,    # Writer
-    "458d5ac7-e504-4b95-af7a-a9fdf7151895": SONNET_MODEL,    # Strategist
-    "915ce8cd-4608-48f2-9b53-b15288ab4676": HAIKU_MODEL,     # Publisher
-    "1833525a-1cf5-43b9-a4ce-e31a9b412880": HAIKU_MODEL,     # Analyst
-}
+# Ollama model for use with codex_local adapter (Ollama Cloud / deepseek)
+CODEX_MODEL = "deepseek-v3.2"
 
 def reset_agent(agent_id, agent_name):
     """Reset an agent from error to idle using Board API.
-    Uses per-agent Claude models with claude_local adapter.
-    Corrects the model if it was corrupted to deepseek-v3.2 (incompatible with claude_local)."""
-    model = AGENT_MODEL_MAP.get(agent_id, SONNET_MODEL)
+    Uses codex_local adapter with deepseek-v3.2 via Ollama Cloud."""
     payload = {
         "status": "idle",
-        "adapterType": "claude_local",
-        "adapterConfig": AGENT_MODEL_MAP.get(agent_id) and {
-            "model": model,
+        "adapterType": "codex_local",
+        "adapterConfig": {
+            "model": CODEX_MODEL,
             "search": True,
+            "fastMode": False,
             "graceSec": 5,
             "maxTurns": 30,
             "timeoutSec": 600,
-            "bypassSandbox": True,
-            "dangerouslySkipPermissions": True
-        } or {"model": model}
+            "dangerouslyBypassApprovalsAndSandbox": True
+        }
     }
     # Try /api/agents/{id} first (Board-level access)
     result = api("PATCH", f"{BASE_URL}/agents/{agent_id}", payload)
