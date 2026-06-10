@@ -3,9 +3,9 @@
 ## Report Scope
 
 - Site: https://baeseokjae.github.io/
-- Report type: daily
+- Report type: weekly + striking
 - Data window: 2026-05-31 to 2026-06-07
-- Run time: 2026-06-10 13:01:08 UTC
+- Run time: 2026-06-10 16:02:14 UTC
 - Source: Google Search Console, expected 3-day delay
 
 ## Summary
@@ -31,7 +31,11 @@
 
 ## Striking Distance
 
-No striking-distance keywords were found in this daily output. Per the workflow, no SEO refresh issue was created because the daily report did not surface any keyword in positions 11-20.
+No striking-distance keywords were found in the dedicated striking report. Per the workflow, no SEO refresh issue was created because no keyword surfaced in positions 11-20.
+
+## Page Performance
+
+- `/`: 0 clicks / 53 impressions
 
 ## Raw Report Output
 
@@ -44,4 +48,10 @@ Top Queries:
   [0c/1i pos:10.0] continue.dev github stars 2026
   [0c/1i pos:28.0] cursorbench 3.1
   [0c/1i pos:25.0] gptaku
+
+=== STRIKING DISTANCE (pos 11-20, near page 1) ===
+None found yet.
+
+=== PAGE PERFORMANCE (2026-05-31 ~ 2026-06-07) ===
+  [0c/53i] /
 ```
