@@ -5,7 +5,7 @@
 - Site: https://baeseokjae.github.io/
 - Report type: weekly + striking
 - Data window: 2026-05-31 to 2026-06-07
-- Run time: 2026-06-10 16:02:14 UTC
+- Run time: 2026-06-10 22:04:48 UTC
 - Source: Google Search Console, expected 3-day delay
 
 ## Summary
