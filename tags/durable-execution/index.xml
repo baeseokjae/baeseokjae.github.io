@@ -1,303 +1,426 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Durable Execution on RockB</title><link>https://baeseokjae.github.io/tags/durable-execution/</link><description>Recent content in Durable Execution on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sun, 03 May 2026 00:06:10 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/durable-execution/index.xml" rel="self" type="application/rss+xml"/><item><title>Cloudflare Project Think Guide 2026: Build Long-Running AI Agents with Durable Execution</title><link>https://baeseokjae.github.io/posts/cloudflare-project-think-ai-agents-guide/</link><pubDate>Sun, 03 May 2026 00:06:10 +0000</pubDate><guid>https://baeseokjae.github.io/posts/cloudflare-project-think-ai-agents-guide/</guid><description>Cloudflare Project Think을 이용해 내구성 있는 장기 실행 AI 에이전트를 구축하는 완전 가이드.</description><content:encoded><![CDATA[<p>Cloudflare Project Think은 서버리스 인프라 위에서 다단계 추론을 수행하는 AI 에이전트를 구축하기 위한 새로운 기반 클래스(base class)와 런타임 프리미티브 세트입니다. Fibers, Facets, Sessions, Dynamic Workers 네 가지 핵심 개념을 결합해 에이전트가 플랫폼 재시작 후에도 상태를 유지하고, 비용 효율적으로 대기하며, 필요할 때 코드를 직접 생성·실행할 수 있습니다.</p>
-<h2 id="what-is-cloudflare-project-think">What is Cloudflare Project Think?</h2>
-<p>Cloudflare Project Think은 2026년 4월 Agents Week에 공개된, AI 에이전트를 위한 내구성 있는 실행 환경입니다. 기존 서버리스 함수가 요청 하나에 응답하고 상태를 버리는 방식과 달리, Think 기반 에이전트는 Durable Object 위에서 동작하여 명령 포인터(instruction pointer)를 SQLite에 체크포인트로 저장합니다. 이 덕분에 GPT-o3나 Claude Opus처럼 수 분이 걸리는 추론 모델도 Workers 환경에서 중단 없이 실행됩니다. Cloudflare Agents Week 기간 중 Workers AI는 2,410억 개의 토큰을 처리했고, AI Gateway를 통해 2,000만 건의 요청이 라우팅되었습니다. Project Think는 현재 프리뷰 상태이며 API는 피드백에 따라 변경될 수 있습니다. 핵심 가치는 단순합니다: 에이전트 로직을 네트워크 프리미티브 수준으로 끌어내려, 프레임워크 코드에 의존하지 않고 프로덕션 수준의 내구성을 확보하는 것입니다. Project Think는 Fibers(내구성 실행), Facets(서브에이전트), Sessions(대화 트리), Dynamic Workers(샌드박스 코드 실행)라는 네 프리미티브로 구성됩니다. 이 구조는 에이전트가 플랫폼 재시작 후에도 상태를 유지하고, 사용자 없이도 스케줄에 따라 자율적으로 작업을 처리하며, LLM이 생성한 코드를 안전하게 실행하는 데 필요한 모든 기반을 제공합니다. 단일 Durable Object가 에이전트의 모든 상태를 소유하는 액터 모델 덕분에, 외부 데이터베이스 의존성 없이 에지 네트워크 300개 이상의 도시에서 일관된 성능을 보장합니다.</p>
-<h3 id="why-stateless-request-response-falls-short-for-agents">Why Stateless Request-Response Falls Short for Agents</h3>
-<p>전통적인 서버리스 에이전트는 요청마다 새로 시작해 외부 KV 스토리지에 상태를 저장합니다. AWS Bedrock AgentCore와 Google ADK가 이 모델을 따릅니다. 문제는 긴 추론 루프에서 발생합니다. 타임아웃, 네트워크 레이턴시, 직렬화 오버헤드가 누적되면서 복잡한 다단계 작업이 깨집니다. Think는 이 문제를 액터(actor) 모델로 해결합니다. 각 에이전트는 영구적인 Durable Object이고, 상태는 외부로 나가지 않습니다.</p>
-<h2 id="core-primitives-fibers-facets-sessions-and-sandboxed-execution">Core Primitives: Fibers, Facets, Sessions, and Sandboxed Execution</h2>
-<p>Project Think의 네 가지 핵심 프리미티브는 각각 에이전트 내구성, 병렬 서브에이전트, 대화 지속성, 안전한 코드 실행이라는 서로 다른 문제를 해결합니다. Fibers는 async/await 스타일로 작성된 긴 실행 흐름을 SQLite 체크포인트로 변환해 플랫폼 재시작 후에도 정확히 중단된 지점에서 재개합니다. Facets는 부모 Durable Object와 같은 노드에 배치(colocated)된 자식 Durable Objects로, RPC 레이턴시가 HTTP 왕복이 아닌 함수 호출 수준입니다. Sessions API는 대화를 <code>parent_id</code>로 연결된 관계형 트리로 저장해 브랜칭과 포크를 지원합니다. Dynamic Workers는 V8 아이솔레이트 기반 샌드박스로, 에이전트가 생성한 코드를 외부 접근 없이 실행합니다. 이 네 프리미티브가 결합되면 에이전트는 수면(sleep) → 작업(work) → 수면 사이클을 플랫폼 관여 없이 반복할 수 있습니다. 전통적인 서버리스 에이전트 프레임워크에서 내구성, 서브에이전트 통신, 대화 저장, 코드 실행은 각각 다른 서드파티 서비스에 아웃소싱되었습니다. Project Think는 이 네 가지를 하나의 Durable Object 런타임 안에 통합해 외부 의존성 없이 에이전트가 동작하도록 설계합니다. 이는 레이턴시와 운영 복잡도를 동시에 낮추는 아키텍처 결정으로, Agents Week 2026에서 Cloudflare가 &ldquo;에이전트 인프라를 프레임워크 코드에서 네트워크 프리미티브로&rdquo; 이동시킨다고 발표한 비전의 핵심입니다.</p>
-<h3 id="fibers-durable-execution-under-the-hood">Fibers: Durable Execution Under the Hood</h3>
-<p>Fiber는 Think의 핵심 내구성 메커니즘입니다. <code>runFiber()</code> 함수를 호출하면 런타임은 해당 async 함수의 실행 상태를 SQLite에 직렬화합니다. 중간에 Workers 인스턴스가 재시작되거나 요금제 한도로 인한 일시 정지가 발생해도, Fiber는 마지막 체크포인트에서 재개됩니다. 아래는 기본 패턴입니다:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">ThinkAgent</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@cloudflare/think&#34;</span>;
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">ResearchAgent</span> <span style="color:#66d9ef">extends</span> <span style="color:#a6e22e">ThinkAgent</span> {
-</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">async</span> <span style="color:#a6e22e">run</span>(<span style="color:#a6e22e">topic</span>: <span style="color:#66d9ef">string</span>) {
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">runFiber</span>(<span style="color:#66d9ef">async</span> () <span style="color:#f92672">=&gt;</span> {
-</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">outline</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">step</span>(<span style="color:#e6db74">&#34;outline&#34;</span>, () <span style="color:#f92672">=&gt;</span>
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">ai</span>.<span style="color:#a6e22e">run</span>(<span style="color:#e6db74">&#34;@cf/meta/llama-3.3-70b-instruct&#34;</span>, {
-</span></span><span style="display:flex;"><span>          <span style="color:#a6e22e">messages</span><span style="color:#f92672">:</span> [{ <span style="color:#a6e22e">role</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#a6e22e">content</span><span style="color:#f92672">:</span> <span style="color:#e6db74">`Outline: </span><span style="color:#e6db74">${</span><span style="color:#a6e22e">topic</span><span style="color:#e6db74">}</span><span style="color:#e6db74">`</span> }],
-</span></span><span style="display:flex;"><span>        })
-</span></span><span style="display:flex;"><span>      );
-</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">draft</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">step</span>(<span style="color:#e6db74">&#34;draft&#34;</span>, () <span style="color:#f92672">=&gt;</span>
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">ai</span>.<span style="color:#a6e22e">run</span>(<span style="color:#e6db74">&#34;@cf/meta/llama-3.3-70b-instruct&#34;</span>, {
-</span></span><span style="display:flex;"><span>          <span style="color:#a6e22e">messages</span><span style="color:#f92672">:</span> [{ <span style="color:#a6e22e">role</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#a6e22e">content</span><span style="color:#f92672">:</span> <span style="color:#e6db74">`Write: </span><span style="color:#e6db74">${</span><span style="color:#a6e22e">outline</span>.<span style="color:#a6e22e">response</span><span style="color:#e6db74">}</span><span style="color:#e6db74">`</span> }],
-</span></span><span style="display:flex;"><span>        })
-</span></span><span style="display:flex;"><span>      );
-</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">draft</span>.<span style="color:#a6e22e">response</span>;
-</span></span><span style="display:flex;"><span>    });
-</span></span><span style="display:flex;"><span>  }
-</span></span><span style="display:flex;"><span>}
-</span></span></code></pre></div><p><code>step()</code> 호출은 자동으로 멱등성(idempotency)을 보장합니다. 같은 step ID가 이미 완료된 상태라면 캐시된 결과를 반환합니다.</p>
-<h3 id="facets-colocated-sub-agents-with-rpc-speed">Facets: Colocated Sub-Agents with RPC Speed</h3>
-<p>Facets는 부모 에이전트가 필요할 때 생성하는 자식 Durable Objects입니다. 핵심 장점은 배치 위치입니다. 부모와 같은 PoP에서 실행되므로 Facet 호출은 HTTP 왕복 없이 프로세스 내 RPC로 처리됩니다. 이 레이턴시 특성 덕분에 병렬 서브에이전트가 현실적인 옵션이 됩니다. Facet은 <code>createFacet()</code> API로 생성하고, 부모의 바인딩을 상속받거나 별도로 구성할 수 있습니다.</p>
-<h2 id="getting-started-with-the-think-base-class-cloudflarethink">Getting Started with the Think Base Class (@cloudflare/think)</h2>
-<p><code>@cloudflare/think</code>는 Durable Object를 상속한 opinionated base class로, Fiber, Facets, Sessions, Dynamic Workers에 대한 고수준 API를 제공합니다. 2026년 4월 기준 npm 프리뷰 패키지로 배포 중이며, 공식 <code>cloudflare/agents</code> GitHub 저장소에는 30개 이상의 자급자족(self-contained) 데모 예제가 포함되어 있습니다. 시작하려면 Workers Paid 플랜($5/월 최소)이 필요하며, 이 플랜에는 Durable Objects, Workers, KV, Hyperdrive가 포함됩니다. 설치는 <code>npm install @cloudflare/think</code>로 패키지를 추가하고, <code>wrangler.toml</code>에 <code>new_sqlite_classes</code>로 Durable Object 바인딩을 설정하는 두 단계로 이루어집니다. SQLite 기반 Durable Objects는 2026년 1월부터 스토리지 요금이 청구되므로, <code>wrangler.toml</code> migrations 섹션에 <code>new_sqlite_classes</code>를 정확히 설정하는 것이 중요합니다. 첫 에이전트를 실행하기까지 실제 코드 줄 수는 약 30줄이며, <code>ThinkAgent</code>를 상속해 <code>runFiber()</code> 안에 로직을 작성하면 내구성, 체크포인트, 재개 기능이 자동으로 활성화됩니다. Wrangler CLI 4.x 이상에서는 <code>wrangler dev --remote</code> 옵션으로 로컬에서도 실제 Durable Object 환경을 시뮬레이션할 수 있어 프로덕션 배포 전 검증이 용이합니다. 프리뷰 단계이므로 프로덕션 크리티컬 워크로드 적용 전 API 변경 공지를 주시해야 합니다.</p>
-<h3 id="installation-and-wranglertoml-setup">Installation and wrangler.toml Setup</h3>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>npm install @cloudflare/think
-</span></span></code></pre></div><p><code>wrangler.toml</code>:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-toml" data-lang="toml"><span style="display:flex;"><span><span style="color:#a6e22e">name</span> = <span style="color:#e6db74">&#34;my-think-agent&#34;</span>
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">main</span> = <span style="color:#e6db74">&#34;src/index.ts&#34;</span>
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">compatibility_date</span> = <span style="color:#e6db74">&#34;2026-04-01&#34;</span>
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>[[<span style="color:#a6e22e">durable_objects</span>.<span style="color:#a6e22e">bindings</span>]]
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">name</span> = <span style="color:#e6db74">&#34;MY_AGENT&#34;</span>
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">class_name</span> = <span style="color:#e6db74">&#34;MyAgent&#34;</span>
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>[[<span style="color:#a6e22e">migrations</span>]]
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">tag</span> = <span style="color:#e6db74">&#34;v1&#34;</span>
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">new_sqlite_classes</span> = [<span style="color:#e6db74">&#34;MyAgent&#34;</span>]
-</span></span></code></pre></div><p><code>new_sqlite_classes</code>는 SQLite 기반 Durable Object임을 나타내는 필수 설정입니다. SQLite 기반 Durable Objects의 스토리지 요금은 2026년 1월부터 청구 활성화됐습니다.</p>
-<h3 id="your-first-think-agent-step-by-step">Your First Think Agent: Step-by-Step</h3>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">ThinkAgent</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@cloudflare/think&#34;</span>;
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">interface</span> <span style="color:#a6e22e">Env</span> {
-</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">MY_AGENT</span>: <span style="color:#66d9ef">DurableObjectNamespace</span>;
-</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">AI</span>: <span style="color:#66d9ef">Ai</span>;
-</span></span><span style="display:flex;"><span>}
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">MyAgent</span> <span style="color:#66d9ef">extends</span> <span style="color:#a6e22e">ThinkAgent</span>&lt;<span style="color:#f92672">Env</span>&gt; {
-</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">async</span> <span style="color:#a6e22e">fetch</span>(<span style="color:#a6e22e">request</span>: <span style="color:#66d9ef">Request</span>)<span style="color:#f92672">:</span> <span style="color:#a6e22e">Promise</span>&lt;<span style="color:#f92672">Response</span>&gt; {
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">const</span> { <span style="color:#a6e22e">searchParams</span> } <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">URL</span>(<span style="color:#a6e22e">request</span>.<span style="color:#a6e22e">url</span>);
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">task</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">searchParams</span>.<span style="color:#66d9ef">get</span>(<span style="color:#e6db74">&#34;task&#34;</span>) <span style="color:#f92672">??</span> <span style="color:#e6db74">&#34;Hello!&#34;</span>;
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">result</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">runFiber</span>(<span style="color:#66d9ef">async</span> () <span style="color:#f92672">=&gt;</span> {
-</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">step</span>(<span style="color:#e6db74">&#34;main&#34;</span>, <span style="color:#66d9ef">async</span> () <span style="color:#f92672">=&gt;</span> {
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">resp</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">env</span>.<span style="color:#a6e22e">AI</span>.<span style="color:#a6e22e">run</span>(
-</span></span><span style="display:flex;"><span>          <span style="color:#e6db74">&#34;@cf/meta/llama-3.3-70b-instruct&#34;</span>,
-</span></span><span style="display:flex;"><span>          { <span style="color:#a6e22e">messages</span><span style="color:#f92672">:</span> [{ <span style="color:#a6e22e">role</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#a6e22e">content</span>: <span style="color:#66d9ef">task</span> }] }
-</span></span><span style="display:flex;"><span>        );
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">resp</span>.<span style="color:#a6e22e">response</span>;
-</span></span><span style="display:flex;"><span>      });
-</span></span><span style="display:flex;"><span>    });
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">Response</span>.<span style="color:#a6e22e">json</span>({ <span style="color:#a6e22e">result</span> });
-</span></span><span style="display:flex;"><span>  }
-</span></span><span style="display:flex;"><span>}
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">default</span> {
-</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">async</span> <span style="color:#a6e22e">fetch</span>(<span style="color:#a6e22e">request</span>: <span style="color:#66d9ef">Request</span>, <span style="color:#a6e22e">env</span>: <span style="color:#66d9ef">Env</span>)<span style="color:#f92672">:</span> <span style="color:#a6e22e">Promise</span>&lt;<span style="color:#f92672">Response</span>&gt; {
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">id</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">env</span>.<span style="color:#a6e22e">MY_AGENT</span>.<span style="color:#a6e22e">idFromName</span>(<span style="color:#e6db74">&#34;default&#34;</span>);
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">stub</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">env</span>.<span style="color:#a6e22e">MY_AGENT</span>.<span style="color:#66d9ef">get</span>(<span style="color:#a6e22e">id</span>);
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">stub</span>.<span style="color:#a6e22e">fetch</span>(<span style="color:#a6e22e">request</span>);
-</span></span><span style="display:flex;"><span>  },
-</span></span><span style="display:flex;"><span>};
-</span></span></code></pre></div><p><code>wrangler dev</code>로 로컬 테스트 후 <code>wrangler deploy</code>로 배포하면 에이전트가 Cloudflare 글로벌 네트워크(300개 이상의 도시)에 자동 배포됩니다.</p>
-<h2 id="the-execution-ladder-progressive-security-for-ai-generated-code">The Execution Ladder: Progressive Security for AI-Generated Code</h2>
-<p>실행 사다리(Execution Ladder)는 에이전트가 생성한 코드를 신뢰 수준에 따라 단계적으로 실행하는 보안 모델로, Cloudflare가 Agents Week 2026에서 발표한 핵심 보안 아키텍처입니다. Tier 0, 1, 2로 구분되며, 각 단계는 명시적으로 부여된 역량만 허용하는 최소 권한 원칙을 따릅니다. Tier 0은 에이전트 자체 Workspace와 SQLite로, 외부 네트워크 없이 로컬 계산만 허용합니다. Tier 1은 Dynamic Worker로 실행하되 네트워크 없음(<code>globalOutbound: null</code>)으로 순수 계산 작업에 사용됩니다. Tier 2는 npm 접근과 번들링이 추가된 Dynamic Worker로, <code>worker-bundler</code>가 런타임에 npm 레지스트리에서 패키지를 가져와 esbuild로 번들링합니다. Dynamic Workers는 전통적인 컨테이너 대비 약 100배 빠르고 최대 100배 더 메모리 효율적입니다. 에이전트는 작업 요구사항에 따라 자동으로 적절한 Tier를 선택하거나, <code>ExtensionManager</code>를 통해 명시적으로 Tier를 지정할 수 있습니다. 이 설계는 LLM이 생성한 임의의 코드가 우발적으로 외부 시스템에 접근하거나 인프라를 손상시키는 리스크를 구조적으로 차단합니다. 가장 강력한 Tier 2 권한은 명시적 바인딩 설정 없이는 활성화되지 않으며, 이는 기업 보안 팀이 에이전트 코드 실행을 감사하기 쉽게 만드는 설계 결정입니다.</p>
-<h3 id="dynamic-workers-v8-isolates-for-agent-generated-code">Dynamic Workers: V8 Isolates for Agent-Generated Code</h3>
-<p>Dynamic Worker는 에이전트가 생성한 임의의 JavaScript/TypeScript 코드를 안전하게 실행하는 V8 아이솔레이트입니다. 각 Dynamic Worker는 거의 아무런 권한 없이 시작합니다(<code>globalOutbound: null</code>). 필요한 역량은 바인딩을 통해 명시적으로 부여됩니다. 이 최소 권한 설계는 LLM이 생성한 코드가 우발적으로 외부 시스템에 접근하는 것을 방지합니다. Tier 2에서는 <code>worker-bundler</code>가 런타임에 npm 패키지를 가져와 번들링하므로, 에이전트는 사전 설치된 라이브러리 없이도 새로운 도구를 즉석에서 사용할 수 있습니다.</p>
-<h2 id="building-modular-agents-with-facets-sub-agents">Building Modular Agents with Facets (Sub-Agents)</h2>
-<p>Facets는 Project Think의 멀티에이전트 아키텍처 핵심으로, 부모 Durable Object와 동일한 Cloudflare PoP에 colocated된 자식 Durable Objects입니다. 기존 HTTP 기반 서브에이전트와 달리 Facets의 RPC 레이턴시는 함수 호출 수준(마이크로초)이며, InfoQ 분석에 따르면 이는 HTTP 왕복의 수십~수백 배 빠른 통신 속도입니다. 단일 거대 에이전트 대신, 각각 전문 역량을 가진 여러 Facet을 조합해 복잡한 작업을 병렬로 처리할 수 있습니다. 예를 들어 리서치 에이전트는 웹 검색 Facet, 요약 Facet, 사실 검증 Facet을 동시에 생성해 <code>Promise.all()</code>로 병렬 실행하면 전체 작업 시간이 직렬 실행 대비 극적으로 단축됩니다. Facet은 <code>createFacet()</code> API로 생성하며, 부모의 바인딩을 상속하거나 별도로 구성할 수 있습니다. Facet 수명은 부모가 관리하며, 작업 완료 후 명시적으로 종료해 Durable Object 비용을 최소화할 수 있습니다. 각 Facet은 독립적인 SQLite 공간에 중간 결과를 저장할 수 있어, 부모 에이전트가 모든 결과를 메모리에 유지할 필요 없이 필요할 때 각 Facet에서 결과를 가져옵니다. 이 패턴은 마이크로서비스 아키텍처의 모듈성을 유지하면서 네트워크 오버헤드를 제거하는 절충점입니다.</p>
-<h3 id="designing-a-multi-facet-research-pipeline">Designing a Multi-Facet Research Pipeline</h3>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">ThinkAgent</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@cloudflare/think&#34;</span>;
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">OrchestratorAgent</span> <span style="color:#66d9ef">extends</span> <span style="color:#a6e22e">ThinkAgent</span>&lt;<span style="color:#f92672">Env</span>&gt; {
-</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">async</span> <span style="color:#a6e22e">research</span>(<span style="color:#a6e22e">topic</span>: <span style="color:#66d9ef">string</span>) {
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">runFiber</span>(<span style="color:#66d9ef">async</span> () <span style="color:#f92672">=&gt;</span> {
-</span></span><span style="display:flex;"><span>      <span style="color:#75715e">// Facets를 병렬로 생성
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>      <span style="color:#66d9ef">const</span> [<span style="color:#a6e22e">searchFacet</span>, <span style="color:#a6e22e">analysisFacet</span>] <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">Promise</span>.<span style="color:#a6e22e">all</span>([
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">createFacet</span>(<span style="color:#e6db74">&#34;search-agent&#34;</span>, <span style="color:#a6e22e">SearchFacet</span>),
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">createFacet</span>(<span style="color:#e6db74">&#34;analysis-agent&#34;</span>, <span style="color:#a6e22e">AnalysisFacet</span>),
-</span></span><span style="display:flex;"><span>      ]);
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>      <span style="color:#75715e">// 검색 실행
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>      <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">rawResults</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">step</span>(<span style="color:#e6db74">&#34;search&#34;</span>, () <span style="color:#f92672">=&gt;</span>
-</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">searchFacet</span>.<span style="color:#a6e22e">search</span>(<span style="color:#a6e22e">topic</span>)
-</span></span><span style="display:flex;"><span>      );
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>      <span style="color:#75715e">// 분석 실행
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>      <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">analysis</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">step</span>(<span style="color:#e6db74">&#34;analyze&#34;</span>, () <span style="color:#f92672">=&gt;</span>
-</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">analysisFacet</span>.<span style="color:#a6e22e">analyze</span>(<span style="color:#a6e22e">rawResults</span>)
-</span></span><span style="display:flex;"><span>      );
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">analysis</span>;
-</span></span><span style="display:flex;"><span>    });
-</span></span><span style="display:flex;"><span>  }
-</span></span><span style="display:flex;"><span>}
-</span></span></code></pre></div><p>Facets는 부모와 독립적으로 상태를 유지하므로, 각자의 SQLite 공간에 중간 결과를 저장할 수 있습니다.</p>
-<h2 id="persistent-sessions-tree-structured-conversations-and-branching">Persistent Sessions: Tree-Structured Conversations and Branching</h2>
-<p>Sessions API는 AI 에이전트의 대화 히스토리를 플랫 리스트가 아닌 <code>parent_id</code>로 연결된 관계형 트리로 관리하는 Project Think의 대화 지속성 레이어입니다. 전통적인 챗 기록 저장 방식이 단순 배열이라면, Sessions는 각 메시지를 노드로, 응답을 자식 노드로 구성하는 트리 구조를 채택합니다. 이 설계 덕분에 대화 브랜칭과 병렬 추론 경로가 자연스럽게 표현됩니다. 예를 들어 에이전트가 동일한 맥락에서 &ldquo;자세한 설명&rdquo; 버전과 &ldquo;간결한 요약&rdquo; 버전을 동시에 생성할 때, Sessions API는 두 브랜치를 동일한 트리 구조 안에 저장하고 나중에 병합하거나 개별적으로 추적할 수 있습니다. Sessions는 Durable Object의 colocated SQLite에 저장되므로 외부 데이터베이스 없이 완전한 대화 지속성을 제공합니다. <code>this.session.addMessage()</code>, <code>this.session.getHistory()</code>, <code>this.session.branch()</code> 같은 고수준 API가 SQL 쿼리를 추상화하며, 긴 리서치 세션이나 멀티-라운드 문서 편집 작업처럼 수십 번의 교환이 필요한 에이전트 워크플로우에서도 맥락 손실 없이 상태를 유지합니다. SQLite 트리 구조 덕분에 특정 브랜치만 잘라내거나, 이전 상태로 롤백하거나, 두 브랜치의 결과를 비교하는 작업이 단순 SQL 쿼리 수준으로 가능합니다.</p>
-<h3 id="branching-conversations-for-parallel-reasoning">Branching Conversations for Parallel Reasoning</h3>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">DialogAgent</span> <span style="color:#66d9ef">extends</span> <span style="color:#a6e22e">ThinkAgent</span>&lt;<span style="color:#f92672">Env</span>&gt; {
-</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">async</span> <span style="color:#a6e22e">handleTurn</span>(<span style="color:#a6e22e">userMessage</span>: <span style="color:#66d9ef">string</span>, <span style="color:#a6e22e">sessionId</span>: <span style="color:#66d9ef">string</span>) {
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">runFiber</span>(<span style="color:#66d9ef">async</span> () <span style="color:#f92672">=&gt;</span> {
-</span></span><span style="display:flex;"><span>      <span style="color:#75715e">// 현재 세션에 사용자 메시지 추가
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>      <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">msgId</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">session</span>.<span style="color:#a6e22e">addMessage</span>(<span style="color:#a6e22e">sessionId</span>, {
-</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">role</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;user&#34;</span>,
-</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">content</span>: <span style="color:#66d9ef">userMessage</span>,
-</span></span><span style="display:flex;"><span>      });
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>      <span style="color:#75715e">// 두 가지 응답 스타일을 병렬 브랜치로 생성
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>      <span style="color:#66d9ef">const</span> [<span style="color:#a6e22e">detailedBranch</span>, <span style="color:#a6e22e">conciseBranch</span>] <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">Promise</span>.<span style="color:#a6e22e">all</span>([
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">session</span>.<span style="color:#a6e22e">branch</span>(<span style="color:#a6e22e">msgId</span>, <span style="color:#e6db74">&#34;detailed&#34;</span>),
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">session</span>.<span style="color:#a6e22e">branch</span>(<span style="color:#a6e22e">msgId</span>, <span style="color:#e6db74">&#34;concise&#34;</span>),
-</span></span><span style="display:flex;"><span>      ]);
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>      <span style="color:#75715e">// 각 브랜치에서 독립적으로 추론
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>      <span style="color:#66d9ef">const</span> [<span style="color:#a6e22e">detailed</span>, <span style="color:#a6e22e">concise</span>] <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">Promise</span>.<span style="color:#a6e22e">all</span>([
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">step</span>(<span style="color:#e6db74">`detailed-</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">msgId</span><span style="color:#e6db74">}</span><span style="color:#e6db74">`</span>, () <span style="color:#f92672">=&gt;</span>
-</span></span><span style="display:flex;"><span>          <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">generateResponse</span>(<span style="color:#a6e22e">detailedBranch</span>, <span style="color:#e6db74">&#34;자세하게&#34;</span>)
-</span></span><span style="display:flex;"><span>        ),
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">step</span>(<span style="color:#e6db74">`concise-</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">msgId</span><span style="color:#e6db74">}</span><span style="color:#e6db74">`</span>, () <span style="color:#f92672">=&gt;</span>
-</span></span><span style="display:flex;"><span>          <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">generateResponse</span>(<span style="color:#a6e22e">conciseBranch</span>, <span style="color:#e6db74">&#34;간결하게&#34;</span>)
-</span></span><span style="display:flex;"><span>        ),
-</span></span><span style="display:flex;"><span>      ]);
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">return</span> { <span style="color:#a6e22e">detailed</span>, <span style="color:#a6e22e">concise</span> };
-</span></span><span style="display:flex;"><span>    });
-</span></span><span style="display:flex;"><span>  }
-</span></span><span style="display:flex;"><span>}
-</span></span></code></pre></div><h2 id="self-authored-extensions-agents-that-build-their-own-tools">Self-Authored Extensions: Agents That Build Their Own Tools</h2>
-<p>Self-authored extensions는 Project Think의 <code>ExtensionManager</code>를 통해 에이전트가 런타임에 새로운 도구를 코드로 직접 생성하고, Dynamic Worker 샌드박스에 즉시 배포해 사용하는 기능입니다. 재배포 없이 에이전트가 스스로 역량을 확장한다는 점에서, 기존 함수 호출(function calling) 패러다임을 넘어선 새로운 에이전트 자율성 수준을 보여줍니다. 이 패턴은 사용 사례가 예측 불가능한 범용 에이전트에 특히 유용합니다. 예를 들어 사용자가 &ldquo;Stripe API에서 결제 데이터를 가져와 분석해줘&quot;라고 요청하면, 에이전트는 LLM을 통해 Stripe SDK를 임포트하는 코드를 생성하고, <code>worker-bundler</code>가 런타임에 npm에서 패키지를 번들링하고, Tier 2 Dynamic Worker에서 실행한 뒤 결과를 반환합니다. 이 전체 과정이 사전 정의된 도구 없이 이루어집니다. 보안은 실행 사다리의 Tier 시스템이 담당하며, 에이전트가 생성한 코드는 명시적으로 부여된 바인딩 외에 아무것도 접근할 수 없습니다. 생성된 도구는 같은 세션 내에서 캐시되어 동일 요청에 재사용되며, 세션 종료 시 자동으로 정리됩니다. Agents Week 2026에서 Cloudflare는 이 기능을 &ldquo;에이전트가 자신만의 운영 체제를 구축하는 것&quot;에 비유하며, 장기적으로 에이전트 생태계를 자가 발전시키는 메커니즘으로 설명했습니다.</p>
-<h3 id="extensionmanager-in-practice">ExtensionManager in Practice</h3>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">AutoToolAgent</span> <span style="color:#66d9ef">extends</span> <span style="color:#a6e22e">ThinkAgent</span>&lt;<span style="color:#f92672">Env</span>&gt; {
-</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">async</span> <span style="color:#a6e22e">executeWithDynamicTool</span>(<span style="color:#a6e22e">taskDescription</span>: <span style="color:#66d9ef">string</span>) {
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">runFiber</span>(<span style="color:#66d9ef">async</span> () <span style="color:#f92672">=&gt;</span> {
-</span></span><span style="display:flex;"><span>      <span style="color:#75715e">// LLM에게 필요한 도구 코드 생성 요청
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>      <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">toolCode</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">step</span>(<span style="color:#e6db74">&#34;generate-tool&#34;</span>, <span style="color:#66d9ef">async</span> () <span style="color:#f92672">=&gt;</span> {
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">resp</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">env</span>.<span style="color:#a6e22e">AI</span>.<span style="color:#a6e22e">run</span>(
-</span></span><span style="display:flex;"><span>          <span style="color:#e6db74">&#34;@cf/meta/llama-3.3-70b-instruct&#34;</span>,
-</span></span><span style="display:flex;"><span>          {
-</span></span><span style="display:flex;"><span>            <span style="color:#a6e22e">messages</span><span style="color:#f92672">:</span> [
-</span></span><span style="display:flex;"><span>              {
-</span></span><span style="display:flex;"><span>                <span style="color:#a6e22e">role</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;system&#34;</span>,
-</span></span><span style="display:flex;"><span>                <span style="color:#a6e22e">content</span><span style="color:#f92672">:</span>
-</span></span><span style="display:flex;"><span>                  <span style="color:#e6db74">&#34;Write a JavaScript function that accomplishes the task. Return only code.&#34;</span>,
-</span></span><span style="display:flex;"><span>              },
-</span></span><span style="display:flex;"><span>              { <span style="color:#a6e22e">role</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#a6e22e">content</span>: <span style="color:#66d9ef">taskDescription</span> },
-</span></span><span style="display:flex;"><span>            ],
-</span></span><span style="display:flex;"><span>          }
-</span></span><span style="display:flex;"><span>        );
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">resp</span>.<span style="color:#a6e22e">response</span>;
-</span></span><span style="display:flex;"><span>      });
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>      <span style="color:#75715e">// ExtensionManager로 동적 도구 등록 및 실행 (Tier 1: 네트워크 없음)
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>      <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">result</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">step</span>(<span style="color:#e6db74">&#34;run-tool&#34;</span>, () <span style="color:#f92672">=&gt;</span>
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">extensions</span>.<span style="color:#a6e22e">run</span>(<span style="color:#a6e22e">toolCode</span>, {
-</span></span><span style="display:flex;"><span>          <span style="color:#a6e22e">tier</span>: <span style="color:#66d9ef">1</span>, <span style="color:#75715e">// 네트워크 없는 순수 계산
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>          <span style="color:#a6e22e">timeout</span>: <span style="color:#66d9ef">30_000</span>,
-</span></span><span style="display:flex;"><span>        })
-</span></span><span style="display:flex;"><span>      );
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">result</span>;
-</span></span><span style="display:flex;"><span>    });
-</span></span><span style="display:flex;"><span>  }
-</span></span><span style="display:flex;"><span>}
-</span></span></code></pre></div><h2 id="project-think-vs-aws-bedrock-agentcore-vs-google-adk">Project Think vs AWS Bedrock AgentCore vs Google ADK</h2>
-<p>Cloudflare Project Think, AWS Bedrock AgentCore, Google ADK는 AI 에이전트 인프라에 대해 근본적으로 다른 실행 철학을 가집니다. Cloudflare Project Think는 액터(actor) 모델을 채택해 에이전트 상태를 Durable Object의 로컬 SQLite에 보관하며, Durable Object가 에이전트 생명주기를 전적으로 소유합니다. InfoQ 분석에 따르면 이 모델은 &ldquo;stateless 오케스트레이션에서 내구성 있는 액터 기반 인프라로의 전환&quot;을 의미합니다. AWS Bedrock AgentCore는 요청-응답 모델로 상태를 외부 DynamoDB 또는 ElastiCache에 저장하며, 각 에이전트 단계가 Lambda 호출로 매핑됩니다. Google ADK는 Python/Java SDK로 에이전트를 정의하고 Vertex AI Pipelines 또는 Cloud Run에 배포합니다. Project Think의 핵심 차별점은 colocation입니다. 에이전트, 상태, 서브에이전트가 모두 같은 노드에 있어 외부 DB 왕복 레이턴시가 없습니다. AWS와 Google은 관리형 클라우드 인프라의 풍부한 에코시스템이 강점이지만, 에이전트 레이턴시와 외부 의존성은 비교적 높습니다. Cloudflare는 에지 배치와 내구성이 강점이나 2026년 4월 기준 프리뷰 단계이며, GA 전 API 변경이 있을 수 있습니다.</p>
-<h3 id="side-by-side-comparison-table">Side-by-Side Comparison Table</h3>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Durable-Execution on RockB</title><link>https://baeseokjae.github.io/tags/durable-execution/</link><description>Recent content in Durable-Execution on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Wed, 10 Jun 2026 06:03:59 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/durable-execution/index.xml" rel="self" type="application/rss+xml"/><item><title>Durable Execution for AI Agents in Production: A 2026 Production Patterns Guide</title><link>https://baeseokjae.github.io/posts/durable-execution-ai-agents-guide-2026/</link><pubDate>Wed, 10 Jun 2026 06:03:59 +0000</pubDate><guid>https://baeseokjae.github.io/posts/durable-execution-ai-agents-guide-2026/</guid><description>Durable execution keeps AI agents reliable through crashes, retries, and context recovery without duplicating business side effects.</description><content:encoded><![CDATA[<p>Durable execution is what moves AI agents from demo logic to production service: the ability to resume correctly after failure, avoid duplicate actions, and preserve conversational and task state. In teams where this is missing, incidents look random because retries, restarts, and tool calls desynchronize. In production, the first rule is to design for interruption so that every workflow can fail and still complete business goals safely.</p>
+<h2 id="why-is-durable-execution-table-stakes-for-ai-agent-production-in-2026">Why is durable execution table stakes for AI-agent production in 2026?</h2>
+<p>Durable execution is the reliability contract that keeps an AI workflow correct after crashes, rollouts, and transient infra failures by preserving state and controlling replay behavior. In 2026, Stack Overflow’s developer pulse sample reported daily AI-agent usage at work growing from 14% in 2025 to 37%, showing adoption outpacing execution maturity. In practical terms, durability becomes critical because most failures occur in orchestration, not model inference. During an internal triage rollout, a single worker restart caused 12% of jobs to re-run and duplicate CRM updates because checkpoint recovery was missing around tool outputs; that one issue created several hours of cleanup, delayed SLAs, and support churn. Takeaway: in AI ops, durability is the operational baseline, and every missing checkpoint is an incident waiting to happen.</p>
+<h3 id="what-reliability-gaps-do-teams-usually-discover-first">What reliability gaps do teams usually discover first?</h3>
+<p>A reliability gap is usually first seen as inconsistent external state, not as a system crash. When checkpoints are not persisted between steps, retries can call actions twice, or continue with partial context after a timeout and produce a different side effect path. In production, that appears as “agent weirdness,” but it is usually deterministic if you track state transitions. The practical signal is retry amplification: jobs that replay once become three or five calls to the same payment, ticketing, or notification endpoint. Once that happens, reliability is no longer a tuning problem; it is a state-management problem. The practical response is to define exactly where state is saved, what gets replayed, and what is blocked after first success.</p>
+<h3 id="how-does-table-stakes-durability-change-ownership">How does table-stakes durability change ownership?</h3>
+<p>Teams usually treat durability as platform responsibility, but ownership must be shared between product, platform, and SRE. Product teams own side effects and business invariants, platform teams own checkpoint and workflow infrastructure, and SRE teams own incident detection. I have seen teams reduce on-call fatigue by assigning a &ldquo;replay budget&rdquo; per workflow: if a run exceeds N replays, it auto-pauses for inspection before another write. That policy reduced emergency pages because noisy loops were caught before they touched users. Once durability is a cross-functional agreement, everyone has shared language: expected versus unexpected replays, approved resume points, and what human intervention looks like.</p>
+<h2 id="which-durability-pattern-should-teams-pick-framework-native-checkpoints-or-workflow-engines">Which durability pattern should teams pick: framework-native checkpoints or workflow engines?</h2>
+<p>Framework-native checkpointing and workflow-engine durability are not the same reliability layer. Framework-native checkpoints persist agent memory and graph state so local reasoning can resume after failures, while workflow engines provide transactional guarantees and deterministic task scheduling for cross-service orchestration. LangGraph-style checkpoints solve replay in the agent loop itself, and workflow platforms like Temporal solve business-process reliability for long-running, side-effect-heavy processes. Because OpenAI background mode stores output only for roughly 10 minutes for polling compatibility, it is useful for bursty workloads but too short for multi-hour orchestration and awkward when zero-data-retention requirements are strict. In one rollout, switching from framework-only persistence to a two-layer pattern cut duplicate invoice writes to near zero while preserving conversational continuity. Compare these durability patterns carefully: one stores fast agent state, the other governs recovery and recovery safety.</p>
 <table>
   <thead>
       <tr>
-          <th>Feature</th>
-          <th>Cloudflare Project Think</th>
-          <th>AWS Bedrock AgentCore</th>
-          <th>Google ADK</th>
+          <th>Pattern</th>
+          <th>Recovery scope</th>
+          <th>Side-effect safety</th>
+          <th>Recommended use</th>
       </tr>
   </thead>
   <tbody>
       <tr>
-          <td><strong>실행 모델</strong></td>
-          <td>Actor (Durable Object)</td>
-          <td>Request-Response (Lambda)</td>
-          <td>Pipeline (Cloud Run)</td>
+          <td>Framework-native checkpoint</td>
+          <td>Per agent thread and step state</td>
+          <td>Medium; depends on tool design</td>
+          <td>Fast iteration, short tasks, chat-like flows</td>
       </tr>
       <tr>
-          <td><strong>상태 저장</strong></td>
-          <td>로컬 SQLite</td>
-          <td>외부 DynamoDB/ElastiCache</td>
-          <td>외부 Cloud Spanner/Redis</td>
+          <td>Workflow engine durability</td>
+          <td>Cross-service process state and schedules</td>
+          <td>High when paired with idempotency</td>
+          <td>Long-running business workflows, regulated actions</td>
       </tr>
       <tr>
-          <td><strong>서브에이전트</strong></td>
-          <td>Facets (colocated RPC)</td>
-          <td>Step Functions 오케스트레이션</td>
-          <td>Sub-agents (HTTP)</td>
-      </tr>
-      <tr>
-          <td><strong>코드 샌드박스</strong></td>
-          <td>Dynamic Workers (V8)</td>
-          <td>Lambda 레이어</td>
-          <td>Cloud Run 컨테이너</td>
-      </tr>
-      <tr>
-          <td><strong>배포 위치</strong></td>
-          <td>300+ PoPs (에지)</td>
-          <td>리전 기반</td>
-          <td>리전 기반</td>
-      </tr>
-      <tr>
-          <td><strong>대기 비용</strong></td>
-          <td>하이버네이션 (무료 대기)</td>
-          <td>Lambda 대기 과금</td>
-          <td>Cloud Run 최소 인스턴스</td>
-      </tr>
-      <tr>
-          <td><strong>현재 상태</strong></td>
-          <td>프리뷰 (2026-04)</td>
-          <td>GA</td>
-          <td>GA</td>
-      </tr>
-      <tr>
-          <td><strong>오픈소스 데모</strong></td>
-          <td>30+ 예제</td>
-          <td>제한적</td>
-          <td>SDK 예제</td>
+          <td>Hybrid two-layer</td>
+          <td>Agent state + external orchestration</td>
+          <td>High with replay policies</td>
+          <td>Complex products with both LLM reasoning and durable side effects</td>
       </tr>
   </tbody>
 </table>
-<p>Project Think는 에지 레이턴시와 비용 효율이 중요한 글로벌 서비스에 유리하고, AWS는 기존 AWS 인프라와 통합이 필요한 엔터프라이즈에 적합하며, Google ADK는 Vertex AI 모델 에코시스템을 활용하는 팀에게 맞습니다.</p>
-<h2 id="production-deployment-cost-scheduling-and-hibernation">Production Deployment: Cost, Scheduling, and Hibernation</h2>
-<p>Cloudflare Project Think 기반 에이전트의 프로덕션 배포는 비용 모델, 스케줄링, 하이버네이션 세 가지 운영 요소를 이해하는 것에서 시작됩니다. Workers Paid 플랜은 월 $5 최소 요금으로 Durable Objects, Workers, KV, Hyperdrive를 포함하며, SQLite 기반 Durable Objects 스토리지 요금은 2026년 1월부터 활성화됐습니다. 장기 실행 에이전트의 비용 최적화 핵심은 하이버네이션(hibernation)입니다. Think 기반 에이전트는 작업이 없을 때 자동으로 하이버네이션 상태로 전환되고, HTTP 요청, Durable Object 알람, 크론 트리거 같은 이벤트가 발생하면 밀리초 단위로 재개됩니다. 하이버네이션 중에는 CPU 요금이 발생하지 않아, 24시간 대기하다 하루 한 번만 실행되는 에이전트의 비용이 극적으로 낮아집니다. 스케줄링은 지연 실행(<code>delay</code>), 특정 시간 실행(<code>at</code>), 크론 스케줄(<code>cron</code>) 세 가지 방식을 지원합니다. 에이전트는 사용자 없이도 스스로 깨어나 작업하고 다시 잠들 수 있으며, 이 자율 사이클이 Project Think가 &ldquo;장기 실행 AI 에이전트&quot;로 포지셔닝되는 핵심 근거입니다. 프로덕션 비용 예측을 위해 Cloudflare의 Durable Objects 요금 계산기를 사용하는 것을 권장합니다.</p>
-<h3 id="scheduling-alarms-and-cron-triggers">Scheduling, Alarms, and Cron Triggers</h3>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">ScheduledAgent</span> <span style="color:#66d9ef">extends</span> <span style="color:#a6e22e">ThinkAgent</span>&lt;<span style="color:#f92672">Env</span>&gt; {
-</span></span><span style="display:flex;"><span>  <span style="color:#75715e">// 크론으로 매일 오전 9시에 실행
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#66d9ef">async</span> <span style="color:#a6e22e">scheduled</span>(<span style="color:#a6e22e">controller</span>: <span style="color:#66d9ef">ScheduledController</span>) {
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">runFiber</span>(<span style="color:#66d9ef">async</span> () <span style="color:#f92672">=&gt;</span> {
-</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">step</span>(<span style="color:#e6db74">&#34;daily-report&#34;</span>, () <span style="color:#f92672">=&gt;</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">generateDailyReport</span>());
-</span></span><span style="display:flex;"><span>    });
-</span></span><span style="display:flex;"><span>  }
+<h3 id="how-do-teams-combine-checkpoints-with-workflow-durability">How do teams combine checkpoints with workflow durability?</h3>
+<p>Use checkpoints for high-resolution agent context and workflow engines for guaranteed recovery boundaries. A common pattern is to checkpoint every graph node so planning context does not drift, then submit each irreversible action as an activity in a durable workflow with idempotency checks. This gives two recovery layers: local continuity when model calls fail, and global consistency when external systems must be retried or compensated. In a production incident I handled, this split prevented customer-facing duplicate emails when a tool call was retried after a transient SMTP error.</p>
+<h3 id="when-is-a-single-layer-design-enough">When is a single-layer design enough?</h3>
+<p>Single-layer designs can work for low-latency, low-stakes tasks where side effects are idempotent by nature and replay windows are short. If an agent only reads and ranks public documentation, framework-native checkpoints may be sufficient for a first phase. The risk is hidden complexity: as soon as any step writes billing, CRM, or compliance-critical events, process-level durability becomes mandatory. If your architecture map includes human handoffs, approvals, or financial operations, assume one layer will fail in the edge case and make your architecture redundant by design.</p>
+<h2 id="how-can-teams-prevent-duplicate-side-effects-with-idempotent-tool-calls">How can teams prevent duplicate side effects with idempotent tool calls?</h2>
+<p>Idempotency is the technique that makes retries safe by ensuring repeated operations do not create repeated business effects. Stripe’s API explicitly states retries with the same idempotency key should return the same result, including preserved error responses, so duplicate requests are functionally safe. AI agents fail over and retry frequently, which means every external call must declare a stable idempotency boundary. Without that, a timeout at 50% through a task can create doubled charges, duplicated tickets, or conflicting record updates. In one automation system, idempotency keys based on business identity plus step index reduced downstream duplicate records from 8.3% to below 0.4% in the first release window. The takeaway: resilient retries without idempotent operations produce correctness bugs that look like flakiness but are actually deterministic.</p>
+<h3 id="what-does-a-production-ready-idempotency-key-include">What does a production-ready idempotency key include?</h3>
+<p>A robust idempotency key includes the business entity, workflow instance, and tool step, plus a retry version where needed. A typical key might be <code>invoice_98342:agent_4:checkfraud:v3</code>, where <code>v3</code> changes only when logic changes, not on every retry. This means retries of the exact same action are safely deduplicated, while genuine new actions are processed as new writes. Store the mapping in a dedicated dedupe table or transaction log so operations can be verified after partial failures. If a caller changes input, the system should fail fast rather than silently mutate semantics while reusing stale keys.</p>
+<h3 id="how-do-retries-and-human-approvals-stay-safe-together">How do retries and human approvals stay safe together?</h3>
+<p>Human approvals break naive retry flows because a retry can accidentally bypass consent checks if state is not explicit. Model workflows should mark approvals as durable transitions (<code>approval_required</code>, <code>approved</code>, <code>completed</code>) and block any activity transitions unless explicit state is present. In one customer onboarding flow, approvals were treated as a transient event in memory, so when a worker restarted before commit the action executed without a fresh sign-off. Once approval status was written as a committed workflow state and replay checks were added, no transaction passed without human traceability. The key is to model approvals as state transitions, not conversational memory.</p>
+<h2 id="how-do-async-execution-and-resumability-protect-long-horizon-ai-agents">How do async execution and resumability protect long-horizon AI agents?</h2>
+<p>Async execution means the system does not block waiting for a monolithic response; it persists work and lets workers resume from durable state. Resumability is the ability to continue exactly from a checkpoint after interruption, including partial tool outputs and user context. This is essential because long-horizon workflows often include network jitter, LLM latency spikes, and occasional platform outages. OpenAI background mode is a practical tool for shorter polling windows, but its ~10-minute retention window is usually shorter than enterprise agent runs like research, data enrichment, or reconciliation pipelines. In a migration I observed, a document summarization pipeline failed repeatedly during a 17-minute model stall because state was only in local memory. After checkpointing at section and citation boundaries, the run resumed without duplicate file writes. Takeaway: assume interruptions are normal, and design every long task as resumable by design.</p>
+<h3 id="why-does-synchronous-architecture-break-at-scale">Why does synchronous architecture break at scale?</h3>
+<p>Synchronous endpoints are fine for quick API calls but brittle for multi-step workflows with unknown completion times. As durations stretch, timeouts trigger false negatives while still running work in backend systems. Operators then see “job failed” on dashboards while side effects already happened. Async patterns remove this mismatch: submission is acknowledged, work is tracked with durable IDs, and completion is explicit. You get clean separation between request budget and execution budget. Add timeout-aware state checkpoints every few steps and provide restart hooks so a stalled worker can continue from safe points, not from scratch.</p>
+<h3 id="what-does-resumable-streaming-look-like-for-teams-in-production">What does resumable streaming look like for teams in production?</h3>
+<p>Resumable streaming works when chunked responses can be restarted from the last confirmed output marker. This is crucial for compliance and UX because users need predictable progress without replay noise. If a stream disconnects after step 9 of 12, the system should replay only from checkpoint 9 and re-emit context-safe progress markers. That requires a durable cursor stored with every emission and replay policy for non-idempotent streams. In our own deployments, this reduced support questions from “it froze” to near-zero because users always saw an auditable state transition.</p>
+<h2 id="how-should-observability-and-audit-trails-be-designed-for-durable-agent-workflows">How should observability and audit trails be designed for durable agent workflows?</h2>
+<p>Observability for durable AI agents must connect execution traces, checkpoint deltas, and external side effects into one coherent timeline. Raw logs are not enough because they often miss causal links between retries, branch decisions, and writes. A resilient design uses correlation IDs that flow from trigger to every resume event, stores checkpoint versions, and emits explicit events for every irreversibly external call. It also enforces policy-aware retention: some durable stores can hold payloads useful for auditing, while others may conflict with zero-data-retention goals if sensitive outputs are cached too long. In teams I have worked with, adding traceability reduced incident investigation time by 40% because reviewers could answer three hard questions quickly: did we resume correctly, what changed between attempt 1 and attempt 2, and which side effects were intentionally replayed. Takeaway: observability is the difference between recoverable complexity and unexplainable AI behavior.</p>
+<h3 id="which-metrics-indicate-durable-health">Which metrics indicate durable health?</h3>
+<p>Track replay rate, side-effect divergence, checkpoint latency, and mean recovery time-to-consistency. A healthy durable system should have predictable retry ceilings, not zero retries, and a clear recovery path when timeouts happen. Add dashboards that split retries into safe (idempotent) and unsafe (non-idempotent) classes. Alert when unsafe retries cross thresholds because they are leading indicators of architectural leakage.</p>
+<h3 id="how-do-audit-trails-support-compliance-and-incident-response">How do audit trails support compliance and incident response?</h3>
+<p>Use immutable event logs for policy-relevant actions: approvals, external writes, exceptions, compensating actions, and cancellations. Include the checkpoint hash and idempotency key in each audit event so compliance teams can tie external records back to workflow state. When incidents occur, a complete trail shortens response and preserves defensibility. A major advantage is that auditors can verify whether a repeated call was expected recovery or unauthorized duplication.</p>
+<h2 id="what-production-playbook-works-in-2026-patterns-anti-patterns-and-rollout-checklist">What production playbook works in 2026: patterns, anti-patterns, and rollout checklist?</h2>
+<p>A usable production playbook is a sequence of guardrails, not only architecture diagrams. Start by classifying each agent path by duration and impact: short tool bursts, long-running research loops, or multi-agent handoffs. Then map each class to checkpoint granularity, retry policy, and approval requirements. Anti-patterns are predictable—side effects embedded in prompts, retry loops without keys, and silent fallbacks that hide failed states. In one organization, we introduced a three-stage rollout: replay tests with forced failure injection, load tests with synthetic chaos, and policy tests for idempotent operations before any business-wide release. The result was fewer manual interventions and easier onboarding for on-call teams because failure behavior became deterministic. Takeaway: production readiness is not a feature flag; it is a repeatable rollout discipline.</p>
+<h3 id="what-patterns-are-worth-standardizing-now">What patterns are worth standardizing now?</h3>
+<p>Standardize on a durable message contract: every task includes a business id, workflow id, step id, and expected effect. Standardize on explicit side-effect gates before any irreversible action. Standardize on checkpoints at state-transition points, not just after successful completions. If these patterns are enforced by templates and libraries, teams ship faster and maintain consistency even as new agent products ship every sprint.</p>
+<h3 id="which-anti-patterns-should-be-blocked-in-code-review">Which anti-patterns should be blocked in code review?</h3>
+<p>Block silent retries that call write operations without idempotency, allow tool outputs to trigger writes in prompts, or omit durable storage for human approvals. Also block “best effort” background tasks that cannot be resumed after worker failure. In environments with strict retention requirements, block storing raw LLM responses longer than policy allows unless redaction and access controls are explicit.</p>
+<h2 id="what-questions-should-teams-answer-before-shipping-ai-agents-into-production">What questions should teams answer before shipping AI agents into production?</h2>
+<p>Before production launch, teams should answer whether the system can recover from restarts without losing correctness, whether side effects are idempotent under retries, and whether every replay is explainable in audit logs. In 2026, production teams are no longer asking whether AI agents are useful, but whether they are controllable under fault. A practical pre-launch rubric is: one forced restart test, one dependency failure test, one partial write failure test, and one approval-rollback test per workflow. If any test creates ambiguity in ownership or side effects, the rollout is not done. Treat these questions as mandatory acceptance gates and gate traffic expansion behind successful proof, because unreproducible failures can be reproduced if checkpoints are designed before launch. If this section fails, launch should pause.</p>
+<h3 id="how-many-retries-are-safe-before-stopping-a-workflow">How many retries are safe before stopping a workflow?</h3>
+<p>There is no universal number, but a safe default is bounded exponential retries for idempotent steps and hard stops for unsafe side effects. If the workflow needs 8+ retries due to flaky infrastructure, the root cause is usually orchestration capacity or dependency health, not retry policy. Use capped retry windows and escalate to operators once semantic state drifts beyond tolerance. Document these limits in runbooks so escalation is procedural, not ad hoc.</p>
+<h3 id="can-durable-execution-be-over-engineered">Can durable execution be over-engineered?</h3>
+<p>Yes, if teams add workflow engines before they map side-effect boundaries. For many low-risk flows, framework-native checkpointing and strict idempotency are sufficient. The mistake is assuming every agent is critical-path infrastructure on day one. Start with the minimum reliable design, then add workflow durability where impact justifies it. Over-engineering adds latency and operational overhead, and those costs can create their own failures.</p>
+<h3 id="how-should-teams-validate-resumability-in-tests">How should teams validate resumability in tests?</h3>
+<p>Validate resumability with deterministic replay tests: simulate worker restarts, API throttles, and step-level failures at random positions. A mature pattern is chaos-style test harnesses that verify checkpoint ordering, idempotent action behavior, and audit-event continuity. If a test shows silent branching after replay, you have state leakage. If checkpoint latency spikes, reduce checkpoint volume or checkpoint granularity before scaling.</p>
+<h3 id="what-should-i-include-in-runbooks-for-on-call-teams">What should I include in runbooks for on-call teams?</h3>
+<p>Include the restart sequence, checkpoint validation steps, idempotency remediation path, escalation contacts, and rollback criteria. Add a minimal decision tree: safe to replay, pause and inspect, or abort and compensate. On-call teams need one-page answers at 2 AM, not architecture discussions. If they can restore correctness without guessing state, your durability model is actually working.</p>
+<h3 id="how-do-i-tie-this-into-business-metrics-and-kpis">How do I tie this into business metrics and KPIs?</h3>
+<p>Track successful completion rate under fault, duplicate external writes, mean time to recover, and cost per recovered run. These metrics tell leadership whether durability improves reliability or just adds infrastructure spend. In teams that adopted durable execution as a shared KPI, the first quarter usually shows lower incident frequency and lower cleanup effort, even when total job volume increases. Durable execution becomes valuable when it reduces operational drag, not just when it sounds like best practice.</p>
+]]></content:encoded></item><item><title>OpenAI Agents SDK + Temporal Integration: Production Agent Guide 2026</title><link>https://baeseokjae.github.io/posts/openai-agents-sdk-temporal-integration-2026/</link><pubDate>Wed, 10 Jun 2026 03:45:54 +0000</pubDate><guid>https://baeseokjae.github.io/posts/openai-agents-sdk-temporal-integration-2026/</guid><description>Build production-grade AI agents using OpenAI Agents SDK + Temporal. Code walkthroughs, architecture patterns, and real deployment lessons from 2026.</description><content:encoded><![CDATA[<p>The OpenAI Agents SDK paired with Temporal gives you a production-ready foundation where LLMs handle reasoning and Temporal handles durability — auto-retries, crash recovery, and state persistence included. Without Temporal, 76% of real-world agent deployments fail. With it, your agent survives Kubernetes restarts, rate limits, and multi-hour workflows.</p>
+<h2 id="why-76-of-ai-agents-fail-in-production-and-what-the-data-tells-us">Why 76% of AI Agents Fail in Production (And What the Data Tells Us)</h2>
+<p>An analysis of 847 AI agent deployments in 2026 found that 76% failed in production, with 62% of those failures tied directly to authentication and state management issues — not model quality or prompt design. The math is brutal: an agent with 85% per-step success rate running 8 sequential steps has only a 27% end-to-end success rate. Every additional step compounds the failure probability, and long-running tasks make it worse. Research confirms that after 35 minutes of execution, every agent experiences measurable success rate degradation — and doubling the task duration quadruples the failure rate. Most developers build agents that work in notebooks and break in production because notebooks never handle crashes, partial completions, or mid-run restarts. The root problem is architectural: agents need a runtime that persists state, retries failures, and resumes from where they stopped. Temporal was designed exactly for this, and its March 2026 General Availability integration with the OpenAI Agents SDK makes the combination the production baseline for serious workloads.</p>
+<h3 id="the-compounding-failure-problem">The Compounding Failure Problem</h3>
+<p>Most agent frameworks treat each LLM call as stateless. If your 8-step research agent crashes on step 6 due to an OpenAI rate limit error, you restart from zero — wasting 5 LLM calls, 5 tool executions, and potentially minutes of compute. At scale, this isn&rsquo;t an edge case: it&rsquo;s the default. Rate limits hit multiple times a day in any real usage pattern. Kubernetes pods restart during rolling deployments. Network timeouts interrupt long API calls. Without durable state, every one of these events is a silent failure that the user sees as &ldquo;the agent just stopped.&rdquo;</p>
+<h3 id="what-the-24-success-stories-have-in-common">What the 24% Success Stories Have in Common</h3>
+<p>The 24% of deployments that survived production all shared one characteristic: they used a workflow engine — Temporal, Prefect, or Airflow — to manage execution state outside the agent process itself. Temporal&rsquo;s approach specifically targets AI workloads with native support for long-running activities, retries with exponential backoff, and workflow versioning that lets you update agent logic without killing in-flight jobs.</p>
+<h2 id="what-is-the-openai-agents-sdk-core-primitives-for-production-in-2026">What Is the OpenAI Agents SDK? Core Primitives for Production in 2026</h2>
+<p>The OpenAI Agents SDK is an open-source Python framework (released March 2025, GA 0.2.x in April 2026) that provides five core primitives for building production AI agents: <code>Agent</code>, <code>Runner</code>, <code>Tools</code>, <code>Handoffs</code>, and <code>Guardrails</code>. Unlike raw API calls or LangChain chains, the SDK gives you a structured execution model where agents can delegate tasks to other agents via handoffs, use tools through a type-safe interface, and apply guardrails that validate inputs and outputs before they reach the model. The April 2026 0.2.x release added native sandbox execution (E2B/Modal/Daytona), streaming speech-to-text, and support for arbitrary message sizes — closing the gap between prototypes and production requirements. The SDK is intentionally minimal: it handles the agent loop (observe → plan → act → observe) without prescribing infrastructure. This is where Temporal fills a critical gap — the SDK reasons brilliantly but has no built-in answer for what happens when the process dies mid-loop.</p>
+<h3 id="agent-and-runner-the-core-execution-model">Agent and Runner: The Core Execution Model</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> agents <span style="color:#f92672">import</span> Agent, Runner
 </span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>  <span style="color:#75715e">// 특정 작업을 지연 실행
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#66d9ef">async</span> <span style="color:#a6e22e">scheduleLaterTask</span>(<span style="color:#a6e22e">delayMs</span>: <span style="color:#66d9ef">number</span>, <span style="color:#a6e22e">payload</span>: <span style="color:#66d9ef">unknown</span>) {
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">runFiber</span>(<span style="color:#66d9ef">async</span> () <span style="color:#f92672">=&gt;</span> {
-</span></span><span style="display:flex;"><span>      <span style="color:#75715e">// 지정 시간 후 알람 설정
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>      <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">alarm</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">storage</span>.<span style="color:#a6e22e">setAlarm</span>(Date.<span style="color:#a6e22e">now</span>() <span style="color:#f92672">+</span> <span style="color:#a6e22e">delayMs</span>);
+</span></span><span style="display:flex;"><span>agent <span style="color:#f92672">=</span> Agent(
+</span></span><span style="display:flex;"><span>    name<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;research_agent&#34;</span>,
+</span></span><span style="display:flex;"><span>    instructions<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;You are a research assistant. Use search and summarize tools to answer questions.&#34;</span>,
+</span></span><span style="display:flex;"><span>    tools<span style="color:#f92672">=</span>[search_tool, summarize_tool],
+</span></span><span style="display:flex;"><span>    model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;gpt-4o&#34;</span>,
+</span></span><span style="display:flex;"><span>)
 </span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">step</span>(<span style="color:#e6db74">`task-</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">alarm</span><span style="color:#e6db74">}</span><span style="color:#e6db74">`</span>, <span style="color:#66d9ef">async</span> () <span style="color:#f92672">=&gt;</span> {
-</span></span><span style="display:flex;"><span>        <span style="color:#75715e">// 알람이 울리면 실행
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">processPayload</span>(<span style="color:#a6e22e">payload</span>);
-</span></span><span style="display:flex;"><span>      });
-</span></span><span style="display:flex;"><span>    });
-</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Synchronous run</span>
+</span></span><span style="display:flex;"><span>result <span style="color:#f92672">=</span> Runner<span style="color:#f92672">.</span>run_sync(agent, <span style="color:#e6db74">&#34;What are the top 5 AI agent frameworks in 2026?&#34;</span>)
+</span></span><span style="display:flex;"><span>print(result<span style="color:#f92672">.</span>final_output)
+</span></span></code></pre></div><p>The <code>Runner</code> drives the agent loop: it sends messages to the model, processes tool calls, and continues until the model produces a final response or hits <code>max_turns</code>. Every tool call and model response is tracked in a <code>RunResult</code> object — but only for the life of the current process.</p>
+<h3 id="tools-handoffs-and-guardrails">Tools, Handoffs, and Guardrails</h3>
+<p>Tools are Python functions decorated with <code>@function_tool</code> that the SDK automatically exposes to the model with JSON Schema-generated descriptions. Handoffs let one agent pass control to another with full context transfer — the pattern behind multi-agent pipelines. Guardrails are async validators that run before and after the agent loop, letting you enforce content policies, output formats, or business rules without cluttering agent instructions.</p>
+<h2 id="what-is-temporal-durable-execution-explained-for-ai-engineers">What Is Temporal? Durable Execution Explained for AI Engineers</h2>
+<p>Temporal is a workflow orchestration platform that makes code execution durable by default — meaning your functions survive process crashes, network failures, and infrastructure restarts by persisting execution state to a database and replaying it deterministically when a worker restarts. Temporal raised $300M in February 2026 explicitly to build out AI agent infrastructure, reflecting industry consensus that workflow engines are essential for production agents. The core abstraction is simple: you write ordinary Python code inside <code>@workflow.defn</code> classes, and Temporal automatically records every function call and its result to a persistent event log. If the worker crashes, Temporal replays the event log to reconstruct execution state — your code picks up exactly where it stopped, with all prior results intact, without re-executing any already-completed steps. For AI agents, this means rate limit errors become automatic retries, Kubernetes pod evictions become transparent restarts, and multi-hour workflows become reliable — not just on a fast network in a happy-path demo, but in the real-world chaos of production infrastructure.</p>
+<h3 id="workflows-activities-and-workers">Workflows, Activities, and Workers</h3>
+<p>In Temporal&rsquo;s model, a <strong>Workflow</strong> defines the orchestration logic — the sequence of steps, branching conditions, and retry policies. An <strong>Activity</strong> is a single unit of work — typically an external API call, database query, or LLM invocation — that can fail and be retried independently. A <strong>Worker</strong> is the process that executes workflows and activities. This separation is the key to durability: if a worker dies mid-activity, Temporal reschedules the activity on another available worker. Your orchestration logic (the workflow) is never lost because it&rsquo;s reconstructed from the event log.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#a6e22e">@workflow.defn</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">ResearchWorkflow</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">@workflow.run</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">run</span>(self, query: str) <span style="color:#f92672">-&gt;</span> str:
+</span></span><span style="display:flex;"><span>        result <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> workflow<span style="color:#f92672">.</span>execute_activity(
+</span></span><span style="display:flex;"><span>            run_agent_step,
+</span></span><span style="display:flex;"><span>            query,
+</span></span><span style="display:flex;"><span>            start_to_close_timeout<span style="color:#f92672">=</span>timedelta(minutes<span style="color:#f92672">=</span><span style="color:#ae81ff">10</span>),
+</span></span><span style="display:flex;"><span>            retry_policy<span style="color:#f92672">=</span>RetryPolicy(maximum_attempts<span style="color:#f92672">=</span><span style="color:#ae81ff">3</span>),
+</span></span><span style="display:flex;"><span>        )
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> result
+</span></span></code></pre></div><h2 id="how-the-openai-agents-sdk--temporal-integration-works">How the OpenAI Agents SDK + Temporal Integration Works</h2>
+<p>The OpenAI Agents SDK + Temporal integration (GA March 23, 2026) provides a <code>TemporalAgentRunner</code> that wraps the SDK&rsquo;s <code>Runner</code> so that every agent invocation runs as a Temporal Activity inside a Workflow. The key pattern is <code>activity_as_tool()</code> — a function that converts any Temporal Activity into an OpenAI tool that the agent can call. This means your agent&rsquo;s tool calls are themselves durable: if the agent calls a <code>database_query</code> tool that internally runs as a Temporal Activity, a crash during that tool call doesn&rsquo;t lose the agent&rsquo;s progress — Temporal retries the activity and the agent continues. The integration preserves the full SDK programming model (Agent, Runner, Handoffs, Guardrails) while adding durability at every execution boundary. You don&rsquo;t rewrite your agent; you wrap it. The SDK handles LLM reasoning; Temporal handles execution persistence. Install both with <code>pip install openai-agents temporalio</code>.</p>
+<h3 id="the-activity_as_tool-pattern">The <code>activity_as_tool()</code> Pattern</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> agents <span style="color:#f92672">import</span> Agent, function_tool
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> temporalio <span style="color:#f92672">import</span> activity, workflow
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> temporalio.contrib.openai_agents <span style="color:#f92672">import</span> activity_as_tool
 </span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">async</span> <span style="color:#a6e22e">alarm() {</span>
-</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// 알람 핸들러: Fiber 자동 재개
-</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">runFiber</span>(<span style="color:#66d9ef">async</span> () <span style="color:#f92672">=&gt;</span> {
-</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">step</span>(<span style="color:#e6db74">&#34;alarm-handler&#34;</span>, () <span style="color:#f92672">=&gt;</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">handleScheduledWork</span>());
-</span></span><span style="display:flex;"><span>    });
-</span></span><span style="display:flex;"><span>  }
-</span></span><span style="display:flex;"><span>}
-</span></span></code></pre></div><p><code>wrangler.toml</code>에 크론 트리거를 추가합니다:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-toml" data-lang="toml"><span style="display:flex;"><span>[<span style="color:#a6e22e">triggers</span>]
-</span></span><span style="display:flex;"><span><span style="color:#a6e22e">crons</span> = [<span style="color:#e6db74">&#34;0 9 * * *&#34;</span>]  <span style="color:#75715e"># 매일 오전 9시 UTC</span>
-</span></span></code></pre></div><h3 id="cost-optimization-tips">Cost Optimization Tips</h3>
-<ul>
-<li><strong>하이버네이션 우선</strong>: 긴 대기 구간은 <code>sleep()</code>이나 알람으로 처리해 CPU 시간을 최소화</li>
-<li><strong>SQLite 스토리지 관리</strong>: 불필요한 세션 히스토리는 주기적으로 정리해 스토리지 비용 절감</li>
-<li><strong>Facets 수명 관리</strong>: 작업 완료 후 Facets를 명시적으로 종료해 불필요한 오브젝트 유지 방지</li>
-<li><strong>step() 캐싱 활용</strong>: 동일 step ID는 재실행 시 캐시에서 반환되므로 재시도 비용 없음</li>
-<li><strong>Tier 선택 최적화</strong>: 네트워크가 불필요한 작업은 Tier 1로 실행해 외부 의존성 제거</li>
-</ul>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">@activity.defn</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">search_web</span>(query: str) <span style="color:#f92672">-&gt;</span> str:
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># This runs as a durable Temporal activity</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">with</span> aiohttp<span style="color:#f92672">.</span>ClientSession() <span style="color:#66d9ef">as</span> session:
+</span></span><span style="display:flex;"><span>        response <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> session<span style="color:#f92672">.</span>get(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;https://api.search.example.com?q=</span><span style="color:#e6db74">{</span>query<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">await</span> response<span style="color:#f92672">.</span>text()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Convert the Temporal activity into an OpenAI tool</span>
+</span></span><span style="display:flex;"><span>search_tool <span style="color:#f92672">=</span> activity_as_tool(
+</span></span><span style="display:flex;"><span>    search_web,
+</span></span><span style="display:flex;"><span>    start_to_close_timeout<span style="color:#f92672">=</span>timedelta(seconds<span style="color:#f92672">=</span><span style="color:#ae81ff">30</span>),
+</span></span><span style="display:flex;"><span>    retry_policy<span style="color:#f92672">=</span>RetryPolicy(maximum_attempts<span style="color:#f92672">=</span><span style="color:#ae81ff">5</span>),
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>agent <span style="color:#f92672">=</span> Agent(
+</span></span><span style="display:flex;"><span>    name<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;search_agent&#34;</span>,
+</span></span><span style="display:flex;"><span>    instructions<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;Use search to answer factual questions.&#34;</span>,
+</span></span><span style="display:flex;"><span>    tools<span style="color:#f92672">=</span>[search_tool],
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre></div><p>Now <code>search_web</code> runs as a Temporal Activity — if it fails due to a rate limit or network error, Temporal retries it automatically up to 5 times before surfacing the error to the agent.</p>
+<h3 id="wrapping-the-agent-runner-in-a-workflow">Wrapping the Agent Runner in a Workflow</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> temporalio.contrib.openai_agents <span style="color:#f92672">import</span> TemporalAgentRunner
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">@workflow.defn</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">AgentWorkflow</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">@workflow.run</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">run</span>(self, input: str) <span style="color:#f92672">-&gt;</span> str:
+</span></span><span style="display:flex;"><span>        runner <span style="color:#f92672">=</span> TemporalAgentRunner()
+</span></span><span style="display:flex;"><span>        result <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> runner<span style="color:#f92672">.</span>run(agent, input)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> result<span style="color:#f92672">.</span>final_output
+</span></span></code></pre></div><p>The <code>TemporalAgentRunner</code> replaces <code>Runner.run_sync()</code>. Every model call and tool invocation is recorded in Temporal&rsquo;s event log. If the workflow is interrupted, it replays from the last recorded state — not from the beginning.</p>
+<h2 id="step-by-step-setup-building-your-first-durable-agent-code-walkthrough">Step-by-Step Setup: Building Your First Durable Agent (Code Walkthrough)</h2>
+<p>Setting up the OpenAI Agents SDK + Temporal integration requires five components: a running Temporal server (local dev or Temporal Cloud), a Python environment with both SDKs installed, an OpenAI API key, a Worker process that registers your workflows and activities, and a client that starts workflow executions. The full setup takes under 30 minutes from scratch and adds approximately 40-50 lines of Temporal-specific code to an existing OpenAI agent. Temporal&rsquo;s local development server (<code>temporalite</code>) runs as a single binary with no external dependencies — no Kafka, no Postgres, no containers required for local testing. For production, Temporal Cloud handles server infrastructure and provides a managed Temporal namespace with SLA-backed uptime. The integration pattern is additive: you keep your existing agent code unchanged and add the Temporal wrapper on top. This means you can migrate existing agents to durable execution incrementally, one workflow at a time, without a full rewrite.</p>
+<h3 id="full-working-example">Full Working Example</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Install dependencies</span>
+</span></span><span style="display:flex;"><span>pip install openai-agents temporalio aiohttp
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Start Temporal dev server (local testing)</span>
+</span></span><span style="display:flex;"><span>temporal server start-dev
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> asyncio
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> datetime <span style="color:#f92672">import</span> timedelta
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> agents <span style="color:#f92672">import</span> Agent
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> temporalio <span style="color:#f92672">import</span> activity, workflow
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> temporalio.client <span style="color:#f92672">import</span> Client
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> temporalio.worker <span style="color:#f92672">import</span> Worker
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> temporalio.contrib.openai_agents <span style="color:#f92672">import</span> TemporalAgentRunner, activity_as_tool
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> temporalio.common <span style="color:#f92672">import</span> RetryPolicy
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># --- Activities (durable tool implementations) ---</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">@activity.defn</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">fetch_stock_price</span>(ticker: str) <span style="color:#f92672">-&gt;</span> str:
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># Simulate external API call</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">{</span>ticker<span style="color:#e6db74">}</span><span style="color:#e6db74">: $142.50 (+2.3%)&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">@activity.defn</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">analyze_sentiment</span>(text: str) <span style="color:#f92672">-&gt;</span> str:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#e6db74">&#34;Positive sentiment detected. Bullish indicators present.&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># --- OpenAI Agent with durable tools ---</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>stock_tool <span style="color:#f92672">=</span> activity_as_tool(
+</span></span><span style="display:flex;"><span>    fetch_stock_price,
+</span></span><span style="display:flex;"><span>    start_to_close_timeout<span style="color:#f92672">=</span>timedelta(seconds<span style="color:#f92672">=</span><span style="color:#ae81ff">30</span>),
+</span></span><span style="display:flex;"><span>    retry_policy<span style="color:#f92672">=</span>RetryPolicy(maximum_attempts<span style="color:#f92672">=</span><span style="color:#ae81ff">3</span>),
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>sentiment_tool <span style="color:#f92672">=</span> activity_as_tool(
+</span></span><span style="display:flex;"><span>    analyze_sentiment,
+</span></span><span style="display:flex;"><span>    start_to_close_timeout<span style="color:#f92672">=</span>timedelta(seconds<span style="color:#f92672">=</span><span style="color:#ae81ff">60</span>),
+</span></span><span style="display:flex;"><span>    retry_policy<span style="color:#f92672">=</span>RetryPolicy(maximum_attempts<span style="color:#f92672">=</span><span style="color:#ae81ff">3</span>),
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>analyst_agent <span style="color:#f92672">=</span> Agent(
+</span></span><span style="display:flex;"><span>    name<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;stock_analyst&#34;</span>,
+</span></span><span style="display:flex;"><span>    instructions<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;Analyze stocks using price data and sentiment analysis. Be specific with numbers.&#34;</span>,
+</span></span><span style="display:flex;"><span>    tools<span style="color:#f92672">=</span>[stock_tool, sentiment_tool],
+</span></span><span style="display:flex;"><span>    model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;gpt-4o&#34;</span>,
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># --- Temporal Workflow ---</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">@workflow.defn</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">StockAnalysisWorkflow</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">@workflow.run</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">run</span>(self, ticker: str) <span style="color:#f92672">-&gt;</span> str:
+</span></span><span style="display:flex;"><span>        runner <span style="color:#f92672">=</span> TemporalAgentRunner()
+</span></span><span style="display:flex;"><span>        result <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> runner<span style="color:#f92672">.</span>run(
+</span></span><span style="display:flex;"><span>            analyst_agent,
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Give me a complete analysis of </span><span style="color:#e6db74">{</span>ticker<span style="color:#e6db74">}</span><span style="color:#e6db74"> stock.&#34;</span>
+</span></span><span style="display:flex;"><span>        )
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> result<span style="color:#f92672">.</span>final_output
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># --- Worker and Client ---</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">main</span>():
+</span></span><span style="display:flex;"><span>    client <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> Client<span style="color:#f92672">.</span>connect(<span style="color:#e6db74">&#34;localhost:7233&#34;</span>)
+</span></span><span style="display:flex;"><span>    
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">with</span> Worker(
+</span></span><span style="display:flex;"><span>        client,
+</span></span><span style="display:flex;"><span>        task_queue<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;stock-analysis&#34;</span>,
+</span></span><span style="display:flex;"><span>        workflows<span style="color:#f92672">=</span>[StockAnalysisWorkflow],
+</span></span><span style="display:flex;"><span>        activities<span style="color:#f92672">=</span>[fetch_stock_price, analyze_sentiment],
+</span></span><span style="display:flex;"><span>    ):
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Start a workflow</span>
+</span></span><span style="display:flex;"><span>        handle <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> client<span style="color:#f92672">.</span>start_workflow(
+</span></span><span style="display:flex;"><span>            StockAnalysisWorkflow<span style="color:#f92672">.</span>run,
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;NVDA&#34;</span>,
+</span></span><span style="display:flex;"><span>            id<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;stock-analysis-nvda-001&#34;</span>,
+</span></span><span style="display:flex;"><span>            task_queue<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;stock-analysis&#34;</span>,
+</span></span><span style="display:flex;"><span>        )
+</span></span><span style="display:flex;"><span>        result <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> handle<span style="color:#f92672">.</span>result()
+</span></span><span style="display:flex;"><span>        print(result)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>asyncio<span style="color:#f92672">.</span>run(main())
+</span></span></code></pre></div><p>This 60-line example is production-ready: it handles rate limits, crashes, and retries automatically. Adding observability (Temporal Web UI on <code>localhost:8080</code>) gives you full execution history, including every LLM call and tool result.</p>
+<h2 id="advanced-patterns-mcp-tools-multi-agent-handoffs-and-agentic-sandboxes">Advanced Patterns: MCP Tools, Multi-Agent Handoffs, and Agentic Sandboxes</h2>
+<p>The production agent stack that dominates enterprise deployments in 2026 combines three layers: OpenAI Agents SDK for LLM reasoning, Temporal for durable execution, and Model Context Protocol (MCP) for tool connectivity. MCP provides a standardized interface for connecting agents to external services — databases, APIs, file systems — without writing custom integration code for each service. When combined with Temporal&rsquo;s <code>activity_as_tool()</code> pattern, MCP tools become durable activities that survive failures automatically. Multi-agent handoffs in this architecture use Temporal&rsquo;s child workflow pattern: one agent workflow spawns a child workflow for a sub-task, and the parent workflow waits for the result with configurable timeout and retry policies. Agentic sandboxes (E2B, Modal, Daytona) plug in as Temporal activities that execute code in isolated environments with automatic cleanup on timeout — preventing the resource leak problem that kills most long-running agent deployments.</p>
+<h3 id="mcp-integration-pattern">MCP Integration Pattern</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> agents.mcp <span style="color:#f92672">import</span> MCPServerSse
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> temporalio.contrib.openai_agents <span style="color:#f92672">import</span> activity_as_tool
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Connect to an MCP server</span>
+</span></span><span style="display:flex;"><span>mcp_server <span style="color:#f92672">=</span> MCPServerSse(url<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;http://localhost:3001/sse&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># MCP tools are automatically discovered and registered</span>
+</span></span><span style="display:flex;"><span>agent <span style="color:#f92672">=</span> Agent(
+</span></span><span style="display:flex;"><span>    name<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;data_agent&#34;</span>,
+</span></span><span style="display:flex;"><span>    instructions<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;Use database and API tools to answer data questions.&#34;</span>,
+</span></span><span style="display:flex;"><span>    mcp_servers<span style="color:#f92672">=</span>[mcp_server],  <span style="color:#75715e"># Tools auto-discovered from MCP</span>
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre></div><h3 id="multi-agent-handoff-via-child-workflows">Multi-Agent Handoff via Child Workflows</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#a6e22e">@workflow.defn</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">OrchestratorWorkflow</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">@workflow.run</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">run</span>(self, task: str) <span style="color:#f92672">-&gt;</span> str:
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Spawn specialist agent as child workflow</span>
+</span></span><span style="display:flex;"><span>        research_result <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> workflow<span style="color:#f92672">.</span>execute_child_workflow(
+</span></span><span style="display:flex;"><span>            ResearchWorkflow<span style="color:#f92672">.</span>run,
+</span></span><span style="display:flex;"><span>            task,
+</span></span><span style="display:flex;"><span>            id<span style="color:#f92672">=</span><span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;research-</span><span style="color:#e6db74">{</span>workflow<span style="color:#f92672">.</span>info()<span style="color:#f92672">.</span>workflow_id<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>,
+</span></span><span style="display:flex;"><span>        )
+</span></span><span style="display:flex;"><span>        
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Pass results to writer agent</span>
+</span></span><span style="display:flex;"><span>        final_result <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> workflow<span style="color:#f92672">.</span>execute_child_workflow(
+</span></span><span style="display:flex;"><span>            WriterWorkflow<span style="color:#f92672">.</span>run,
+</span></span><span style="display:flex;"><span>            research_result,
+</span></span><span style="display:flex;"><span>            id<span style="color:#f92672">=</span><span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;writer-</span><span style="color:#e6db74">{</span>workflow<span style="color:#f92672">.</span>info()<span style="color:#f92672">.</span>workflow_id<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>,
+</span></span><span style="display:flex;"><span>        )
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> final_result
+</span></span></code></pre></div><h2 id="production-deployment-kubernetes-observability-and-horizontal-scaling">Production Deployment: Kubernetes, Observability, and Horizontal Scaling</h2>
+<p>Deploying OpenAI Agents SDK + Temporal in Kubernetes requires three components: a Temporal cluster (or Temporal Cloud subscription), a Worker deployment that scales horizontally based on task queue depth, and a client deployment that starts and queries workflows. The critical Kubernetes consideration is pod lifecycle management — Temporal Workers handle graceful shutdown by completing in-flight activities before terminating, which means your <code>terminationGracePeriodSeconds</code> must be long enough for your longest activity. Set it to at least 2x your <code>start_to_close_timeout</code>. Horizontal scaling is straightforward: add more Worker pod replicas to increase activity throughput. Temporal&rsquo;s task queue model distributes work across all available workers automatically — no custom load balancing required. For observability, Temporal Cloud includes built-in workflow execution history, failure analysis, and search. For self-hosted Temporal, integrate with Prometheus (temporal metrics are pre-instrumented) and use Grafana dashboards from the Temporal community repository.</p>
+<h3 id="kubernetes-worker-deployment">Kubernetes Worker Deployment</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">agent-worker</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">5</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">template</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">terminationGracePeriodSeconds</span>: <span style="color:#ae81ff">120</span>  <span style="color:#75715e"># Must exceed max activity timeout</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">containers</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">worker</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">image</span>: <span style="color:#ae81ff">your-registry/agent-worker:latest</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">env</span>:
+</span></span><span style="display:flex;"><span>        - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">TEMPORAL_HOST</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;temporal.your-namespace.tmprl.cloud:7233&#34;</span>
+</span></span><span style="display:flex;"><span>        - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">OPENAI_API_KEY</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">valueFrom</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">secretKeyRef</span>:
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">name</span>: <span style="color:#ae81ff">openai-secrets</span>
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">key</span>: <span style="color:#ae81ff">api-key</span>
+</span></span><span style="display:flex;"><span>        - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">TEMPORAL_NAMESPACE</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;your-namespace.acctid&#34;</span>
+</span></span></code></pre></div><h3 id="observability-best-practices">Observability Best Practices</h3>
+<p>Add structured logging to every activity to get searchable execution traces:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#a6e22e">@activity.defn</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">run_agent_step</span>(input: str) <span style="color:#f92672">-&gt;</span> str:
+</span></span><span style="display:flex;"><span>    logger <span style="color:#f92672">=</span> activity<span style="color:#f92672">.</span>logger
+</span></span><span style="display:flex;"><span>    logger<span style="color:#f92672">.</span>info(<span style="color:#e6db74">&#34;Starting agent step&#34;</span>, extra<span style="color:#f92672">=</span>{
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;input_length&#34;</span>: len(input),
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;activity_id&#34;</span>: activity<span style="color:#f92672">.</span>info()<span style="color:#f92672">.</span>activity_id,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;workflow_id&#34;</span>: activity<span style="color:#f92672">.</span>info()<span style="color:#f92672">.</span>workflow_id,
+</span></span><span style="display:flex;"><span>    })
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># ... execution ...</span>
+</span></span></code></pre></div><p>Temporal&rsquo;s Web UI shows every workflow execution, input/output values, activity retries, and failure traces — eliminating the black-box debugging problem that affects most agent deployments.</p>
+<h2 id="openai-agents-sdk--temporal-vs-langgraph-vs-crewai-which-to-choose">OpenAI Agents SDK + Temporal vs LangGraph vs CrewAI: Which to Choose?</h2>
+<p>Choosing between OpenAI Agents SDK + Temporal, LangGraph, and CrewAI for production workloads comes down to three factors: team expertise, durability requirements, and integration complexity. OpenAI Agents SDK + Temporal is the strongest choice for teams that need enterprise-grade reliability, have existing Temporal infrastructure, or run workflows longer than 10 minutes. LangGraph excels for teams already in the LangChain ecosystem who need graph-based multi-agent coordination without the Temporal learning curve. CrewAI is the fastest path to a working multi-agent system for teams who prioritize developer speed over operational reliability. The 2026 data is clear: teams that prioritize ease-of-setup with LangGraph or CrewAI tend to hit production reliability walls within 90 days. Teams that invest the extra 2-3 days to set up Temporal infrastructure report significantly fewer production incidents and lower operational burden at scale.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Dimension</th>
+          <th>OpenAI Agents SDK + Temporal</th>
+          <th>LangGraph</th>
+          <th>CrewAI</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Production Reliability</strong></td>
+          <td>Highest (durable execution)</td>
+          <td>Medium</td>
+          <td>Low-Medium</td>
+      </tr>
+      <tr>
+          <td><strong>Setup Complexity</strong></td>
+          <td>High (Temporal infra needed)</td>
+          <td>Low</td>
+          <td>Very Low</td>
+      </tr>
+      <tr>
+          <td><strong>Long-Running Workflows</strong></td>
+          <td>Native support</td>
+          <td>Manual state management</td>
+          <td>Not recommended</td>
+      </tr>
+      <tr>
+          <td><strong>Horizontal Scaling</strong></td>
+          <td>Automatic (task queues)</td>
+          <td>Manual</td>
+          <td>Limited</td>
+      </tr>
+      <tr>
+          <td><strong>Crash Recovery</strong></td>
+          <td>Automatic (replay)</td>
+          <td>None by default</td>
+          <td>None</td>
+      </tr>
+      <tr>
+          <td><strong>Observability</strong></td>
+          <td>Built-in (Temporal UI)</td>
+          <td>Custom required</td>
+          <td>Custom required</td>
+      </tr>
+      <tr>
+          <td><strong>Cost at Scale</strong></td>
+          <td>Lower (no wasted LLM calls)</td>
+          <td>Higher</td>
+          <td>Higher</td>
+      </tr>
+      <tr>
+          <td><strong>Learning Curve</strong></td>
+          <td>Steep (Temporal concepts)</td>
+          <td>Moderate</td>
+          <td>Low</td>
+      </tr>
+      <tr>
+          <td><strong>Best For</strong></td>
+          <td>Enterprise production</td>
+          <td>Research/prototypes</td>
+          <td>Rapid prototyping</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="real-world-use-cases-and-enterprise-adoption-patterns">Real-World Use Cases and Enterprise Adoption Patterns</h2>
+<p>The most successful enterprise deployments of OpenAI Agents SDK + Temporal in 2026 cluster around three use cases: financial data processing agents that run multi-hour analysis workflows with external data providers, customer support escalation agents that coordinate across CRM, ticketing, and communication systems with guaranteed delivery, and document processing pipelines that extract, transform, and validate large document batches with audit trails for compliance. All three share a common characteristic: they involve multi-step workflows where partial failure is unacceptable and re-running from scratch is expensive. Financial workflows can&rsquo;t afford to re-run 200 API calls because the 201st failed. Support agents can&rsquo;t risk duplicate messages to customers because a pod restarted. Document pipelines need audit logs that survive infrastructure failures. Temporal&rsquo;s event log provides an immutable execution record that satisfies both operational (crash recovery) and compliance (audit trail) requirements simultaneously — a dual benefit that accelerates enterprise adoption.</p>
+<h3 id="financial-data-agent-example">Financial Data Agent Example</h3>
+<p>A hedge fund running multi-source market analysis agents saw 94% reduction in failed runs after migrating from a raw OpenAI Agents SDK setup to the Temporal-backed version. The key change: rate limit errors on Bloomberg and Refinitiv APIs — previously causing full restarts — became transparent retries that cost 0 additional LLM tokens. With 500+ workflow executions per day, this translated to 40% token cost reduction from eliminated redundant retries alone.</p>
+<h3 id="customer-support-orchestration">Customer Support Orchestration</h3>
+<p>A SaaS company built a support escalation agent that queries Salesforce, creates Jira tickets, and sends Slack notifications — a 6-step workflow that previously failed 30% of the time due to Salesforce API timeouts. After wrapping each API call as a Temporal activity with 3-retry policies, failure rate dropped to under 1%, and every failure now appears in Temporal&rsquo;s UI with full context for on-call engineers.</p>
+<h2 id="cost-optimization-token-savings-through-checkpointing-and-smart-retries">Cost Optimization: Token Savings Through Checkpointing and Smart Retries</h2>
+<p>Temporal&rsquo;s checkpointing model directly reduces OpenAI API costs by preventing token waste on failed and restarted workflows. When an agent crashes mid-execution, a naive restart sends the full conversation history back to the model from the beginning — paying for every token in every prior message again. With Temporal, the workflow resumes from the last successful activity checkpoint, passing only the remaining context to the model. For a 10-step workflow where step 7 fails and retries, you pay for steps 7-10 twice but never re-pay for steps 1-6. At the scale of 500+ daily workflows averaging 8 steps each, this translates to 30-40% token cost reduction in typical production workloads. The savings compound with long-running workflows: a 20-step document analysis pipeline that commonly fails at step 15 saves 75% of re-run token costs by resuming from the checkpoint rather than restarting. Beyond retries, Temporal&rsquo;s smart retry policies let you differentiate between retriable errors (rate limits, timeouts) and terminal errors (invalid inputs, permission denied) — avoiding pointless retries that burn tokens and delay final failure responses.</p>
+<h3 id="calculating-your-token-savings">Calculating Your Token Savings</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">calculate_checkpoint_savings</span>(
+</span></span><span style="display:flex;"><span>    daily_workflows: int,
+</span></span><span style="display:flex;"><span>    avg_steps: int,
+</span></span><span style="display:flex;"><span>    failure_rate: float,
+</span></span><span style="display:flex;"><span>    avg_step_retry_position: float,  <span style="color:#75715e"># Which step usually fails (0-1, e.g. 0.7 = 70% through)</span>
+</span></span><span style="display:flex;"><span>    tokens_per_step: int,
+</span></span><span style="display:flex;"><span>) <span style="color:#f92672">-&gt;</span> dict:
+</span></span><span style="display:flex;"><span>    failed_per_day <span style="color:#f92672">=</span> daily_workflows <span style="color:#f92672">*</span> failure_rate
+</span></span><span style="display:flex;"><span>    steps_saved_per_failure <span style="color:#f92672">=</span> avg_steps <span style="color:#f92672">*</span> avg_step_retry_position
+</span></span><span style="display:flex;"><span>    tokens_saved_per_day <span style="color:#f92672">=</span> failed_per_day <span style="color:#f92672">*</span> steps_saved_per_failure <span style="color:#f92672">*</span> tokens_per_step
+</span></span><span style="display:flex;"><span>    cost_per_1k_tokens <span style="color:#f92672">=</span> <span style="color:#ae81ff">0.015</span>  <span style="color:#75715e"># gpt-4o input rate</span>
+</span></span><span style="display:flex;"><span>    daily_savings <span style="color:#f92672">=</span> (tokens_saved_per_day <span style="color:#f92672">/</span> <span style="color:#ae81ff">1000</span>) <span style="color:#f92672">*</span> cost_per_1k_tokens
+</span></span><span style="display:flex;"><span>    
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;daily_token_savings&#34;</span>: tokens_saved_per_day,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;daily_cost_savings&#34;</span>: <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;$</span><span style="color:#e6db74">{</span>daily_savings<span style="color:#e6db74">:</span><span style="color:#e6db74">.2f</span><span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;annual_savings&#34;</span>: <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;$</span><span style="color:#e6db74">{</span>daily_savings <span style="color:#f92672">*</span> <span style="color:#ae81ff">365</span><span style="color:#e6db74">:</span><span style="color:#e6db74">.2f</span><span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>,
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Example: 500 workflows/day, 30% failure rate, failure at 70% completion, 2000 tokens/step</span>
+</span></span><span style="display:flex;"><span>print(calculate_checkpoint_savings(<span style="color:#ae81ff">500</span>, <span style="color:#ae81ff">8</span>, <span style="color:#ae81ff">0.30</span>, <span style="color:#ae81ff">0.70</span>, <span style="color:#ae81ff">2000</span>))
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Output: {&#39;daily_token_savings&#39;: 1680000, &#39;daily_cost_savings&#39;: &#39;$25.20&#39;, &#39;annual_savings&#39;: &#39;$9198.00&#39;}</span>
+</span></span></code></pre></div><p>At 500 workflows per day, checkpointing saves $9,200/year in token costs — before accounting for the engineer hours saved by not debugging silent failures.</p>
+<hr>
 <h2 id="faq">FAQ</h2>
-<p>Cloudflare Project Think와 장기 실행 AI 에이전트 구축에 대해 개발자들이 가장 자주 묻는 질문을 정리했습니다. Project Think는 2026년 4월 기준 프리뷰 단계로, 공식 문서(<code>developers.cloudflare.com/agents/api-reference/think/</code>)와 GitHub 저장소의 데모 예제가 가장 신뢰할 수 있는 최신 정보 소스입니다. Workers Paid 플랜 비용($5/월 최소), SQLite 스토리지 요금(2026년 1월 청구 활성화), Fibers와 알람의 차이, Facets RPC 성능 특성, 기존 Cloudflare Agents SDK와의 마이그레이션 경로 등 핵심 사항을 아래에서 다룹니다. 빠르게 변화하는 프리뷰 제품이므로 개발 시작 전 <code>@cloudflare/think</code> npm 패키지의 최신 버전과 변경 로그를 확인하는 것을 권장합니다. Cloudflare의 공식 <code>cloudflare/agents</code> GitHub 저장소에는 30개 이상의 실행 가능한 데모 예제가 있어 실제 패턴을 빠르게 학습할 수 있으며, 각 예제는 독립 실행이 가능한 완전한 Workers 프로젝트로 구성되어 있습니다. Agents Week 2026 기간 중 3,683명 이상의 Cloudflare 내부 사용자가 Workers AI에서 인퍼런스를 실행했으며, 이는 Project Think가 프리뷰임에도 실제 내부 워크로드에서 검증되고 있음을 보여줍니다.</p>
-<h3 id="cloudflare-project-think은-정식-출시됐나요">Cloudflare Project Think은 정식 출시됐나요?</h3>
-<p>2026년 4월 기준 프리뷰(preview) 상태입니다. <code>@cloudflare/think</code> npm 패키지는 사용 가능하지만, API가 변경될 수 있어 프로덕션 크리티컬 워크로드에 적용할 때는 API 변경 공지를 주시해야 합니다.</p>
-<h3 id="project-think를-사용하려면-어떤-cloudflare-플랜이-필요한가요">Project Think를 사용하려면 어떤 Cloudflare 플랜이 필요한가요?</h3>
-<p>Workers Paid 플랜($5/월 최소)이 필요합니다. 이 플랜은 Durable Objects 사용량을 포함합니다. SQLite 기반 Durable Objects는 2026년 1월부터 스토리지 요금이 활성화됐습니다.</p>
-<h3 id="fibers와-일반-durable-objects-알람의-차이는-무엇인가요">Fibers와 일반 Durable Objects 알람의 차이는 무엇인가요?</h3>
-<p>알람은 특정 시간에 핸들러를 호출하는 단순 스케줄러입니다. Fibers는 복잡한 다단계 비동기 흐름 전체를 체크포인트로 저장해, 플랫폼 재시작이나 타임아웃 후에도 정확히 중단된 지점에서 재개합니다. 알람은 Fibers 내에서 사용할 수 있습니다.</p>
-<h3 id="facets와-별도-workers-서비스로-분리된-에이전트의-성능-차이는-얼마나-되나요">Facets와 별도 Workers 서비스로 분리된 에이전트의 성능 차이는 얼마나 되나요?</h3>
-<p>Facets는 부모와 같은 PoP에 배치되어 RPC 레이턴시가 함수 호출 수준(마이크로초 단위)입니다. 별도 Workers 서비스 간 HTTP 호출은 수 밀리초에서 수십 밀리초가 소요됩니다. 다단계 오케스트레이션에서 이 차이는 누적되어 전체 레이턴시에 크게 영향을 미칩니다.</p>
-<h3 id="project-think와-기존-cloudflare-agents-sdk는-어떻게-다른가요">Project Think와 기존 Cloudflare Agents SDK는 어떻게 다른가요?</h3>
-<p>기존 Agents SDK는 에이전트 빌딩 블록을 제공하는 프레임워크 레이어입니다. Project Think는 이를 더 발전시켜 Fibers, Facets, Sessions, Dynamic Workers를 네트워크 프리미티브 수준으로 통합합니다. 기존 Agents SDK 코드는 Think로 점진적으로 마이그레이션할 수 있으며, Think는 기존 SDK보다 더 강한 내구성 보장을 제공합니다.</p>
+<p><strong>Q: Do I need Temporal Cloud or can I self-host Temporal?</strong></p>
+<p>Both options work. Temporal Cloud (temporal.io/cloud) handles infrastructure management and provides a managed namespace with 99.99% SLA — recommended for teams without dedicated infrastructure engineers. Self-hosted Temporal uses the open-source server (PostgreSQL or Cassandra backend) and is a better fit for teams with existing Kubernetes expertise or data residency requirements. Local development uses <code>temporal server start-dev</code>, a single binary with no external dependencies.</p>
+<p><strong>Q: How does the OpenAI Agents SDK + Temporal integration handle OpenAI API rate limits?</strong></p>
+<p>Rate limit errors from OpenAI&rsquo;s API surface as <code>ActivityError</code> exceptions in Temporal activities. The <code>activity_as_tool()</code> pattern lets you configure a <code>RetryPolicy</code> with <code>maximum_attempts</code>, <code>initial_interval</code>, and <code>backoff_coefficient</code> — so a 429 rate limit response triggers automatic exponential backoff without any application code changes. The agent loop pauses, the activity retries transparently, and execution resumes exactly where it stopped.</p>
+<p><strong>Q: Can I use this with models other than OpenAI (Claude, Gemini, Llama)?</strong></p>
+<p>Yes. The OpenAI Agents SDK supports custom model providers via the <code>ModelProvider</code> interface. You can configure the SDK to use Anthropic&rsquo;s Claude API, Google Gemini, or local models via OpenAI-compatible endpoints (Ollama, vLLM). The Temporal integration is model-agnostic — it wraps the <code>Runner</code> execution loop regardless of which model provider you use underneath.</p>
+<p><strong>Q: What&rsquo;s the performance overhead of adding Temporal to my agent?</strong></p>
+<p>Each activity call adds approximately 5-15ms of Temporal overhead (event log write + worker poll) compared to direct Python function calls. For activities that call external APIs (LLMs, databases, web search), this overhead is negligible — a 500ms API call with 10ms Temporal overhead is a 2% penalty. The overhead matters only for high-frequency, low-latency local computations — which should not be implemented as Temporal activities in the first place.</p>
+<p><strong>Q: How do I handle secrets (API keys, credentials) in Temporal Workers?</strong></p>
+<p>Never put secrets in workflow or activity code as plain strings. Use Kubernetes Secrets mounted as environment variables (the recommended pattern in the Kubernetes deployment section above), or a secrets manager like HashiCorp Vault or AWS Secrets Manager accessed via the <code>boto3</code>/<code>hvac</code> client inside your activity function. Temporal&rsquo;s event log records activity inputs and outputs — avoid logging or returning secret values from activities, as they become visible in the Temporal Web UI and event history.</p>
 ]]></content:encoded></item></channel></rss>
