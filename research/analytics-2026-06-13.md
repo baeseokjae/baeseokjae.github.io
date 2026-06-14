@@ -3,7 +3,7 @@
 Source: Google Search Console via `agents/analyst/gsc_report.py daily`
 Site: https://baeseokjae.github.io/
 Data window: 2026-06-03 to 2026-06-10
-Latest GSC run: 2026-06-13 16:01:33 UTC
+Latest GSC run: 2026-06-13 22:03:58 UTC
 Note: GSC data uses the expected 3-day delay.
 
 ## Summary
