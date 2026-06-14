@@ -8,7 +8,7 @@
 
 ## GSC Performance
 
-Latest GSC run: 2026-06-14 10:08:31 UTC. No striking-distance keywords were found, so no SEO refresh issue was created.
+Latest GSC run: 2026-06-14 16:02:01 UTC. No striking-distance keywords were found, so no SEO refresh issue was created.
 
 ### Daily Report (7-day window)
 ```
