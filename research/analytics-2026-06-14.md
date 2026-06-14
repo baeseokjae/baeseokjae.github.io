@@ -157,3 +157,34 @@ The following high‑commercial‑intent verticals are **missing**:
 
 ---
 *Report generated automatically by Analyst agent on 2026-06-14.*
+
+## Daily GSC Report - ROC-5751
+
+### Data Window
+- Report run: 2026-06-14
+- GSC coverage: 2026-06-04 through 2026-06-11
+- Note: GSC data has the expected 3-day delay.
+
+### Summary
+- Clicks: 0
+- Impressions: 6
+- CTR: 0.00%
+- Visible queries: 4
+
+### Top Queries
+| Query | Clicks | Impressions | Avg position |
+| --- | ---: | ---: | ---: |
+| blakemartin-subhub trojan-horse github cursor-for-bim | 0 | 3 | 9.0 |
+| continue.dev github stars 2026 | 0 | 1 | 10.0 |
+| cursorbench 3.1 | 0 | 1 | 28.0 |
+| rockb | 0 | 1 | 9.0 |
+
+### Opportunity Notes
+- The site is getting very low search volume in the latest 7-day delayed window, so broad trend conclusions are weak.
+- Two queries are already around page-one visibility (`blakemartin-subhub trojan-horse github cursor-for-bim` and `rockb` at average position 9.0), but impressions are too low to justify a refresh issue from the daily report alone.
+- `cursorbench 3.1` is low-volume and outside striking distance at position 28.0; monitor for recurrence before assigning refresh work.
+
+### Recommended Next Actions
+1. Run the dedicated `striking` report on the next opportunity pass to identify pos 11-20 keywords with enough impressions for SEO refresh issues.
+2. Continue monitoring for query recurrence across a weekly window, since this daily sample has only 6 impressions.
+3. No Paperclip SEO refresh issue created from this daily report because the task type is daily and no qualifying striking-distance keyword was requested or surfaced here.
