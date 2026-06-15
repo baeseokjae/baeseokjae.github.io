@@ -8,7 +8,7 @@
 
 ## GSC Performance
 
-Latest GSC run: 2026-06-15 12:17:41 UTC. No striking-distance keywords were found, so no SEO refresh issue was created.
+Latest GSC run: 2026-06-15 16:02:12 UTC. No striking-distance keywords were found, so no SEO refresh issue was created.
 
 Heartbeat daily rerun: 2026-06-15 13:01:03 UTC. The 7-day GSC overview still shows 0 clicks, 3 impressions, and 0.00% CTR for 2026-06-05 through 2026-06-12.
 
