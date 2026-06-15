@@ -2,6 +2,7 @@
 
 ## GSC Data Window
 - Report run: 2026-06-15
+- Striking rerun: 2026-06-15T06:14:58Z
 - GSC coverage: 2026-06-05 through 2026-06-12
 - Note: GSC data has the expected 3-day delay.
 
