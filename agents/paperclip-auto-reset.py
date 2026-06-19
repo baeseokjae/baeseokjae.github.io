@@ -230,11 +230,12 @@ def get_issues():
     return issues
 
 # Default model for codex_local adapter in ChatGPT-backed environments.
-CODEX_MODEL = os.environ.get("CODEX_MODEL", "gpt-4.1")
+# Use a ChatGPT-supported model for automatic resets.
+CODEX_MODEL = os.environ.get("CODEX_MODEL", "gpt-5.5")
 
 def reset_agent(agent_id, agent_name):
     """Reset an agent from error to idle using Board API.
-    Uses codex_local adapter with a ChatGPT-compatible model (default: gpt-4.1)."""
+    Uses codex_local adapter with deepseek model."""
     payload = {
         "status": "idle",
         "adapterType": "codex_local",

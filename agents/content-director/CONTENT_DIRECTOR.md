@@ -63,8 +63,12 @@ You manage the blog content pipeline. You run ONLY via wakeup (cron or event). Y
 7. Update the parent Article issue to `in_progress` FIRST (only when first dispatching Research):
    ```
    PATCH /api/issues/{parentArticleId}
-   { "status": "in_progress" }
+   {
+     "status": "in_progress",
+     "assigneeAgentId": "2621e372-2118-4186-9070-0d62b7a2f332"
+   }
    ```
+   - Paperclip requires an assignee for `in_progress`; assign the parent Article to ContentDirector as the pipeline container owner.
    - If this fails (422 or 5xx): **DO NOT proceed**. Log the error and exit.
 8. Assign the appropriate subtask based on stage:
    - Research → Researcher: `"assigneeAgentId": "d88ae332-76ca-464a-98fd-ace75d19c4fe"`
@@ -74,7 +78,7 @@ You manage the blog content pipeline. You run ONLY via wakeup (cron or event). Y
    PATCH /api/issues/{subtaskId}
    { "status": "todo", "assigneeAgentId": "{agentId}" }
    ```
-   - If this fails: revert parent back to `backlog`, log the error, and exit.
+   - If this fails: revert parent back to `backlog`, clear the parent assignee, log the error, and exit.
    - **If dispatching Research**: after successful PATCH, immediately wake the Researcher so it starts without waiting for the next cron cycle:
      ```
      curl -sS -X POST "$PAPERCLIP_API_URL/api/agents/d88ae332-76ca-464a-98fd-ace75d19c4fe/wakeup" \

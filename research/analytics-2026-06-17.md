@@ -1,50 +1,35 @@
-# Blog Analytics Report — 2026-06-16
-
-## Daily GSC Run — 2026-06-16 13:01:39 UTC
-- **GSC window**: 2026-06-06 through 2026-06-13
-- **Clicks**: 0
-- **Impressions**: 2
-- **CTR**: 0.00%
-- **Top queries**:
-  - `continue.dev github stars 2026` — 0 clicks, 1 impression, avg position 10.0
-  - `rockb` — 0 clicks, 1 impression, avg position 9.0
-
-**Action**: No refresh issue created from this daily run. The assigned task type was `daily`; no position 11-20 striking-distance keywords were returned by the daily report output.
+# Blog Analytics Report — 2026-06-17
 
 ## Executive Summary
 - **Total published posts**: 637
-- **Researched, not yet published**: 81
-- **Pending Paperclip issues**: 1
-- **GSC impressions (7 days)**: 2
+- **Researched, not yet published**: 89
+- **Pending Paperclip issues**: 17
+- **GSC impressions (7 days)**: 1
 
 ## GSC Performance
 
-Latest GSC run: 2026-06-16 22:06:14 UTC. No striking-distance keywords were found, so no SEO refresh issue was created.
-
 ### Daily Report (7-day window)
 ```
-=== DAILY GSC REPORT (2026-06-06 ~ 2026-06-13) ===
-Clicks: 0 | Impressions: 2 | CTR: 0.00%
+=== DAILY GSC REPORT (2026-06-07 ~ 2026-06-14) ===
+Clicks: 0 | Impressions: 1 | CTR: 0.00%
 
 Top Queries:
-  [0c/1i pos:10.0] continue.dev github stars 2026
   [0c/1i pos:9.0] rockb
 ```
 
 ### Weekly Report
 ```
-=== DAILY GSC REPORT (2026-06-06 ~ 2026-06-13) ===
-Clicks: 0 | Impressions: 2 | CTR: 0.00%
+=== DAILY GSC REPORT (2026-06-07 ~ 2026-06-14) ===
+Clicks: 0 | Impressions: 1 | CTR: 0.00%
 
 Top Queries:
-  [0c/1i pos:10.0] continue.dev github stars 2026
   [0c/1i pos:9.0] rockb
 
 === STRIKING DISTANCE (pos 11-20, near page 1) ===
 None found yet.
 
-=== PAGE PERFORMANCE (2026-06-06 ~ 2026-06-13) ===
-  [0c/80i] /
+=== PAGE PERFORMANCE (2026-06-07 ~ 2026-06-14) ===
+  [2c/87i] /
 ```
 
 ### Striking Distance (positions 11-20)
@@ -55,13 +40,13 @@ None found yet.
 
 ### Page Performance
 ```
-=== PAGE PERFORMANCE (2026-06-06 ~ 2026-06-13) ===
-  [0c/80i] /
+=== PAGE PERFORMANCE (2026-06-07 ~ 2026-06-14) ===
+  [2c/87i] /
 ```
 
 ## Content Pipeline Status
 
-**Topics by status**: {'published': 637, 'rejected': 8, 'researched': 81, 'queued_throttled': 3012, 'writing': 1, 'queued': 16}
+**Topics by status**: {'published': 637, 'rejected': 9, 'researched': 89, 'queued_throttled': 3181, 'writing': 1}
 
 ### Researched but Not Published
 - `ai-coding-productivity-statistics-2026` — AI Coding Productivity Statistics 2026: What the Data Says
@@ -145,9 +130,26 @@ None found yet.
 - `agent-card-entitlements-discovery-guide-2026` — Agent Card Entitlements Guide 2026: Control Who Can Discover A2A Agents
 - `crossmint-agentic-payments-protocols-comparison-2026` — Crossmint Agentic Payments Protocols Comparison 2026
 - `agentic-commerce-protocol-support-matrix-2026` — Agentic Commerce Protocol Support Matrix 2026
+- `arcade-agent-authorization-architecture-guide-2026` — Arcade Agent Authorization Architecture Guide 2026
+- `agentops-policy-metrics-guide-2026` — AgentOps Policy Metrics Guide 2026: Track Memory, Gateway, Identity, and Policy Controls
+- `trigger-dev-ai-agents-durable-tasks-guide-2026` — Trigger.dev AI Agents Durable Tasks Guide 2026
+- `ai-agent-development-cost-breakdown-2026` — AI Agent Development Cost Breakdown 2026
+- `baml-structured-outputs-false-confidence-guide-2026` — BAML Structured Outputs False Confidence Guide 2026
+- `github-copilot-agent-mode-vs-codex-cloud-2026` — GitHub Copilot Agent Mode vs Codex Cloud 2026
+- `microsoft-agent-framework-vs-langgraph-2026` — Microsoft Agent Framework vs LangGraph 2026
+- `agent-runtime-state-persistence-guide-2026` — Agent Runtime State Persistence Guide 2026
 
 ### Pending Paperclip Issues
-- **[ROC-5160]** Homepage CTR Optimization - 0% Click-Through Rate (todo)
+- **[ROC-5922]** Dispatch Next Article (blocked)
+- **[ROC-5921]** [Auto-Reset] Analyst recurring error — 3 resets in 1h (todo)
+- **[ROC-5920]** [Auto-Reset] ContentDirector recurring error — 3 resets in 1h (todo)
+- **[ROC-5919]** [Auto-Reset] Strategist recurring error — 3 resets in 1h (todo)
+- **[ROC-5918]** [Auto-Reset] Analyst recurring error — 3 resets in 1h (todo)
+- **[ROC-5917]** [Auto-Reset] ContentDirector recurring error — 3 resets in 1h (todo)
+- **[ROC-5916]** [Auto-Reset] Strategist recurring error — 3 resets in 1h (todo)
+- **[ROC-5915]** [Auto-Reset] ContentDirector recurring error — 3 resets in 1h (todo)
+- **[ROC-5914]** [Auto-Reset] Analyst recurring error — 3 resets in 1h (todo)
+- **[ROC-5913]** [Auto-Reset] Strategist recurring error — 3 resets in 1h (todo)
 
 ## Content Gap Analysis
 
@@ -169,4 +171,4 @@ The following high‑commercial‑intent verticals are **missing**:
 5. **Ensure internal linking** across published posts.
 
 ---
-*Report generated automatically by Analyst agent on 2026-06-16.*
+*Report generated automatically by Analyst agent on 2026-06-17.*

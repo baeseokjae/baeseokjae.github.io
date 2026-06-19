@@ -1,50 +1,35 @@
-# Blog Analytics Report — 2026-06-16
-
-## Daily GSC Run — 2026-06-16 13:01:39 UTC
-- **GSC window**: 2026-06-06 through 2026-06-13
-- **Clicks**: 0
-- **Impressions**: 2
-- **CTR**: 0.00%
-- **Top queries**:
-  - `continue.dev github stars 2026` — 0 clicks, 1 impression, avg position 10.0
-  - `rockb` — 0 clicks, 1 impression, avg position 9.0
-
-**Action**: No refresh issue created from this daily run. The assigned task type was `daily`; no position 11-20 striking-distance keywords were returned by the daily report output.
+# Blog Analytics Report — 2026-06-18
 
 ## Executive Summary
 - **Total published posts**: 637
-- **Researched, not yet published**: 81
-- **Pending Paperclip issues**: 1
-- **GSC impressions (7 days)**: 2
+- **Researched, not yet published**: 97
+- **Pending Paperclip issues**: 233
+- **GSC impressions (7 days)**: 1
 
 ## GSC Performance
 
-Latest GSC run: 2026-06-16 22:06:14 UTC. No striking-distance keywords were found, so no SEO refresh issue was created.
-
 ### Daily Report (7-day window)
 ```
-=== DAILY GSC REPORT (2026-06-06 ~ 2026-06-13) ===
-Clicks: 0 | Impressions: 2 | CTR: 0.00%
+=== DAILY GSC REPORT (2026-06-08 ~ 2026-06-15) ===
+Clicks: 0 | Impressions: 1 | CTR: 0.00%
 
 Top Queries:
-  [0c/1i pos:10.0] continue.dev github stars 2026
   [0c/1i pos:9.0] rockb
 ```
 
 ### Weekly Report
 ```
-=== DAILY GSC REPORT (2026-06-06 ~ 2026-06-13) ===
-Clicks: 0 | Impressions: 2 | CTR: 0.00%
+=== DAILY GSC REPORT (2026-06-08 ~ 2026-06-15) ===
+Clicks: 0 | Impressions: 1 | CTR: 0.00%
 
 Top Queries:
-  [0c/1i pos:10.0] continue.dev github stars 2026
   [0c/1i pos:9.0] rockb
 
 === STRIKING DISTANCE (pos 11-20, near page 1) ===
 None found yet.
 
-=== PAGE PERFORMANCE (2026-06-06 ~ 2026-06-13) ===
-  [0c/80i] /
+=== PAGE PERFORMANCE (2026-06-08 ~ 2026-06-15) ===
+  [3c/92i] /
 ```
 
 ### Striking Distance (positions 11-20)
@@ -55,13 +40,13 @@ None found yet.
 
 ### Page Performance
 ```
-=== PAGE PERFORMANCE (2026-06-06 ~ 2026-06-13) ===
-  [0c/80i] /
+=== PAGE PERFORMANCE (2026-06-08 ~ 2026-06-15) ===
+  [3c/92i] /
 ```
 
 ## Content Pipeline Status
 
-**Topics by status**: {'published': 637, 'rejected': 8, 'researched': 81, 'queued_throttled': 3012, 'writing': 1, 'queued': 16}
+**Topics by status**: {'published': 637, 'rejected': 9, 'researched': 97, 'queued_throttled': 3173, 'writing': 1}
 
 ### Researched but Not Published
 - `ai-coding-productivity-statistics-2026` — AI Coding Productivity Statistics 2026: What the Data Says
@@ -145,9 +130,34 @@ None found yet.
 - `agent-card-entitlements-discovery-guide-2026` — Agent Card Entitlements Guide 2026: Control Who Can Discover A2A Agents
 - `crossmint-agentic-payments-protocols-comparison-2026` — Crossmint Agentic Payments Protocols Comparison 2026
 - `agentic-commerce-protocol-support-matrix-2026` — Agentic Commerce Protocol Support Matrix 2026
+- `arcade-agent-authorization-architecture-guide-2026` — Arcade Agent Authorization Architecture Guide 2026
+- `agentops-policy-metrics-guide-2026` — AgentOps Policy Metrics Guide 2026: Track Memory, Gateway, Identity, and Policy Controls
+- `trigger-dev-ai-agents-durable-tasks-guide-2026` — Trigger.dev AI Agents Durable Tasks Guide 2026
+- `ai-agent-development-cost-breakdown-2026` — AI Agent Development Cost Breakdown 2026
+- `baml-structured-outputs-false-confidence-guide-2026` — BAML Structured Outputs False Confidence Guide 2026
+- `github-copilot-agent-mode-vs-codex-cloud-2026` — GitHub Copilot Agent Mode vs Codex Cloud 2026
+- `microsoft-agent-framework-vs-langgraph-2026` — Microsoft Agent Framework vs LangGraph 2026
+- `nango-vs-composio-vs-arcade-agent-auth-2026` — Nango vs Composio vs Arcade Agent Auth 2026
+- `long-horizon-document-agents-guide-2026` — Long Horizon Document Agents Guide 2026
+- `llamaindex-bright-data-web-agent-guide-2026` — LlamaIndex Bright Data Web Agent Guide 2026
+- `ai-agent-web-context-pipeline-guide-2026` — AI Agent Web Context Pipeline Guide 2026
+- `durable-ai-agent-checkpointing-guide-2026` — Durable AI Agent Checkpointing Guide 2026
+- `inngest-vs-temporal-ai-agent-workflows-2026` — Inngest vs Temporal AI Agent Workflows 2026
+- `diagrid-durable-workflows-ai-agents-guide-2026` — Diagrid Durable Workflows for AI Agents Guide 2026
+- `async-ai-agent-workflows-failure-recovery-2026` — Async AI Agent Workflows Failure Recovery 2026
+- `agent-runtime-state-persistence-guide-2026` — Agent Runtime State Persistence Guide 2026
 
 ### Pending Paperclip Issues
-- **[ROC-5160]** Homepage CTR Optimization - 0% Click-Through Rate (todo)
+- **[ROC-6345]** [Auto-Reset] Analyst recurring error — 3 resets in 1h (todo)
+- **[ROC-6344]** [Auto-Reset] ContentDirector recurring error — 3 resets in 1h (todo)
+- **[ROC-6343]** [Auto-Reset] Writer recurring error — 3 resets in 1h (todo)
+- **[ROC-6342]** [Auto-Reset] Strategist recurring error — 3 resets in 1h (todo)
+- **[ROC-6341]** [Auto-Reset] Researcher recurring error — 3 resets in 1h (todo)
+- **[ROC-6340]** [Auto-Reset] Publisher recurring error — 3 resets in 1h (todo)
+- **[ROC-6339]** [Auto-Reset] Analyst recurring error — 3 resets in 1h (todo)
+- **[ROC-6338]** [Auto-Reset] ContentDirector recurring error — 3 resets in 1h (todo)
+- **[ROC-6337]** [Auto-Reset] Writer recurring error — 3 resets in 1h (todo)
+- **[ROC-6336]** [Auto-Reset] Strategist recurring error — 3 resets in 1h (todo)
 
 ## Content Gap Analysis
 
@@ -169,4 +179,4 @@ The following high‑commercial‑intent verticals are **missing**:
 5. **Ensure internal linking** across published posts.
 
 ---
-*Report generated automatically by Analyst agent on 2026-06-16.*
+*Report generated automatically by Analyst agent on 2026-06-18.*
