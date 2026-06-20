@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Pi-Agent-Core on RockB</title><link>https://baeseokjae.github.io/tags/pi-agent-core/</link><description>Recent content in Pi-Agent-Core on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sat, 20 Jun 2026 12:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/pi-agent-core/index.xml" rel="self" type="application/rss+xml"/><item><title>Pi Agent Core Guide 2026: The Runtime-Agnostic TypeScript Agent Harness Behind Flue and Agno</title><link>https://baeseokjae.github.io/posts/pi-agent-core-guide-2026/</link><pubDate>Sat, 20 Jun 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/pi-agent-core-guide-2026/</guid><description>Pi Agent Core is a minimal TypeScript agent harness by Mario Zechner (2.8M weekly npm downloads). This guide covers its architecture, the Flue and Agno frameworks built on top, Cloudflare integration, and how it compares to Claude Code SDK and OpenAI Agents SDK.</description><content:encoded><![CDATA[<p>Pi Agent Core (<code>pi-agent-core</code>) is a minimal, runtime-agnostic TypeScript agent harness by Mario Zechner with 2.8 million weekly npm downloads. It provides the foundational agent loop — tool execution, state management, and event streaming — without coupling you to any LLM provider, runtime environment, or framework. Two major ecosystems build on it: Flue (from the Astro team) as a full-stack agent framework, and Agno as a production agent platform SDK. Cloudflare adopted Pi as the harness in their three-layer agent architecture announced June 17, 2026. If you&rsquo;re building agents in TypeScript and want to understand the layer between your LLM API calls and your framework, this is where you start.</p>
+<hr>
+<h2 id="what-is-pi-agent-core-and-why-does-it-exist">What Is Pi Agent Core and Why Does It Exist?</h2>
+<p>Pi Agent Core is a deliberately minimal agent harness that implements exactly one thing: the perceive-reason-act loop that drives every AI agent. It sits between <code>pi-ai</code> (the unified multi-provider LLM API layer) and higher-level frameworks like Flue and Agno. Mario Zechner created it because existing agent SDKs were either tied to a specific LLM provider (Claude Code SDK, OpenAI Agents SDK) or so heavily abstracted that you couldn&rsquo;t inspect or override the core loop without wading through layers of indirection (LangChain). The Pi philosophy is that an agent harness should be small enough to read in one sitting, portable across runtimes, and designed so the agent can extend itself — not require you to learn a new framework abstraction for every feature.</p>
+<p>The npm package weighs under 10KB gzipped. The core agent loop fits in roughly 300 lines of TypeScript. The system prompt is the shortest of any major agent harness — Zechner&rsquo;s design principle is that the harness should stay out of the way and let the agent&rsquo;s actual instructions drive behavior.</p>
+<h2 id="how-does-pi-agent-cores-architecture-work">How Does Pi Agent Core&rsquo;s Architecture Work?</h2>
+<p>Pi Agent Core&rsquo;s architecture follows a clean three-layer model that separates concerns without overlapping responsibilities.</p>
+<h3 id="pi-ai-the-unified-llm-api-layer">pi-ai: The Unified LLM API Layer</h3>
+<p>Pi-ai is the transport layer — a unified multi-provider API that normalizes calls to OpenAI, Anthropic, Google Gemini, AWS Bedrock, and local Ollama models under a single interface. You define your provider once, and pi-agent-core calls it without caring which backend is running. This is analogous to how the VSCode Language Server Protocol abstracts editor-specific features, but for LLM providers. Switching from Claude to GPT-4 to Gemini requires changing one line in your config, not rewriting your agent&rsquo;s tool calls.</p>
+<h3 id="pi-agent-core-the-agent-harness">pi-agent-core: The Agent Harness</h3>
+<p>The core harness implements five things:</p>
+<ol>
+<li><strong>Stateful agent runtime</strong> — maintains conversation context, tool call history, and session state across turns</li>
+<li><strong>Tool execution engine</strong> — parses and dispatches tool calls from LLM responses, returns results back into context</li>
+<li><strong>Event streaming</strong> — emits structured events for every step (tool call started, tool call completed, error, state change) so frameworks and UIs can react</li>
+<li><strong>Steering and follow-up queues</strong> — manages the &ldquo;the model wants to do ten things at once&rdquo; problem by queueing and prioritizing tool calls</li>
+<li><strong>Hooks system</strong> — <code>beforeToolCall</code> and <code>afterToolCall</code> hooks let you intercept every interaction with the runtime</li>
+</ol>
+<p>What Pi intentionally leaves out: no MCP support built in, no sub-agent spawning, no plan mode, no built-in sandboxing. You add these in the framework layer or via extensions. The default tool set is exactly four tools: Read, Write, Edit, Bash. That&rsquo;s it. You extend it by writing extensions — TypeScript functions that wrap new capabilities.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">createAgent</span>, <span style="color:#a6e22e">tool</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#39;pi-agent-core&#39;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">piAi</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#39;pi-ai&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">agent</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">createAgent</span>({
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">model</span>: <span style="color:#66d9ef">piAi</span>(<span style="color:#e6db74">&#39;anthropic&#39;</span>, { <span style="color:#a6e22e">model</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;claude-sonnet-4-20260514&#39;</span> }),
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">systemPrompt</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;You are a code reviewer. Analyze pull requests for security issues.&#39;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">tools</span><span style="color:#f92672">:</span> [
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">tool</span>(<span style="color:#e6db74">&#39;readFile&#39;</span>, <span style="color:#66d9ef">async</span> (<span style="color:#a6e22e">path</span>: <span style="color:#66d9ef">string</span>) <span style="color:#f92672">=&gt;</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">fs</span>.<span style="color:#a6e22e">readFile</span>(<span style="color:#a6e22e">path</span>, <span style="color:#e6db74">&#39;utf-8&#39;</span>)),
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">tool</span>(<span style="color:#e6db74">&#39;listFiles&#39;</span>, <span style="color:#66d9ef">async</span> (<span style="color:#a6e22e">dir</span>: <span style="color:#66d9ef">string</span>) <span style="color:#f92672">=&gt;</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">fs</span>.<span style="color:#a6e22e">readdir</span>(<span style="color:#a6e22e">dir</span>)),
+</span></span><span style="display:flex;"><span>  ],
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">hooks</span><span style="color:#f92672">:</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">beforeToolCall</span><span style="color:#f92672">:</span> (<span style="color:#a6e22e">call</span>) <span style="color:#f92672">=&gt;</span> {
+</span></span><span style="display:flex;"><span>      <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">`Calling </span><span style="color:#e6db74">${</span><span style="color:#a6e22e">call</span>.<span style="color:#a6e22e">tool</span><span style="color:#e6db74">}</span><span style="color:#e6db74"> with`</span>, <span style="color:#a6e22e">call</span>.<span style="color:#a6e22e">args</span>)
+</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">call</span>
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>  },
+</span></span><span style="display:flex;"><span>})
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">for</span> <span style="color:#66d9ef">await</span> (<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">event</span> <span style="color:#66d9ef">of</span> <span style="color:#a6e22e">agent</span>.<span style="color:#a6e22e">run</span>(<span style="color:#e6db74">&#39;Review the PR in /workspace/pr-42&#39;</span>)) {
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#a6e22e">event</span>.<span style="color:#66d9ef">type</span>, <span style="color:#a6e22e">event</span>.<span style="color:#a6e22e">data</span>)
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>The <code>for await</code> event stream is the key design choice — it makes Pi composable. Flue wraps this stream into HTTP responses, WebSocket pushes, and file outputs. Agno maps it into its FastAPI runtime. Cloudflare pipes it through Durable Objects for crash recovery.</p>
+<h2 id="how-do-flue-and-agno-build-on-pi-agent-core">How Do Flue and Agno Build on Pi Agent Core?</h2>
+<p>This is where the ecosystem differentiation becomes useful. Pi is the harness. Flue and Agno are frameworks designed for fundamentally different use cases, and understanding which one you need starts with understanding what Pi gives them both.</p>
+<h3 id="flue-full-stack-agent-framework-from-the-astro-team">Flue: Full-Stack Agent Framework from the Astro Team</h3>
+<p>Flue, built by the Astro team (the same people behind the popular static site generator), treats Pi Agent Core as its execution engine and builds a full framework on top. It adds:</p>
+<ul>
+<li><strong>Declarative agent definitions</strong> — You describe what the agent knows (Markdown files), not what it does (TypeScript code). Agent skills are <code>.md</code> files read at runtime, meaning the same skill file works in Claude Code, Cursor, and production Flue deployments.</li>
+<li><strong>Multi-target deployment</strong> — One codebase deploys to Node.js, Cloudflare Workers, GitHub Actions, or GitLab CI. The framework handles the runtime adaptation; your agent code doesn&rsquo;t change.</li>
+<li><strong>Durable streams</strong> — Append-only event logs that survive process crashes. If your agent runs for 20 minutes and the server restarts at minute 17, Flue replays the event log from the last durable checkpoint — not from the beginning.</li>
+<li><strong>Virtual sandbox</strong> — A <code>just-bash</code> backend plus Cloudflare Shell provide sandboxed code execution without Docker overhead.</li>
+<li><strong>CLI</strong> — <code>npx flue dev</code>, <code>npx flue deploy</code>, <code>npx flue logs</code> — the Astro team&rsquo;s DX sensibility applied to agents.</li>
+</ul>
+<p>Flue is the right choice when you want a full opinionated framework, you&rsquo;re comfortable with TypeScript, and you want to deploy the same agent to multiple runtimes without rewriting it.</p>
+<h3 id="agno-production-agent-platform-sdk">Agno: Production Agent Platform SDK</h3>
+<p>Agno (disclosure: I covered its architecture in depth in the <a href="/posts/agno-phidata-framework-guide-2026/">Agno Framework Guide</a>) takes Pi in a different direction. Instead of wrapping it in a TypeScript framework, Agno uses Pi as the execution core for its Python SDK. Yes — Pi is TypeScript, Agno is Python. Agno wraps Pi&rsquo;s event stream via a bridge layer and exposes it as Python agent primitives:</p>
+<ul>
+<li><strong>Framework-agnostic agent definitions</strong> — Wrap Claude SDK, LangChain, or any agent framework. Pi handles the core loop; Agno handles connectivity to 100+ integrations.</li>
+<li><strong>AgentOS</strong> — FastAPI-based production runtime with 50+ endpoints, SSE, WebSocket, session persistence, and RBAC.</li>
+<li><strong>Human-in-the-loop</strong> — Built-in approval system for sensitive tool calls.</li>
+<li><strong>OpenTelemetry</strong> — Production observability out of the box.</li>
+<li><strong>Session persistence</strong> — Agents store state in your own PostgreSQL or SQLite database.</li>
+</ul>
+<table>
+  <thead>
+      <tr>
+          <th>Feature</th>
+          <th>Flue</th>
+          <th>Agno</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Language</td>
+          <td>TypeScript</td>
+          <td>Python (wrap via bridge)</td>
+      </tr>
+      <tr>
+          <td>Deployment targets</td>
+          <td>Node, Cloudflare, GitHub Actions, GitLab CI</td>
+          <td>FastAPI / AgentOS</td>
+      </tr>
+      <tr>
+          <td>Agent definition</td>
+          <td>Markdown files (skills)</td>
+          <td>Python SDK with tools</td>
+      </tr>
+      <tr>
+          <td>Sandbox</td>
+          <td>Virtual (just-bash, Cloudflare Shell)</td>
+          <td>Docker / AgentOS</td>
+      </tr>
+      <tr>
+          <td>Observability</td>
+          <td>Durable streams + logs</td>
+          <td>OpenTelemetry native</td>
+      </tr>
+      <tr>
+          <td>Control plane</td>
+          <td>None (BYO)</td>
+          <td>AgentOS + hosted UI</td>
+      </tr>
+      <tr>
+          <td>Community</td>
+          <td>5K GitHub stars</td>
+          <td>40K+ GitHub stars</td>
+      </tr>
+      <tr>
+          <td>Best for</td>
+          <td>Teams that want runtime portability + skills in markdown</td>
+          <td>Teams that want Python SDK + production infra</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="why-did-cloudflare-adopt-pi-as-their-agent-harness">Why Did Cloudflare Adopt Pi as Their Agent Harness?</h2>
+<p>The June 17, 2026 announcement from Cloudflare opened their Agents SDK to any harness, with Flue as the first officially supported framework. The architecture uses a three-layer model:</p>
+<ul>
+<li><strong>Framework layer</strong>: Flue — project structure, conventions, CLI, DX</li>
+<li><strong>Harness layer</strong>: Pi / Project Think — agentic loop that calls tools, reads results, manages context</li>
+<li><strong>Runtime layer</strong>: Cloudflare Agents SDK — compute, state, storage primitives (durable execution, sandboxing)</li>
+</ul>
+<p>Cloudflare&rsquo;s bet is that separating these concerns lets each layer evolve independently. The runtime layer provides primitives like <code>runFiber</code>/<code>stash</code>/<code>onFiberRecovered</code> for durable execution, Code Mode (dynamic Worker isolates with 10ms cold start), and Shell (SQLite-backed durable virtual filesystem). The harness layer (Pi) doesn&rsquo;t need to know about any of this — it just calls tools and streams events. Flue maps Pi&rsquo;s event stream to Cloudflare&rsquo;s Durable Objects transparently.</p>
+<p>This matters because Cloudflare validated that Pi&rsquo;s minimal design is a feature, not a limitation. A harness that tries to do everything — built-in MCP, sub-agents, plan mode, sandboxing — can&rsquo;t slot cleanly into a platform that provides those capabilities natively. Pi&rsquo;s &ldquo;just the loop&rdquo; philosophy made it the right abstraction boundary.</p>
+<h2 id="how-does-pi-compare-to-other-agent-harnesses-in-2026">How Does Pi Compare to Other Agent Harnesses in 2026?</h2>
+<p>I&rsquo;ve worked with Claude Code SDK, OpenAI Agents SDK, and OpenHarness in production. Here&rsquo;s how Pi positions against them:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Dimension</th>
+          <th>Pi Agent Core</th>
+          <th>Claude Code SDK</th>
+          <th>OpenAI Agents SDK</th>
+          <th>OpenHarness</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Provider lock-in</strong></td>
+          <td>None (pi-ai abstracts all)</td>
+          <td>Anthropic only</td>
+          <td>OpenAI only</td>
+          <td>None</td>
+      </tr>
+      <tr>
+          <td><strong>Language</strong></td>
+          <td>TypeScript</td>
+          <td>TypeScript</td>
+          <td>Python / TypeScript</td>
+          <td>Python</td>
+      </tr>
+      <tr>
+          <td><strong>Core size</strong></td>
+          <td>~300 lines</td>
+          <td>~15K+ lines</td>
+          <td>~10K+ lines</td>
+          <td>~30K+ lines</td>
+      </tr>
+      <tr>
+          <td><strong>MCP</strong></td>
+          <td>Not built-in (add via extension)</td>
+          <td>Native</td>
+          <td>Native</td>
+          <td>Native</td>
+      </tr>
+      <tr>
+          <td><strong>Event streaming</strong></td>
+          <td>First-class</td>
+          <td>SDK-specific</td>
+          <td>SDK-specific</td>
+          <td>Debug-only</td>
+      </tr>
+      <tr>
+          <td><strong>Sub-agents</strong></td>
+          <td>Not built-in</td>
+          <td>Yes</td>
+          <td>Yes</td>
+          <td>Yes</td>
+      </tr>
+      <tr>
+          <td><strong>Runtime-agnostic</strong></td>
+          <td>Yes (Node, CF, Deno)</td>
+          <td>Node only</td>
+          <td>Python runtime</td>
+          <td>Python only</td>
+      </tr>
+      <tr>
+          <td><strong>npm downloads/week</strong></td>
+          <td>2.8M</td>
+          <td>1.2M (est.)</td>
+          <td>900K (est.)</td>
+          <td>40K (est.)</td>
+      </tr>
+      <tr>
+          <td><strong>Default tools</strong></td>
+          <td>4 (Read, Write, Edit, Bash)</td>
+          <td>~20</td>
+          <td>~15</td>
+          <td>43</td>
+      </tr>
+  </tbody>
+</table>
+<p>The &ldquo;agent extends itself&rdquo; philosophy — where Pi agents write their own extensions during execution — is the most distinctive capability. If your agent needs a new tool to complete its task, it can write the extension, register it, and continue. No other harness treats extension-authoring as a runtime primitive.</p>
+<p><a href="/posts/openharness-universal-agent-harness-2026/">OpenHarness</a> takes the opposite approach: more built-in tools, MCP-native, and a 10-subsystem architecture. It&rsquo;s better if you want everything out of the box. Pi is better if you want a core you understand completely and a framework layer (Flue, Agno, or your own) that adds exactly what you need.</p>
+<h2 id="when-should-you-use-pi-agent-core-vs-a-higher-level-framework">When Should You Use Pi Agent Core vs. a Higher-Level Framework?</h2>
+<p>Three scenarios where Pi makes the most sense:</p>
+<ol>
+<li>
+<p><strong>You&rsquo;re building a custom agent framework</strong> — If you&rsquo;re shipping a product that wraps agents (like a customer support platform or a code review bot), Pi gives you the loop without dictating your architecture. You own the framework layer above it.</p>
+</li>
+<li>
+<p><strong>You need multi-provider portability</strong> — If your architecture requires running different models for different tasks (Claude for reasoning, GPT-4 for structured output, Gemini for multimodal), Pi&rsquo;s provider abstraction handles this without framework overhead.</p>
+</li>
+<li>
+<p><strong>You&rsquo;re deploying to edge runtimes</strong> — Cloudflare Workers, Deno, and Bun all run Pi without modification. Most SDKs assume Node.js or a Python runtime.</p>
+</li>
+</ol>
+<p>For everything else — single-agent coding assistants, research agents, simple automation — Flue or Agno will save you time. Pi is the foundation layer, not the end product.</p>
+<h2 id="faq">FAQ</h2>
+<h3 id="is-pi-agent-core-production-ready">Is Pi Agent Core production-ready?</h3>
+<p>Yes. 2.8 million weekly npm downloads, adopted by Cloudflare as their reference harness, and powering production deployments of Flue and Agno. The core is small, well-tested, and has been in active development since late 2024.</p>
+<h3 id="does-pi-agent-core-support-python">Does Pi Agent Core support Python?</h3>
+<p>No — Pi is TypeScript/JavaScript only. However, frameworks like Agno bridge Pi&rsquo;s event stream into Python via a runtime bridge. If you need a pure Python agent harness, <a href="/posts/openharness-universal-agent-harness-2026/">OpenHarness</a> or LangGraph are better options.</p>
+<h3 id="how-is-pi-different-from-claude-code-sdk">How is Pi different from Claude Code SDK?</h3>
+<p>Claude Code SDK is Anthropic&rsquo;s harness for building Claude-only agents. Pi is provider-agnostic — you can swap from Claude to GPT-4 to Gemini by changing one config line. Pi also has the &ldquo;agent extends itself&rdquo; runtime primitive and is open-source, whereas Claude Code SDK is not fully open.</p>
+<h3 id="does-pi-work-with-mcp-servers">Does Pi work with MCP servers?</h3>
+<p>Not natively. Pi intentionally does not include built-in MCP support — it provides extension hooks where you can add MCP connectivity via the extension system. Flue adds native MCP support at the framework layer. If MCP is a requirement, start with Flue rather than raw Pi.</p>
+<h3 id="can-i-use-pi-agent-core-with-non-llm-agents">Can I use Pi Agent Core with non-LLM agents?</h3>
+<p>The harness is designed for LLM-driven agents — the perceive-reason-act loop assumes a model that generates tool calls from context. If you&rsquo;re building rule-based automation or deterministic workflows, a traditional workflow engine (Temporal, Airflow) is more appropriate. Pi shines where you need an LLM deciding which tools to call and in what order.</p>
+]]></content:encoded></item></channel></rss>
