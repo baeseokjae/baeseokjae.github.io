@@ -1,14 +1,20 @@
 ---
-title: "AI-Generated Code Security Statistics 2026: Data from 8+ Major Studies"
-date: 2026-05-26T22:18:45+00:00
-tags: ["AI security", "code security", "vulnerability statistics", "DevSecOps", "GitHub Copilot"]
-description: "45% of AI-generated code contains security vulnerabilities. We analyzed 8+ major 2026 studies to reveal the real risk data developers need."
-draft: false
 cover:
-  image: "/images/ai-generated-code-security-statistics-2026.png"
-  alt: "AI-Generated Code Security Statistics 2026: Data from 8+ Major Studies"
+  alt: 'AI-Generated Code Security Statistics 2026: Data from 8+ Major Studies'
+  image: /images/ai-generated-code-security-statistics-2026.png
   relative: false
-schema: "schema-ai-generated-code-security-statistics-2026"
+date: 2026-05-26 22:18:45+00:00
+description: 45% of AI-generated code contains security vulnerabilities. We analyzed
+  8+ major 2026 studies to reveal the real risk data developers need.
+draft: false
+schema: schema-ai-generated-code-security-statistics-2026
+tags:
+- AI security
+- code security
+- vulnerability statistics
+- DevSecOps
+- GitHub Copilot
+title: 'AI-Generated Code Security Statistics 2026: Data from 8+ Major Studies'
 ---
 
 AI-generated code security statistics reveal a growing crisis: 42% of all code is now AI-generated or AI-assisted, yet only 12% of organizations apply the same security standards to it as traditional code. Across 8+ major studies, vulnerability rates range from 25% to 78% depending on methodology — but every study agrees the risk is real and getting worse.

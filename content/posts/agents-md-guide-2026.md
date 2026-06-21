@@ -1,14 +1,21 @@
 ---
-title: "AGENTS.md Guide 2026: How to Write AI Agent Instructions for Every Tool"
-date: 2026-04-18T06:11:17+00:00
-tags: ["AGENTS.md", "AI coding", "developer tools", "Claude Code", "Cursor", "Codex"]
-description: "AGENTS.md is the open standard for AI agent instructions that cuts agent runtime 28.6% and works across Cursor, Claude Code, Windsurf, and 20+ tools."
-draft: false
 cover:
-  image: "/images/agents-md-guide-2026.png"
-  alt: "AGENTS.md Guide 2026: How to Write AI Agent Instructions for Every Tool"
+  alt: 'AGENTS.md Guide 2026: How to Write AI Agent Instructions for Every Tool'
+  image: /images/agents-md-guide-2026.png
   relative: false
-schema: "schema-agents-md-guide-2026"
+date: 2026-04-18 06:11:17+00:00
+description: AGENTS.md is the open standard for AI agent instructions that cuts agent
+  runtime 28.6% and works across Cursor, Claude Code, Windsurf, and 20+ tools.
+draft: false
+schema: schema-agents-md-guide-2026
+tags:
+- AGENTS.md
+- AI coding
+- developer tools
+- Claude Code
+- Cursor
+- Codex
+title: 'AGENTS.md Guide 2026: How to Write AI Agent Instructions for Every Tool'
 ---
 
 AGENTS.md is a markdown file placed at your repository root that gives AI coding agents the project-specific instructions they need to work effectively — build commands, code style rules, testing conventions, and git workflow — without reading your entire codebase first.

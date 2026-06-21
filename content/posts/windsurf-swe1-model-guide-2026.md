@@ -1,14 +1,21 @@
 ---
-title: "Windsurf SWE-1 Model Guide 2026: Benchmarks, Speed, and What It Means for Developers"
-date: 2026-04-24T10:03:56+00:00
-tags: ["windsurf", "ai-coding", "swe-1", "benchmarks", "developer-tools"]
-description: "Complete guide to Windsurf SWE-1 models in 2026: benchmarks, SWE-Bench scores, pricing, and how it compares to Cursor, Copilot, and Claude Code."
-draft: false
 cover:
-  image: "/images/windsurf-swe1-model-guide-2026.png"
-  alt: "Windsurf SWE-1 Model Guide 2026"
+  alt: Windsurf SWE-1 Model Guide 2026
+  image: /images/windsurf-swe1-model-guide-2026.png
   relative: false
-schema: "schema-windsurf-swe1-model-guide-2026"
+date: 2026-04-24 10:03:56+00:00
+description: 'Complete guide to Windsurf SWE-1 models in 2026: benchmarks, SWE-Bench
+  scores, pricing, and how it compares to Cursor, Copilot, and Claude Code.'
+draft: false
+schema: schema-windsurf-swe1-model-guide-2026
+tags:
+- windsurf
+- ai-coding
+- swe-1
+- benchmarks
+- developer-tools
+title: 'Windsurf SWE-1 Model Guide 2026: Benchmarks, Speed, and What It Means for
+  Developers'
 ---
 
 Windsurf SWE-1 is the first AI model family purpose-built for software engineering workflows — not just code completion. It handles multi-step agentic tasks, incomplete work states, and long-running edits across the IDE, terminal, and browser. For developers choosing an AI coding tool in 2026, SWE-1's combination of 40%+ SWE-Bench scores and up to 950 tokens/second throughput makes it a serious alternative to Cursor and GitHub Copilot.

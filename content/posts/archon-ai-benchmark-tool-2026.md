@@ -1,14 +1,20 @@
 ---
-title: "Archon AI Benchmark: Open-Source Harness Builder for Reproducible AI Coding"
-date: 2026-05-19T18:04:15+00:00
-tags: ["archon AI benchmark", "AI coding tools", "open source", "harness engineering", "LLM reproducibility"]
-description: "Archon is the open-source YAML workflow harness that lifts AI coding PR acceptance from 6.7% to 70% — a 10x improvement with the same LLM."
-draft: false
 cover:
-  image: "/images/archon-ai-benchmark-tool-2026.png"
-  alt: "Archon AI Benchmark: Open-Source Harness Builder for Reproducible AI Coding"
+  alt: 'Archon AI Benchmark: Open-Source Harness Builder for Reproducible AI Coding'
+  image: /images/archon-ai-benchmark-tool-2026.png
   relative: false
-schema: "schema-archon-ai-benchmark-tool-2026"
+date: 2026-05-19 18:04:15+00:00
+description: Archon is the open-source YAML workflow harness that lifts AI coding
+  PR acceptance from 6.7% to 70% — a 10x improvement with the same LLM.
+draft: false
+schema: schema-archon-ai-benchmark-tool-2026
+tags:
+- archon AI benchmark
+- AI coding tools
+- open source
+- harness engineering
+- LLM reproducibility
+title: 'Archon AI Benchmark: Open-Source Harness Builder for Reproducible AI Coding'
 ---
 
 Archon is an open-source AI coding harness builder that wraps LLMs like Claude Code and OpenAI Codex inside deterministic YAML workflows, lifting the PR acceptance rate from a raw 6.7% to nearly 70% — without changing the underlying model. If you've ever wondered why AI-generated code works brilliantly one day and catastrophically fails the next, the answer is the absence of structure. Archon provides that structure.

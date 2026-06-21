@@ -1,14 +1,21 @@
 ---
-title: "Activepieces vs n8n 2026: Open-Source Automation Compared"
-date: 2026-05-04T15:30:00+00:00
-tags: ["activepieces", "n8n", "workflow automation", "open source", "self-hosted", "no-code"]
-description: "Activepieces vs n8n 2026: pricing model differences, integration counts, self-hosting options, AI agent capabilities, and which open-source automation platform fits your team."
-draft: false
 cover:
-  image: "/images/activepieces-vs-n8n-comparison-2026.png"
-  alt: "Activepieces vs n8n 2026: Open-Source Automation Compared"
+  alt: 'Activepieces vs n8n 2026: Open-Source Automation Compared'
+  image: /images/activepieces-vs-n8n-comparison-2026.png
   relative: false
-schema: "schema-activepieces-vs-n8n-comparison-2026"
+date: 2026-05-04 15:30:00+00:00
+description: 'Activepieces vs n8n 2026: pricing model differences, integration counts,
+  self-hosting options, AI agent capabilities, and which open-source automation p...'
+draft: false
+schema: schema-activepieces-vs-n8n-comparison-2026
+tags:
+- activepieces
+- n8n
+- workflow automation
+- open source
+- self-hosted
+- no-code
+title: 'Activepieces vs n8n 2026: Open-Source Automation Compared'
 ---
 
 Activepieces and n8n are the two strongest open-source automation platforms in 2026 — both self-hostable, both with visual builders, and both positioned as alternatives to Zapier and Make. The decision between them isn't obvious. n8n has 400+ integrations and a mature ecosystem; Activepieces has 300+ with an MIT license that n8n's AGPLv3 doesn't match. The pricing model difference is where the real tradeoff shows: Activepieces counts tasks per flow execution, n8n charges per workflow execution. This guide breaks down exactly where each platform wins.

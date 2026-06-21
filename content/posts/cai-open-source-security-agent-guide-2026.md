@@ -1,14 +1,22 @@
 ---
-title: "CAI Open-Source Security Agent Framework: Build and Deploy Offensive AI Security Agents"
-date: 2026-04-25T15:04:16+00:00
-tags: ["cybersecurity", "ai-agents", "penetration-testing", "open-source", "python"]
-description: "Complete guide to CAI, the open-source cybersecurity AI framework that won 41/45 CTF flags and delivers 91% solve rates for automated pentesting."
-draft: false
 cover:
-  image: "/images/cai-open-source-security-agent-guide-2026.png"
-  alt: "CAI Open-Source Security Agent Framework: Build and Deploy Offensive AI Security Agents"
+  alt: 'CAI Open-Source Security Agent Framework: Build and Deploy Offensive AI Security
+    Agents'
+  image: /images/cai-open-source-security-agent-guide-2026.png
   relative: false
-schema: "schema-cai-open-source-security-agent-guide-2026"
+date: 2026-04-25 15:04:16+00:00
+description: Complete guide to CAI, the open-source cybersecurity AI framework that
+  won 41/45 CTF flags and delivers 91% solve rates for automated pentesting.
+draft: false
+schema: schema-cai-open-source-security-agent-guide-2026
+tags:
+- cybersecurity
+- ai-agents
+- penetration-testing
+- open-source
+- python
+title: 'CAI Open-Source Security Agent Framework: Build and Deploy Offensive AI Security
+  Agents'
 ---
 
 CAI (Cybersecurity AI) is an open-source framework from Alias Robotics that lets security engineers build, orchestrate, and deploy autonomous AI agents for offensive security tasks — from reconnaissance to exploitation, bug bounty automation to CTF solving. Install it with `pip install cai-framework`, point it at a target, and it handles the full pentest loop without step-by-step human direction.

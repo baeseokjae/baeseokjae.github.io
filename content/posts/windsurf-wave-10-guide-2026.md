@@ -1,14 +1,20 @@
 ---
-title: "Windsurf Wave 10 Planning Mode Guide: Browser-Aware Cascade & plan.md Workflow"
-date: 2026-05-11T18:04:18+00:00
-tags: ["windsurf", "AI coding", "planning mode", "cascade", "developer tools"]
-description: "Complete guide to Windsurf Wave 10: Planning Mode, browser-aware Cascade, plan.md workflow, and o3 pricing changes for developers."
-draft: false
 cover:
-  image: "/images/windsurf-wave-10-guide-2026.png"
-  alt: "Windsurf Wave 10 Planning Mode Guide: Browser-Aware Cascade & plan.md Workflow"
+  alt: 'Windsurf Wave 10 Planning Mode Guide: Browser-Aware Cascade & plan.md Workflow'
+  image: /images/windsurf-wave-10-guide-2026.png
   relative: false
-schema: "schema-windsurf-wave-10-guide-2026"
+date: 2026-05-11 18:04:18+00:00
+description: 'Complete guide to Windsurf Wave 10: Planning Mode, browser-aware Cascade,
+  plan.md workflow, and o3 pricing changes for developers.'
+draft: false
+schema: schema-windsurf-wave-10-guide-2026
+tags:
+- windsurf
+- AI coding
+- planning mode
+- cascade
+- developer tools
+title: 'Windsurf Wave 10 Planning Mode Guide: Browser-Aware Cascade & plan.md Workflow'
 ---
 
 Windsurf Wave 10 ships two features that change how AI-assisted coding works: Planning Mode, which pairs every Cascade conversation with a persistent `plan.md` file for multi-session task management, and the Windsurf Browser, a built-in Chromium browser that lets Cascade read your open tabs, console logs, and DOM without any copy-paste. Both are available on paid plans at no extra cost as of June 2025.

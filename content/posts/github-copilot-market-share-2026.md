@@ -1,14 +1,18 @@
 ---
-title: "GitHub Copilot Market Share 2026: Why 37% Is Not the Finish Line"
-date: 2026-06-11T13:16:15+00:00
-tags: ["AI coding assistants", "GitHub Copilot", "developer tools"]
-description: "Copilot still leads with 37%, but challengers are winning on agentic workflows, portability, and migration resilience."
-draft: false
 cover:
-  image: "/images/github-copilot-market-share-2026.png"
-  alt: "GitHub Copilot Market Share 2026: Why 37% Is Not the Finish Line"
+  alt: 'GitHub Copilot Market Share 2026: Why 37% Is Not the Finish Line'
+  image: /images/github-copilot-market-share-2026.png
   relative: false
-schema: "schema-github-copilot-market-share-2026"
+date: 2026-06-11 13:16:15+00:00
+description: Copilot still leads with 37%, but challengers are winning on agentic
+  workflows, portability, and migration resilience.
+draft: false
+schema: schema-github-copilot-market-share-2026
+tags:
+- AI coding assistants
+- GitHub Copilot
+- developer tools
+title: 'GitHub Copilot Market Share 2026: Why 37% Is Not the Finish Line'
 ---
 
 GitHub Copilot remains the default AI coding assistant in many stacks, but 2026 is about who can operate across tools, fix bugs in PR-sized slices, and survive platform churn better than incumbents. Copilot is still strong, yet 37% market share is now a lead under active pressure from agentic competitors, pricing pressure, and migration risk.

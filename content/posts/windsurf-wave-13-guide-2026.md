@@ -1,14 +1,20 @@
 ---
-title: "Windsurf Wave 13 Guide 2026: What's New and How to Use the Latest Features"
-date: 2026-05-01T12:04:38+00:00
-tags: ["windsurf", "ai-ide", "developer-tools", "agents", "cascade"]
-description: "Complete guide to Windsurf Wave 13 'Shipmas Edition': free SWE-1.5 model, true parallel agents with Git worktrees, Arena Mode, Plan Mode, and more."
-draft: false
 cover:
-  image: "/images/windsurf-wave-13-guide-2026.png"
-  alt: "Windsurf Wave 13 Guide 2026: What's New and How to Use the Latest Features"
+  alt: 'Windsurf Wave 13 Guide 2026: What''s New and How to Use the Latest Features'
+  image: /images/windsurf-wave-13-guide-2026.png
   relative: false
-schema: "schema-windsurf-wave-13-guide-2026"
+date: 2026-05-01 12:04:38+00:00
+description: 'Complete guide to Windsurf Wave 13 ''Shipmas Edition'': free SWE-1.5
+  model, true parallel agents with Git worktrees, Arena Mode, Plan Mode, and more.'
+draft: false
+schema: schema-windsurf-wave-13-guide-2026
+tags:
+- windsurf
+- ai-ide
+- developer-tools
+- agents
+- cascade
+title: 'Windsurf Wave 13 Guide 2026: What''s New and How to Use the Latest Features'
 ---
 
 Windsurf Wave 13 is the December 24, 2025 "Shipmas Edition" release that made SWE-1.5 free for all users, introduced true parallel agents via Git worktrees, and shipped Arena Mode for blind head-to-head model comparisons — the single largest feature drop in Windsurf's history.

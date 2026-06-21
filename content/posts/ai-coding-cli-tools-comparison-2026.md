@@ -1,14 +1,22 @@
 ---
-title: "AI Coding CLI Tools Comparison 2026: Claude Code vs Codex vs Gemini CLI vs Junie"
-date: 2026-05-08T00:00:00+00:00
-tags: ["claude-code","codex-cli","gemini-cli","ai-coding","cli-tools"]
-description: "A direct benchmark comparison of Claude Code, Codex CLI, Gemini CLI, and Junie by accuracy, pricing, context window, and CI/CD integration for 2026."
-draft: false
 cover:
-  image: "/images/ai-coding-cli-tools-comparison-2026.png"
-  alt: "AI Coding CLI Tools Comparison 2026: Claude Code vs Codex vs Gemini CLI vs Junie"
+  alt: 'AI Coding CLI Tools Comparison 2026: Claude Code vs Codex vs Gemini CLI vs
+    Junie'
+  image: /images/ai-coding-cli-tools-comparison-2026.png
   relative: false
-schema: "schema-ai-coding-cli-tools-comparison-2026"
+date: 2026-05-08 00:00:00+00:00
+description: A direct benchmark comparison of Claude Code, Codex CLI, Gemini CLI,
+  and Junie by accuracy, pricing, context window, and CI/CD integration for 2026.
+draft: false
+schema: schema-ai-coding-cli-tools-comparison-2026
+tags:
+- claude-code
+- codex-cli
+- gemini-cli
+- ai-coding
+- cli-tools
+title: 'AI Coding CLI Tools Comparison 2026: Claude Code vs Codex vs Gemini CLI vs
+  Junie'
 ---
 
 If you need to pick one AI coding CLI tool in 2026, the short version is this: **Claude Code** (SWE-Bench 80.8%) wins on accuracy, **Codex CLI** (Terminal-Bench 77.3%) wins on CI/CD speed, **Gemini CLI** (1M-token context) wins on large-codebase coverage, and **Junie** (LLM-agnostic BYOK) wins on cost flexibility.

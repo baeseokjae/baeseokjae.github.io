@@ -1,14 +1,22 @@
 ---
-title: "Helicone Alternatives 2026: Best LLM Observability Tools After the Mintlify Acquisition"
-date: 2026-05-16T00:00:00+00:00
-tags: ["helicone alternatives", "llm observability", "langfuse", "langsmith", "portkey"]
-description: "Helicone was acquired by Mintlify in March 2026 and is now in maintenance mode. Here are the best alternatives: Langfuse, LangSmith, Portkey, Braintrust, and Stockyard compared."
-draft: false
 cover:
-  image: "/images/helicone-alternatives-2026.png"
-  alt: "Helicone Alternatives 2026: Best LLM Observability Tools After the Mintlify Acquisition"
+  alt: 'Helicone Alternatives 2026: Best LLM Observability Tools After the Mintlify
+    Acquisition'
+  image: /images/helicone-alternatives-2026.png
   relative: false
-schema: "schema-helicone-alternatives-2026"
+date: 2026-05-16 00:00:00+00:00
+description: 'Helicone was acquired by Mintlify in March 2026 and is now in maintenance
+  mode. Here are the best alternatives: Langfuse, LangSmith, Portkey, Braintrust...'
+draft: false
+schema: schema-helicone-alternatives-2026
+tags:
+- helicone alternatives
+- llm observability
+- langfuse
+- langsmith
+- portkey
+title: 'Helicone Alternatives 2026: Best LLM Observability Tools After the Mintlify
+  Acquisition'
 ---
 
 Helicone was acquired by Mintlify on March 3, 2026, and the platform has been in maintenance mode ever since — receiving only security patches, bug fixes, and support for new model identifiers. If you depend on Helicone in production today, your migration window is open. The strongest replacements are **Langfuse** (open-source, SDK-based, 40,000+ active builders), **LangSmith** (deepest LangChain integration available), **Portkey** (200+ LLM provider gateway), **Braintrust** (eval-first with 1M free spans per month), and **Stockyard** (a single ~25MB Go binary requiring zero cloud dependency).

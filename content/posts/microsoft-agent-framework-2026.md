@@ -1,14 +1,20 @@
 ---
-title: "Microsoft Agent Framework 2026: AutoGen Successor Explained"
-date: 2026-04-19T16:32:33+00:00
-tags: ["microsoft agent framework", "autogen", "ai agents", "multi-agent systems", "azure ai"]
-description: "Microsoft Agent Framework replaces AutoGen in 2026 with native Responses API, MCP server integration, and enterprise workflow orchestration patterns."
-draft: false
 cover:
-  image: "/images/microsoft-agent-framework-2026.png"
-  alt: "Microsoft Agent Framework 2026: AutoGen Successor Explained"
+  alt: 'Microsoft Agent Framework 2026: AutoGen Successor Explained'
+  image: /images/microsoft-agent-framework-2026.png
   relative: false
-schema: "schema-microsoft-agent-framework-2026"
+date: 2026-04-19 16:32:33+00:00
+description: Microsoft Agent Framework replaces AutoGen in 2026 with native Responses
+  API, MCP server integration, and enterprise workflow orchestration patterns.
+draft: false
+schema: schema-microsoft-agent-framework-2026
+tags:
+- microsoft agent framework
+- autogen
+- ai agents
+- multi-agent systems
+- azure ai
+title: 'Microsoft Agent Framework 2026: AutoGen Successor Explained'
 ---
 
 Microsoft Agent Framework is Microsoft's 2026 production-ready replacement for AutoGen, offering native Responses API support, MCP server integration, and workflow-based orchestration patterns designed for enterprise deployments at scale.

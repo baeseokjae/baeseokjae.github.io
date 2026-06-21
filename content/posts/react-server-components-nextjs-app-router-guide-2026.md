@@ -1,14 +1,20 @@
 ---
-title: "React Server Components in Next.js App Router: Complete Developer Guide"
-date: 2026-06-02T03:48:36+00:00
-tags: ["React Server Components", "Next.js", "App Router", "Web Performance", "Full-Stack"]
-description: "Master React Server Components in Next.js App Router — data fetching, streaming, Server Actions, PPR, and migration from Pages Router."
-draft: false
 cover:
-  image: "/images/react-server-components-nextjs-app-router-guide-2026.png"
-  alt: "React Server Components in Next.js App Router: Complete Developer Guide"
+  alt: 'React Server Components in Next.js App Router: Complete Developer Guide'
+  image: /images/react-server-components-nextjs-app-router-guide-2026.png
   relative: false
-schema: "schema-react-server-components-nextjs-app-router-guide-2026"
+date: 2026-06-02 03:48:36+00:00
+description: Master React Server Components in Next.js App Router — data fetching,
+  streaming, Server Actions, PPR, and migration from Pages Router.
+draft: false
+schema: schema-react-server-components-nextjs-app-router-guide-2026
+tags:
+- React Server Components
+- Next.js
+- App Router
+- Web Performance
+- Full-Stack
+title: 'React Server Components in Next.js App Router: Complete Developer Guide'
 ---
 
 React Server Components (RSC) are components that run exclusively on the server, never ship JavaScript to the browser, and can access databases and file systems directly. In Next.js 15 App Router, every component in the `app/` directory is a Server Component by default — you opt into client-side interactivity with `'use client'`, not out of it. This guide covers the complete RSC mental model, data fetching patterns, streaming, Server Actions, caching, Partial Prerendering, and the 7 mistakes that silently wreck bundle size.

@@ -1,14 +1,21 @@
 ---
-title: "Grok 4 Review 2026: xAI Flagship Model, grok-code-fast, Benchmarks and API"
-date: 2026-05-07T00:00:00+00:00
-tags: ["grok-4", "xai", "llm", "api", "benchmark", "review"]
-description: "Grok 4 review 2026: xAI flagship reasoning model, grok-code-fast coding variant, 2M context window, API setup, and benchmarks vs Claude Opus 4.7 and GPT-5.5."
-draft: false
 cover:
-  image: "/images/grok-4-review-2026.png"
-  alt: "Grok 4 Review 2026: xAI Flagship Model, grok-code-fast, Benchmarks and API"
+  alt: 'Grok 4 Review 2026: xAI Flagship Model, grok-code-fast, Benchmarks and API'
+  image: /images/grok-4-review-2026.png
   relative: false
-schema: "schema-grok-4-review-2026"
+date: 2026-05-07 00:00:00+00:00
+description: 'Grok 4 review 2026: xAI flagship reasoning model, grok-code-fast coding
+  variant, 2M context window, API setup, and benchmarks vs Claude Opus 4.7 and GPT...'
+draft: false
+schema: schema-grok-4-review-2026
+tags:
+- grok-4
+- xai
+- llm
+- api
+- benchmark
+- review
+title: 'Grok 4 Review 2026: xAI Flagship Model, grok-code-fast, Benchmarks and API'
 ---
 
 Grok 4 launched in Q2 2026 as xAI's flagship reasoning model, positioned against Claude Opus 4.7 and GPT-5.5 at a competitive $3.50 per million tokens for API access — significantly cheaper than Claude Opus 4.7's input pricing or GPT-5.5's $5/million input tokens. The 2M+ context window is the headline spec: processing an entire large codebase or a full book in a single prompt without chunking. The grok-code-fast variant adds a specialized tokenizer optimized for programming tasks. xAI built Colossus — a 100,000+ H100/H200 GPU cluster — specifically for Grok 4's training, which reflects both the ambition and the resources behind this model. Here's an honest technical assessment of what Grok 4 delivers versus its benchmarks.

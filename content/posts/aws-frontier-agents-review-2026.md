@@ -1,14 +1,21 @@
 ---
-title: "AWS Frontier Agents Review 2026: AI-Powered Security Testing and DevOps"
-date: 2026-05-15T00:00:00+00:00
-tags: ["aws","frontier-agents","ai-security","devops","amazon-bedrock"]
-description: "A deep review of AWS Frontier Agents GA — the AWS Security Agent and AWS DevOps Agent — covering architecture, benchmarks, competitive positioning, and a step-by-step deployment guide."
-draft: false
 cover:
-  image: "/images/aws-frontier-agents-review-2026.png"
-  alt: "AWS Frontier Agents Review 2026: AI-Powered Security Testing and DevOps"
+  alt: 'AWS Frontier Agents Review 2026: AI-Powered Security Testing and DevOps'
+  image: /images/aws-frontier-agents-review-2026.png
   relative: false
-schema: "schema-aws-frontier-agents-review-2026"
+date: 2026-05-15 00:00:00+00:00
+description: A deep review of AWS Frontier Agents GA — the AWS Security Agent and
+  AWS DevOps Agent — covering architecture, benchmarks, competitive positioning, and
+  ...
+draft: false
+schema: schema-aws-frontier-agents-review-2026
+tags:
+- aws
+- frontier-agents
+- ai-security
+- devops
+- amazon-bedrock
+title: 'AWS Frontier Agents Review 2026: AI-Powered Security Testing and DevOps'
 ---
 
 AWS Frontier Agents reached general availability on March 31, 2026, marking the most significant expansion of Amazon's AI portfolio since Bedrock launched in 2023. Two production-ready agents — the AWS Security Agent and the AWS DevOps Agent — are now available to all AWS customers, backed by Amazon Bedrock and powered by Claude models from Anthropic. This review covers architecture, performance benchmarks, competitive positioning against Azure AI Agent Service and Google Cloud Agent Builder, and a practical deployment guide so you can get Frontier Agents running in your own pipeline today.

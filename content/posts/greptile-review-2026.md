@@ -1,14 +1,20 @@
 ---
-title: "Greptile Review 2026: AI Code Review That Understands Your Entire Codebase"
-date: 2026-04-26T06:02:30+00:00
-tags: ["greptile", "AI code review", "code review tools", "developer tools", "PR review"]
-description: "Greptile leads AI code review benchmarks with 82% bug catch rate and 100% high-severity detection — but is it right for your team?"
-draft: false
 cover:
-  image: "/images/greptile-review-2026.png"
-  alt: "Greptile Review 2026: AI Code Review That Understands Your Entire Codebase"
+  alt: 'Greptile Review 2026: AI Code Review That Understands Your Entire Codebase'
+  image: /images/greptile-review-2026.png
   relative: false
-schema: "schema-greptile-review-2026"
+date: 2026-04-26 06:02:30+00:00
+description: Greptile leads AI code review benchmarks with 82% bug catch rate and
+  100% high-severity detection — but is it right for your team?
+draft: false
+schema: schema-greptile-review-2026
+tags:
+- greptile
+- AI code review
+- code review tools
+- developer tools
+- PR review
+title: 'Greptile Review 2026: AI Code Review That Understands Your Entire Codebase'
 ---
 
 Greptile is an AI code review tool that indexes your entire repository — not just the diff — to catch bugs, architectural regressions, and dependency breaks that other tools miss entirely. In independent benchmarks across 50 real-world bugs from Sentry, Cal.com, Grafana, Keycloak, and Discourse, Greptile achieved an 82% overall bug catch rate and a 100% high-severity detection rate, leading every major AI code review competitor. It costs $30/developer/month with 50 reviews included and no free tier.

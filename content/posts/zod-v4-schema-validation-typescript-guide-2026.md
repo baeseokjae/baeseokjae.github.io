@@ -1,14 +1,20 @@
 ---
-title: "Zod v4 TypeScript Schema Validation: What Changed and Migration Guide"
-date: 2026-06-08T19:49:09+00:00
-tags: ["TypeScript", "Zod", "Schema Validation", "Migration", "JavaScript"]
-description: "Complete guide to Zod v4 breaking changes, 14x performance gains, new features, and a step-by-step migration path from Zod v3."
-draft: false
 cover:
-  image: "/images/zod-v4-schema-validation-typescript-guide-2026.png"
-  alt: "Zod v4 TypeScript Schema Validation"
+  alt: Zod v4 TypeScript Schema Validation
+  image: /images/zod-v4-schema-validation-typescript-guide-2026.png
   relative: false
-schema: "schema-zod-v4-schema-validation-typescript-guide-2026"
+date: 2026-06-08 19:49:09+00:00
+description: Complete guide to Zod v4 breaking changes, 14x performance gains, new
+  features, and a step-by-step migration path from Zod v3.
+draft: false
+schema: schema-zod-v4-schema-validation-typescript-guide-2026
+tags:
+- TypeScript
+- Zod
+- Schema Validation
+- Migration
+- JavaScript
+title: 'Zod v4 TypeScript Schema Validation: What Changed and Migration Guide'
 ---
 
 Zod v4 is a major overhaul of the most popular TypeScript schema validation library — delivering 14x faster string parsing, a 57% smaller core bundle, and a completely reworked API for format validation. Most codebases can migrate in under a day using the official codemod, but there are real breaking changes that will catch you off guard if you skip the changelog.

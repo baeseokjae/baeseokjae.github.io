@@ -1,14 +1,21 @@
 ---
-title: "GitHub Copilot Coding Agent Guide 2026: Autonomous Background Task Agent"
-date: 2026-04-27T14:13:59+00:00
-tags: ["github-copilot", "ai-coding-agent", "background-agent", "github-actions", "developer-tools"]
-description: "Complete guide to GitHub Copilot's autonomous coding agent: how it works, pricing, use cases, and when to use it vs interactive agents like Claude Code."
-draft: false
 cover:
-  image: "/images/github-copilot-coding-agent-guide-2026.png"
-  alt: "GitHub Copilot Coding Agent Guide 2026: Autonomous Background Task Agent"
+  alt: 'GitHub Copilot Coding Agent Guide 2026: Autonomous Background Task Agent'
+  image: /images/github-copilot-coding-agent-guide-2026.png
   relative: false
-schema: "schema-github-copilot-coding-agent-guide-2026"
+date: 2026-04-27 14:13:59+00:00
+description: 'Complete guide to GitHub Copilot''s autonomous coding agent: how it
+  works, pricing, use cases, and when to use it vs interactive agents like Claude
+  Code.'
+draft: false
+schema: schema-github-copilot-coding-agent-guide-2026
+tags:
+- github-copilot
+- ai-coding-agent
+- background-agent
+- github-actions
+- developer-tools
+title: 'GitHub Copilot Coding Agent Guide 2026: Autonomous Background Task Agent'
 ---
 
 GitHub Copilot's coding agent lets you assign a GitHub Issue, walk away, and come back to a ready-to-review pull request — no terminal open, no prompts to answer mid-task. It operates as a cloud-based background worker that creates branches, writes code, runs tests, and opens PRs autonomously, making it the first mainstream tool to industrialize asynchronous AI coding at enterprise scale.

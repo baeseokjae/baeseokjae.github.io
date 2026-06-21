@@ -1,14 +1,20 @@
 ---
-title: "Claude Opus 4.6 Review 2026: The New SWE-Bench Leader for Coding"
-date: 2026-04-28T12:02:08+00:00
-tags: ["ai-coding", "claude", "benchmarks", "llm-review", "anthropic"]
-description: "Claude Opus 4.6 review: 80.8% SWE-bench, 83% ARC-AGI-2 reasoning leap, Agent Teams compiler demo, and whether it's worth the upgrade over 4.5."
-draft: false
 cover:
-  image: "/images/claude-4-6-opus-review-2026.png"
-  alt: "Claude Opus 4.6 Review 2026: The New SWE-Bench Leader for Coding"
+  alt: 'Claude Opus 4.6 Review 2026: The New SWE-Bench Leader for Coding'
+  image: /images/claude-4-6-opus-review-2026.png
   relative: false
-schema: "schema-claude-4-6-opus-review-2026"
+date: 2026-04-28 12:02:08+00:00
+description: 'Claude Opus 4.6 review: 80.8% SWE-bench, 83% ARC-AGI-2 reasoning leap,
+  Agent Teams compiler demo, and whether it''s worth the upgrade over 4.5.'
+draft: false
+schema: schema-claude-4-6-opus-review-2026
+tags:
+- ai-coding
+- claude
+- benchmarks
+- llm-review
+- anthropic
+title: 'Claude Opus 4.6 Review 2026: The New SWE-Bench Leader for Coding'
 ---
 
 Claude Opus 4.6 scores 80.8% on SWE-bench Verified — the highest for any general-purpose AI model at launch — and delivers an 83% jump in ARC-AGI-2 reasoning (from 37.6% to 68.8%). Agent Teams demonstrated building a 100,000-line C compiler that boots Linux. For most developer teams the question isn't "is it better" but "where is it better and does that justify the cost."

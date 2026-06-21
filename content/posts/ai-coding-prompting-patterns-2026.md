@@ -1,14 +1,20 @@
 ---
-title: "AI Coding Prompting Patterns 2026: 15 Patterns That Double Output Quality"
-date: 2026-05-30T15:07:30+00:00
-tags: ["prompt-engineering", "ai-coding", "developer-tools", "cursor", "claude"]
-description: "15 battle-tested AI coding prompting patterns for 2026 — from spec-first planning to AI-on-AI review — backed by real data."
-draft: false
 cover:
-  image: "/images/ai-coding-prompting-patterns-2026.png"
-  alt: "AI Coding Prompting Patterns 2026: 15 Patterns That Double Output Quality"
+  alt: 'AI Coding Prompting Patterns 2026: 15 Patterns That Double Output Quality'
+  image: /images/ai-coding-prompting-patterns-2026.png
   relative: false
-schema: "schema-ai-coding-prompting-patterns-2026"
+date: 2026-05-30 15:07:30+00:00
+description: 15 battle-tested AI coding prompting patterns for 2026 — from spec-first
+  planning to AI-on-AI review — backed by real data.
+draft: false
+schema: schema-ai-coding-prompting-patterns-2026
+tags:
+- prompt-engineering
+- ai-coding
+- developer-tools
+- cursor
+- claude
+title: 'AI Coding Prompting Patterns 2026: 15 Patterns That Double Output Quality'
 ---
 
 The 15 AI coding prompting patterns that consistently double output quality in 2026 are: spec-first planning, context packing, persistent rules files, persona prompting, chain-of-thought, test-driven prompting, few-shot examples, constraint lists, XML tagging, positive framing, context position optimization, output contracts, iterative refinement, AI-on-AI review, and reasoning model adaptation.

@@ -1,14 +1,20 @@
 ---
-title: "OpenAI Codex Skills Guide: Reusable Agent Behaviors for Developer Workflows"
-date: 2026-05-17T06:04:39+00:00
-tags: ["openai codex", "codex skills", "ai coding agents", "developer productivity", "agentic coding"]
-description: "Master OpenAI Codex Skills — the reusable agent behavior system that encodes workflows once and deploys them indefinitely across dev teams."
-draft: false
 cover:
-  image: "/images/openai-codex-skills-guide-2026.png"
-  alt: "OpenAI Codex Skills Guide: Reusable Agent Behaviors for Developer Workflows"
+  alt: 'OpenAI Codex Skills Guide: Reusable Agent Behaviors for Developer Workflows'
+  image: /images/openai-codex-skills-guide-2026.png
   relative: false
-schema: "schema-openai-codex-skills-guide-2026"
+date: 2026-05-17 06:04:39+00:00
+description: Master OpenAI Codex Skills — the reusable agent behavior system that
+  encodes workflows once and deploys them indefinitely across dev teams.
+draft: false
+schema: schema-openai-codex-skills-guide-2026
+tags:
+- openai codex
+- codex skills
+- ai coding agents
+- developer productivity
+- agentic coding
+title: 'OpenAI Codex Skills Guide: Reusable Agent Behaviors for Developer Workflows'
 ---
 
 OpenAI Codex Skills are reusable, self-contained packages that encode a developer workflow once and let Codex invoke that workflow on demand — without re-prompting. If you've ever corrected Codex on the same PR review pattern three times, a skill makes that correction permanent.

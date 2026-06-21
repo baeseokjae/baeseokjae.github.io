@@ -1,14 +1,22 @@
 ---
-title: "GPT-5.5 Pro API Enterprise Guide: $30 per Million Tokens, Highest Accuracy Tier"
-date: 2026-05-08T00:00:00+00:00
-tags: ["gpt-5-5","openai","enterprise-api","llm","pricing"]
-description: "Complete enterprise guide to GPT-5.5 Pro API: $30/M token pricing, reasoning.effort settings, Batch API cost reduction, and benchmark comparisons against Claude Opus 4.7."
-draft: false
 cover:
-  image: "/images/gpt-5-5-pro-enterprise-api-guide-2026.png"
-  alt: "GPT-5.5 Pro API Enterprise Guide: $30 per Million Tokens, Highest Accuracy Tier"
+  alt: 'GPT-5.5 Pro API Enterprise Guide: $30 per Million Tokens, Highest Accuracy
+    Tier'
+  image: /images/gpt-5-5-pro-enterprise-api-guide-2026.png
   relative: false
-schema: "schema-gpt-5-5-pro-enterprise-api-guide-2026"
+date: 2026-05-08 00:00:00+00:00
+description: 'Complete enterprise guide to GPT-5.5 Pro API: $30/M token pricing, reasoning.effort
+  settings, Batch API cost reduction, and benchmark comparisons agains...'
+draft: false
+schema: schema-gpt-5-5-pro-enterprise-api-guide-2026
+tags:
+- gpt-5-5
+- openai
+- enterprise-api
+- llm
+- pricing
+title: 'GPT-5.5 Pro API Enterprise Guide: $30 per Million Tokens, Highest Accuracy
+  Tier'
 ---
 
 GPT-5.5 Pro launched on April 24, 2026 as OpenAI's highest-accuracy API tier, posting 93.6% on GPQA Diamond and 90.1% on BrowseComp. At $30 per million input tokens and $180 per million output tokens, it carries a 6x price premium over standard GPT-5.5 — a premium that is only defensible when accuracy failures carry measurable downstream cost. This guide covers the full pricing structure, reasoning.effort configuration, benchmark breakdown, competitive positioning against Claude Opus 4.7, enterprise compliance features, and cost optimization strategies to help engineering and architecture teams make a clear-eyed deployment decision.

@@ -1,14 +1,20 @@
 ---
-title: "1Password Unified Access for AI Agents: Developer Security Guide"
-date: 2026-04-26T00:04:05+00:00
-tags: ["1password", "ai-agents", "secrets-management", "developer-security", "non-human-identity"]
-description: "How to use 1Password Unified Access to securely inject credentials into AI agents at runtime — no hardcoded secrets, full audit trail."
-draft: false
 cover:
-  image: "/images/1password-unified-access-ai-agents-2026.png"
-  alt: "1Password Unified Access for AI Agents: Developer Security Guide"
+  alt: '1Password Unified Access for AI Agents: Developer Security Guide'
+  image: /images/1password-unified-access-ai-agents-2026.png
   relative: false
-schema: "schema-1password-unified-access-ai-agents-2026"
+date: 2026-04-26 00:04:05+00:00
+description: How to use 1Password Unified Access to securely inject credentials into
+  AI agents at runtime — no hardcoded secrets, full audit trail.
+draft: false
+schema: schema-1password-unified-access-ai-agents-2026
+tags:
+- 1password
+- ai-agents
+- secrets-management
+- developer-security
+- non-human-identity
+title: '1Password Unified Access for AI Agents: Developer Security Guide'
 ---
 
 1Password Unified Access is a secrets management platform that lets you discover, secure, and audit credentials across human users, machine identities, and AI agents from a single control plane — launched as generally available on March 17, 2026, with partners Anthropic, Cursor, GitHub, Perplexity, and Vercel.

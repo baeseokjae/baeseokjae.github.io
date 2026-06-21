@@ -1,14 +1,20 @@
 ---
-title: "Amp vs Claude Code vs GitHub Copilot: Agentic Coding Comparison 2026"
-date: 2026-05-10T09:05:07+00:00
-tags: ["amp", "claude-code", "github-copilot", "agentic-coding", "ai-tools"]
-description: "Amp vs Claude Code vs GitHub Copilot compared head-to-head: benchmarks, pricing, context windows, and which tool fits your 2026 workflow."
-draft: false
 cover:
-  image: "/images/amp-vs-claude-code-vs-copilot-2026.png"
-  alt: "Amp vs Claude Code vs GitHub Copilot: Agentic Coding Comparison 2026"
+  alt: 'Amp vs Claude Code vs GitHub Copilot: Agentic Coding Comparison 2026'
+  image: /images/amp-vs-claude-code-vs-copilot-2026.png
   relative: false
-schema: "schema-amp-vs-claude-code-vs-copilot-2026"
+date: 2026-05-10 09:05:07+00:00
+description: 'Amp vs Claude Code vs GitHub Copilot compared head-to-head: benchmarks,
+  pricing, context windows, and which tool fits your 2026 workflow.'
+draft: false
+schema: schema-amp-vs-claude-code-vs-copilot-2026
+tags:
+- amp
+- claude-code
+- github-copilot
+- agentic-coding
+- ai-tools
+title: 'Amp vs Claude Code vs GitHub Copilot: Agentic Coding Comparison 2026'
 ---
 
 Amp gives you model-agnostic flexibility, Claude Code gives you the highest SWE-bench score (87.6%) and the deepest autonomous reasoning, and GitHub Copilot gives you the broadest IDE integration at the lowest entry price. Choosing between them depends on whether you optimize for multi-model control, agentic autonomy, or ecosystem lock-in.

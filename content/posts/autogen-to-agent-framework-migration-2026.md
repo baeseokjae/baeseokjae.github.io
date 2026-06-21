@@ -1,14 +1,18 @@
 ---
-title: "AutoGen Migration Agent Framework 2026: Complete Migration Walkthrough"
-date: 2026-06-15T03:32:22+00:00
-tags: ["AutoGen", "Microsoft Agent Framework", "AI agents"]
-description: "A practical AutoGen migration walkthrough for moving agents, tools, state, and group chats to Microsoft Agent Framework 1.0."
-draft: false
 cover:
-  image: "/images/autogen-to-agent-framework-migration-2026.png"
-  alt: "AutoGen Migration Agent Framework 2026: Complete Migration Walkthrough"
+  alt: 'AutoGen Migration Agent Framework 2026: Complete Migration Walkthrough'
+  image: /images/autogen-to-agent-framework-migration-2026.png
   relative: false
-schema: "schema-autogen-to-agent-framework-migration-2026"
+date: 2026-06-15 03:32:22+00:00
+description: A practical AutoGen migration walkthrough for moving agents, tools, state,
+  and group chats to Microsoft Agent Framework 1.0.
+draft: false
+schema: schema-autogen-to-agent-framework-migration-2026
+tags:
+- AutoGen
+- Microsoft Agent Framework
+- AI agents
+title: 'AutoGen Migration Agent Framework 2026: Complete Migration Walkthrough'
 ---
 
 AutoGen migration Agent Framework 2026 work is best treated as a production architecture upgrade, not a package rename. Start by inventorying agents, tools, state, and group chat behavior, then port simple assistants before rebuilding multi-agent flows as typed Agent Framework workflows.

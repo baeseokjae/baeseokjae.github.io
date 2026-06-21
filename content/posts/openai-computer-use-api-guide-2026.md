@@ -1,14 +1,20 @@
 ---
-title: "OpenAI Computer Use API Developer Guide 2026: Build Browser Automation Agents"
-date: 2026-04-26T19:04:36+00:00
-tags: ["openai", "computer-use", "browser-automation", "responses-api", "ai-agents"]
-description: "A complete developer guide to OpenAI Computer Use API: setup, code walkthroughs, security sandboxing, and comparison with Claude computer use."
-draft: false
 cover:
-  image: "/images/openai-computer-use-api-guide-2026.png"
-  alt: "OpenAI Computer Use API Developer Guide 2026"
+  alt: OpenAI Computer Use API Developer Guide 2026
+  image: /images/openai-computer-use-api-guide-2026.png
   relative: false
-schema: "schema-openai-computer-use-api-guide-2026"
+date: 2026-04-26 19:04:36+00:00
+description: 'A complete developer guide to OpenAI Computer Use API: setup, code walkthroughs,
+  security sandboxing, and comparison with Claude computer use.'
+draft: false
+schema: schema-openai-computer-use-api-guide-2026
+tags:
+- openai
+- computer-use
+- browser-automation
+- responses-api
+- ai-agents
+title: 'OpenAI Computer Use API Developer Guide 2026: Build Browser Automation Agents'
 ---
 
 The OpenAI Computer Use API lets you build agents that see a screen, click, type, and navigate web browsers — all through a single API call. This guide walks you through every implementation option, from a 20-line quickstart to production-grade sandboxed agents.

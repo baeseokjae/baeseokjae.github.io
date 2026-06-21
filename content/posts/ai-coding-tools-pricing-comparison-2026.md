@@ -1,14 +1,18 @@
 ---
-title: "AI Coding Tools Pricing Comparison 2026: Free vs Paid Plans Ranked"
-date: 2026-06-12T01:04:21+00:00
-tags: ["ai coding", "pricing comparison", "developer tools"]
-description: "A practical 2026 ranking of AI coding tools by free-tier limits, paid-seat math, and team governance."
-draft: false
 cover:
-  image: "/images/ai-coding-tools-pricing-comparison-2026.png"
-  alt: "AI Coding Tools Pricing Comparison 2026: Free vs Paid Plans Ranked"
+  alt: 'AI Coding Tools Pricing Comparison 2026: Free vs Paid Plans Ranked'
+  image: /images/ai-coding-tools-pricing-comparison-2026.png
   relative: false
-schema: "schema-ai-coding-tools-pricing-comparison-2026"
+date: 2026-06-12 01:04:21+00:00
+description: A practical 2026 ranking of AI coding tools by free-tier limits, paid-seat
+  math, and team governance.
+draft: false
+schema: schema-ai-coding-tools-pricing-comparison-2026
+tags:
+- ai coding
+- pricing comparison
+- developer tools
+title: 'AI Coding Tools Pricing Comparison 2026: Free vs Paid Plans Ranked'
 ---
 
 If you are choosing an AI coding tool in 2026, compare usage shape before monthly price. In real projects, free tiers are useful for evaluation, but once a developer runs prompts through code review, refactors, and test cycles, usage ceilings and overage behavior determine cost more than sticker-plan labels. This ranking focuses on what I see working teams and solo devs optimize around: value delivered per token/completion, team guardrails, and operational predictability.

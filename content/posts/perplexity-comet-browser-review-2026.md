@@ -1,14 +1,20 @@
 ---
-title: "Perplexity Comet Browser Review 2026: AI Browser Worth Switching?"
-date: 2026-05-06T00:05:01+00:00
-tags: ["AI browser", "Perplexity Comet", "browser review", "AI tools", "productivity"]
-description: "Perplexity Comet browser review 2026: features, privacy risks, CometJacking security flaws, and whether it's worth replacing Chrome."
-draft: false
 cover:
-  image: "/images/perplexity-comet-browser-review-2026.png"
-  alt: "Perplexity Comet Browser Review 2026: AI Browser Worth Switching?"
+  alt: 'Perplexity Comet Browser Review 2026: AI Browser Worth Switching?'
+  image: /images/perplexity-comet-browser-review-2026.png
   relative: false
-schema: "schema-perplexity-comet-browser-review-2026"
+date: 2026-05-06 00:05:01+00:00
+description: 'Perplexity Comet browser review 2026: features, privacy risks, CometJacking
+  security flaws, and whether it''s worth replacing Chrome.'
+draft: false
+schema: schema-perplexity-comet-browser-review-2026
+tags:
+- AI browser
+- Perplexity Comet
+- browser review
+- AI tools
+- productivity
+title: 'Perplexity Comet Browser Review 2026: AI Browser Worth Switching?'
 ---
 
 Perplexity Comet is a Chromium-based AI browser that embeds an agentic assistant directly into your browsing session — reading your open tabs, filling forms, and executing multi-step tasks without you switching to a separate chat window. It's genuinely capable for research workflows, but a string of 2026 security incidents and an aggressive data monetization model make it a complicated recommendation.

@@ -1,14 +1,20 @@
 ---
-title: "Langflow vs n8n vs Dify: Which AI Workflow Tool Should Developers Choose?"
-date: 2026-05-10T12:05:55+00:00
-tags: ["langflow","n8n","dify","ai-workflow","open-source"]
-description: "A direct comparison of Langflow, n8n, and Dify for production AI workflows in 2026. Use-case-driven guide to picking the right tool."
-draft: false
 cover:
-  image: "/images/langflow-vs-n8n-vs-dify-2026.png"
-  alt: "Langflow vs n8n vs Dify: Which AI Workflow Tool Should Developers Choose?"
+  alt: 'Langflow vs n8n vs Dify: Which AI Workflow Tool Should Developers Choose?'
+  image: /images/langflow-vs-n8n-vs-dify-2026.png
   relative: false
-schema: "schema-langflow-vs-n8n-vs-dify-2026"
+date: 2026-05-10 12:05:55+00:00
+description: A direct comparison of Langflow, n8n, and Dify for production AI workflows
+  in 2026. Use-case-driven guide to picking the right tool.
+draft: false
+schema: schema-langflow-vs-n8n-vs-dify-2026
+tags:
+- langflow
+- n8n
+- dify
+- ai-workflow
+- open-source
+title: 'Langflow vs n8n vs Dify: Which AI Workflow Tool Should Developers Choose?'
 ---
 
 Langflow, n8n, and Dify each have 36,000 to 50,000-plus GitHub stars and growing adoption, but they solve fundamentally different problems. Choosing the wrong one does not just slow you down — it forces a rewrite six months later when your requirements outgrow what the tool was designed to do. Langflow is a visual builder for LangChain and LangGraph pipelines; n8n is a general-purpose automation engine that added AI modules; Dify is a full LLM-app platform with backend, database, admin UI, API gateway, and prompt management baked in. None of them is universally best. The right answer depends entirely on what layer of the stack you need help with and who on your team will be owning it week to week.

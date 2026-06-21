@@ -1,14 +1,21 @@
 ---
-title: "JetBrains AI Tools Survey 2026: Key Findings for Dev Teams"
-date: 2026-05-31T09:05:36+00:00
-tags: ["ai-tools", "developer-survey", "github-copilot", "claude-code", "cursor", "productivity"]
-description: "JetBrains AI Pulse survey of 10,000+ developers reveals 90% adoption, Claude Code's explosive rise, and the real productivity paradox."
-draft: false
 cover:
-  image: "/images/jetbrains-survey-ai-tools-2026.png"
-  alt: "JetBrains AI Tools Survey 2026: Key Findings for Dev Teams"
+  alt: 'JetBrains AI Tools Survey 2026: Key Findings for Dev Teams'
+  image: /images/jetbrains-survey-ai-tools-2026.png
   relative: false
-schema: "schema-jetbrains-survey-ai-tools-2026"
+date: 2026-05-31 09:05:36+00:00
+description: JetBrains AI Pulse survey of 10,000+ developers reveals 90% adoption,
+  Claude Code's explosive rise, and the real productivity paradox.
+draft: false
+schema: schema-jetbrains-survey-ai-tools-2026
+tags:
+- ai-tools
+- developer-survey
+- github-copilot
+- claude-code
+- cursor
+- productivity
+title: 'JetBrains AI Tools Survey 2026: Key Findings for Dev Teams'
 ---
 
 JetBrains' April 2026 AI Pulse survey of over 10,000 professional developers is the most rigorous snapshot of AI tool adoption available: 90% of developers now use at least one AI tool at work, Claude Code jumped from 3% to 18% work usage in under a year, and a longitudinal behavior study reveals developers are editing far more code than they realize.

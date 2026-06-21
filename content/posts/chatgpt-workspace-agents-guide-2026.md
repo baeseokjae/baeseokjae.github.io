@@ -1,14 +1,21 @@
 ---
-title: "ChatGPT Workspace Agents (Codex-Powered): Team Guide 2026"
-date: 2026-04-26T18:04:46+00:00
-tags: ["chatgpt", "workspace-agents", "codex", "openai", "team-automation", "enterprise-ai"]
-description: "Complete team guide to ChatGPT Workspace Agents powered by Codex — build, deploy, and govern autonomous agents in Slack and across your stack."
-draft: false
 cover:
-  image: "/images/chatgpt-workspace-agents-guide-2026.png"
-  alt: "ChatGPT Workspace Agents (Codex-Powered): Team Guide 2026"
+  alt: 'ChatGPT Workspace Agents (Codex-Powered): Team Guide 2026'
+  image: /images/chatgpt-workspace-agents-guide-2026.png
   relative: false
-schema: "schema-chatgpt-workspace-agents-guide-2026"
+date: 2026-04-26 18:04:46+00:00
+description: Complete team guide to ChatGPT Workspace Agents powered by Codex — build,
+  deploy, and govern autonomous agents in Slack and across your stack.
+draft: false
+schema: schema-chatgpt-workspace-agents-guide-2026
+tags:
+- chatgpt
+- workspace-agents
+- codex
+- openai
+- team-automation
+- enterprise-ai
+title: 'ChatGPT Workspace Agents (Codex-Powered): Team Guide 2026'
 ---
 
 ChatGPT Workspace Agents are autonomous AI workers powered by Codex that your team builds once and runs continuously — reading files, calling APIs, posting to Slack, updating Salesforce, and completing multi-step workflows without hand-holding. Launched April 22, 2026, they replace custom GPTs for Business and Enterprise users.

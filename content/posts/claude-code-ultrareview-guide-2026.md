@@ -1,14 +1,20 @@
 ---
-title: "Claude Code /ultrareview Command: What It Does and When to Use It"
-date: 2026-05-07T12:03:58+00:00
-tags: ["claude-code", "code-review", "ai-tools", "developer-tools", "ultrareview"]
-description: "A complete guide to /ultrareview in Claude Code — how the Find→Verify pipeline works, cost, modes, and when it pays off over /review."
-draft: false
 cover:
-  image: "/images/claude-code-ultrareview-guide-2026.png"
-  alt: "Claude Code /ultrareview Command: What It Does and When to Use It"
+  alt: 'Claude Code /ultrareview Command: What It Does and When to Use It'
+  image: /images/claude-code-ultrareview-guide-2026.png
   relative: false
-schema: "schema-claude-code-ultrareview-guide-2026"
+date: 2026-05-07 12:03:58+00:00
+description: A complete guide to /ultrareview in Claude Code — how the Find→Verify
+  pipeline works, cost, modes, and when it pays off over /review.
+draft: false
+schema: schema-claude-code-ultrareview-guide-2026
+tags:
+- claude-code
+- code-review
+- ai-tools
+- developer-tools
+- ultrareview
+title: 'Claude Code /ultrareview Command: What It Does and When to Use It'
 ---
 
 The `/ultrareview` command deploys a fleet of cloud-hosted AI reviewer agents against your code. Run it before merging anything where a production bug would cost real time or money to fix.

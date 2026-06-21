@@ -1,14 +1,23 @@
 ---
-title: "Natural Language Programming in 2026: From Replit to v0 to Bolt.new"
-date: 2026-05-24T00:05:24+00:00
-tags: ["vibe-coding", "ai-tools", "natural-language-programming", "no-code", "replit", "v0", "bolt-new", "lovable"]
-description: "Complete guide to natural language programming tools in 2026 — compare Replit, v0, Bolt.new, and Lovable with real use cases, pricing, and security tradeoffs."
-draft: false
 cover:
-  image: "/images/natural-language-programming-guide-2026.png"
-  alt: "Natural Language Programming in 2026: From Replit to v0 to Bolt.new"
+  alt: 'Natural Language Programming in 2026: From Replit to v0 to Bolt.new'
+  image: /images/natural-language-programming-guide-2026.png
   relative: false
-schema: "schema-natural-language-programming-guide-2026"
+date: 2026-05-24 00:05:24+00:00
+description: Complete guide to natural language programming tools in 2026 — compare
+  Replit, v0, Bolt.new, and Lovable with real use cases, pricing, and security trad...
+draft: false
+schema: schema-natural-language-programming-guide-2026
+tags:
+- vibe-coding
+- ai-tools
+- natural-language-programming
+- no-code
+- replit
+- v0
+- bolt-new
+- lovable
+title: 'Natural Language Programming in 2026: From Replit to v0 to Bolt.new'
 ---
 
 Natural language programming tools let you describe software in plain English and receive working code — no syntax memorization, no configuration files, no build toolchain setup. In 2026, that capability has matured enough that 63% of users across the top platforms are non-developers building real products.

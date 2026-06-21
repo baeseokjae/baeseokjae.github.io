@@ -1,14 +1,20 @@
 ---
-title: "Windsurf Memories Feature Guide 2026: How to Make Cascade Remember Your Codebase"
-date: 2026-04-23T01:07:42+00:00
-tags: ["windsurf", "cascade", "ai-ide", "developer-tools", "productivity"]
-description: "Complete guide to Windsurf Memories, Rules, and AGENTS.md — make Cascade remember your codebase conventions, preferences, and architecture permanently."
-draft: false
 cover:
-  image: "/images/windsurf-memories-guide-2026.png"
-  alt: "Windsurf Memories Feature Guide 2026: How to Make Cascade Remember Your Codebase"
+  alt: 'Windsurf Memories Feature Guide 2026: How to Make Cascade Remember Your Codebase'
+  image: /images/windsurf-memories-guide-2026.png
   relative: false
-schema: "schema-windsurf-memories-guide-2026"
+date: 2026-04-23 01:07:42+00:00
+description: Complete guide to Windsurf Memories, Rules, and AGENTS.md — make Cascade
+  remember your codebase conventions, preferences, and architecture permanently.
+draft: false
+schema: schema-windsurf-memories-guide-2026
+tags:
+- windsurf
+- cascade
+- ai-ide
+- developer-tools
+- productivity
+title: 'Windsurf Memories Feature Guide 2026: How to Make Cascade Remember Your Codebase'
 ---
 
 Windsurf Memories let Cascade automatically capture and reuse context from your conversations — so you stop re-explaining your stack, naming conventions, and architecture every session. Combined with Rules and AGENTS.md, you get a persistent codebase brain that survives IDE restarts.

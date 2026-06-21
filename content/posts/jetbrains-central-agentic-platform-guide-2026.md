@@ -1,14 +1,20 @@
 ---
-title: "JetBrains Central Agentic Platform: Complete Early Access Guide 2026"
-date: 2026-06-03T12:03:34+00:00
-tags: ["JetBrains", "AI agents", "agentic platform", "developer tools", "enterprise AI"]
-description: "Complete guide to JetBrains Central agentic platform — architecture, supported agents, Early Access Program, pricing, and comparison with GitHub Copilot."
-draft: false
 cover:
-  image: "/images/jetbrains-central-agentic-platform-guide-2026.png"
-  alt: "JetBrains Central Agentic Platform: Complete Early Access Guide 2026"
+  alt: 'JetBrains Central Agentic Platform: Complete Early Access Guide 2026'
+  image: /images/jetbrains-central-agentic-platform-guide-2026.png
   relative: false
-schema: "schema-jetbrains-central-agentic-platform-guide-2026"
+date: 2026-06-03 12:03:34+00:00
+description: Complete guide to JetBrains Central agentic platform — architecture,
+  supported agents, Early Access Program, pricing, and comparison with GitHub Copilot.
+draft: false
+schema: schema-jetbrains-central-agentic-platform-guide-2026
+tags:
+- JetBrains
+- AI agents
+- agentic platform
+- developer tools
+- enterprise AI
+title: 'JetBrains Central Agentic Platform: Complete Early Access Guide 2026'
 ---
 
 JetBrains Central is an enterprise-grade agentic platform that lets teams govern, orchestrate, and observe AI coding agents — Junie, Claude, Codex, Gemini CLI, and custom agents — from a single control plane. It launched Early Access in Q2 2026 with design partners including Google Cloud, Anthropic, and OpenAI.

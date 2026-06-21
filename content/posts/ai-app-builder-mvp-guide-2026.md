@@ -1,14 +1,24 @@
 ---
-title: "AI App Builder Guide 2026: How to Ship an MVP in a Weekend with Vibe Coding Tools"
-date: 2026-04-23T01:25:18+00:00
-tags: ["ai app builder", "vibe coding", "mvp", "lovable", "bolt", "replit", "no-code"]
-description: "The definitive 2026 guide to AI app builders — Lovable, Bolt, Replit, v0 compared with a step-by-step weekend MVP playbook."
-draft: false
 cover:
-  image: "/images/ai-app-builder-mvp-guide-2026.png"
-  alt: "AI App Builder Guide 2026: How to Ship an MVP in a Weekend with Vibe Coding Tools"
+  alt: 'AI App Builder Guide 2026: How to Ship an MVP in a Weekend with Vibe Coding
+    Tools'
+  image: /images/ai-app-builder-mvp-guide-2026.png
   relative: false
-schema: "schema-ai-app-builder-mvp-guide-2026"
+date: 2026-04-23 01:25:18+00:00
+description: The definitive 2026 guide to AI app builders — Lovable, Bolt, Replit,
+  v0 compared with a step-by-step weekend MVP playbook.
+draft: false
+schema: schema-ai-app-builder-mvp-guide-2026
+tags:
+- ai app builder
+- vibe coding
+- mvp
+- lovable
+- bolt
+- replit
+- no-code
+title: 'AI App Builder Guide 2026: How to Ship an MVP in a Weekend with Vibe Coding
+  Tools'
 ---
 
 The fastest founders in 2026 are shipping usable MVPs in 48 hours — not because they write faster code, but because they've stopped writing most of it. AI app builders like Lovable, Bolt.new, and Replit Agent let you describe a product in plain English and get back a deployable web app. This guide covers which tools to use, when to switch between them, and exactly how to go from idea to live URL over a single weekend.

@@ -1,14 +1,20 @@
 ---
-title: "Claude Opus 4.6 vs GPT-5 for Coding 2026: Real Developer Benchmarks"
-date: 2026-04-20T01:04:01+00:00
-tags: ["Claude Opus 4.6", "GPT-5", "coding benchmarks", "LLM comparison", "AI coding tools"]
-description: "Claude Opus 4.6 leads SWE-bench Pro at 74% vs GPT-5.4's 57.7%, but GPT-5 is 6x cheaper. Here's the real data developers need in 2026."
-draft: false
 cover:
-  image: "/images/claude-opus-4-vs-gpt-5-coding-2026.png"
-  alt: "Claude Opus 4.6 vs GPT-5 for Coding 2026: Real Developer Benchmarks"
+  alt: 'Claude Opus 4.6 vs GPT-5 for Coding 2026: Real Developer Benchmarks'
+  image: /images/claude-opus-4-vs-gpt-5-coding-2026.png
   relative: false
-schema: "schema-claude-opus-4-vs-gpt-5-coding-2026"
+date: 2026-04-20 01:04:01+00:00
+description: Claude Opus 4.6 leads SWE-bench Pro at 74% vs GPT-5.4's 57.7%, but GPT-5
+  is 6x cheaper. Here's the real data developers need in 2026.
+draft: false
+schema: schema-claude-opus-4-vs-gpt-5-coding-2026
+tags:
+- Claude Opus 4.6
+- GPT-5
+- coding benchmarks
+- LLM comparison
+- AI coding tools
+title: 'Claude Opus 4.6 vs GPT-5 for Coding 2026: Real Developer Benchmarks'
 ---
 
 If you're choosing between Claude Opus 4.6 and GPT-5 for coding in 2026, the short answer is: Claude wins on complex autonomous code fixes (SWE-bench Pro 74% vs 57.7%), but GPT-5.4 costs 6x less on input and dominates terminal workflows — neither is universally better, and your workflow determines the winner.

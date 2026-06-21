@@ -1,14 +1,20 @@
 ---
-title: "Mistral Small 4 Review 2026: EU-Compliant, Open-Weight, $0.40/M Input"
-date: 2026-05-08T00:00:00+00:00
-tags: ["mistral","open-weight","eu-compliance","llm","review"]
-description: "Mistral Small 4 is a 119B MoE model unifying reasoning, vision, and coding in a single open-weight release with full GDPR compliance and Apache 2.0 licensing."
-draft: false
 cover:
-  image: "/images/mistral-small-4-review-2026.png"
-  alt: "Mistral Small 4 Review 2026"
+  alt: Mistral Small 4 Review 2026
+  image: /images/mistral-small-4-review-2026.png
   relative: false
-schema: "schema-mistral-small-4-review-2026"
+date: 2026-05-08 00:00:00+00:00
+description: Mistral Small 4 is a 119B MoE model unifying reasoning, vision, and coding
+  in a single open-weight release with full GDPR compliance and Apache 2.0 lice...
+draft: false
+schema: schema-mistral-small-4-review-2026
+tags:
+- mistral
+- open-weight
+- eu-compliance
+- llm
+- review
+title: 'Mistral Small 4 Review 2026: EU-Compliant, Open-Weight, $0.40/M Input'
 ---
 
 Mistral Small 4 ships as an Apache 2.0 open-weight model with 119B total parameters and only 6.5B active per token through a 128-expert Mixture-of-Experts architecture. It handles reasoning, vision, and coding through a single endpoint, replaces three separate Mistral models, and is priced at $0.40/M input tokens through the Mistral API.

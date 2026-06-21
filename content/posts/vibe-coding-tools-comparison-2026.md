@@ -1,14 +1,25 @@
 ---
-title: "Vibe Coding Tools Comparison 2026: Cursor vs Replit vs Bolt vs Lovable vs v0"
-date: 2026-05-02T17:09:28+00:00
-tags: ["vibe coding", "cursor", "replit", "bolt", "lovable", "v0", "ai coding tools", "comparison"]
-description: "Hands-on comparison of the 5 major vibe coding tools in 2026 — Cursor, Replit, Bolt, Lovable, and v0 — with pricing, use cases, and a decision framework."
-draft: false
 cover:
-  image: "/images/vibe-coding-tools-comparison-2026.png"
-  alt: "Vibe Coding Tools Comparison 2026: Cursor vs Replit vs Bolt vs Lovable vs v0"
+  alt: 'Vibe Coding Tools Comparison 2026: Cursor vs Replit vs Bolt vs Lovable vs
+    v0'
+  image: /images/vibe-coding-tools-comparison-2026.png
   relative: false
-schema: "schema-vibe-coding-tools-comparison-2026"
+date: 2026-05-02 17:09:28+00:00
+description: Hands-on comparison of the 5 major vibe coding tools in 2026 — Cursor,
+  Replit, Bolt, Lovable, and v0 — with pricing, use cases, and a decision framework.
+draft: false
+schema: schema-vibe-coding-tools-comparison-2026
+tags:
+- vibe coding
+- cursor
+- replit
+- bolt
+- lovable
+- v0
+- ai coding tools
+- comparison
+title: 'Vibe Coding Tools Comparison 2026: Cursor vs Replit vs Bolt vs Lovable vs
+  v0'
 ---
 
 The five tools that dominate vibe coding in 2026 — Cursor, Replit, Bolt, Lovable, and v0 — all work, but each wins a different use case. Cursor is for professional devs shipping production code. Bolt wins on speed. Lovable is the non-technical founder's tool. v0 owns the React/UI niche. Replit is where beginners learn.

@@ -1,14 +1,21 @@
 ---
-title: "GPT-5 vs Claude Opus 4 vs Gemini 3: 2026 Coding Benchmark Comparison"
-date: 2026-04-27T14:25:59+00:00
-tags: ["gpt-5", "claude-opus-4", "gemini-3", "coding-benchmarks", "ai-coding", "llm-comparison"]
-description: "GPT-5 vs Claude Opus 4 vs Gemini 3 for coding in 2026 — SWE-bench, Terminal-Bench, pricing, and workflow-by-workflow recommendations."
-draft: false
 cover:
-  image: "/images/gpt-5-vs-claude-opus-4-vs-gemini-3-coding-2026.png"
-  alt: "GPT-5 vs Claude Opus 4 vs Gemini 3: 2026 Coding Benchmark Comparison"
+  alt: 'GPT-5 vs Claude Opus 4 vs Gemini 3: 2026 Coding Benchmark Comparison'
+  image: /images/gpt-5-vs-claude-opus-4-vs-gemini-3-coding-2026.png
   relative: false
-schema: "schema-gpt-5-vs-claude-opus-4-vs-gemini-3-coding-2026"
+date: 2026-04-27 14:25:59+00:00
+description: GPT-5 vs Claude Opus 4 vs Gemini 3 for coding in 2026 — SWE-bench, Terminal-Bench,
+  pricing, and workflow-by-workflow recommendations.
+draft: false
+schema: schema-gpt-5-vs-claude-opus-4-vs-gemini-3-coding-2026
+tags:
+- gpt-5
+- claude-opus-4
+- gemini-3
+- coding-benchmarks
+- ai-coding
+- llm-comparison
+title: 'GPT-5 vs Claude Opus 4 vs Gemini 3: 2026 Coding Benchmark Comparison'
 ---
 
 No single model wins the 2026 coding LLM race outright — it depends on your workflow. Claude Opus 4.6 leads SWE-bench Verified at 76.2%, GPT-5.3-Codex tops Terminal-Bench CLI workflows at 89 points, and Gemini 3.1 Pro delivers competitive performance at roughly 60% lower cost than Claude. Here is exactly what each model is best at, with benchmark data and pricing to back it up.

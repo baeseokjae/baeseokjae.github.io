@@ -1,14 +1,20 @@
 ---
-title: "Qwen 3.6-35B-A3B Local Deployment Guide: How 3B Active Params Changes the Build"
-date: 2026-06-11T09:04:11+00:00
-tags: ["qwen 3.6", "local llm deployment", "moe inference"]
-description: "Deploy Qwen3.6-35B-A3B locally with Ollama, llama.cpp, and LM Studio by choosing the right quant and hardware profile."
-draft: false
 cover:
-  image: "/images/qwen-3-6-local-deployment-2026.png"
-  alt: "Qwen 3.6-35B-A3B Local Deployment Guide: How 3B Active Params Changes the Build"
+  alt: 'Qwen 3.6-35B-A3B Local Deployment Guide: How 3B Active Params Changes the
+    Build'
+  image: /images/qwen-3-6-local-deployment-2026.png
   relative: false
-schema: "schema-qwen-3-6-local-deployment-2026"
+date: 2026-06-11 09:04:11+00:00
+description: Deploy Qwen3.6-35B-A3B locally with Ollama, llama.cpp, and LM Studio
+  by choosing the right quant and hardware profile.
+draft: false
+schema: schema-qwen-3-6-local-deployment-2026
+tags:
+- qwen 3.6
+- local llm deployment
+- moe inference
+title: 'Qwen 3.6-35B-A3B Local Deployment Guide: How 3B Active Params Changes the
+  Build'
 ---
 
 If you want a frontier coding model without cloud bills, Qwen3.6-35B-A3B is the first local LLM I’d run right now because its 3B active-parameter MoE path behaves like a 3B model in many deployment budgets while preserving much stronger coding signal than smaller dense models. I am going to show you the exact setup flow I use for local inference: runtime choice, quantization, context strategy, and verification commands that keep inference stable.

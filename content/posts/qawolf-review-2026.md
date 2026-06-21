@@ -1,14 +1,20 @@
 ---
-title: "QA Wolf Review 2026: AI-Generated Playwright Tests at Scale"
-date: 2026-04-27T03:03:55+00:00
-tags: ["qa-wolf", "playwright", "test-automation", "ai-testing", "managed-qa"]
-description: "Honest QA Wolf review 2026: pricing, AI Playwright test generation, pros/cons, and how it compares to Mabl, Testim, and BrowserStack."
-draft: false
 cover:
-  image: "/images/qawolf-review-2026.png"
-  alt: "QA Wolf Review 2026: AI-Generated Playwright Tests at Scale"
+  alt: 'QA Wolf Review 2026: AI-Generated Playwright Tests at Scale'
+  image: /images/qawolf-review-2026.png
   relative: false
-schema: "schema-qawolf-review-2026"
+date: 2026-04-27 03:03:55+00:00
+description: 'Honest QA Wolf review 2026: pricing, AI Playwright test generation,
+  pros/cons, and how it compares to Mabl, Testim, and BrowserStack.'
+draft: false
+schema: schema-qawolf-review-2026
+tags:
+- qa-wolf
+- playwright
+- test-automation
+- ai-testing
+- managed-qa
+title: 'QA Wolf Review 2026: AI-Generated Playwright Tests at Scale'
 ---
 
 QA Wolf is a managed AI testing service that writes, runs, and maintains Playwright end-to-end tests for you — not a DIY tool. At $60K–$250K/year, it replaces a dedicated QA team and guarantees 80% automated test coverage within 4 months, making it best suited for fast-moving SaaS teams without in-house QA.

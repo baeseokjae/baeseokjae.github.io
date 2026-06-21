@@ -1,14 +1,22 @@
 ---
-title: "Cursor 3 Agents Window Guide: Glass Interface, Design Mode, and Worktrees Explained"
-date: 2026-04-27T09:03:54+00:00
-tags: ["Cursor", "AI IDE", "Agents Window", "Cursor 3", "developer tools"]
-description: "A complete guide to Cursor 3 Glass — covering the Agents Window, Design Mode, and Worktrees for parallel agent-first development in 2026."
-draft: false
 cover:
-  image: "/images/cursor-3-glass-agents-window-deep-dive-2026.png"
-  alt: "Cursor 3 Agents Window Guide: Glass Interface, Design Mode, and Worktrees Explained"
+  alt: 'Cursor 3 Agents Window Guide: Glass Interface, Design Mode, and Worktrees
+    Explained'
+  image: /images/cursor-3-glass-agents-window-deep-dive-2026.png
   relative: false
-schema: "schema-cursor-3-glass-agents-window-deep-dive-2026"
+date: 2026-04-27 09:03:54+00:00
+description: A complete guide to Cursor 3 Glass — covering the Agents Window, Design
+  Mode, and Worktrees for parallel agent-first development in 2026.
+draft: false
+schema: schema-cursor-3-glass-agents-window-deep-dive-2026
+tags:
+- Cursor
+- AI IDE
+- Agents Window
+- Cursor 3
+- developer tools
+title: 'Cursor 3 Agents Window Guide: Glass Interface, Design Mode, and Worktrees
+  Explained'
 ---
 
 Cursor 3 Glass is a full rebuild of the Cursor IDE interface around agent orchestration — not just code editing. Released April 2, 2026, it lets you run dozens of parallel agents across multiple repos and branches, annotate UI elements directly in a browser with Design Mode, and isolate background tasks in Worktrees, all from a single unified window.

@@ -1,14 +1,20 @@
 ---
-title: "Azure Bicep IaC ARM Template Alternative Developer Guide 2026"
-date: 2026-05-18T18:03:30+00:00
-tags: ["azure", "bicep", "infrastructure-as-code", "arm-templates", "devops"]
-description: "Azure Bicep이 ARM JSON 템플릿을 대체하는 이유와 마이그레이션, 모듈, CI/CD 통합 방법을 다루는 완전한 개발자 가이드."
-draft: false
 cover:
-  image: "/images/azure-bicep-iac-arm-template-alternative-developer-guide-2026.png"
-  alt: "Azure Bicep IaC ARM Template Alternative Developer Guide 2026"
+  alt: Azure Bicep IaC ARM Template Alternative Developer Guide 2026
+  image: /images/azure-bicep-iac-arm-template-alternative-developer-guide-2026.png
   relative: false
-schema: "schema-azure-bicep-iac-arm-template-alternative-developer-guide-2026"
+date: 2026-05-18 18:03:30+00:00
+description: Azure Bicep이 ARM JSON 템플릿을 대체하는 이유와 마이그레이션, 모듈, CI/CD 통합 방법을 다루는 완전한
+  개발자 가이드.
+draft: false
+schema: schema-azure-bicep-iac-arm-template-alternative-developer-guide-2026
+tags:
+- azure
+- bicep
+- infrastructure-as-code
+- arm-templates
+- devops
+title: Azure Bicep IaC ARM Template Alternative Developer Guide 2026
 ---
 
 Azure Bicep은 ARM JSON 템플릿의 공식 후속 언어로, 동일한 Azure Resource Manager 엔진 위에서 동작하면서 코드 크기를 절반으로 줄이고 IntelliSense와 타입 안전성을 제공합니다. Microsoft는 2026년 현재 모든 신규 ARM 배포에 Bicep을 기본 권장 언어로 채택했습니다.

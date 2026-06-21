@@ -1,14 +1,20 @@
 ---
-title: "GPT-5-Codex Developer Guide: OpenAI's SWE-Optimized Model API Explained"
-date: 2026-05-25T00:04:49+00:00
-tags: ["gpt-5-codex", "openai", "coding-ai", "responses-api", "agentic-coding"]
-description: "Complete developer guide to GPT-5-Codex: API setup, agentic workflows, pricing, benchmarks, and when to use it over GPT-5.5."
-draft: false
 cover:
-  image: "/images/gpt-5-codex-model-guide-2026.png"
-  alt: "GPT-5-Codex Developer Guide: OpenAI's SWE-Optimized Model API Explained"
+  alt: 'GPT-5-Codex Developer Guide: OpenAI''s SWE-Optimized Model API Explained'
+  image: /images/gpt-5-codex-model-guide-2026.png
   relative: false
-schema: "schema-gpt-5-codex-model-guide-2026"
+date: 2026-05-25 00:04:49+00:00
+description: 'Complete developer guide to GPT-5-Codex: API setup, agentic workflows,
+  pricing, benchmarks, and when to use it over GPT-5.5.'
+draft: false
+schema: schema-gpt-5-codex-model-guide-2026
+tags:
+- gpt-5-codex
+- openai
+- coding-ai
+- responses-api
+- agentic-coding
+title: 'GPT-5-Codex Developer Guide: OpenAI''s SWE-Optimized Model API Explained'
 ---
 
 GPT-5-Codex is OpenAI's software-engineering-optimized model family, built specifically for agentic coding tasks like feature development, debugging, and large-scale refactoring. Unlike general-purpose GPT models, it runs exclusively through the Responses API and powers the OpenAI Codex platform, which reached 4 million weekly active developers by April 2026.

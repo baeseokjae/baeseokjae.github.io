@@ -1,14 +1,20 @@
 ---
-title: "AI Harness Engineering: Structured Workflows for Deterministic AI-Assisted Development"
-date: 2026-06-15T15:12:58+00:00
-tags: ["AI engineering", "developer productivity", "software delivery"]
-description: "A practical guide to AI harness engineering for deterministic AI-assisted development workflows."
-draft: false
 cover:
-  image: "/images/ai-harness-engineering-guide-2026.png"
-  alt: "AI Harness Engineering: Structured Workflows for Deterministic AI-Assisted Development"
+  alt: 'AI Harness Engineering: Structured Workflows for Deterministic AI-Assisted
+    Development'
+  image: /images/ai-harness-engineering-guide-2026.png
   relative: false
-schema: "schema-ai-harness-engineering-guide-2026"
+date: 2026-06-15 15:12:58+00:00
+description: A practical guide to AI harness engineering for deterministic AI-assisted
+  development workflows.
+draft: false
+schema: schema-ai-harness-engineering-guide-2026
+tags:
+- AI engineering
+- developer productivity
+- software delivery
+title: 'AI Harness Engineering: Structured Workflows for Deterministic AI-Assisted
+  Development'
 ---
 
 AI harness engineering is the practice of wrapping AI coding agents in structured workflows, constraints, state, and verification so their output becomes repeatable enough for production software delivery. The useful shift is not better prompting. It is turning AI assistance into an engineered system with typed inputs, tool limits, tests, and review gates.

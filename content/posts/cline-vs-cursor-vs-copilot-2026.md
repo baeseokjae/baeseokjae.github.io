@@ -1,14 +1,20 @@
 ---
-title: "Cline vs Cursor vs GitHub Copilot 2026: VS Code AI Agent Showdown"
-date: 2026-05-08T00:00:00+00:00
-tags: ["cline","cursor","github-copilot","vs-code","ai-coding"]
-description: "A direct comparison of Cline, Cursor, and GitHub Copilot in 2026: features, pricing, agent capabilities, and which tool fits which developer profile."
-draft: false
 cover:
-  image: "/images/cline-vs-cursor-vs-copilot-2026.png"
-  alt: "Cline vs Cursor vs GitHub Copilot 2026: VS Code AI Agent Showdown"
+  alt: 'Cline vs Cursor vs GitHub Copilot 2026: VS Code AI Agent Showdown'
+  image: /images/cline-vs-cursor-vs-copilot-2026.png
   relative: false
-schema: "schema-cline-vs-cursor-vs-copilot-2026"
+date: 2026-05-08 00:00:00+00:00
+description: 'A direct comparison of Cline, Cursor, and GitHub Copilot in 2026: features,
+  pricing, agent capabilities, and which tool fits which developer profile.'
+draft: false
+schema: schema-cline-vs-cursor-vs-copilot-2026
+tags:
+- cline
+- cursor
+- github-copilot
+- vs-code
+- ai-coding
+title: 'Cline vs Cursor vs GitHub Copilot 2026: VS Code AI Agent Showdown'
 ---
 
 ## Cline vs Cursor vs GitHub Copilot 2026: The VS Code AI Agent Landscape

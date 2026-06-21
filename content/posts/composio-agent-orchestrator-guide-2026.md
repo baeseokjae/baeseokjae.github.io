@@ -1,14 +1,20 @@
 ---
-title: "Composio Agent Orchestrator: Parallel Coding Agents for CI and PR Reviews"
-date: 2026-05-22T08:23:00+00:00
-tags: ["composio", "agent-orchestrator", "parallel-agents", "ci-automation", "pr-review"]
-description: "Composio Agent Orchestrator review 2026: run 5+ parallel coding agents, automate CI fixes, handle full PR lifecycle, and compare with OpenAI Symphony and T3 Code."
-draft: false
 cover:
-  image: "/images/composio-agent-orchestrator-guide-2026.png"
-  alt: "Composio Agent Orchestrator: Parallel Coding Agents for CI and PR Reviews"
+  alt: 'Composio Agent Orchestrator: Parallel Coding Agents for CI and PR Reviews'
+  image: /images/composio-agent-orchestrator-guide-2026.png
   relative: false
-schema: "schema-composio-agent-orchestrator-guide-2026"
+date: 2026-05-22 08:23:00+00:00
+description: 'Composio Agent Orchestrator review 2026: run 5+ parallel coding agents,
+  automate CI fixes, handle full PR lifecycle, and compare with OpenAI Symphony an...'
+draft: false
+schema: schema-composio-agent-orchestrator-guide-2026
+tags:
+- composio
+- agent-orchestrator
+- parallel-agents
+- ci-automation
+- pr-review
+title: 'Composio Agent Orchestrator: Parallel Coding Agents for CI and PR Reviews'
 ---
 
 Composio Agent Orchestrator (AO) is an open-source framework for running multiple coding agents in parallel on a single codebase — handling task assignment, CI failure routing, PR creation, and review loops without human intervention between steps. It was open-sourced by Composio in February 2026 and reached 4,900 GitHub stars in its first months.

@@ -1,14 +1,21 @@
 ---
-title: "OpenAI Agents SDK Tutorial 2026: Build Multi-Agent Pipelines in Python"
-date: 2026-04-27T15:02:17+00:00
-tags: ["openai", "agents", "python", "multi-agent", "ai-agents", "tutorial"]
-description: "Step-by-step guide to building production multi-agent pipelines with OpenAI Agents SDK 0.13.4 — handoffs, guardrails, tracing, and cost optimization."
-draft: false
 cover:
-  image: "/images/openai-agents-sdk-tutorial-2026.png"
-  alt: "OpenAI Agents SDK Tutorial 2026: Build Multi-Agent Pipelines in Python"
+  alt: 'OpenAI Agents SDK Tutorial 2026: Build Multi-Agent Pipelines in Python'
+  image: /images/openai-agents-sdk-tutorial-2026.png
   relative: false
-schema: "schema-openai-agents-sdk-tutorial-2026"
+date: 2026-04-27 15:02:17+00:00
+description: Step-by-step guide to building production multi-agent pipelines with
+  OpenAI Agents SDK 0.13.4 — handoffs, guardrails, tracing, and cost optimization.
+draft: false
+schema: schema-openai-agents-sdk-tutorial-2026
+tags:
+- openai
+- agents
+- python
+- multi-agent
+- ai-agents
+- tutorial
+title: 'OpenAI Agents SDK Tutorial 2026: Build Multi-Agent Pipelines in Python'
 ---
 
 The OpenAI Agents SDK lets you build production-grade multi-agent pipelines in Python with fewer than 100 lines of core logic. Install it with `pip install openai-agents`, define agents with instructions and tools, connect them via handoffs or an orchestrator, and run with `asyncio`. This tutorial walks through a complete three-agent pipeline from setup to deployment.

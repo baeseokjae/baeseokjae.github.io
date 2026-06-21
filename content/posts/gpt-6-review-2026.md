@@ -1,14 +1,22 @@
 ---
-title: "GPT-6 Review 2026: OpenAI's New Flagship Model — Benchmarks, API, and Developer Use Cases"
-date: 2026-05-03T06:06:42+00:00
-tags: ["gpt-6", "openai", "ai-models", "developer-tools", "benchmarks", "api"]
-description: "GPT-6 pre-training is done but not yet released. Here's every confirmed fact, benchmark projection, and API detail developers need to plan ahead."
-draft: false
 cover:
-  image: "/images/gpt-6-review-2026.png"
-  alt: "GPT-6 Review 2026: OpenAI's New Flagship Model"
+  alt: 'GPT-6 Review 2026: OpenAI''s New Flagship Model'
+  image: /images/gpt-6-review-2026.png
   relative: false
-schema: "schema-gpt-6-review-2026"
+date: 2026-05-03 06:06:42+00:00
+description: GPT-6 pre-training is done but not yet released. Here's every confirmed
+  fact, benchmark projection, and API detail developers need to plan ahead.
+draft: false
+schema: schema-gpt-6-review-2026
+tags:
+- gpt-6
+- openai
+- ai-models
+- developer-tools
+- benchmarks
+- api
+title: 'GPT-6 Review 2026: OpenAI''s New Flagship Model — Benchmarks, API, and Developer
+  Use Cases'
 ---
 
 GPT-6 is OpenAI's next flagship model — pre-training completed on March 24, 2026 at the Stargate facility in Abilene, Texas, but the model has not shipped to the public as of May 2026. What's confirmed, what's projection, and what every developer building on the OpenAI API needs to know right now.

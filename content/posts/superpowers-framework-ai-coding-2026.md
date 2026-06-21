@@ -1,14 +1,20 @@
 ---
-title: "Superpowers Framework: TDD Methodology for AI Coding Agents 2026"
-date: 2026-04-24T04:12:05+00:00
-tags: ["ai-agents", "developer-tools", "tutorial", "tdd", "claude-code"]
-description: "Superpowers is the open-source framework that enforces TDD discipline on AI coding agents—here's how to install it and why it works."
-draft: false
 cover:
-  image: "/images/superpowers-framework-ai-coding-2026.png"
-  alt: "Superpowers Framework: TDD Methodology for AI Coding Agents 2026"
+  alt: 'Superpowers Framework: TDD Methodology for AI Coding Agents 2026'
+  image: /images/superpowers-framework-ai-coding-2026.png
   relative: false
-schema: "schema-superpowers-framework-ai-coding-2026"
+date: 2026-04-24 04:12:05+00:00
+description: Superpowers is the open-source framework that enforces TDD discipline
+  on AI coding agents—here's how to install it and why it works.
+draft: false
+schema: schema-superpowers-framework-ai-coding-2026
+tags:
+- ai-agents
+- developer-tools
+- tutorial
+- tdd
+- claude-code
+title: 'Superpowers Framework: TDD Methodology for AI Coding Agents 2026'
 ---
 
 The Superpowers framework is the fastest way to stop your AI coding agent from shipping broken code. Instead of hoping the model follows best practices, Superpowers installs a structured set of skills that *enforce* a clarify → design → plan → code → verify discipline on every task—red tests before green, always.

@@ -1,14 +1,20 @@
 ---
-title: "Daytona Review 2026: Sub-90ms AI Agent Code Execution Infrastructure"
-date: 2026-05-11T12:05:31+00:00
-tags: ["Daytona", "AI agent infrastructure", "code execution sandbox", "developer tools", "cloud development"]
-description: "Hands-on Daytona review: sub-90ms cold starts, open-source self-hosting, LangChain/Claude integration, and head-to-head comparison with E2B and Modal."
-draft: false
 cover:
-  image: "/images/daytona-review-2026.png"
-  alt: "Daytona Review 2026: Sub-90ms AI Agent Code Execution Infrastructure"
+  alt: 'Daytona Review 2026: Sub-90ms AI Agent Code Execution Infrastructure'
+  image: /images/daytona-review-2026.png
   relative: false
-schema: "schema-daytona-review-2026"
+date: 2026-05-11 12:05:31+00:00
+description: 'Hands-on Daytona review: sub-90ms cold starts, open-source self-hosting,
+  LangChain/Claude integration, and head-to-head comparison with E2B and Modal.'
+draft: false
+schema: schema-daytona-review-2026
+tags:
+- Daytona
+- AI agent infrastructure
+- code execution sandbox
+- developer tools
+- cloud development
+title: 'Daytona Review 2026: Sub-90ms AI Agent Code Execution Infrastructure'
 ---
 
 Daytona is an agent-native sandbox infrastructure platform that spins up isolated code execution environments in under 90ms — with optimized configurations hitting 27ms cold starts — eliminating the 2–5 second Docker delays that compound into 30+ second overhead across a typical 15-tool-call agent loop.

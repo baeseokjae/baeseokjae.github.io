@@ -1,14 +1,24 @@
 ---
-title: "Devstral Small 2 Local Setup Guide 2026: Run Mistral Coding Agent on Your Laptop"
-date: 2026-04-30T06:04:25+00:00
-tags: ["devstral small 2", "local AI", "mistral", "coding agent", "ollama", "vllm", "llama.cpp"]
-description: "Step-by-step guide to running Devstral Small 2 (24B, 68% SWE-bench) locally via Ollama, vLLM, or llama.cpp — zero API fees, full privacy."
-draft: false
 cover:
-  image: "/images/devstral-small-2-local-setup-guide-2026.png"
-  alt: "Devstral Small 2 Local Setup Guide 2026: Run Mistral Coding Agent on Your Laptop"
+  alt: 'Devstral Small 2 Local Setup Guide 2026: Run Mistral Coding Agent on Your
+    Laptop'
+  image: /images/devstral-small-2-local-setup-guide-2026.png
   relative: false
-schema: "schema-devstral-small-2-local-setup-guide-2026"
+date: 2026-04-30 06:04:25+00:00
+description: Step-by-step guide to running Devstral Small 2 (24B, 68% SWE-bench) locally
+  via Ollama, vLLM, or llama.cpp — zero API fees, full privacy.
+draft: false
+schema: schema-devstral-small-2-local-setup-guide-2026
+tags:
+- devstral small 2
+- local AI
+- mistral
+- coding agent
+- ollama
+- vllm
+- llama.cpp
+title: 'Devstral Small 2 Local Setup Guide 2026: Run Mistral Coding Agent on Your
+  Laptop'
 ---
 
 Devstral Small 2 is a 24B-parameter coding model from Mistral AI that scores 68% on SWE-bench Verified and runs on a single 24GB GPU or a Mac M-series with 32GB unified memory — making it the first cloud-grade coding agent most developers can realistically self-host. This guide covers three setup paths: Ollama for beginners, vLLM for production teams, and llama.cpp for CPU-only or low-VRAM machines.

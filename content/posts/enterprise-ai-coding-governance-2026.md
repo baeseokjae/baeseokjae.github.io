@@ -1,14 +1,21 @@
 ---
-title: "Enterprise AI Coding Governance 2026: Policy, Compliance, and Shadow AI"
-date: 2026-05-07T12:00:00+00:00
-tags: ["enterprise", "governance", "ai-coding", "compliance", "security", "shadow-ai"]
-description: "78% of enterprises report unauthorized AI coding tool use. Build a five-pillar governance framework covering shadow AI, HIPAA, PCI-DSS, SOC 2, and EU AI Act."
-draft: false
 cover:
-  image: "/images/enterprise-ai-coding-governance-2026.png"
-  alt: "Enterprise AI Coding Governance 2026: Policy, Compliance, and Shadow AI"
+  alt: 'Enterprise AI Coding Governance 2026: Policy, Compliance, and Shadow AI'
+  image: /images/enterprise-ai-coding-governance-2026.png
   relative: false
-schema: "schema-enterprise-ai-coding-governance-2026"
+date: 2026-05-07 12:00:00+00:00
+description: 78% of enterprises report unauthorized AI coding tool use. Build a five-pillar
+  governance framework covering shadow AI, HIPAA, PCI-DSS, SOC 2, and EU AI...
+draft: false
+schema: schema-enterprise-ai-coding-governance-2026
+tags:
+- enterprise
+- governance
+- ai-coding
+- compliance
+- security
+- shadow-ai
+title: 'Enterprise AI Coding Governance 2026: Policy, Compliance, and Shadow AI'
 ---
 
 Ninety-two percent of Fortune 500 companies have deployed at least one AI coding assistant — yet 78% of enterprises simultaneously report employees using unauthorized AI tools for coding tasks (Gartner, 2025). That gap between sanctioned deployment and actual developer behavior is the governance problem of 2026. Engineers who can't get fast approval for the AI tool they want will use their personal Claude.ai account, their individual Cursor subscription, or a free Copilot tier on a laptop that has never seen your DLP policy. The code they paste in takes your intellectual property, your customer data, and your regulatory posture out of scope — silently, without a ticket, without a log entry. This guide provides the framework, the policy language, and the 90-day roadmap to close that gap.

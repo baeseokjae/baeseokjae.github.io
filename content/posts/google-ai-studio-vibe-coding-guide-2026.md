@@ -1,14 +1,22 @@
 ---
-title: "Google AI Studio Vibe Coding: Full Setup and Build Guide 2026"
-date: 2026-06-09T21:10:08+00:00
-tags: ["Google AI Studio", "vibe coding", "Gemini", "Antigravity", "full-stack", "Firebase", "Cloud Run"]
-description: "Complete 2026 guide to Google AI Studio vibe coding — free setup, Build mode, Annotation mode, full-stack Firebase apps, and one-click Cloud Run deploy."
-draft: false
 cover:
-  image: "/images/google-ai-studio-vibe-coding-guide-2026.png"
-  alt: "Google AI Studio Vibe Coding: Full Setup and Build Guide 2026"
+  alt: 'Google AI Studio Vibe Coding: Full Setup and Build Guide 2026'
+  image: /images/google-ai-studio-vibe-coding-guide-2026.png
   relative: false
-schema: "schema-google-ai-studio-vibe-coding-guide-2026"
+date: 2026-06-09 21:10:08+00:00
+description: Complete 2026 guide to Google AI Studio vibe coding — free setup, Build
+  mode, Annotation mode, full-stack Firebase apps, and one-click Cloud Run deploy.
+draft: false
+schema: schema-google-ai-studio-vibe-coding-guide-2026
+tags:
+- Google AI Studio
+- vibe coding
+- Gemini
+- Antigravity
+- full-stack
+- Firebase
+- Cloud Run
+title: 'Google AI Studio Vibe Coding: Full Setup and Build Guide 2026'
 ---
 
 Google AI Studio's vibe coding lets you build and deploy full-stack web and Android apps using plain English — no terminal, no package managers, no boilerplate. Open a browser, describe what you want, and the Antigravity agent writes, runs, and deploys your app to Cloud Run. Completely free for most developers.

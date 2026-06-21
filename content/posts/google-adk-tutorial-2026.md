@@ -1,14 +1,18 @@
 ---
-title: "Google ADK Tutorial: Build Your First AI Agent (google adk tutorial)"
-date: 2026-06-11T18:02:37+00:00
-tags: ["google adk", "ai agents", "python tutorial"]
-description: "Learn how to build and harden your first Google ADK agent in 2026 with real setup steps, debugging patterns, and deployment-ready defaults."
-draft: false
 cover:
-  image: "/images/google-adk-tutorial-2026.png"
-  alt: "Google ADK Tutorial: Build Your First AI Agent (google adk tutorial)"
+  alt: 'Google ADK Tutorial: Build Your First AI Agent (google adk tutorial)'
+  image: /images/google-adk-tutorial-2026.png
   relative: false
-schema: "schema-google-adk-tutorial-2026"
+date: 2026-06-11 18:02:37+00:00
+description: Learn how to build and harden your first Google ADK agent in 2026 with
+  real setup steps, debugging patterns, and deployment-ready defaults.
+draft: false
+schema: schema-google-adk-tutorial-2026
+tags:
+- google adk
+- ai agents
+- python tutorial
+title: 'Google ADK Tutorial: Build Your First AI Agent (google adk tutorial)'
 ---
 
 Google ADK gives you a production-oriented path for first-pass AI agents because it packages model orchestration, tool calls, sessions, and runtime execution together instead of treating them as separate integrations. In 2026, you can run a first agent in under 20 minutes with the built-in quickstart flows, then keep the same foundation while you scale to multi-agent and enterprise observability features like OpenTelemetry, self-healing plugins, and session persistence.
@@ -141,4 +145,3 @@ Treat safety as measurable criteria, not opinions. Define four tests: deny dange
 
 ### Where should I host my first agent for early users?
 Start local with web UI or CLI and move to a staging endpoint only when you have stable session IDs, trace logs, and structured outputs. For production-like testing, a small container is enough; for enterprise-like confidence, add managed state and policy gates. Skip vanity infra decisions; focus on reproducible runs and recoverable failures.
-

@@ -1,14 +1,20 @@
 ---
-title: "Durable Execution for AI Agents in Production: A 2026 Production Patterns Guide"
-date: 2026-06-10T06:03:59+00:00
-tags: ["AI agents", "durable execution", "LLM operations"]
-description: "Durable execution keeps AI agents reliable through crashes, retries, and context recovery without duplicating business side effects."
-draft: false
 cover:
-  image: "/images/durable-execution-ai-agents-guide-2026.png"
-  alt: "Durable Execution for AI Agents in Production: A 2026 Production Patterns Guide"
+  alt: 'Durable Execution for AI Agents in Production: A 2026 Production Patterns
+    Guide'
+  image: /images/durable-execution-ai-agents-guide-2026.png
   relative: false
-schema: "schema-durable-execution-ai-agents-guide-2026"
+date: 2026-06-10 06:03:59+00:00
+description: Durable execution keeps AI agents reliable through crashes, retries,
+  and context recovery without duplicating business side effects.
+draft: false
+schema: schema-durable-execution-ai-agents-guide-2026
+tags:
+- AI agents
+- durable execution
+- LLM operations
+title: 'Durable Execution for AI Agents in Production: A 2026 Production Patterns
+  Guide'
 ---
 
 Durable execution is what moves AI agents from demo logic to production service: the ability to resume correctly after failure, avoid duplicate actions, and preserve conversational and task state. In teams where this is missing, incidents look random because retries, restarts, and tool calls desynchronize. In production, the first rule is to design for interruption so that every workflow can fail and still complete business goals safely.

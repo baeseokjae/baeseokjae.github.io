@@ -1,14 +1,21 @@
 ---
-title: "Gemini Flash-Lite Batch API: 50% Cost Savings for High-Volume Tasks (2026 Guide)"
-date: 2026-04-26T22:03:54+00:00
-tags: ["Gemini", "Batch API", "Cost Optimization", "Google AI", "Python"]
-description: "Complete guide to Gemini 3.1 Flash-Lite Batch API: 50% discount, JSONL implementation, real cost calculators, and 90%+ savings with prompt caching."
-draft: false
 cover:
-  image: "/images/gemini-3-1-flash-lite-batch-api-cost-guide-2026.png"
-  alt: "Gemini Flash-Lite Batch API: 50% Cost Savings for High-Volume Tasks"
+  alt: 'Gemini Flash-Lite Batch API: 50% Cost Savings for High-Volume Tasks'
+  image: /images/gemini-3-1-flash-lite-batch-api-cost-guide-2026.png
   relative: false
-schema: "schema-gemini-3-1-flash-lite-batch-api-cost-guide-2026"
+date: 2026-04-26 22:03:54+00:00
+description: 'Complete guide to Gemini 3.1 Flash-Lite Batch API: 50% discount, JSONL
+  implementation, real cost calculators, and 90%+ savings with prompt caching.'
+draft: false
+schema: schema-gemini-3-1-flash-lite-batch-api-cost-guide-2026
+tags:
+- Gemini
+- Batch API
+- Cost Optimization
+- Google AI
+- Python
+title: 'Gemini Flash-Lite Batch API: 50% Cost Savings for High-Volume Tasks (2026
+  Guide)'
 ---
 
 Gemini Flash-Lite Batch API cuts your LLM costs in half by processing requests asynchronously — submit a JSONL file, get results back within 24 hours, and pay $0.125/1M input tokens instead of $0.25. For teams running thousands of daily classification, translation, or summarization jobs, this single change can reduce monthly AI spend from hundreds of dollars to tens.

@@ -1,14 +1,20 @@
 ---
-title: "Arize Phoenix Guide: Open-Source LLM Observability for Developers (2026)"
-date: 2026-05-17T15:03:42+00:00
-tags: ["arize phoenix", "llm observability", "opentelemetry", "rag evaluation", "ai monitoring"]
-description: "Step-by-step guide to Arize Phoenix: install, instrument LLM apps, trace RAG pipelines, and run evals — all open-source, zero vendor lock-in."
-draft: false
 cover:
-  image: "/images/arize-phoenix-observability-guide-2026.png"
-  alt: "Arize Phoenix Guide: Open-Source LLM Observability for Developers"
+  alt: 'Arize Phoenix Guide: Open-Source LLM Observability for Developers'
+  image: /images/arize-phoenix-observability-guide-2026.png
   relative: false
-schema: "schema-arize-phoenix-observability-guide-2026"
+date: 2026-05-17 15:03:42+00:00
+description: 'Step-by-step guide to Arize Phoenix: install, instrument LLM apps, trace
+  RAG pipelines, and run evals — all open-source, zero vendor lock-in.'
+draft: false
+schema: schema-arize-phoenix-observability-guide-2026
+tags:
+- arize phoenix
+- llm observability
+- opentelemetry
+- rag evaluation
+- ai monitoring
+title: 'Arize Phoenix Guide: Open-Source LLM Observability for Developers (2026)'
 ---
 
 Arize Phoenix is a free, open-source LLM observability platform that gives developers full-stack visibility into LLM applications — tracing requests, evaluating outputs, and debugging RAG pipelines — without requiring a cloud subscription or vendor account. It runs locally in a Python process or scales to Docker and Kubernetes for production deployments.

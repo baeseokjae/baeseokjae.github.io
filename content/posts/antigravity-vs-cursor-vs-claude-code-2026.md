@@ -1,14 +1,21 @@
 ---
-title: "Google Antigravity vs Cursor vs Claude Code 2026: Agent-First IDE Compared"
-date: 2026-04-18T16:22:05+00:00
-tags: ["AI coding tools", "Google Antigravity", "Cursor", "Claude Code", "agent-first IDE", "AI IDE 2026"]
-description: "Google Antigravity vs Cursor vs Claude Code 2026 — full comparison of pricing, benchmarks, MCP support, and which AI IDE wins for your workflow."
-draft: false
 cover:
-  image: "/images/antigravity-vs-cursor-vs-claude-code-2026.png"
-  alt: "Google Antigravity vs Cursor vs Claude Code 2026"
+  alt: Google Antigravity vs Cursor vs Claude Code 2026
+  image: /images/antigravity-vs-cursor-vs-claude-code-2026.png
   relative: false
-schema: "schema-antigravity-vs-cursor-vs-claude-code-2026"
+date: 2026-04-18 16:22:05+00:00
+description: Google Antigravity vs Cursor vs Claude Code 2026 — full comparison of
+  pricing, benchmarks, MCP support, and which AI IDE wins for your workflow.
+draft: false
+schema: schema-antigravity-vs-cursor-vs-claude-code-2026
+tags:
+- AI coding tools
+- Google Antigravity
+- Cursor
+- Claude Code
+- agent-first IDE
+- AI IDE 2026
+title: 'Google Antigravity vs Cursor vs Claude Code 2026: Agent-First IDE Compared'
 ---
 
 Google Antigravity, Cursor, and Claude Code represent three distinct philosophies of AI-assisted development in 2026. Antigravity is the fastest feature builder at 42 seconds per task; Claude Code reasons deepest with 5.5x better token efficiency; Cursor remains the most polished daily driver with the widest ecosystem. Which one wins depends entirely on how you work.

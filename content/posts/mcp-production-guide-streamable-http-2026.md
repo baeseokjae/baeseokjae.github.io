@@ -1,14 +1,21 @@
 ---
-title: "MCP Streamable HTTP Production Guide 2026: stdio vs Streamable HTTP"
-date: 2026-05-05T18:04:13+00:00
-tags: ["MCP", "Model Context Protocol", "AI Infrastructure", "DevOps", "Streamable HTTP"]
-description: "Complete guide to choosing and deploying MCP transports in 2026: stdio vs Streamable HTTP, auth, scaling, and platform recipes for Cloudflare, AWS ECS, and Kubernetes."
-draft: false
 cover:
-  image: "/images/mcp-production-guide-streamable-http-2026.png"
-  alt: "MCP Production Deployment Guide 2026: Streamable HTTP vs stdio"
+  alt: 'MCP Production Deployment Guide 2026: Streamable HTTP vs stdio'
+  image: /images/mcp-production-guide-streamable-http-2026.png
   relative: false
-schema: "schema-mcp-production-guide-streamable-http-2026"
+date: 2026-05-05 18:04:13+00:00
+description: 'Complete guide to choosing and deploying MCP transports in 2026: stdio
+  vs Streamable HTTP, auth, scaling, and platform recipes for Cloudflare, AWS ECS,
+  ...'
+draft: false
+schema: schema-mcp-production-guide-streamable-http-2026
+tags:
+- MCP
+- Model Context Protocol
+- AI Infrastructure
+- DevOps
+- Streamable HTTP
+title: 'MCP Streamable HTTP Production Guide 2026: stdio vs Streamable HTTP'
 ---
 
 The Model Context Protocol has surpassed 97 million monthly SDK downloads and 81,000 GitHub stars as of April 2026. 78% of enterprise AI teams report at least one MCP-backed agent in production. The transport layer decision — stdio vs Streamable HTTP — determines whether your MCP server is a local dev tool or a production service that scales across teams and organizational boundaries. This guide covers when to use each transport, how to authenticate Streamable HTTP servers with OAuth 2.1, and platform-specific deployment recipes for Cloudflare Workers, AWS ECS, and Kubernetes.

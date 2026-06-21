@@ -1,14 +1,20 @@
 ---
-title: "GLM-5V-Turbo Review 2026: Zhipu AI Multimodal Agent Model"
-date: 2026-05-08T00:03:46+00:00
-tags: ["ai-models", "multimodal-ai", "vision-coding", "ai-agents", "zhipu-ai"]
-description: "GLM-5V-Turbo is Zhipu AI's native multimodal agent model with 94.8 Design2Code score, 202K context, and $1.20/M input pricing — the full developer review."
-draft: false
 cover:
-  image: "/images/glm-5v-turbo-review-2026.png"
-  alt: "GLM-5V-Turbo Review 2026: Zhipu AI Multimodal Agent Model"
+  alt: 'GLM-5V-Turbo Review 2026: Zhipu AI Multimodal Agent Model'
+  image: /images/glm-5v-turbo-review-2026.png
   relative: false
-schema: "schema-glm-5v-turbo-review-2026"
+date: 2026-05-08 00:03:46+00:00
+description: GLM-5V-Turbo is Zhipu AI's native multimodal agent model with 94.8 Design2Code
+  score, 202K context, and $1.20/M input pricing — the full developer review.
+draft: false
+schema: schema-glm-5v-turbo-review-2026
+tags:
+- ai-models
+- multimodal-ai
+- vision-coding
+- ai-agents
+- zhipu-ai
+title: 'GLM-5V-Turbo Review 2026: Zhipu AI Multimodal Agent Model'
 ---
 
 GLM-5V-Turbo is Zhipu AI's first native multimodal agent foundation model, released April 1, 2026, purpose-built for vision-driven coding and autonomous GUI workflows — not a text model with a vision adapter bolted on afterward. With a 94.8 Design2Code score versus Claude Opus 4.6's 77.3, and pricing at $1.20/M input tokens, it competes directly with frontier models at a fraction of the cost.

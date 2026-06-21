@@ -1,14 +1,21 @@
 ---
-title: "DeepEval Tutorial 2026: Pytest-Native LLM Evaluation for Production AI"
-date: 2026-05-12T21:03:44+00:00
-tags: ["deepeval", "llm-evaluation", "pytest", "rag", "ai-testing", "ci-cd"]
-description: "Step-by-step DeepEval tutorial covering pytest-native LLM testing, RAG metrics, G-Eval, agent evaluation, and CI/CD integration in 2026."
-draft: false
 cover:
-  image: "/images/deepeval-tutorial-2026.png"
-  alt: "DeepEval Tutorial 2026: Pytest-Native LLM Evaluation for Production AI"
+  alt: 'DeepEval Tutorial 2026: Pytest-Native LLM Evaluation for Production AI'
+  image: /images/deepeval-tutorial-2026.png
   relative: false
-schema: "schema-deepeval-tutorial-2026"
+date: 2026-05-12 21:03:44+00:00
+description: Step-by-step DeepEval tutorial covering pytest-native LLM testing, RAG
+  metrics, G-Eval, agent evaluation, and CI/CD integration in 2026.
+draft: false
+schema: schema-deepeval-tutorial-2026
+tags:
+- deepeval
+- llm-evaluation
+- pytest
+- rag
+- ai-testing
+- ci-cd
+title: 'DeepEval Tutorial 2026: Pytest-Native LLM Evaluation for Production AI'
 ---
 
 DeepEval is an open-source, pytest-native framework for evaluating LLM outputs using 50+ research-backed metrics — no labeled data required for most production use cases. Install it with `pip install deepeval`, write test cases like Python unit tests, and run `deepeval test run` from the CLI to catch regressions before they reach users.

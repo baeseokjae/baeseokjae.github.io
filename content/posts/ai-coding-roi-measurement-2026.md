@@ -1,14 +1,20 @@
 ---
-title: "How to Measure AI Coding ROI: Beyond Vanity Metrics"
-date: 2026-06-01T23:15:17+00:00
-tags: ["AI coding ROI", "developer productivity", "engineering metrics", "GitHub Copilot", "DORA metrics"]
-description: "Most AI coding ROI measurements are wrong. Here's a step-by-step framework to measure true productivity gains, avoid vanity metrics, and calculate real returns."
-draft: false
 cover:
-  image: "/images/ai-coding-roi-measurement-2026.png"
-  alt: "How to Measure AI Coding ROI: Beyond Vanity Metrics"
+  alt: 'How to Measure AI Coding ROI: Beyond Vanity Metrics'
+  image: /images/ai-coding-roi-measurement-2026.png
   relative: false
-schema: "schema-ai-coding-roi-measurement-2026"
+date: 2026-06-01 23:15:17+00:00
+description: Most AI coding ROI measurements are wrong. Here's a step-by-step framework
+  to measure true productivity gains, avoid vanity metrics, and calculate real ...
+draft: false
+schema: schema-ai-coding-roi-measurement-2026
+tags:
+- AI coding ROI
+- developer productivity
+- engineering metrics
+- GitHub Copilot
+- DORA metrics
+title: 'How to Measure AI Coding ROI: Beyond Vanity Metrics'
 ---
 
 Most teams measuring AI coding ROI are looking at the wrong numbers. Developers feel faster, acceptance rates look great, and vendor dashboards show impressive gains — but when you trace those numbers back to shipped features and business outcomes, the story falls apart.

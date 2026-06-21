@@ -1,14 +1,20 @@
 ---
-title: "Why Developers Love Claude Code: 91% Satisfaction and NPS 54 (2026 Data)"
-date: 2026-06-03T20:53:40+00:00
-tags: ["claude-code", "developer-tools", "ai-coding", "productivity", "developer-survey"]
-description: "Claude Code hit 91% CSAT and NPS 54 — the highest satisfaction scores in AI coding tools. Here's what the 2026 data actually shows and why."
-draft: false
 cover:
-  image: "/images/claude-code-developer-satisfaction-2026.png"
-  alt: "Why Developers Love Claude Code: 91% Satisfaction and NPS 54"
+  alt: 'Why Developers Love Claude Code: 91% Satisfaction and NPS 54'
+  image: /images/claude-code-developer-satisfaction-2026.png
   relative: false
-schema: "schema-claude-code-developer-satisfaction-2026"
+date: 2026-06-03 20:53:40+00:00
+description: Claude Code hit 91% CSAT and NPS 54 — the highest satisfaction scores
+  in AI coding tools. Here's what the 2026 data actually shows and why.
+draft: false
+schema: schema-claude-code-developer-satisfaction-2026
+tags:
+- claude-code
+- developer-tools
+- ai-coding
+- productivity
+- developer-survey
+title: 'Why Developers Love Claude Code: 91% Satisfaction and NPS 54 (2026 Data)'
 ---
 
 Claude Code holds a 91% customer satisfaction score and NPS of 54 — the highest marks in the AI coding tool category as of January 2026 — while growing from 3% to 18% at-work adoption in just eight months. The satisfaction gap over GitHub Copilot (4.8/5 vs. 4.1/5) is wide enough to matter, and 46% of senior engineers now call it their most-loved tool. Here's what the data shows and why it happened.

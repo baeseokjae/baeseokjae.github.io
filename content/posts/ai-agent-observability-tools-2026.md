@@ -1,14 +1,22 @@
 ---
-title: "AI Agent Observability 2026: Braintrust vs Arize Phoenix vs Langfuse Compared"
-date: 2026-05-12T09:04:54+00:00
-tags: ["observability", "LLM", "AI agents", "Braintrust", "Arize Phoenix", "Langfuse", "monitoring"]
-description: "Braintrust, Arize Phoenix, and Langfuse compared on tracing depth, evaluation capabilities, pricing, and self-hosting for production AI agents in 2026."
-draft: false
 cover:
-  image: "/images/ai-agent-observability-tools-2026.png"
-  alt: "AI Agent Observability 2026: Braintrust vs Arize Phoenix vs Langfuse Compared"
+  alt: 'AI Agent Observability 2026: Braintrust vs Arize Phoenix vs Langfuse Compared'
+  image: /images/ai-agent-observability-tools-2026.png
   relative: false
-schema: "schema-ai-agent-observability-tools-2026"
+date: 2026-05-12 09:04:54+00:00
+description: Braintrust, Arize Phoenix, and Langfuse compared on tracing depth, evaluation
+  capabilities, pricing, and self-hosting for production AI agents in 2026.
+draft: false
+schema: schema-ai-agent-observability-tools-2026
+tags:
+- observability
+- LLM
+- AI agents
+- Braintrust
+- Arize Phoenix
+- Langfuse
+- monitoring
+title: 'AI Agent Observability 2026: Braintrust vs Arize Phoenix vs Langfuse Compared'
 ---
 
 The fastest-moving part of AI infrastructure in 2026 is observability — and for good reason. The LLM observability platform market hit $2.69B this year (up from $1.97B in 2025), growing at a 36.3% CAGR. Three platforms dominate production use: **Braintrust** (SaaS-only, $80M Series B, enterprise-grade CI/CD gates), **Arize Phoenix** (100% open-source, OpenTelemetry-native, 9,100+ GitHub stars), and **Langfuse** (MIT-licensed, ClickHouse-acquired, 19,000+ GitHub stars). Choosing the wrong one means either paying for features you won't use or hitting invisible ceilings when your agent fleet scales.

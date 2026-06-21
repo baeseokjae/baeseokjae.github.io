@@ -1,14 +1,20 @@
 ---
-title: "Qwen 3.5 Coding Guide: Open-Weight Model That Rivals GPT-5"
-date: 2026-05-09T00:00:00+00:00
-tags: ["qwen","open-weight","coding-model","self-hosted","alibaba"]
-description: "Complete guide to Qwen 3.5 Coder: benchmark performance, model sizes, self-hosting hardware requirements, VS Code integration, and cost-performance comparison with GPT-5."
-draft: false
 cover:
-  image: "/images/qwen-3-5-coding-guide-2026.png"
-  alt: "Qwen 3.5 Coding Guide: Open-Weight Model That Rivals GPT-5"
+  alt: 'Qwen 3.5 Coding Guide: Open-Weight Model That Rivals GPT-5'
+  image: /images/qwen-3-5-coding-guide-2026.png
   relative: false
-schema: "schema-qwen-3-5-coding-guide-2026"
+date: 2026-05-09 00:00:00+00:00
+description: 'Complete guide to Qwen 3.5 Coder: benchmark performance, model sizes,
+  self-hosting hardware requirements, VS Code integration, and cost-performance comp...'
+draft: false
+schema: schema-qwen-3-5-coding-guide-2026
+tags:
+- qwen
+- open-weight
+- coding-model
+- self-hosted
+- alibaba
+title: 'Qwen 3.5 Coding Guide: Open-Weight Model That Rivals GPT-5'
 ---
 
 Qwen 3.5 Coder is Alibaba's latest open-weight code generation model family, spanning 0.5B to 72B parameters, and it is the first open-source coding model to come within 3-5% of GPT-5 on production benchmarks while carrying an Apache 2.0 license. For engineering teams burning $5–30 per million tokens on frontier API calls, that gap is closing fast enough to demand a hard look at the numbers.

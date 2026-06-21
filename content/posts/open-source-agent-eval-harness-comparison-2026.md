@@ -1,14 +1,23 @@
 ---
-title: "Open Source Agent Eval Harness Comparison 2026"
-date: 2026-06-19T12:00:00+00:00
-tags: ["agent-evaluation", "eval-harness", "llm-testing", "open-source", "maseval", "clawbench", "kensa", "evalh"]
-description: "A 2026 comparison of 11 open-source agent evaluation harnesses: MASEval, ClawBench, reaatech, ProofAgent, OpenAgentBench, Kensa, PawBench, CUBE, evalh, Harness Bench, and Siddharth-1001. Includes code examples and a staged CI framework."
-draft: false
 cover:
-  image: "/images/open-source-agent-eval-harness-comparison-2026.png"
-  alt: "Open Source Agent Eval Harness Comparison 2026"
+  alt: Open Source Agent Eval Harness Comparison 2026
+  image: /images/open-source-agent-eval-harness-comparison-2026.png
   relative: false
-schema: "schema-open-source-agent-eval-harness-comparison-2026"
+date: 2026-06-19 12:00:00+00:00
+description: 'A 2026 comparison of 11 open-source agent evaluation harnesses: MASEval,
+  ClawBench, reaatech, ProofAgent, OpenAgentBench, Kensa, PawBench, CUBE, evalh, ...'
+draft: false
+schema: schema-open-source-agent-eval-harness-comparison-2026
+tags:
+- agent-evaluation
+- eval-harness
+- llm-testing
+- open-source
+- maseval
+- clawbench
+- kensa
+- evalh
+title: Open Source Agent Eval Harness Comparison 2026
 ---
 
 The 2026 open-source agent eval harness market is undergoing a Cambrian explosion. Unlike 2024–2025 where the dominant tools focused on scoring LLM outputs — comparing a generated answer to a ground-truth label — this year's crop evaluates the entire agent system: harness configuration, tool-use trajectory, orchestration topology, and failure recovery as a unified stack. I spent the last month digging into 11 open-source eval frameworks that emerged in the past 12 months. The key finding: framework choice matters as much as model choice. PawBench demonstrates this directly — identical models across different harnesses produce up to an 11.5-point spread on the same task set. If you're still treating eval as "run a model, check the answer," the tools below will change how you think about agent quality.

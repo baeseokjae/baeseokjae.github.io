@@ -1,14 +1,19 @@
 ---
-title: "OpenAI Codex CLI Guide 2026: Terminal AI Coding with the Rust-Built Agent"
-date: 2026-04-24T18:04:05+00:00
-tags: ["ai-coding", "developer-tools", "ai-agents", "openai"]
-description: "Complete guide to OpenAI Codex CLI 2026: install the Rust-built terminal agent, configure AGENTS.md, set approval modes, and integrate MCP tools."
-draft: false
 cover:
-  image: "/images/openai-codex-cli-guide-2026.png"
-  alt: "OpenAI Codex CLI Guide 2026: Terminal AI Coding with the Rust-Built Agent"
+  alt: 'OpenAI Codex CLI Guide 2026: Terminal AI Coding with the Rust-Built Agent'
+  image: /images/openai-codex-cli-guide-2026.png
   relative: false
-schema: "schema-openai-codex-cli-guide-2026"
+date: 2026-04-24 18:04:05+00:00
+description: 'Complete guide to OpenAI Codex CLI 2026: install the Rust-built terminal
+  agent, configure AGENTS.md, set approval modes, and integrate MCP tools.'
+draft: false
+schema: schema-openai-codex-cli-guide-2026
+tags:
+- ai-coding
+- developer-tools
+- ai-agents
+- openai
+title: 'OpenAI Codex CLI Guide 2026: Terminal AI Coding with the Rust-Built Agent'
 ---
 
 OpenAI Codex CLI is a terminal-based AI coding agent that reads your codebase, writes and edits files, runs tests, and commits changes — all from your command line. Unlike web-based AI tools, Codex CLI runs locally against your actual repository, understanding real project context rather than a pasted snippet.

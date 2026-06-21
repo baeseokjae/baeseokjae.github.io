@@ -1,14 +1,20 @@
 ---
-title: "Flowise Review 2026: Open-Source No-Code LLM App Builder"
-date: 2026-04-27T15:43:42+00:00
-tags: ["flowise", "open-source", "AI workflow builder", "LLM", "no-code AI"]
-description: "Honest Flowise review 2026: features, pricing, setup complexity, and who should use this open-source visual LLM app builder."
-draft: false
 cover:
-  image: "/images/flowise-review-2026.png"
-  alt: "Flowise Review 2026: Open-Source No-Code LLM App Builder"
+  alt: 'Flowise Review 2026: Open-Source No-Code LLM App Builder'
+  image: /images/flowise-review-2026.png
   relative: false
-schema: "schema-flowise-review-2026"
+date: 2026-04-27 15:43:42+00:00
+description: 'Honest Flowise review 2026: features, pricing, setup complexity, and
+  who should use this open-source visual LLM app builder.'
+draft: false
+schema: schema-flowise-review-2026
+tags:
+- flowise
+- open-source
+- AI workflow builder
+- LLM
+- no-code AI
+title: 'Flowise Review 2026: Open-Source No-Code LLM App Builder'
 ---
 
 Flowise is an open-source, drag-and-drop visual builder for LLM-powered applications and AI agents — free to self-host, with a managed cloud plan at $35/month. If you have a technical team and want full control over your AI workflows without vendor lock-in, it's one of the best tools available in 2026. If you're non-technical and expecting a one-click SaaS setup, look elsewhere.

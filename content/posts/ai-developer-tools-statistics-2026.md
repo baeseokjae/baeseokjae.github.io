@@ -1,14 +1,20 @@
 ---
-title: "AI Developer Tools Adoption Statistics 2026: The Complete Data"
-date: 2026-05-08T00:00:00+00:00
-tags: ["ai-developer-tools","statistics","adoption","github-copilot","cursor"]
-description: "90% of developers now use at least one AI tool at work. Here is the complete 2026 dataset on adoption, market share, productivity impact, trust, ROI, and the benchmark numbers that actually matter."
-draft: false
 cover:
-  image: "/images/ai-developer-tools-statistics-2026.png"
-  alt: "AI Developer Tools Adoption Statistics 2026: The Complete Data"
+  alt: 'AI Developer Tools Adoption Statistics 2026: The Complete Data'
+  image: /images/ai-developer-tools-statistics-2026.png
   relative: false
-schema: "schema-ai-developer-tools-statistics-2026"
+date: 2026-05-08 00:00:00+00:00
+description: 90% of developers now use at least one AI tool at work. Here is the complete
+  2026 dataset on adoption, market share, productivity impact, trust, ROI, an...
+draft: false
+schema: schema-ai-developer-tools-statistics-2026
+tags:
+- ai-developer-tools
+- statistics
+- adoption
+- github-copilot
+- cursor
+title: 'AI Developer Tools Adoption Statistics 2026: The Complete Data'
 ---
 
 Nine in ten developers now use at least one AI tool at work — a number that would have seemed implausible three years ago. The JetBrains Developer Ecosystem Survey from January 2026 puts overall adoption at 90%, with 74% having moved beyond general-purpose chatbots to adopt specialized coding assistants or agents. Trust, however, has not kept pace: only 29% of developers report trusting AI tool output, a collapse from over 70% in 2023. The gap between adoption and trust is the central tension defining the developer tooling landscape in 2026.

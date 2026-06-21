@@ -1,14 +1,21 @@
 ---
-title: "SWE-bench Explained: How to Use Coding Benchmarks to Pick an LLM (2026 Guide)"
-date: 2026-05-09T00:04:31+00:00
-tags: ["SWE-bench", "LLM benchmarks", "AI coding tools", "coding benchmarks", "AI development"]
-description: "SWE-bench measures how well LLMs fix real GitHub issues. Learn how to read the leaderboard, spot contaminated scores, and pick the right model for your codebase."
-draft: false
 cover:
-  image: "/images/swe-bench-coding-benchmarks-guide-2026.png"
-  alt: "SWE-bench Explained: How to Use Coding Benchmarks to Pick an LLM"
+  alt: 'SWE-bench Explained: How to Use Coding Benchmarks to Pick an LLM'
+  image: /images/swe-bench-coding-benchmarks-guide-2026.png
   relative: false
-schema: "schema-swe-bench-coding-benchmarks-guide-2026"
+date: 2026-05-09 00:04:31+00:00
+description: SWE-bench measures how well LLMs fix real GitHub issues. Learn how to
+  read the leaderboard, spot contaminated scores, and pick the right model for your
+  ...
+draft: false
+schema: schema-swe-bench-coding-benchmarks-guide-2026
+tags:
+- SWE-bench
+- LLM benchmarks
+- AI coding tools
+- coding benchmarks
+- AI development
+title: 'SWE-bench Explained: How to Use Coding Benchmarks to Pick an LLM (2026 Guide)'
 ---
 
 SWE-bench measures how well an LLM can resolve real-world GitHub issues end-to-end — not toy problems. As of May 2026, scores range from 93.9% (Claude Mythos Preview on Verified) to 23% on the harder, contamination-resistant Pro variant. Here's how to read those numbers without being misled.

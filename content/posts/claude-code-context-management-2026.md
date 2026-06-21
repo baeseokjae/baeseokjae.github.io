@@ -1,14 +1,20 @@
 ---
-title: "Claude Code Context Management 2026: The 60% Rule and CLAUDE.md Power Tips"
-date: 2026-04-29T00:03:39+00:00
-tags: ["claude-code", "context-management", "ai-coding", "developer-tools", "token-optimization"]
-description: "Master claude code context management with the 60% rule, CLAUDE.md structure, and /compact command to boost productivity by 67%."
-draft: false
 cover:
-  image: "/images/claude-code-context-management-2026.png"
-  alt: "Claude Code Context Management 2026: The 60% Rule and CLAUDE.md Power Tips"
+  alt: 'Claude Code Context Management 2026: The 60% Rule and CLAUDE.md Power Tips'
+  image: /images/claude-code-context-management-2026.png
   relative: false
-schema: "schema-claude-code-context-management-2026"
+date: 2026-04-29 00:03:39+00:00
+description: Master claude code context management with the 60% rule, CLAUDE.md structure,
+  and /compact command to boost productivity by 67%.
+draft: false
+schema: schema-claude-code-context-management-2026
+tags:
+- claude-code
+- context-management
+- ai-coding
+- developer-tools
+- token-optimization
+title: 'Claude Code Context Management 2026: The 60% Rule and CLAUDE.md Power Tips'
 ---
 
 Claude Code context management is the practice of strategically controlling what information lives in your session's active memory window so the model stays sharp, costs stay low, and output quality never degrades. In 2026, developers who master this discipline ship 67% more merged PRs per day than those who treat Claude Code like a glorified autocomplete tool — the difference is almost entirely in how they handle context.

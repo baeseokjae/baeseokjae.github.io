@@ -1,14 +1,20 @@
 ---
-title: "Context Engineering for AI Coding Agents 2026: Strategies That Actually Work"
-date: 2026-04-30T12:17:59+00:00
-tags: ["context-engineering", "ai-agents", "coding-agents", "llm", "developer-productivity"]
-description: "Context engineering is the #1 skill separating developers who get 10x gains from AI coding agents from those stuck at 10% productivity."
-draft: false
 cover:
-  image: "/images/context-engineering-ai-coding-agents-2026.png"
-  alt: "Context Engineering for AI Coding Agents 2026: Strategies That Actually Work"
+  alt: 'Context Engineering for AI Coding Agents 2026: Strategies That Actually Work'
+  image: /images/context-engineering-ai-coding-agents-2026.png
   relative: false
-schema: "schema-context-engineering-ai-coding-agents-2026"
+date: 2026-04-30 12:17:59+00:00
+description: 'Context engineering is the #1 skill separating developers who get 10x
+  gains from AI coding agents from those stuck at 10% productivity.'
+draft: false
+schema: schema-context-engineering-ai-coding-agents-2026
+tags:
+- context-engineering
+- ai-agents
+- coding-agents
+- llm
+- developer-productivity
+title: 'Context Engineering for AI Coding Agents 2026: Strategies That Actually Work'
 ---
 
 Context engineering is the practice of architecting exactly what information an AI coding agent sees — system prompts, codebase files, tool definitions, memory — so the model has the right tokens at the right time. In 2026, over 70% of AI coding failures trace back to poor context design, not model capability limits.

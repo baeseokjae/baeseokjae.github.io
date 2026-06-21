@@ -1,14 +1,20 @@
 ---
-title: "Pipedream vs n8n 2026: Which Developer Automation Platform Wins?"
-date: 2026-04-20T13:06:13+00:00
-tags: ["n8n", "Pipedream", "workflow-automation", "developer-tools", "iPaaS"]
-description: "Pipedream vs n8n 2026 compared across pricing, AI agents, self-hosting, and team fit — with a clear verdict for developers and ops teams."
-draft: false
 cover:
-  image: "/images/pipedream-vs-n8n-2026.png"
-  alt: "Pipedream vs n8n 2026: Which Developer Automation Platform Wins?"
+  alt: 'Pipedream vs n8n 2026: Which Developer Automation Platform Wins?'
+  image: /images/pipedream-vs-n8n-2026.png
   relative: false
-schema: "schema-pipedream-vs-n8n-2026"
+date: 2026-04-20 13:06:13+00:00
+description: Pipedream vs n8n 2026 compared across pricing, AI agents, self-hosting,
+  and team fit — with a clear verdict for developers and ops teams.
+draft: false
+schema: schema-pipedream-vs-n8n-2026
+tags:
+- n8n
+- Pipedream
+- workflow-automation
+- developer-tools
+- iPaaS
+title: 'Pipedream vs n8n 2026: Which Developer Automation Platform Wins?'
 ---
 
 Pipedream and n8n are the two platforms developers actually argue about in 2026. n8n gives you a visual workflow canvas, open-source code, and self-hosting with zero per-execution costs. Pipedream gives you 2,000+ pre-built integrations, code-first Node.js/Python steps, and near-instant event-driven execution — all fully managed. Which one wins depends entirely on who owns your automation stack.

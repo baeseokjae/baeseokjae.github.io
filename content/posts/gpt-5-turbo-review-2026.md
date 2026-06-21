@@ -1,14 +1,21 @@
 ---
-title: "GPT-5 Turbo Review 2026: Native Image+Audio, Better JSON, April 7 Release"
-date: 2026-05-15T09:07:05+00:00
-tags: ["GPT-5", "OpenAI", "LLM", "API", "multimodal", "structured-outputs"]
-description: "GPT-5 Turbo (GPT-5.4 mini) delivers native image+audio, strict JSON outputs, and 2x faster inference at $0.15/M tokens — here's the developer verdict for 2026."
-draft: false
 cover:
-  image: "/images/gpt-5-turbo-review-2026.png"
-  alt: "GPT-5 Turbo Review 2026"
+  alt: GPT-5 Turbo Review 2026
+  image: /images/gpt-5-turbo-review-2026.png
   relative: false
-schema: "schema-gpt-5-turbo-review-2026"
+date: 2026-05-15 09:07:05+00:00
+description: GPT-5 Turbo (GPT-5.4 mini) delivers native image+audio, strict JSON outputs,
+  and 2x faster inference at $0.15/M tokens — here's the developer verdict fo...
+draft: false
+schema: schema-gpt-5-turbo-review-2026
+tags:
+- GPT-5
+- OpenAI
+- LLM
+- API
+- multimodal
+- structured-outputs
+title: 'GPT-5 Turbo Review 2026: Native Image+Audio, Better JSON, April 7 Release'
 ---
 
 GPT-5 Turbo — OpenAI's fast, efficient variant marketed as GPT-5 mini and later GPT-5.4 mini — delivers native multimodal input (images and audio in a single API call), strict JSON structured outputs, and 400K-token context at roughly $0.15 per million input tokens. It is the practical choice for production applications where cost and latency matter more than raw intelligence ceiling.

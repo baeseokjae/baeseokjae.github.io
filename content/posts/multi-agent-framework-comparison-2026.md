@@ -1,14 +1,20 @@
 ---
-title: "Multi Agent Framework Comparison 2026: LangGraph vs CrewAI vs ADK vs Strands vs Agno"
-date: 2026-06-12T16:04:54+00:00
-tags: ["ai agents", "multi-agent systems", "developer tools"]
-description: "A practical 2026 comparison of LangGraph, CrewAI, Google ADK, Strands Agents, and Agno for production agent systems."
-draft: false
 cover:
-  image: "/images/multi-agent-framework-comparison-2026.png"
-  alt: "Multi Agent Framework Comparison 2026: LangGraph vs CrewAI vs ADK vs Strands vs Agno"
+  alt: 'Multi Agent Framework Comparison 2026: LangGraph vs CrewAI vs ADK vs Strands
+    vs Agno'
+  image: /images/multi-agent-framework-comparison-2026.png
   relative: false
-schema: "schema-multi-agent-framework-comparison-2026"
+date: 2026-06-12 16:04:54+00:00
+description: A practical 2026 comparison of LangGraph, CrewAI, Google ADK, Strands
+  Agents, and Agno for production agent systems.
+draft: false
+schema: schema-multi-agent-framework-comparison-2026
+tags:
+- ai agents
+- multi-agent systems
+- developer tools
+title: 'Multi Agent Framework Comparison 2026: LangGraph vs CrewAI vs ADK vs Strands
+  vs Agno'
 ---
 
 The best multi-agent framework in 2026 depends on your main failure mode: choose LangGraph for explicit state and recovery, CrewAI for fast role-based workflows, Google ADK for GCP and Gemini-native systems, Strands Agents for AWS-oriented production agents, and Agno for runtime APIs, governance, and operational control.

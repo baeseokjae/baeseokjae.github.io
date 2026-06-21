@@ -1,14 +1,18 @@
 ---
-title: "Mistral Leanstral formal verification AI code: Lean 4 guide for developers"
-date: 2026-06-15T16:04:14+00:00
-tags: ["Mistral Leanstral", "Lean 4", "formal verification"]
-description: "A practical Lean 4 guide to Mistral Leanstral for formally verifying AI-generated code."
-draft: false
 cover:
-  image: "/images/mistral-leanstral-formal-verification-2026.png"
-  alt: "Mistral Leanstral formal verification AI code: Lean 4 guide for developers"
+  alt: 'Mistral Leanstral formal verification AI code: Lean 4 guide for developers'
+  image: /images/mistral-leanstral-formal-verification-2026.png
   relative: false
-schema: "schema-mistral-leanstral-formal-verification-2026"
+date: 2026-06-15 16:04:14+00:00
+description: A practical Lean 4 guide to Mistral Leanstral for formally verifying
+  AI-generated code.
+draft: false
+schema: schema-mistral-leanstral-formal-verification-2026
+tags:
+- Mistral Leanstral
+- Lean 4
+- formal verification
+title: 'Mistral Leanstral formal verification AI code: Lean 4 guide for developers'
 ---
 
 Mistral Leanstral is an open-source Lean 4 code agent built to help developers turn AI-generated code into mechanically checked specifications and proofs. It does not make code correct by confidence alone; it helps produce artifacts that Lean's proof checker can verify.

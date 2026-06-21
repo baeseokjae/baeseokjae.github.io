@@ -1,14 +1,20 @@
 ---
-title: "How Claude Code Went from 3% to 28% Primary Adoption in One Year: The Data"
-date: 2026-05-25T06:07:23+00:00
-tags: ["claude code", "ai coding tools", "developer tools", "agentic coding", "adoption statistics"]
-description: "Claude Code grew from 3% workplace adoption in mid-2025 to 28% primary tool selection by early 2026. Here's the data behind the fastest ramp in developer tooling history."
-draft: false
 cover:
-  image: "/images/claude-code-adoption-story-2026.png"
-  alt: "How Claude Code Went from 3% to 28% Primary Adoption in One Year"
+  alt: How Claude Code Went from 3% to 28% Primary Adoption in One Year
+  image: /images/claude-code-adoption-story-2026.png
   relative: false
-schema: "schema-claude-code-adoption-story-2026"
+date: 2026-05-25 06:07:23+00:00
+description: Claude Code grew from 3% workplace adoption in mid-2025 to 28% primary
+  tool selection by early 2026. Here's the data behind the fastest ramp in develope...
+draft: false
+schema: schema-claude-code-adoption-story-2026
+tags:
+- claude code
+- ai coding tools
+- developer tools
+- agentic coding
+- adoption statistics
+title: 'How Claude Code Went from 3% to 28% Primary Adoption in One Year: The Data'
 ---
 
 Claude Code reached 28% primary tool selection among developers by early 2026 — up from roughly 3% workplace adoption in April–June 2025 — making it the fastest growth trajectory ever recorded for a developer productivity tool. The data comes from multiple independent surveys covering tens of thousands of engineers, not self-reported Anthropic metrics.

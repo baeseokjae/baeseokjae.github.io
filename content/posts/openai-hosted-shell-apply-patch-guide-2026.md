@@ -1,14 +1,22 @@
 ---
-title: "OpenAI Hosted Shell and Apply Patch: GPT-5.5 Compute Tools for Autonomous Code Execution"
-date: 2026-04-25T10:05:54+00:00
-tags: ["openai", "gpt-5.5", "autonomous-coding", "api", "developer-tools"]
-description: "Complete guide to GPT-5.5's hosted shell and apply_patch tools for building autonomous coding agents via the OpenAI Responses API."
-draft: false
 cover:
-  image: "/images/openai-hosted-shell-apply-patch-guide-2026.png"
-  alt: "OpenAI Hosted Shell and Apply Patch: GPT-5.5 Compute Tools for Autonomous Code Execution"
+  alt: 'OpenAI Hosted Shell and Apply Patch: GPT-5.5 Compute Tools for Autonomous
+    Code Execution'
+  image: /images/openai-hosted-shell-apply-patch-guide-2026.png
   relative: false
-schema: "schema-openai-hosted-shell-apply-patch-guide-2026"
+date: 2026-04-25 10:05:54+00:00
+description: Complete guide to GPT-5.5's hosted shell and apply_patch tools for building
+  autonomous coding agents via the OpenAI Responses API.
+draft: false
+schema: schema-openai-hosted-shell-apply-patch-guide-2026
+tags:
+- openai
+- gpt-5.5
+- autonomous-coding
+- api
+- developer-tools
+title: 'OpenAI Hosted Shell and Apply Patch: GPT-5.5 Compute Tools for Autonomous
+  Code Execution'
 ---
 
 GPT-5.5's hosted shell and `apply_patch` tools let you run autonomous coding agents that explore filesystems, execute commands, and apply precise code edits — all inside an OpenAI-managed Debian 12 sandbox with no infrastructure to maintain.

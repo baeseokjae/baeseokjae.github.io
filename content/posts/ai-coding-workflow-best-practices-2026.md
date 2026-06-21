@@ -1,14 +1,22 @@
 ---
-title: "AI Coding Workflow Best Practices 2026: 12 Patterns From Senior Engineers"
-date: 2026-06-01T01:37:04+00:00
-tags: ["AI coding", "developer workflow", "AI tools", "GitHub Copilot", "Claude Code", "context engineering", "productivity"]
-description: "12 battle-tested AI coding workflow patterns from senior engineers — spec-first, context libraries, two-correction rule, governance, and more."
-draft: false
 cover:
-  image: "/images/ai-coding-workflow-best-practices-2026.png"
-  alt: "AI Coding Workflow Best Practices 2026: 12 Patterns From Senior Engineers"
+  alt: 'AI Coding Workflow Best Practices 2026: 12 Patterns From Senior Engineers'
+  image: /images/ai-coding-workflow-best-practices-2026.png
   relative: false
-schema: "schema-ai-coding-workflow-best-practices-2026"
+date: 2026-06-01 01:37:04+00:00
+description: 12 battle-tested AI coding workflow patterns from senior engineers —
+  spec-first, context libraries, two-correction rule, governance, and more.
+draft: false
+schema: schema-ai-coding-workflow-best-practices-2026
+tags:
+- AI coding
+- developer workflow
+- AI tools
+- GitHub Copilot
+- Claude Code
+- context engineering
+- productivity
+title: 'AI Coding Workflow Best Practices 2026: 12 Patterns From Senior Engineers'
 ---
 
 AI coding workflow best practices are the difference between teams that use AI to ship faster and teams that drown in AI-generated debt. With 92% of US developers using AI daily in 2026 and AI writing 41% of all code, the bottleneck is no longer the tool — it's the workflow around it.

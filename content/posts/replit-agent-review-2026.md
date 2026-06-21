@@ -1,14 +1,20 @@
 ---
-title: "Replit Agent Review 2026: Build Full Apps from Plain English Prompts"
-date: 2026-04-23T01:16:36+00:00
-tags: ["replit", "ai-coding", "app-builder", "review", "developer-tools"]
-description: "Honest Replit Agent V2 review after building real apps: pricing, benchmarks, autonomous debugging, and how it compares to Cursor, Bolt, and Lovable."
-draft: false
 cover:
-  image: "/images/replit-agent-review-2026.png"
-  alt: "Replit Agent Review 2026: Build Full Apps from Plain English Prompts"
+  alt: 'Replit Agent Review 2026: Build Full Apps from Plain English Prompts'
+  image: /images/replit-agent-review-2026.png
   relative: false
-schema: "schema-replit-agent-review-2026"
+date: 2026-04-23 01:16:36+00:00
+description: 'Honest Replit Agent V2 review after building real apps: pricing, benchmarks,
+  autonomous debugging, and how it compares to Cursor, Bolt, and Lovable.'
+draft: false
+schema: schema-replit-agent-review-2026
+tags:
+- replit
+- ai-coding
+- app-builder
+- review
+- developer-tools
+title: 'Replit Agent Review 2026: Build Full Apps from Plain English Prompts'
 ---
 
 Replit Agent V2 lets you describe an app in plain English and get a fully deployed, running web application in minutes — no boilerplate, no environment setup, no deployment pipeline. It handles the full stack: writing code, debugging errors, provisioning a database, and deploying to a live URL automatically.

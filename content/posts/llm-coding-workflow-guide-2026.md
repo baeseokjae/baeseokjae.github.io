@@ -1,14 +1,20 @@
 ---
-title: "LLM Coding Workflow Guide 2026: How Top Developers Structure AI-Assisted Development"
-date: 2026-04-18T11:16:57+00:00
-tags: ["AI coding", "LLM workflow", "developer productivity", "Claude Code", "spec-driven development"]
-description: "A 5-phase framework for structured AI-assisted coding in 2026: spec-driven planning, context packing, iterative implementation, quality gates, and tooling."
-draft: false
 cover:
-  image: "/images/llm-coding-workflow-guide-2026.png"
-  alt: "LLM Coding Workflow Guide 2026"
+  alt: LLM Coding Workflow Guide 2026
+  image: /images/llm-coding-workflow-guide-2026.png
   relative: false
-schema: "schema-llm-coding-workflow-guide-2026"
+date: 2026-04-18 11:16:57+00:00
+description: 'A 5-phase framework for structured AI-assisted coding in 2026: spec-driven
+  planning, context packing, iterative implementation, quality gates, and tooling.'
+draft: false
+schema: schema-llm-coding-workflow-guide-2026
+tags:
+- AI coding
+- LLM workflow
+- developer productivity
+- Claude Code
+- spec-driven development
+title: 'LLM Coding Workflow Guide 2026: How Top Developers Structure AI-Assisted Development'
 ---
 
 The most effective LLM coding workflow in 2026 follows five phases: spec-driven planning, context packing, iterative implementation, automated quality gates, and persistent tooling infrastructure. Developers who follow this structure report 25–39% productivity gains versus ad-hoc prompting, which leaves most of the value on the table.

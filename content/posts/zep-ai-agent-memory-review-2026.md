@@ -1,14 +1,20 @@
 ---
-title: "Zep AI Review 2026: Temporal Knowledge Graphs for Agent Memory"
-date: 2026-05-07T18:04:24+00:00
-tags: ["agent memory", "knowledge graph", "AI agents", "Zep AI", "Graphiti"]
-description: "Zep AI uses temporal knowledge graphs to give agents persistent, relationship-aware memory — outperforming Mem0 by 15 points on LongMemEval."
-draft: false
 cover:
-  image: "/images/zep-ai-agent-memory-review-2026.png"
-  alt: "Zep AI Review 2026: Temporal Knowledge Graphs for Agent Memory"
+  alt: 'Zep AI Review 2026: Temporal Knowledge Graphs for Agent Memory'
+  image: /images/zep-ai-agent-memory-review-2026.png
   relative: false
-schema: "schema-zep-ai-agent-memory-review-2026"
+date: 2026-05-07 18:04:24+00:00
+description: Zep AI uses temporal knowledge graphs to give agents persistent, relationship-aware
+  memory — outperforming Mem0 by 15 points on LongMemEval.
+draft: false
+schema: schema-zep-ai-agent-memory-review-2026
+tags:
+- agent memory
+- knowledge graph
+- AI agents
+- Zep AI
+- Graphiti
+title: 'Zep AI Review 2026: Temporal Knowledge Graphs for Agent Memory'
 ---
 
 Zep AI is a persistent memory layer for AI agents that uses a temporal knowledge graph — not a flat vector store — to track how facts, entities, and relationships evolve over time. In independent benchmarks, Zep scores 63.8% on LongMemEval versus Mem0's 49.0%, a 15-point gap that directly translates to more accurate long-running agent behavior.

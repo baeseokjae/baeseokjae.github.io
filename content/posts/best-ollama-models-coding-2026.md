@@ -1,14 +1,20 @@
 ---
-title: "Best Ollama Models for Coding 2026: Ranked and Tested"
-date: 2026-04-29T21:04:13+00:00
-tags: ["ollama", "local AI", "coding models", "LLM", "developer tools"]
-description: "The best Ollama models for coding in 2026, ranked by benchmark scores, VRAM requirements, and real-world performance on consumer hardware."
-draft: false
 cover:
-  image: "/images/best-ollama-models-coding-2026.png"
-  alt: "Best Ollama Models for Coding 2026"
+  alt: Best Ollama Models for Coding 2026
+  image: /images/best-ollama-models-coding-2026.png
   relative: false
-schema: "schema-best-ollama-models-coding-2026"
+date: 2026-04-29 21:04:13+00:00
+description: The best Ollama models for coding in 2026, ranked by benchmark scores,
+  VRAM requirements, and real-world performance on consumer hardware.
+draft: false
+schema: schema-best-ollama-models-coding-2026
+tags:
+- ollama
+- local AI
+- coding models
+- LLM
+- developer tools
+title: 'Best Ollama Models for Coding 2026: Ranked and Tested'
 ---
 
 Ollama has become the default way to run local AI models in 2026: 52 million monthly downloads, 169,000+ GitHub stars, and 42% of developers now running at least some LLM workloads entirely on-device. The hard part is no longer installing Ollama — it is choosing which model to pull for coding. This guide ranks the eight best Ollama models for coding based on benchmark data, VRAM requirements, and practical performance on tasks developers actually face.

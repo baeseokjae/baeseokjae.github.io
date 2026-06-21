@@ -1,14 +1,22 @@
 ---
-title: "Peta AI Agent Credential Security: Scoped Credentials Without Raw API Key Exposure"
-date: 2026-04-26T01:04:36+00:00
-tags: ["ai-agents", "security", "mcp", "credentials", "peta"]
-description: "How Peta gives AI agents scoped, policy-controlled credentials — eliminating raw API key exposure in MCP and agentic workflows."
-draft: false
 cover:
-  image: "/images/peta-ai-agent-credential-guide-2026.png"
-  alt: "Peta AI Agent Credential Security: Scoped Credentials Without Raw API Key Exposure"
+  alt: 'Peta AI Agent Credential Security: Scoped Credentials Without Raw API Key
+    Exposure'
+  image: /images/peta-ai-agent-credential-guide-2026.png
   relative: false
-schema: "schema-peta-ai-agent-credential-guide-2026"
+date: 2026-04-26 01:04:36+00:00
+description: How Peta gives AI agents scoped, policy-controlled credentials — eliminating
+  raw API key exposure in MCP and agentic workflows.
+draft: false
+schema: schema-peta-ai-agent-credential-guide-2026
+tags:
+- ai-agents
+- security
+- mcp
+- credentials
+- peta
+title: 'Peta AI Agent Credential Security: Scoped Credentials Without Raw API Key
+  Exposure'
 ---
 
 Giving an AI agent a raw API key is structurally equivalent to handing your housekeeper a master key with no expiry date, no audit trail, and no way to revoke access to a specific door. Peta fixes this by acting as a control plane that intercepts every credential request, enforces a least-privilege policy, and injects short-lived scoped tokens at runtime — so the agent never sees your actual secrets.

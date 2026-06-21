@@ -1,14 +1,20 @@
 ---
-title: "Run Gemma 4 Locally in 2026: 31B Dense Setup Guide with Ollama"
-date: 2026-05-07T06:04:01+00:00
-tags: ["Gemma 4", "Ollama", "local LLM", "AI setup", "open source AI"]
-description: "Step-by-step guide to running Gemma 4 31B Dense locally with Ollama — hardware requirements, installation, Open WebUI, and API usage."
-draft: false
 cover:
-  image: "/images/gemma-4-local-setup-guide-2026.png"
-  alt: "Run Gemma 4 Locally in 2026: 31B Dense Setup Guide with Ollama"
+  alt: 'Run Gemma 4 Locally in 2026: 31B Dense Setup Guide with Ollama'
+  image: /images/gemma-4-local-setup-guide-2026.png
   relative: false
-schema: "schema-gemma-4-local-setup-guide-2026"
+date: 2026-05-07 06:04:01+00:00
+description: Step-by-step guide to running Gemma 4 31B Dense locally with Ollama —
+  hardware requirements, installation, Open WebUI, and API usage.
+draft: false
+schema: schema-gemma-4-local-setup-guide-2026
+tags:
+- Gemma 4
+- Ollama
+- local LLM
+- AI setup
+- open source AI
+title: 'Run Gemma 4 Locally in 2026: 31B Dense Setup Guide with Ollama'
 ---
 
 Gemma 4 31B Dense runs locally on a single RTX 4090 or Mac M3 Max using Ollama — no API key, no data leaving your machine. Install Ollama, run `ollama pull gemma4:31b`, and you have a model that scores 87.1% on MMLU, beating GPT-4o's 86.5%, running entirely on your hardware.

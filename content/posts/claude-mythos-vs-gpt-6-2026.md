@@ -1,14 +1,21 @@
 ---
-title: "Claude Mythos vs GPT-6 2026: Frontier Model Showdown for Developers"
-date: 2026-05-14T03:04:35+00:00
-tags: ["claude-mythos", "gpt-6", "ai-models", "benchmarks", "developer-tools", "frontier-ai"]
-description: "Claude Mythos scores 93.9% on SWE-bench vs GPT-5.5's 88.7%, but access and price flip the equation. Which model wins for your dev team?"
-draft: false
 cover:
-  image: "/images/claude-mythos-vs-gpt-6-2026.png"
-  alt: "Claude Mythos vs GPT-6 2026: Frontier Model Showdown for Developers"
+  alt: 'Claude Mythos vs GPT-6 2026: Frontier Model Showdown for Developers'
+  image: /images/claude-mythos-vs-gpt-6-2026.png
   relative: false
-schema: "schema-claude-mythos-vs-gpt-6-2026"
+date: 2026-05-14 03:04:35+00:00
+description: Claude Mythos scores 93.9% on SWE-bench vs GPT-5.5's 88.7%, but access
+  and price flip the equation. Which model wins for your dev team?
+draft: false
+schema: schema-claude-mythos-vs-gpt-6-2026
+tags:
+- claude-mythos
+- gpt-6
+- ai-models
+- benchmarks
+- developer-tools
+- frontier-ai
+title: 'Claude Mythos vs GPT-6 2026: Frontier Model Showdown for Developers'
 ---
 
 Claude Mythos Preview leads every major coding benchmark in 2026 — 93.9% on SWE-bench Verified — but it's locked behind Anthropic's invitation-only Project Glasswing. GPT-5.5 (the model OpenAI shipped instead of GPT-6) scores 88.7% on SWE-bench, costs 4x less, and is available in the API today. For most dev teams, GPT-5.5 is the only frontier option that actually ships.

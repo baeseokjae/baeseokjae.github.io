@@ -1,14 +1,21 @@
 ---
-title: "GPT-6 vs Claude Opus 4.7 vs Gemini 3.1: Developer Benchmark Comparison 2026"
-date: 2026-05-14T00:04:50+00:00
-tags: ["ai-models", "benchmarks", "developer-tools", "claude", "gemini", "gpt"]
-description: "GPT-6 is not out yet—here's how Claude Opus 4.7 and Gemini 3.1 Pro stack up against GPT-5.5, and what GPT-6 will change for developers."
-draft: false
 cover:
-  image: "/images/gpt-6-vs-claude-opus-4-7-vs-gemini-3-2026.png"
-  alt: "GPT-6 vs Claude Opus 4.7 vs Gemini 3.1: Developer Benchmark Comparison 2026"
+  alt: 'GPT-6 vs Claude Opus 4.7 vs Gemini 3.1: Developer Benchmark Comparison 2026'
+  image: /images/gpt-6-vs-claude-opus-4-7-vs-gemini-3-2026.png
   relative: false
-schema: "schema-gpt-6-vs-claude-opus-4-7-vs-gemini-3-2026"
+date: 2026-05-14 00:04:50+00:00
+description: GPT-6 is not out yet—here's how Claude Opus 4.7 and Gemini 3.1 Pro stack
+  up against GPT-5.5, and what GPT-6 will change for developers.
+draft: false
+schema: schema-gpt-6-vs-claude-opus-4-7-vs-gemini-3-2026
+tags:
+- ai-models
+- benchmarks
+- developer-tools
+- claude
+- gemini
+- gpt
+title: 'GPT-6 vs Claude Opus 4.7 vs Gemini 3.1: Developer Benchmark Comparison 2026'
 ---
 
 As of May 2026, GPT-6 hasn't shipped yet — so this comparison covers what developers are actually choosing between: GPT-5.5, Claude Opus 4.7, and Gemini 3.1 Pro, while mapping where GPT-6 will likely disrupt those rankings when it lands in Q3–Q4 2026.

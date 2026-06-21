@@ -1,14 +1,21 @@
 ---
-title: "ReAct Agent Pattern: The Complete Developer Implementation Guide for 2026"
-date: 2026-05-19T03:04:30+00:00
-tags: ["ai-agents", "react-pattern", "python", "langgraph", "agentic-ai"]
-description: "Build production-ready ReAct agents from scratch in Python, then scale with LangGraph. Covers the Thought→Action→Observation loop, pitfalls, security, and Reflexion upgrade."
-draft: false
 cover:
-  image: "/images/react-agent-pattern-guide-2026.png"
-  alt: "ReAct Agent Pattern: The Complete Developer Implementation Guide for 2026"
+  alt: 'ReAct Agent Pattern: The Complete Developer Implementation Guide for 2026'
+  image: /images/react-agent-pattern-guide-2026.png
   relative: false
-schema: "schema-react-agent-pattern-guide-2026"
+date: 2026-05-19 03:04:30+00:00
+description: Build production-ready ReAct agents from scratch in Python, then scale
+  with LangGraph. Covers the Thought→Action→Observation loop, pitfalls, security,
+  a...
+draft: false
+schema: schema-react-agent-pattern-guide-2026
+tags:
+- ai-agents
+- react-pattern
+- python
+- langgraph
+- agentic-ai
+title: 'ReAct Agent Pattern: The Complete Developer Implementation Guide for 2026'
 ---
 
 ReAct (Reasoning + Acting) is the dominant single-agent pattern for 2026: the model reasons about a goal in a scratchpad, selects a tool, observes the result, and repeats until it reaches a final answer. It combines chain-of-thought reasoning with real-world grounding, making it the default choice when interpretability, error recovery, and multi-step tool use all matter.

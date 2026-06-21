@@ -1,14 +1,23 @@
 ---
-title: "Cloudflare Project Think Guide 2026: Build Long-Running AI Agents with Durable Execution"
-date: 2026-05-07T00:00:00+00:00
-tags: ["cloudflare", "ai-agents", "workers", "durable-objects", "typescript", "serverless"]
-description: "Cloudflare Project Think 2026: build long-running AI agents with durable execution, Fibers, Facets, and Workers infrastructure."
-draft: false
 cover:
-  image: "/images/cloudflare-project-think-ai-agents-guide.png"
-  alt: "Cloudflare Project Think Guide 2026: Build Long-Running AI Agents with Durable Execution"
+  alt: 'Cloudflare Project Think Guide 2026: Build Long-Running AI Agents with Durable
+    Execution'
+  image: /images/cloudflare-project-think-ai-agents-guide.png
   relative: false
-schema: "schema-cloudflare-project-think-ai-agents-guide"
+date: 2026-05-07 00:00:00+00:00
+description: 'Cloudflare Project Think 2026: build long-running AI agents with durable
+  execution, Fibers, Facets, and Workers infrastructure.'
+draft: false
+schema: schema-cloudflare-project-think-ai-agents-guide
+tags:
+- cloudflare
+- ai-agents
+- workers
+- durable-objects
+- typescript
+- serverless
+title: 'Cloudflare Project Think Guide 2026: Build Long-Running AI Agents with Durable
+  Execution'
 ---
 
 During Cloudflare Agents Week 2026, the internal AI engineering stack processed 20 million requests through AI Gateway and 241 billion tokens through Workers AI — the largest proof-of-concept for Cloudflare's own infrastructure as an AI agent runtime. Project Think is Cloudflare's answer to the question of how you build AI agents that run for minutes or hours, maintain state across tool calls, and spawn specialized sub-agents, all on serverless infrastructure. The framework provides a base class (`@cloudflare/think`) built on top of Durable Objects, giving agents persistent state, hibernation (zero billing during idle), and colocated sub-agent execution via RPC. As of April 2026, Project Think is in developer preview — APIs may change as feedback is incorporated. Here is a complete guide to the architecture and how to build with it.

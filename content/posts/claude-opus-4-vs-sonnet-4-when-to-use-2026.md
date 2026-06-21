@@ -1,14 +1,18 @@
 ---
-title: "Claude Opus 4 vs Sonnet 4: When to Use Each Model in 2026"
-date: 2026-06-13T00:04:09+00:00
-tags: ["claude", "ai models", "developer tools"]
-description: "A practical Claude Opus 4 vs Sonnet 4 guide for developers choosing models by cost, coding depth, and 2026 migration risk."
-draft: false
 cover:
-  image: "/images/claude-opus-4-vs-sonnet-4-when-to-use-2026.png"
-  alt: "Claude Opus 4 vs Sonnet 4: When to Use Each Model in 2026"
+  alt: 'Claude Opus 4 vs Sonnet 4: When to Use Each Model in 2026'
+  image: /images/claude-opus-4-vs-sonnet-4-when-to-use-2026.png
   relative: false
-schema: "schema-claude-opus-4-vs-sonnet-4-when-to-use-2026"
+date: 2026-06-13 00:04:09+00:00
+description: A practical Claude Opus 4 vs Sonnet 4 guide for developers choosing models
+  by cost, coding depth, and 2026 migration risk.
+draft: false
+schema: schema-claude-opus-4-vs-sonnet-4-when-to-use-2026
+tags:
+- claude
+- ai models
+- developer tools
+title: 'Claude Opus 4 vs Sonnet 4: When to Use Each Model in 2026'
 ---
 
 Claude Opus 4 vs Sonnet 4 comes down to routing, not loyalty to one model. Use Sonnet 4 for most coding, documentation, support, and high-volume workflows; use Opus 4 when the task is ambiguous, multi-step, architecture-heavy, or expensive to get wrong.

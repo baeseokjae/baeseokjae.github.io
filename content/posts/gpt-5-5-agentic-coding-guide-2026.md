@@ -1,14 +1,20 @@
 ---
-title: "GPT-5.5 Agentic Coding Guide: Terminal-Bench 2.0, Computer Use, Workflows"
-date: 2026-04-26T09:04:22+00:00
-tags: ["gpt-5.5", "agentic coding", "openai codex", "terminal-bench", "ai developer tools"]
-description: "Complete developer guide to GPT-5.5 agentic coding: Terminal-Bench 2.0 results, computer use setup, Responses API workflows, and benchmark comparisons."
-draft: false
 cover:
-  image: "/images/gpt-5-5-agentic-coding-guide-2026.png"
-  alt: "GPT-5.5 Agentic Coding Guide: Terminal-Bench 2.0, Computer Use, Workflows"
+  alt: 'GPT-5.5 Agentic Coding Guide: Terminal-Bench 2.0, Computer Use, Workflows'
+  image: /images/gpt-5-5-agentic-coding-guide-2026.png
   relative: false
-schema: "schema-gpt-5-5-agentic-coding-guide-2026"
+date: 2026-04-26 09:04:22+00:00
+description: 'Complete developer guide to GPT-5.5 agentic coding: Terminal-Bench 2.0
+  results, computer use setup, Responses API workflows, and benchmark comparisons.'
+draft: false
+schema: schema-gpt-5-5-agentic-coding-guide-2026
+tags:
+- gpt-5.5
+- agentic coding
+- openai codex
+- terminal-bench
+- ai developer tools
+title: 'GPT-5.5 Agentic Coding Guide: Terminal-Bench 2.0, Computer Use, Workflows'
 ---
 
 GPT-5.5 is OpenAI's first fully retrained base model since GPT-4.5 — codenamed "Spud" internally — and it scores 82.7% on Terminal-Bench 2.0, making it the leading model for autonomous terminal-based coding tasks as of April 2026. If you're deciding whether to migrate Codex pipelines or agentic coding workflows to GPT-5.5, this guide covers benchmarks, setup, computer use, and real workflow patterns.

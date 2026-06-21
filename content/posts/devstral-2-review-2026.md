@@ -1,13 +1,20 @@
 ---
-title: "Devstral 2 Review 2026: Mistral's Open-Source Coding Agent Hits 72.2% SWE-bench"
-date: 2026-04-29T18:14:43+00:00
-tags: ["devstral-2", "mistral", "open-source-ai", "coding-agents", "swe-bench"]
-description: "Devstral 2 achieves 72.2% on SWE-bench Verified at $0.40/M tokens — the most capable open-weight coding model in 2026. Full review with benchmarks."
-draft: false
 cover:
-  image: "/images/devstral-2-review-2026.png"
-  alt: "Devstral 2 Review 2026: Mistral's Open-Source Coding Agent Hits 72.2% SWE-bench"
+  alt: 'Devstral 2 Review 2026: Mistral''s Open-Source Coding Agent Hits 72.2% SWE-bench'
+  image: /images/devstral-2-review-2026.png
   relative: false
+date: 2026-04-29 18:14:43+00:00
+description: Devstral 2 achieves 72.2% on SWE-bench Verified at $0.40/M tokens — the
+  most capable open-weight coding model in 2026. Full review with benchmarks.
+draft: false
+schema: schema-devstral-2-review-2026
+tags:
+- devstral-2
+- mistral
+- open-source-ai
+- coding-agents
+- swe-bench
+title: 'Devstral 2 Review 2026: Mistral''s Open-Source Coding Agent Hits 72.2% SWE-bench'
 ---
 
 Devstral 2 is Mistral AI's most capable open-weight coding model, achieving 72.2% on SWE-bench Verified — the highest score ever recorded by an open-source model at its parameter count. Released in late 2025 alongside the Mistral Vibe CLI, it costs $0.40 per million input tokens, making it up to 7x cheaper than Claude Sonnet for typical coding workloads.

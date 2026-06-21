@@ -1,14 +1,18 @@
 ---
-title: "VS Code Agents Guide 2026: The Agent-Native Companion App"
-date: 2026-06-13T16:04:34+00:00
-tags: ["VS Code", "AI agents", "developer tools"]
-description: "A practical VS Code agents guide for using Agent Sessions, worktrees, MCP, custom agents, and review gates in 2026."
-draft: false
 cover:
-  image: "/images/vs-code-agents-guide-2026.png"
-  alt: "VS Code Agents Guide 2026: The Agent-Native Companion App"
+  alt: 'VS Code Agents Guide 2026: The Agent-Native Companion App'
+  image: /images/vs-code-agents-guide-2026.png
   relative: false
-schema: "schema-vs-code-agents-guide-2026"
+date: 2026-06-13 16:04:34+00:00
+description: A practical VS Code agents guide for using Agent Sessions, worktrees,
+  MCP, custom agents, and review gates in 2026.
+draft: false
+schema: schema-vs-code-agents-guide-2026
+tags:
+- VS Code
+- AI agents
+- developer tools
+title: 'VS Code Agents Guide 2026: The Agent-Native Companion App'
 ---
 
 VS Code agents are turning the editor into a control plane for delegated software work: plan a task, run it in an isolated session, review diffs, give feedback, and decide what merges. This VS Code agents guide explains the 2026 workflow without treating agents as magic or replacing engineering judgment.

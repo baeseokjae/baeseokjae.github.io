@@ -1,14 +1,20 @@
 ---
-title: "Gemma 4 On-Device Deployment Guide: Run Google's Open Model Locally"
-date: 2026-05-11T00:05:05+00:00
-tags: ["Gemma 4", "local LLM", "on-device AI", "Ollama", "open source"]
-description: "Run Gemma 4 locally with Ollama, LM Studio, or llama.cpp. Hardware requirements, quantization guide, mobile deployment, and fine-tuning with QLoRA."
-draft: false
 cover:
-  image: "/images/gemma-4-on-device-guide-2026.png"
-  alt: "Gemma 4 On-Device Deployment Guide"
+  alt: Gemma 4 On-Device Deployment Guide
+  image: /images/gemma-4-on-device-guide-2026.png
   relative: false
-schema: "schema-gemma-4-on-device-guide-2026"
+date: 2026-05-11 00:05:05+00:00
+description: Run Gemma 4 locally with Ollama, LM Studio, or llama.cpp. Hardware requirements,
+  quantization guide, mobile deployment, and fine-tuning with QLoRA.
+draft: false
+schema: schema-gemma-4-on-device-guide-2026
+tags:
+- Gemma 4
+- local LLM
+- on-device AI
+- Ollama
+- open source
+title: 'Gemma 4 On-Device Deployment Guide: Run Google''s Open Model Locally'
 ---
 
 Gemma 4 is Google's family of open-weights models released April 2, 2026 under Apache 2.0 — four sizes from a 2B mobile-ready model to a 31B dense powerhouse, all runnable locally without sending a single byte to Google's servers. This guide covers every deployment path: Ollama, LM Studio, Hugging Face Transformers, llama.cpp, Android, and iOS.

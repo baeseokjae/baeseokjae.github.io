@@ -1,14 +1,20 @@
 ---
-title: "State of AI Coding Agents 2026: From Pair Programming to Autonomous Teams"
-date: 2026-05-25T21:04:58+00:00
-tags: ["ai-coding-agents", "software-development", "developer-productivity", "autonomous-ai", "enterprise-ai"]
-description: "AI coding agents have gone from autocomplete to autonomous teams in 4 years. Here's what the 2026 data actually shows."
-draft: false
 cover:
-  image: "/images/state-of-ai-coding-agents-2026.png"
-  alt: "State of AI Coding Agents 2026: From Pair Programming to Autonomous Teams"
+  alt: 'State of AI Coding Agents 2026: From Pair Programming to Autonomous Teams'
+  image: /images/state-of-ai-coding-agents-2026.png
   relative: false
-schema: "schema-state-of-ai-coding-agents-2026"
+date: 2026-05-25 21:04:58+00:00
+description: AI coding agents have gone from autocomplete to autonomous teams in 4
+  years. Here's what the 2026 data actually shows.
+draft: false
+schema: schema-state-of-ai-coding-agents-2026
+tags:
+- ai-coding-agents
+- software-development
+- developer-productivity
+- autonomous-ai
+- enterprise-ai
+title: 'State of AI Coding Agents 2026: From Pair Programming to Autonomous Teams'
 ---
 
 The state of AI coding agents in 2026 is this: the average Claude Code session now spans 23 minutes, involves 47 tool calls, and touches multiple files across a codebase — not because developers asked it to, but because the agent decided that's what the task required. That's a fundamentally different relationship with software development than the autocomplete tools of 2021, and the data shows the shift happened faster than anyone projected.

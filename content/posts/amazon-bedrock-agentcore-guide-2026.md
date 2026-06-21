@@ -1,14 +1,18 @@
 ---
-title: "Amazon Bedrock AgentCore Guide: Deploy Production AI Agents on AWS"
-date: 2026-06-12T09:04:45+00:00
-tags: ["AWS", "AI agents", "Amazon Bedrock"]
-description: "Practical Amazon Bedrock AgentCore guide for deploying secure, observable production AI agents on AWS."
-draft: false
 cover:
-  image: "/images/amazon-bedrock-agentcore-guide-2026.png"
-  alt: "Amazon Bedrock AgentCore Guide: Deploy Production AI Agents on AWS"
+  alt: 'Amazon Bedrock AgentCore Guide: Deploy Production AI Agents on AWS'
+  image: /images/amazon-bedrock-agentcore-guide-2026.png
   relative: false
-schema: "schema-amazon-bedrock-agentcore-guide-2026"
+date: 2026-06-12 09:04:45+00:00
+description: Practical Amazon Bedrock AgentCore guide for deploying secure, observable
+  production AI agents on AWS.
+draft: false
+schema: schema-amazon-bedrock-agentcore-guide-2026
+tags:
+- AWS
+- AI agents
+- Amazon Bedrock
+title: 'Amazon Bedrock AgentCore Guide: Deploy Production AI Agents on AWS'
 ---
 
 Amazon Bedrock AgentCore is AWS's production platform for deploying, securing, observing, and governing AI agents built with frameworks such as LangGraph, CrewAI, LlamaIndex, and Strands Agents. Use it when your agent needs managed runtime isolation, enterprise identity, tool governance, memory, evaluation, and AWS-native operations instead of another prototype server.

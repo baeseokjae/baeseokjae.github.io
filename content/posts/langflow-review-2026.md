@@ -1,14 +1,20 @@
 ---
-title: "Langflow Review 2026: Visual AI Workflow Builder for LLM Orchestration"
-date: 2026-05-05T09:04:08+00:00
-tags: ["langflow", "ai-workflow", "llm-orchestration", "open-source", "langchain"]
-description: "Langflow review 2026: 100K GitHub stars, MCP server export, RAG pipelines 10x faster — plus honest limits and alternatives."
-draft: false
 cover:
-  image: "/images/langflow-review-2026.png"
-  alt: "Langflow Review 2026: Visual AI Workflow Builder for LLM Orchestration"
+  alt: 'Langflow Review 2026: Visual AI Workflow Builder for LLM Orchestration'
+  image: /images/langflow-review-2026.png
   relative: false
-schema: "schema-langflow-review-2026"
+date: 2026-05-05 09:04:08+00:00
+description: 'Langflow review 2026: 100K GitHub stars, MCP server export, RAG pipelines
+  10x faster — plus honest limits and alternatives.'
+draft: false
+schema: schema-langflow-review-2026
+tags:
+- langflow
+- ai-workflow
+- llm-orchestration
+- open-source
+- langchain
+title: 'Langflow Review 2026: Visual AI Workflow Builder for LLM Orchestration'
 ---
 
 Langflow is an open-source, visual LLM orchestration tool that lets you build RAG pipelines, AI agents, and multi-model workflows by connecting nodes on a drag-and-drop canvas — no boilerplate required. It won't replace code for complex production systems, but it cuts RAG prototyping from 1–2 hours of LangChain Python to 10–15 minutes.

@@ -1,14 +1,18 @@
 ---
-title: "Agent Goal Hijacking OWASP: Top Agentic AI Risk Explained"
-date: 2026-06-15T07:04:28+00:00
-tags: ["AI security", "OWASP", "agentic AI"]
-description: "Agent goal hijacking OWASP guide for developers securing agentic AI apps against ASI01, prompt injection, and tool misuse."
-draft: false
 cover:
-  image: "/images/agent-goal-hijacking-owasp-agentic-risk-2026.png"
-  alt: "Agent Goal Hijacking OWASP: Top Agentic AI Risk Explained"
+  alt: 'Agent Goal Hijacking OWASP: Top Agentic AI Risk Explained'
+  image: /images/agent-goal-hijacking-owasp-agentic-risk-2026.png
   relative: false
-schema: "schema-agent-goal-hijacking-owasp-agentic-risk-2026"
+date: 2026-06-15 07:04:28+00:00
+description: Agent goal hijacking OWASP guide for developers securing agentic AI apps
+  against ASI01, prompt injection, and tool misuse.
+draft: false
+schema: schema-agent-goal-hijacking-owasp-agentic-risk-2026
+tags:
+- AI security
+- OWASP
+- agentic AI
+title: 'Agent Goal Hijacking OWASP: Top Agentic AI Risk Explained'
 ---
 
 Agent goal hijacking is the OWASP ASI01 risk where an attacker redirects an AI agent from its intended objective toward a malicious or unauthorized outcome. The practical danger is not a weird answer; it is an autonomous workflow using tools, identity, memory, or production APIs to do the wrong thing.

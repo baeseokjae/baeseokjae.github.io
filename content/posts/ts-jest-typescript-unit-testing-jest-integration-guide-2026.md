@@ -1,14 +1,20 @@
 ---
-title: "ts-jest TypeScript Unit Testing Jest Integration Guide 2026"
-date: 2026-05-18T09:04:57+00:00
-tags: ["ts-jest", "TypeScript", "Jest", "unit-testing", "JavaScript"]
-description: "Complete ts-jest setup guide for Jest 30 and TypeScript 5 in 2026: installation, configuration, ESM, monorepo, and common errors fixed."
-draft: false
 cover:
-  image: "/images/ts-jest-typescript-unit-testing-jest-integration-guide-2026.png"
-  alt: "ts-jest TypeScript Unit Testing Jest Integration Guide 2026"
+  alt: ts-jest TypeScript Unit Testing Jest Integration Guide 2026
+  image: /images/ts-jest-typescript-unit-testing-jest-integration-guide-2026.png
   relative: false
-schema: "schema-ts-jest-typescript-unit-testing-jest-integration-guide-2026"
+date: 2026-05-18 09:04:57+00:00
+description: 'Complete ts-jest setup guide for Jest 30 and TypeScript 5 in 2026: installation,
+  configuration, ESM, monorepo, and common errors fixed.'
+draft: false
+schema: schema-ts-jest-typescript-unit-testing-jest-integration-guide-2026
+tags:
+- ts-jest
+- TypeScript
+- Jest
+- unit-testing
+- JavaScript
+title: ts-jest TypeScript Unit Testing Jest Integration Guide 2026
 ---
 
 ts-jest is the official TypeScript preprocessor for Jest, transforming `.ts` and `.tsx` source files into JavaScript that Jest can execute. With 22.7 million weekly npm downloads in 2026, it remains the standard integration layer for TypeScript projects using Jest.

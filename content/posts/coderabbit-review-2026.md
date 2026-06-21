@@ -1,14 +1,20 @@
 ---
-title: "CodeRabbit Review 2026: AI Code Review Tool with 2M+ Repositories"
-date: 2026-04-26T03:02:41+00:00
-tags: ["coderabbit review", "ai code review", "code review tools", "developer tools", "github"]
-description: "CodeRabbit is the most-installed AI code review tool on GitHub, connecting 2M+ repos and processing 13M+ PRs — here's a complete 2026 review."
-draft: false
 cover:
-  image: "/images/coderabbit-review-2026.png"
-  alt: "CodeRabbit Review 2026: AI Code Review Tool with 2M+ Repositories"
+  alt: 'CodeRabbit Review 2026: AI Code Review Tool with 2M+ Repositories'
+  image: /images/coderabbit-review-2026.png
   relative: false
-schema: "schema-coderabbit-review-2026"
+date: 2026-04-26 03:02:41+00:00
+description: CodeRabbit is the most-installed AI code review tool on GitHub, connecting
+  2M+ repos and processing 13M+ PRs — here's a complete 2026 review.
+draft: false
+schema: schema-coderabbit-review-2026
+tags:
+- coderabbit review
+- ai code review
+- code review tools
+- developer tools
+- github
+title: 'CodeRabbit Review 2026: AI Code Review Tool with 2M+ Repositories'
 ---
 
 CodeRabbit is an AI-powered code review tool that integrates directly into your pull request workflow, delivering automated line-by-line feedback within 2–4 minutes. With 2M+ connected repositories, 13M+ PRs processed, and 8,000+ paying customers including Chegg, Groupon, and Mercury, it's the most-installed AI app on GitHub as of 2026.

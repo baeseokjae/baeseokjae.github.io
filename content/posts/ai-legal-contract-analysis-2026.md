@@ -3,7 +3,7 @@ cover:
   alt: 'AI for Legal Contract Analysis 2026: Tools, Use Cases, and ROI'
   image: /images/ai-legal-contract-analysis-2026.png
   relative: false
-date: 2026-05-07T12:00:00+00:00
+date: 2026-05-07 12:00:00+00:00
 description: AI contract analysis in 2026 cuts review time by 80% and attorney hours
   by 50-70%—market hits $5.59B. Best tools, ROI data, and implementation guide.
 draft: false

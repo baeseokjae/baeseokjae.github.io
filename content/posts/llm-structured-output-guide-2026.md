@@ -1,14 +1,20 @@
 ---
-title: "LLM Structured Outputs Guide 2026: JSON Mode, Instructor & Outlines"
-date: 2026-05-10T00:00:00+00:00
-tags: ["structured-output","instructor","pydantic","json-mode","llm"]
-description: "The complete 2026 guide to LLM structured outputs: why prompt-only JSON fails, Instructor vs Outlines, native APIs from OpenAI/Anthropic/Google, and production reliability patterns."
-draft: false
 cover:
-  image: "/images/llm-structured-output-guide-2026.png"
-  alt: "LLM Structured Outputs Guide 2026: JSON Mode, Instructor & Outlines"
+  alt: 'LLM Structured Outputs Guide 2026: JSON Mode, Instructor & Outlines'
+  image: /images/llm-structured-output-guide-2026.png
   relative: false
-schema: "schema-llm-structured-output-guide-2026"
+date: 2026-05-10 00:00:00+00:00
+description: 'The complete 2026 guide to LLM structured outputs: why prompt-only JSON
+  fails, Instructor vs Outlines, native APIs from OpenAI/Anthropic/Google, and pro...'
+draft: false
+schema: schema-llm-structured-output-guide-2026
+tags:
+- structured-output
+- instructor
+- pydantic
+- json-mode
+- llm
+title: 'LLM Structured Outputs Guide 2026: JSON Mode, Instructor & Outlines'
 ---
 
 Structured outputs are no longer optional for serious LLM production systems. A 2026 enterprise survey found that 74% of LLM production applications now use some form of structured output, up from roughly 40% two years ago. The shift is driven by a simple operational reality: free-form text extraction breaks pipelines, structured schema enforcement does not. This guide covers the full stack — from why naive prompting fails to native APIs, Instructor, Outlines, Pydantic patterns, and retry strategies that hold up in production.

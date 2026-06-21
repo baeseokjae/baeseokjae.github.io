@@ -1,14 +1,20 @@
 ---
-title: "Gemini 3.1 Ultra API Developer Guide: 2M Context Window"
-date: 2026-05-07T12:00:00+00:00
-tags: ["gemini", "google-ai", "llm", "api-guide", "developer-guide"]
-description: "Complete developer guide to Gemini 3.1 Ultra: 2M token context, Python SDK setup, multimodal API, pricing, benchmarks, and Vertex AI enterprise deployment."
-draft: false
 cover:
-  image: "/images/gemini-3-1-ultra-developer-guide-2026.png"
-  alt: "Gemini 3.1 Ultra API Developer Guide: 2M Context Window"
+  alt: 'Gemini 3.1 Ultra API Developer Guide: 2M Context Window'
+  image: /images/gemini-3-1-ultra-developer-guide-2026.png
   relative: false
-schema: "schema-gemini-3-1-ultra-developer-guide-2026"
+date: 2026-05-07 12:00:00+00:00
+description: 'Complete developer guide to Gemini 3.1 Ultra: 2M token context, Python
+  SDK setup, multimodal API, pricing, benchmarks, and Vertex AI enterprise deployment.'
+draft: false
+schema: schema-gemini-3-1-ultra-developer-guide-2026
+tags:
+- gemini
+- google-ai
+- llm
+- api-guide
+- developer-guide
+title: 'Gemini 3.1 Ultra API Developer Guide: 2M Context Window'
 ---
 
 Gemini 3.1 Ultra is Google's flagship large language model, released in 2026 with a 2-million-token context window — the largest available from any commercial LLM provider as of this writing. It achieves 92% accuracy on MMLU-Pro and 89% pass@1 on HumanEval+, making it the highest-scoring model on both benchmarks. Access comes through two paths: Google AI Studio for experimentation and Vertex AI for production deployments. Pricing starts at $25 per million input tokens and $100 per million output tokens, with a batch API available at roughly 50% discount. This guide covers everything a developer needs to integrate, optimize, and deploy Gemini 3.1 Ultra at scale.

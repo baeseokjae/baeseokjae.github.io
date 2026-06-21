@@ -1,14 +1,20 @@
 ---
-title: "AWS Strands Agents SDK: Build Production AI Agents in 2026"
-date: 2026-05-05T12:05:41+00:00
-tags: ["AWS Strands Agents", "AI agent framework", "Amazon Bedrock", "Python AI agents", "multi-agent orchestration"]
-description: "Complete guide to AWS Strands Agents SDK — install, build, deploy, and monitor production AI agents with minimal code in 2026."
-draft: false
 cover:
-  image: "/images/strands-agents-aws-guide-2026.png"
-  alt: "AWS Strands Agents SDK: Build Production AI Agents in 2026"
+  alt: 'AWS Strands Agents SDK: Build Production AI Agents in 2026'
+  image: /images/strands-agents-aws-guide-2026.png
   relative: false
-schema: "schema-strands-agents-aws-guide-2026"
+date: 2026-05-05 12:05:41+00:00
+description: Complete guide to AWS Strands Agents SDK — install, build, deploy, and
+  monitor production AI agents with minimal code in 2026.
+draft: false
+schema: schema-strands-agents-aws-guide-2026
+tags:
+- AWS Strands Agents
+- AI agent framework
+- Amazon Bedrock
+- Python AI agents
+- multi-agent orchestration
+title: 'AWS Strands Agents SDK: Build Production AI Agents in 2026'
 ---
 
 AWS Strands Agents is an open-source Python and TypeScript SDK that lets you build production-ready AI agents in under 10 lines of code. Released by AWS in May 2025 and reaching 14 million+ downloads, it uses a model-driven loop where you describe a goal, attach tools, and the agent decides at runtime what to call and in what order.

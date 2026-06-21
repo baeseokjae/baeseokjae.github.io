@@ -1,14 +1,20 @@
 ---
-title: "MemPalace Review 2026: The Highest-Scoring Free AI Memory System for Agents"
-date: 2026-05-19T15:04:27+00:00
-tags: ["ai-memory", "open-source", "ai-agents", "mcp", "claude-code"]
-description: "MemPalace scored 96.6% on LongMemEval — the best free AI memory framework of 2026. Here's what works, what doesn't, and how to set it up."
-draft: false
 cover:
-  image: "/images/mempalace-ai-memory-system-2026.png"
-  alt: "MemPalace Review 2026: The Highest-Scoring Free AI Memory System for Agents"
+  alt: 'MemPalace Review 2026: The Highest-Scoring Free AI Memory System for Agents'
+  image: /images/mempalace-ai-memory-system-2026.png
   relative: false
-schema: "schema-mempalace-ai-memory-system-2026"
+date: 2026-05-19 15:04:27+00:00
+description: MemPalace scored 96.6% on LongMemEval — the best free AI memory framework
+  of 2026. Here's what works, what doesn't, and how to set it up.
+draft: false
+schema: schema-mempalace-ai-memory-system-2026
+tags:
+- ai-memory
+- open-source
+- ai-agents
+- mcp
+- claude-code
+title: 'MemPalace Review 2026: The Highest-Scoring Free AI Memory System for Agents'
 ---
 
 MemPalace is an open-source AI memory framework that scored 96.6% on the LongMemEval benchmark — the highest result ever recorded by a free, self-hosted memory system. It launched on April 5, 2026, gained 23,000+ GitHub stars within 48 hours, and now powers persistent memory for thousands of Claude Code, LangChain, and custom agent deployments. This review covers how it works, what the benchmark score actually means, how to set it up in five minutes, and when to pick a paid alternative instead.

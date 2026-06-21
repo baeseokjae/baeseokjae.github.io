@@ -1,14 +1,20 @@
 ---
-title: "Langfuse Acquired by ClickHouse: What It Means for Open-Source LLM Observability"
-date: 2026-05-16T12:05:44+00:00
-tags: ["langfuse", "clickhouse", "LLM observability", "open source", "AI monitoring"]
-description: "ClickHouse acquired Langfuse in January 2026 alongside a $400M Series D. Here's what changes — and what stays the same — for developers."
-draft: false
 cover:
-  image: "/images/langfuse-clickhouse-acquisition-2026.png"
-  alt: "Langfuse Acquired by ClickHouse: What It Means for Open-Source LLM Observability"
+  alt: 'Langfuse Acquired by ClickHouse: What It Means for Open-Source LLM Observability'
+  image: /images/langfuse-clickhouse-acquisition-2026.png
   relative: false
-schema: "schema-langfuse-clickhouse-acquisition-2026"
+date: 2026-05-16 12:05:44+00:00
+description: ClickHouse acquired Langfuse in January 2026 alongside a $400M Series
+  D. Here's what changes — and what stays the same — for developers.
+draft: false
+schema: schema-langfuse-clickhouse-acquisition-2026
+tags:
+- langfuse
+- clickhouse
+- LLM observability
+- open source
+- AI monitoring
+title: 'Langfuse Acquired by ClickHouse: What It Means for Open-Source LLM Observability'
 ---
 
 On January 16, 2026, ClickHouse announced it had acquired Langfuse — the most widely deployed open-source LLM observability platform — alongside a $400M Series D that tripled ClickHouse's valuation to $15 billion. The MIT license stays intact, self-hosting remains a first-class option, and the Langfuse roadmap is unchanged. But this acquisition reshapes the competitive landscape for LLM monitoring in ways worth understanding before you commit to a toolchain.

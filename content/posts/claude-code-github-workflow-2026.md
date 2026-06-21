@@ -1,14 +1,20 @@
 ---
-title: "Claude Code GitHub Workflow 2026: PR Reviews, Commits, and CI Integration"
-date: 2026-04-23T01:19:59+00:00
-tags: ["Claude Code", "GitHub Actions", "CI/CD", "code review", "AI automation"]
-description: "Complete guide to Claude Code GitHub workflow: automated PR reviews, CI failure auto-fix, and enterprise CI/CD integration using claude-code-action@v1."
-draft: false
 cover:
-  image: "/images/claude-code-github-workflow-2026.png"
-  alt: "Claude Code GitHub Workflow 2026: PR Reviews, Commits, and CI Integration"
+  alt: 'Claude Code GitHub Workflow 2026: PR Reviews, Commits, and CI Integration'
+  image: /images/claude-code-github-workflow-2026.png
   relative: false
-schema: "schema-claude-code-github-workflow-2026"
+date: 2026-04-23 01:19:59+00:00
+description: 'Complete guide to Claude Code GitHub workflow: automated PR reviews,
+  CI failure auto-fix, and enterprise CI/CD integration using claude-code-action@v1.'
+draft: false
+schema: schema-claude-code-github-workflow-2026
+tags:
+- Claude Code
+- GitHub Actions
+- CI/CD
+- code review
+- AI automation
+title: 'Claude Code GitHub Workflow 2026: PR Reviews, Commits, and CI Integration'
 ---
 
 Claude Code GitHub workflow integrates Anthropic's `claude-code-action@v1` directly into GitHub Actions, enabling automated PR reviews, CI failure auto-fixes, and structured code analysis — all triggered by `@claude` mentions or YAML automation rules with under $5/month in API costs for most teams.

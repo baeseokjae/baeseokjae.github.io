@@ -1,14 +1,20 @@
 ---
-title: "GitHub Copilot Agentic Code Review: Automated PR Analysis in 2026"
-date: 2026-05-23T18:01:19+00:00
-tags: ["github-copilot", "code-review", "ai", "pull-request", "devtools"]
-description: "GitHub Copilot agentic code review went GA in March 2026. Here's how to enable it, use Fix with Copilot, and decide when human review still wins."
-draft: false
 cover:
-  image: "/images/github-copilot-agentic-code-review-2026.png"
-  alt: "GitHub Copilot Agentic Code Review: Automated PR Analysis in 2026"
+  alt: 'GitHub Copilot Agentic Code Review: Automated PR Analysis in 2026'
+  image: /images/github-copilot-agentic-code-review-2026.png
   relative: false
-schema: "schema-github-copilot-agentic-code-review-2026"
+date: 2026-05-23 18:01:19+00:00
+description: GitHub Copilot agentic code review went GA in March 2026. Here's how
+  to enable it, use Fix with Copilot, and decide when human review still wins.
+draft: false
+schema: schema-github-copilot-agentic-code-review-2026
+tags:
+- github-copilot
+- code-review
+- ai
+- pull-request
+- devtools
+title: 'GitHub Copilot Agentic Code Review: Automated PR Analysis in 2026'
 ---
 
 GitHub Copilot's agentic code review went generally available on March 5, 2026, processing 60 million reviews in its first months. It doesn't just flag problems — it can autonomously implement fixes through the "Fix with Copilot" workflow, fundamentally changing how teams handle PR turnaround.

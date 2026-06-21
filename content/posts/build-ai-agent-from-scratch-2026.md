@@ -1,14 +1,20 @@
 ---
-title: "How to Build an AI Agent from Scratch 2026: Python + LangChain + Tools"
-date: 2026-04-24T04:10:20+00:00
-tags: ["ai-agents", "python", "langchain", "langgraph", "tutorial"]
-description: "Build a production-ready AI agent from scratch using Python, LangGraph, and custom tools — with memory, error handling, and deployment included."
-draft: false
 cover:
-  image: "/images/build-ai-agent-from-scratch-2026.png"
-  alt: "How to Build an AI Agent from Scratch 2026: Python + LangChain + Tools"
+  alt: 'How to Build an AI Agent from Scratch 2026: Python + LangChain + Tools'
+  image: /images/build-ai-agent-from-scratch-2026.png
   relative: false
-schema: "schema-build-ai-agent-from-scratch-2026"
+date: 2026-04-24 04:10:20+00:00
+description: Build a production-ready AI agent from scratch using Python, LangGraph,
+  and custom tools — with memory, error handling, and deployment included.
+draft: false
+schema: schema-build-ai-agent-from-scratch-2026
+tags:
+- ai-agents
+- python
+- langchain
+- langgraph
+- tutorial
+title: 'How to Build an AI Agent from Scratch 2026: Python + LangChain + Tools'
 ---
 
 Building an AI agent from scratch in 2026 means choosing LangGraph or LangChain, wiring in custom tools, and adding persistent memory — all in under 200 lines of Python. This guide walks every step from environment setup through production deployment, with runnable code and cost estimates under $2.00 in API calls.

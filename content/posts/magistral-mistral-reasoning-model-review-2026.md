@@ -1,14 +1,22 @@
 ---
-title: "Magistral Review 2026: Mistral Open-Weight Reasoning Model That Beats DeepSeek R1"
-date: 2026-04-30T12:08:00+00:00
-tags: ["magistral", "mistral", "reasoning model", "open-weight AI", "deepseek r1"]
-description: "Magistral is Mistral's first open-weight reasoning model. The 24B Small variant runs locally on a MacBook and scores 73.6% on AIME-24 — beating DeepSeek R1 Zero."
-draft: false
 cover:
-  image: "/images/magistral-mistral-reasoning-model-review-2026.png"
-  alt: "Magistral Review 2026: Mistral Open-Weight Reasoning Model That Beats DeepSeek R1"
+  alt: 'Magistral Review 2026: Mistral Open-Weight Reasoning Model That Beats DeepSeek
+    R1'
+  image: /images/magistral-mistral-reasoning-model-review-2026.png
   relative: false
-schema: "schema-magistral-mistral-reasoning-model-review-2026"
+date: 2026-04-30 12:08:00+00:00
+description: Magistral is Mistral's first open-weight reasoning model. The 24B Small
+  variant runs locally on a MacBook and scores 73.6% on AIME-24 — beating DeepSeek...
+draft: false
+schema: schema-magistral-mistral-reasoning-model-review-2026
+tags:
+- magistral
+- mistral
+- reasoning model
+- open-weight AI
+- deepseek r1
+title: 'Magistral Review 2026: Mistral Open-Weight Reasoning Model That Beats DeepSeek
+  R1'
 ---
 
 Magistral is Mistral AI's first reasoning model family, released in 2025. The 24B open-weight Small variant runs on a single RTX 4090 or 32 GB MacBook, scores 70.7% on AIME-2024 pass@1, and is licensed Apache 2.0 — making it the most capable locally-deployable reasoning model available today.

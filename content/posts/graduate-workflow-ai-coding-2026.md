@@ -1,14 +1,22 @@
 ---
-title: "The Graduate AI Coding Workflow: Prototype in Bolt/Lovable, Ship in Cursor/Claude Code"
-date: 2026-05-16T00:00:00+00:00
-tags: ["ai-coding","cursor","lovable","bolt","workflow"]
-description: "The smartest developers in 2026 use two separate AI tool layers — fast prototyping in Bolt or Lovable, then production-grade shipping in Cursor or Claude Code. Here's the full playbook."
-draft: false
 cover:
-  image: "/images/graduate-workflow-ai-coding-2026.png"
-  alt: "The Graduate AI Coding Workflow: Prototype in Bolt/Lovable, Ship in Cursor/Claude Code"
+  alt: 'The Graduate AI Coding Workflow: Prototype in Bolt/Lovable, Ship in Cursor/Claude
+    Code'
+  image: /images/graduate-workflow-ai-coding-2026.png
   relative: false
-schema: "schema-graduate-workflow-ai-coding-2026"
+date: 2026-05-16 00:00:00+00:00
+description: The smartest developers in 2026 use two separate AI tool layers — fast
+  prototyping in Bolt or Lovable, then production-grade shipping in Cursor or Claud...
+draft: false
+schema: schema-graduate-workflow-ai-coding-2026
+tags:
+- ai-coding
+- cursor
+- lovable
+- bolt
+- workflow
+title: 'The Graduate AI Coding Workflow: Prototype in Bolt/Lovable, Ship in Cursor/Claude
+  Code'
 ---
 
 The smartest developers in 2026 have stopped arguing about which AI coding tool is best and started using multiple tools in deliberate sequence. Prototype fast in Bolt.new or Lovable, then graduate your project into Cursor or Claude Code when it's time to ship. This two-phase approach combines the best of rapid iteration with production-grade engineering — and the numbers show it's catching on fast.

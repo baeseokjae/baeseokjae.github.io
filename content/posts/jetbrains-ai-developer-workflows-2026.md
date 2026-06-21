@@ -1,14 +1,20 @@
 ---
-title: "How AI Actually Impacts Developer Workflows: JetBrains April 2026 Research"
-date: 2026-06-02T09:08:12+00:00
-tags: ["AI Coding Tools", "Developer Productivity", "JetBrains", "Software Engineering", "Research"]
-description: "JetBrains' 2-year study of 800 developers and 151M IDE events reveals how AI actually reshapes workflows vs. what developers think is happening."
-draft: false
 cover:
-  image: "/images/jetbrains-ai-developer-workflows-2026.png"
-  alt: "How AI Actually Impacts Developer Workflows: JetBrains April 2026 Research"
+  alt: 'How AI Actually Impacts Developer Workflows: JetBrains April 2026 Research'
+  image: /images/jetbrains-ai-developer-workflows-2026.png
   relative: false
-schema: "schema-jetbrains-ai-developer-workflows-2026"
+date: 2026-06-02 09:08:12+00:00
+description: JetBrains' 2-year study of 800 developers and 151M IDE events reveals
+  how AI actually reshapes workflows vs. what developers think is happening.
+draft: false
+schema: schema-jetbrains-ai-developer-workflows-2026
+tags:
+- AI Coding Tools
+- Developer Productivity
+- JetBrains
+- Software Engineering
+- Research
+title: 'How AI Actually Impacts Developer Workflows: JetBrains April 2026 Research'
 ---
 
 JetBrains' HAX team tracked 800 developers and 151,904,543 IDE events over two years and presented findings at ICSE 2026 in Rio de Janeiro. The headline: AI doesn't just speed up development — it redistributes and reshapes how developers work in ways their own perceptions consistently miss. 74% of AI-assisted developers didn't notice increased window switching, yet telemetry confirmed it was happening the entire time.

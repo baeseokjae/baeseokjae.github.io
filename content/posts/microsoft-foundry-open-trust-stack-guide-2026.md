@@ -1,14 +1,20 @@
 ---
-title: "Microsoft Open Trust Stack AI agent governance: ASSERT, ACS, and OpenInference for production"
-date: 2026-06-13T09:03:45+00:00
-tags: ["ai agents", "governance", "microsoft foundry"]
-description: "A production guide to Microsoft Open Trust Stack AI agent governance with ASSERT, ACS, OpenInference, and Foundry."
-draft: false
 cover:
-  image: "/images/microsoft-foundry-open-trust-stack-guide-2026.png"
-  alt: "Microsoft Open Trust Stack AI agent governance: ASSERT, ACS, and OpenInference for production"
+  alt: 'Microsoft Open Trust Stack AI agent governance: ASSERT, ACS, and OpenInference
+    for production'
+  image: /images/microsoft-foundry-open-trust-stack-guide-2026.png
   relative: false
-schema: "schema-microsoft-foundry-open-trust-stack-guide-2026"
+date: 2026-06-13 09:03:45+00:00
+description: A production guide to Microsoft Open Trust Stack AI agent governance
+  with ASSERT, ACS, OpenInference, and Foundry.
+draft: false
+schema: schema-microsoft-foundry-open-trust-stack-guide-2026
+tags:
+- ai agents
+- governance
+- microsoft foundry
+title: 'Microsoft Open Trust Stack AI agent governance: ASSERT, ACS, and OpenInference
+  for production'
 ---
 
 Microsoft Open Trust Stack AI agent governance is Microsoft's 2026 pattern for making agents testable, enforceable, and observable. The practical model is simple: use ASSERT before release, ACS during runtime, and OpenInference traces across both so engineering, security, and SRE teams can inspect the same evidence.

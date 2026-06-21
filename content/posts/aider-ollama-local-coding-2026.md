@@ -1,14 +1,20 @@
 ---
-title: "Aider + Ollama Local Coding Setup 2026: Free AI Pair Programming Offline"
-date: 2026-04-23T01:15:20+00:00
-tags: ["aider", "ollama", "local-llm", "ai-coding", "open-source"]
-description: "Complete setup guide for Aider + Ollama local AI pair programming — zero API costs, full privacy, works offline in 2026."
-draft: false
 cover:
-  image: "/images/aider-ollama-local-coding-2026.png"
-  alt: "Aider + Ollama Local Coding Setup 2026: Free AI Pair Programming Offline"
+  alt: 'Aider + Ollama Local Coding Setup 2026: Free AI Pair Programming Offline'
+  image: /images/aider-ollama-local-coding-2026.png
   relative: false
-schema: "schema-aider-ollama-local-coding-2026"
+date: 2026-04-23 01:15:20+00:00
+description: Complete setup guide for Aider + Ollama local AI pair programming — zero
+  API costs, full privacy, works offline in 2026.
+draft: false
+schema: schema-aider-ollama-local-coding-2026
+tags:
+- aider
+- ollama
+- local-llm
+- ai-coding
+- open-source
+title: 'Aider + Ollama Local Coding Setup 2026: Free AI Pair Programming Offline'
 ---
 
 Aider + Ollama gives you a fully local AI pair programmer that costs nothing to run, sends zero code to any cloud, and works completely offline — set it up once and you have a private coding assistant running on your own hardware.

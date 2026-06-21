@@ -1,14 +1,20 @@
 ---
-title: "Nous Hermes Agent v0.8.0 Review: Open-Source Alternative to Claude Code"
-date: 2026-05-21T09:05:38+00:00
-tags: ["hermes agent coding", "open source coding agent", "nous hermes agent review", "hermes agent vs claude code", "self-improving AI agent 2026"]
-description: "Nous Hermes Agent v0.8.0 reached 140K GitHub stars in under 3 months. This review covers GEPA self-improvement, real coding performance, security trade-offs, and who should switch from Claude Code."
-draft: false
 cover:
-  image: "/images/nous-hermes-agent-review-2026.png"
-  alt: "Nous Hermes Agent v0.8.0 Review: Open-Source Alternative to Claude Code"
+  alt: 'Nous Hermes Agent v0.8.0 Review: Open-Source Alternative to Claude Code'
+  image: /images/nous-hermes-agent-review-2026.png
   relative: false
-schema: "schema-nous-hermes-agent-review-2026"
+date: 2026-05-21 09:05:38+00:00
+description: Nous Hermes Agent v0.8.0 reached 140K GitHub stars in under 3 months.
+  This review covers GEPA self-improvement, real coding performance, security trade-...
+draft: false
+schema: schema-nous-hermes-agent-review-2026
+tags:
+- hermes agent coding
+- open source coding agent
+- nous hermes agent review
+- hermes agent vs claude code
+- self-improving AI agent 2026
+title: 'Nous Hermes Agent v0.8.0 Review: Open-Source Alternative to Claude Code'
 ---
 
 Nous Hermes Agent is an open-source, self-hosted AI coding and automation agent built by Nous Research that gets measurably faster with every task it completes — reaching 140,000 GitHub stars in under three months after its February 2026 launch. For teams willing to manage infrastructure, it costs $6–80/month versus Claude Code's subscription pricing, and its GEPA self-improvement engine lets open-source models beat proprietary frontier models by roughly 3% on enterprise tasks at 20–90x lower cost.

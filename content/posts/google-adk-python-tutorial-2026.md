@@ -1,14 +1,21 @@
 ---
-title: "Google ADK Tutorial: Build Multi-Agent Systems with Python (2026)"
-date: 2026-05-09T18:04:05+00:00
-tags: ["Google ADK", "multi-agent systems", "Python", "AI agents", "Gemini", "Vertex AI"]
-description: "Step-by-step Google ADK tutorial: install google-adk, build LlmAgent pipelines, run parallel agents, and deploy to Vertex AI in 2026."
-draft: false
 cover:
-  image: "/images/google-adk-python-tutorial-2026.png"
-  alt: "Google ADK Tutorial: Build Multi-Agent Systems with Python"
+  alt: 'Google ADK Tutorial: Build Multi-Agent Systems with Python'
+  image: /images/google-adk-python-tutorial-2026.png
   relative: false
-schema: "schema-google-adk-python-tutorial-2026"
+date: 2026-05-09 18:04:05+00:00
+description: 'Step-by-step Google ADK tutorial: install google-adk, build LlmAgent
+  pipelines, run parallel agents, and deploy to Vertex AI in 2026.'
+draft: false
+schema: schema-google-adk-python-tutorial-2026
+tags:
+- Google ADK
+- multi-agent systems
+- Python
+- AI agents
+- Gemini
+- Vertex AI
+title: 'Google ADK Tutorial: Build Multi-Agent Systems with Python (2026)'
 ---
 
 Google ADK (Agent Development Kit) lets you build a working multi-agent Python system in under 30 minutes — with LlmAgent for reasoning, SequentialAgent and ParallelAgent for orchestration, and a built-in dev UI for debugging. This tutorial walks you from zero to a deployed multi-agent pipeline.

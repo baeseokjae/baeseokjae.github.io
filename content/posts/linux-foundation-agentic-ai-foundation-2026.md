@@ -1,14 +1,21 @@
 ---
-title: "Linux Foundation Agentic AI Foundation (AAIF): MCP + A2A Governance Explained"
-date: 2026-05-22T13:03:54+00:00
-tags: ["agentic-ai", "mcp", "linux-foundation", "a2a", "enterprise-ai", "open-source"]
-description: "The Linux Foundation's Agentic AI Foundation (AAIF) brings MCP, goose, and AGENTS.md under neutral governance. Here's what it means for developers."
-draft: false
 cover:
-  image: "/images/linux-foundation-agentic-ai-foundation-2026.png"
-  alt: "Linux Foundation Agentic AI Foundation (AAIF): MCP + A2A Governance Explained"
+  alt: 'Linux Foundation Agentic AI Foundation (AAIF): MCP + A2A Governance Explained'
+  image: /images/linux-foundation-agentic-ai-foundation-2026.png
   relative: false
-schema: "schema-linux-foundation-agentic-ai-foundation-2026"
+date: 2026-05-22 13:03:54+00:00
+description: The Linux Foundation's Agentic AI Foundation (AAIF) brings MCP, goose,
+  and AGENTS.md under neutral governance. Here's what it means for developers.
+draft: false
+schema: schema-linux-foundation-agentic-ai-foundation-2026
+tags:
+- agentic-ai
+- mcp
+- linux-foundation
+- a2a
+- enterprise-ai
+- open-source
+title: 'Linux Foundation Agentic AI Foundation (AAIF): MCP + A2A Governance Explained'
 ---
 
 The Linux Foundation launched the Agentic AI Foundation (AAIF) in December 2025 to provide neutral governance for the infrastructure powering AI agents in production. It now governs MCP, goose, and AGENTS.md — protocols and tools used across OpenAI, Anthropic, Google, and Block's agent stacks.

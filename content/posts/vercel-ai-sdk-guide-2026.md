@@ -1,14 +1,22 @@
 ---
-title: "Vercel AI SDK Guide 2026: Build Streaming AI Apps in TypeScript With One SDK"
-date: 2026-04-22T05:37:21+00:00
-tags: ["vercel ai sdk", "typescript", "ai development", "next.js", "streaming", "tool calling", "agents"]
-description: "Complete guide to Vercel AI SDK in 2026 — streaming, tool calling, structured output, agents, and production deployment with code examples."
-draft: false
 cover:
-  image: "/images/vercel-ai-sdk-guide-2026.png"
-  alt: "Vercel AI SDK Guide 2026: Build Streaming AI Apps in TypeScript With One SDK"
+  alt: 'Vercel AI SDK Guide 2026: Build Streaming AI Apps in TypeScript With One SDK'
+  image: /images/vercel-ai-sdk-guide-2026.png
   relative: false
-schema: "schema-vercel-ai-sdk-guide-2026"
+date: 2026-04-22 05:37:21+00:00
+description: Complete guide to Vercel AI SDK in 2026 — streaming, tool calling, structured
+  output, agents, and production deployment with code examples.
+draft: false
+schema: schema-vercel-ai-sdk-guide-2026
+tags:
+- vercel ai sdk
+- typescript
+- ai development
+- next.js
+- streaming
+- tool calling
+- agents
+title: 'Vercel AI SDK Guide 2026: Build Streaming AI Apps in TypeScript With One SDK'
 ---
 
 The Vercel AI SDK is a unified TypeScript library that lets you build streaming AI applications across OpenAI, Anthropic, Google, and 13+ other providers without rewriting your core logic when you switch models. Install it once, pick your provider, and ship production-ready AI features in hours instead of days.

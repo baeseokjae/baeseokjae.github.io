@@ -1,14 +1,20 @@
 ---
-title: "Perplexity Sonar API Guide 2026: Add Real-Time Search to Your App"
-date: 2026-05-07T00:04:02+00:00
-tags: ["Perplexity", "API", "real-time search", "AI development", "Python"]
-description: "Step-by-step guide to integrating the Perplexity Sonar API for web-grounded AI responses with citations, streaming, and domain filtering."
-draft: false
 cover:
-  image: "/images/perplexity-sonar-api-guide-2026.png"
-  alt: "Perplexity Sonar API Guide 2026: Add Real-Time Search to Your App"
+  alt: 'Perplexity Sonar API Guide 2026: Add Real-Time Search to Your App'
+  image: /images/perplexity-sonar-api-guide-2026.png
   relative: false
-schema: "schema-perplexity-sonar-api-guide-2026"
+date: 2026-05-07 00:04:02+00:00
+description: Step-by-step guide to integrating the Perplexity Sonar API for web-grounded
+  AI responses with citations, streaming, and domain filtering.
+draft: false
+schema: schema-perplexity-sonar-api-guide-2026
+tags:
+- Perplexity
+- API
+- real-time search
+- AI development
+- Python
+title: 'Perplexity Sonar API Guide 2026: Add Real-Time Search to Your App'
 ---
 
 The Perplexity Sonar API lets you add live web search and inline citations to any app using a single OpenAI-compatible endpoint. You get grounded, up-to-date answers with source links — no separate search API, no custom scraping pipeline — starting at $1 per million tokens.

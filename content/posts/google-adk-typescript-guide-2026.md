@@ -1,14 +1,22 @@
 ---
-title: "Google ADK TypeScript Guide: Build AI Agents with the Official TypeScript SDK"
-date: 2026-04-23T01:21:17+00:00
-tags: ["google-adk", "typescript", "ai-agents", "gemini", "google-cloud"]
-description: "Complete guide to building AI agents with Google ADK TypeScript — installation, tools, multi-agent orchestration, and production deployment."
-draft: false
 cover:
-  image: "/images/google-adk-typescript-guide-2026.png"
-  alt: "Google ADK TypeScript Guide: Build AI Agents with the Official TypeScript SDK"
+  alt: 'Google ADK TypeScript Guide: Build AI Agents with the Official TypeScript
+    SDK'
+  image: /images/google-adk-typescript-guide-2026.png
   relative: false
-schema: "schema-google-adk-typescript-guide-2026"
+date: 2026-04-23 01:21:17+00:00
+description: Complete guide to building AI agents with Google ADK TypeScript — installation,
+  tools, multi-agent orchestration, and production deployment.
+draft: false
+schema: schema-google-adk-typescript-guide-2026
+tags:
+- google-adk
+- typescript
+- ai-agents
+- gemini
+- google-cloud
+title: 'Google ADK TypeScript Guide: Build AI Agents with the Official TypeScript
+  SDK'
 ---
 
 Google ADK TypeScript lets you build production-grade AI agents in 30 minutes or less. Install `@google/adk`, define tools as plain TypeScript functions, wire them to a Gemini model, and deploy anywhere — local dev server, Docker, or Cloud Run — with full end-to-end type safety.

@@ -1,14 +1,20 @@
 ---
-title: "OpenAI Codex Security Review 2026: Autonomous AI Security Researcher Agent"
-date: 2026-05-15T15:05:15+00:00
-tags: ["OpenAI Codex Security", "AI AppSec", "autonomous vulnerability detection", "cybersecurity 2026", "SAST alternative"]
-description: "An in-depth review of OpenAI Codex Security—how it scanned 1.2M commits, found 14 CVEs, and why it deliberately ditched traditional SAST."
-draft: false
 cover:
-  image: "/images/openai-codex-security-review-2026.png"
-  alt: "OpenAI Codex Security Review 2026: Autonomous AI Security Researcher Agent"
+  alt: 'OpenAI Codex Security Review 2026: Autonomous AI Security Researcher Agent'
+  image: /images/openai-codex-security-review-2026.png
   relative: false
-schema: "schema-openai-codex-security-review-2026"
+date: 2026-05-15 15:05:15+00:00
+description: An in-depth review of OpenAI Codex Security—how it scanned 1.2M commits,
+  found 14 CVEs, and why it deliberately ditched traditional SAST.
+draft: false
+schema: schema-openai-codex-security-review-2026
+tags:
+- OpenAI Codex Security
+- AI AppSec
+- autonomous vulnerability detection
+- cybersecurity 2026
+- SAST alternative
+title: 'OpenAI Codex Security Review 2026: Autonomous AI Security Researcher Agent'
 ---
 
 OpenAI Codex Security is an autonomous AI security researcher agent that scans codebases for vulnerabilities, validates findings, and proposes remediations — without relying on traditional rule-based static analysis. It has already scanned 1.2 million commits, discovered 14+ CVEs, and reduced false positives by 50% compared to its initial rollout.

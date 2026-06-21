@@ -1,14 +1,20 @@
 ---
-title: "Claude Code Async Workflows: Background Agents and Parallel Task Patterns in 2026"
-date: 2026-06-16T00:04:20+00:00
-tags: ["Claude Code", "AI coding agents", "developer workflows"]
-description: "A practical guide to Claude Code async workflows, background agents, worktrees, cost, security, and team patterns."
-draft: false
 cover:
-  image: "/images/claude-code-async-workflows-guide-2026.png"
-  alt: "Claude Code Async Workflows: Background Agents and Parallel Task Patterns in 2026"
+  alt: 'Claude Code Async Workflows: Background Agents and Parallel Task Patterns
+    in 2026'
+  image: /images/claude-code-async-workflows-guide-2026.png
   relative: false
-schema: "schema-claude-code-async-workflows-guide-2026"
+date: 2026-06-16 00:04:20+00:00
+description: A practical guide to Claude Code async workflows, background agents,
+  worktrees, cost, security, and team patterns.
+draft: false
+schema: schema-claude-code-async-workflows-guide-2026
+tags:
+- Claude Code
+- AI coding agents
+- developer workflows
+title: 'Claude Code Async Workflows: Background Agents and Parallel Task Patterns
+  in 2026'
 ---
 
 Claude Code async workflows let developers run background agents, parallel subagents, and isolated worktree sessions while the main session keeps moving. The useful pattern is not "run more agents"; it is splitting independent work, assigning clear ownership, checking artifacts, and merging deliberately.

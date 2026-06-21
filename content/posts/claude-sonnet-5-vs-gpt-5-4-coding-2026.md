@@ -1,14 +1,20 @@
 ---
-title: "Claude Sonnet 5 vs GPT-5.4 for Coding: SWE-bench Benchmark Comparison 2026"
-date: 2026-05-18T06:04:48+00:00
-tags: ["claude sonnet 5", "gpt-5.4", "swe-bench", "coding benchmark", "ai coding tools"]
-description: "Claude Sonnet 5 scores 82.1% vs GPT-5.4's 57.7% on SWE-bench Pro. Here's what the gap means for developers choosing an AI coding tool in 2026."
-draft: false
 cover:
-  image: "/images/claude-sonnet-5-vs-gpt-5-4-coding-2026.png"
-  alt: "Claude Sonnet 5 vs GPT-5.4 for Coding: SWE-bench Benchmark Comparison 2026"
+  alt: 'Claude Sonnet 5 vs GPT-5.4 for Coding: SWE-bench Benchmark Comparison 2026'
+  image: /images/claude-sonnet-5-vs-gpt-5-4-coding-2026.png
   relative: false
-schema: "schema-claude-sonnet-5-vs-gpt-5-4-coding-2026"
+date: 2026-05-18 06:04:48+00:00
+description: Claude Sonnet 5 scores 82.1% vs GPT-5.4's 57.7% on SWE-bench Pro. Here's
+  what the gap means for developers choosing an AI coding tool in 2026.
+draft: false
+schema: schema-claude-sonnet-5-vs-gpt-5-4-coding-2026
+tags:
+- claude sonnet 5
+- gpt-5.4
+- swe-bench
+- coding benchmark
+- ai coding tools
+title: 'Claude Sonnet 5 vs GPT-5.4 for Coding: SWE-bench Benchmark Comparison 2026'
 ---
 
 Claude Sonnet 5 scores 82.1% on SWE-bench Verified and 46%+ on SWE-bench Pro, while GPT-5.4 scores 57.7% on SWE-bench Pro with comparable Verified scores around 85%. For most coding workflows, Sonnet 5 delivers a stronger autonomous code-editing experience, but GPT-5.4's reasoning levels give it an edge in cost-flexibility for high-stakes reasoning tasks.

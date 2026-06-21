@@ -1,14 +1,21 @@
 ---
-title: "Z.ai API Developer Guide 2026: GLM Models, Pricing, and Setup"
-date: 2026-05-15T06:05:13+00:00
-tags: ["Z.ai", "Zhipu AI", "GLM", "API", "Claude Code", "developer guide"]
-description: "Complete Z.ai API guide: GLM model lineup, Coding Plan pricing, OpenAI/Anthropic-compatible endpoints, and step-by-step Claude Code setup."
-draft: false
 cover:
-  image: "/images/z-ai-api-developer-guide-2026.png"
-  alt: "Z.ai API Developer Guide 2026"
+  alt: Z.ai API Developer Guide 2026
+  image: /images/z-ai-api-developer-guide-2026.png
   relative: false
-schema: "schema-z-ai-api-developer-guide-2026"
+date: 2026-05-15 06:05:13+00:00
+description: 'Complete Z.ai API guide: GLM model lineup, Coding Plan pricing, OpenAI/Anthropic-compatible
+  endpoints, and step-by-step Claude Code setup.'
+draft: false
+schema: schema-z-ai-api-developer-guide-2026
+tags:
+- Z.ai
+- Zhipu AI
+- GLM
+- API
+- Claude Code
+- developer guide
+title: 'Z.ai API Developer Guide 2026: GLM Models, Pricing, and Setup'
 ---
 
 Z.ai is Zhipu AI's international developer platform, offering access to the GLM model family — including GLM-5.1, the first open-weight model to top the SWE-bench Pro leaderboard — via OpenAI-compatible and Anthropic-compatible APIs. Coding Plan subscriptions start at $10/month, making it the cheapest frontier-adjacent coding setup available in 2026.

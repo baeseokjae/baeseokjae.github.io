@@ -1,14 +1,22 @@
 ---
-title: "Agentic Workflow Context Management 2026: Persistent Memory for AI Coding Agents"
-date: 2026-05-12T15:04:33+00:00
-tags: ["context management", "AI agents", "persistent memory", "CLAUDE.md", "agentic workflows"]
-description: "How AI coding agents solve the stateless memory problem in 2026: CLAUDE.md, Mem0, Zep, Letta, and context compaction strategies compared."
-draft: false
 cover:
-  image: "/images/agentic-workflow-context-management-2026.png"
-  alt: "Agentic Workflow Context Management 2026: Persistent Memory for AI Coding Agents"
+  alt: 'Agentic Workflow Context Management 2026: Persistent Memory for AI Coding
+    Agents'
+  image: /images/agentic-workflow-context-management-2026.png
   relative: false
-schema: "schema-agentic-workflow-context-management-2026"
+date: 2026-05-12 15:04:33+00:00
+description: 'How AI coding agents solve the stateless memory problem in 2026: CLAUDE.md,
+  Mem0, Zep, Letta, and context compaction strategies compared.'
+draft: false
+schema: schema-agentic-workflow-context-management-2026
+tags:
+- context management
+- AI agents
+- persistent memory
+- CLAUDE.md
+- agentic workflows
+title: 'Agentic Workflow Context Management 2026: Persistent Memory for AI Coding
+  Agents'
 ---
 
 AI coding agents in 2026 are powerful but amnesiac by default — every new session starts cold, repeating mistakes you fixed last week and ignoring conventions you established last month. The solution is a deliberate context management architecture: CLAUDE.md behavioral contracts, context compaction triggers, and memory frameworks like Mem0 or Zep that give agents genuine cross-session recall.

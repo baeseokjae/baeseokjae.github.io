@@ -1,14 +1,18 @@
 ---
-title: "OWASP Agentic Applications: 2026 Developer Security Checklist"
-date: 2026-06-14T09:04:37+00:00
-tags: ["agentic-ai", "security", "owasp"]
-description: "A developer checklist for the OWASP Top 10 for Agentic Applications 2026, covering identity, tools, memory, and runtime controls."
-draft: false
 cover:
-  image: "/images/owasp-top-10-agentic-applications-2026.png"
-  alt: "OWASP Agentic Applications: 2026 Developer Security Checklist"
+  alt: 'OWASP Agentic Applications: 2026 Developer Security Checklist'
+  image: /images/owasp-top-10-agentic-applications-2026.png
   relative: false
-schema: "schema-owasp-top-10-agentic-applications-2026"
+date: 2026-06-14 09:04:37+00:00
+description: A developer checklist for the OWASP Top 10 for Agentic Applications 2026,
+  covering identity, tools, memory, and runtime controls.
+draft: false
+schema: schema-owasp-top-10-agentic-applications-2026
+tags:
+- agentic-ai
+- security
+- owasp
+title: 'OWASP Agentic Applications: 2026 Developer Security Checklist'
 ---
 
 OWASP agentic applications security is the practice of limiting what AI agents can decide, access, remember, execute, and delegate. The 2026 OWASP Agentic Top 10 gives developers a checklist for shipping agents that call tools, persist state, and act across real systems without turning autonomy into uncontrolled production risk.

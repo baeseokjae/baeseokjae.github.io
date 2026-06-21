@@ -1,14 +1,23 @@
 ---
-title: "Pydantic AI Tutorial 2026: Type-Safe Python Agents With Automatic Validation and Self-Correction"
-date: 2026-04-22T01:13:32+00:00
-tags: ["pydantic-ai", "python", "ai-agents", "llm", "type-safety", "tutorial"]
-description: "Build production-ready AI agents with Pydantic AI — type-safe structured outputs, tool calling, dependency injection, and automatic validation retries."
-draft: false
 cover:
-  image: "/images/pydantic-ai-tutorial-2026.png"
-  alt: "Pydantic AI Tutorial 2026: Type-Safe Python Agents With Automatic Validation and Self-Correction"
+  alt: 'Pydantic AI Tutorial 2026: Type-Safe Python Agents With Automatic Validation
+    and Self-Correction'
+  image: /images/pydantic-ai-tutorial-2026.png
   relative: false
-schema: "schema-pydantic-ai-tutorial-2026"
+date: 2026-04-22 01:13:32+00:00
+description: Build production-ready AI agents with Pydantic AI — type-safe structured
+  outputs, tool calling, dependency injection, and automatic validation retries.
+draft: false
+schema: schema-pydantic-ai-tutorial-2026
+tags:
+- pydantic-ai
+- python
+- ai-agents
+- llm
+- type-safety
+- tutorial
+title: 'Pydantic AI Tutorial 2026: Type-Safe Python Agents With Automatic Validation
+  and Self-Correction'
 ---
 
 Pydantic AI is a Python agent framework built by the Pydantic team that brings type-safe, validated LLM interactions to production. Install it with `pip install pydantic-ai`, define your agent with a Pydantic `BaseModel` as the result type, and the framework automatically validates LLM output — retrying if validation fails — without any manual JSON parsing or schema wrestling.

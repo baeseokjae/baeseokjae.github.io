@@ -1,14 +1,19 @@
 ---
-title: "OpenAI Codex Background Computer Use Guide (April 2026): Mac and Windows Playbooks"
-date: 2026-06-11T10:03:59+00:00
-tags: ["openai codex", "computer use", "background automation", "developer workflow"]
-description: "A practical April 2026 guide to running OpenAI Codex background computer use on macOS and Windows safely and at scale."
-draft: false
 cover:
-  image: "/images/openai-codex-background-computer-use-guide-2026.png"
-  alt: "OpenAI Codex Background Computer Use Guide (April 2026): Mac and Windows Playbooks"
+  alt: 'OpenAI Codex Background Computer Use Guide (April 2026): Mac and Windows Playbooks'
+  image: /images/openai-codex-background-computer-use-guide-2026.png
   relative: false
-schema: "schema-openai-codex-background-computer-use-guide-2026"
+date: 2026-06-11 10:03:59+00:00
+description: A practical April 2026 guide to running OpenAI Codex background computer
+  use on macOS and Windows safely and at scale.
+draft: false
+schema: schema-openai-codex-background-computer-use-guide-2026
+tags:
+- openai codex
+- computer use
+- background automation
+- developer workflow
+title: 'OpenAI Codex Background Computer Use Guide (April 2026): Mac and Windows Playbooks'
 ---
 
 OpenAI Codex background computer use now lets you keep running long GUI tasks while your main workflow continues, but only when you respect platform limits, permission boundaries, and oversight patterns. In practice, it is strongest for repeatable desktop actions that tolerate brief interruption, like test data setup, document publishing, and batch UI checks, while your local session stays productive.

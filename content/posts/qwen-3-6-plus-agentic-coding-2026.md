@@ -1,14 +1,20 @@
 ---
-title: "Qwen 3.6 Plus Agentic Coding Guide: 1M Context Window for Complex Tasks"
-date: 2026-05-21T19:37:07+00:00
-tags: ["qwen", "agentic-ai", "coding", "llm", "openrouter"]
-description: "Qwen 3.6 Plus: Alibaba's 1M-context agentic coding model with Terminal-Bench 2.0 #1 ranking, always-on CoT, and 13x cheaper output than Claude Opus 4.7."
-draft: false
 cover:
-  image: "/images/qwen-3-6-plus-agentic-coding-2026.png"
-  alt: "Qwen 3.6 Plus Agentic Coding Guide: 1M Context Window for Complex Tasks"
+  alt: 'Qwen 3.6 Plus Agentic Coding Guide: 1M Context Window for Complex Tasks'
+  image: /images/qwen-3-6-plus-agentic-coding-2026.png
   relative: false
-schema: "schema-qwen-3-6-plus-agentic-coding-2026"
+date: 2026-05-21 19:37:07+00:00
+description: 'Qwen 3.6 Plus: Alibaba''s 1M-context agentic coding model with Terminal-Bench
+  2.0 #1 ranking, always-on CoT, and 13x cheaper output than Claude Opus 4.7.'
+draft: false
+schema: schema-qwen-3-6-plus-agentic-coding-2026
+tags:
+- qwen
+- agentic-ai
+- coding
+- llm
+- openrouter
+title: 'Qwen 3.6 Plus Agentic Coding Guide: 1M Context Window for Complex Tasks'
 ---
 
 Qwen 3.6 Plus is Alibaba's frontier agentic coding model, released April 2, 2026, featuring a 1M-token context window, always-on chain-of-thought reasoning, and a #1 rank on Terminal-Bench 2.0 with a score of 61.6 — beating Claude 4.5 Opus. It delivers SWE-bench Verified performance of 78.8% at output token pricing roughly 13× cheaper than Claude Opus 4.7.

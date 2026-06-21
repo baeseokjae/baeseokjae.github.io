@@ -1,14 +1,20 @@
 ---
-title: "AI Agent Production Go-Live Checklist 2026: 45 Checks Before You Deploy"
-date: 2026-06-20T12:00:00+00:00
-tags: ["ai agent production readiness", "agentic ai deployment checklist", "enterprise ai agent go-live", "ai agent governance", "agent observability monitoring"]
-description: "45 production readiness checks for AI agents across 6 domains — security, observability, cost controls, eval gates, HITL, and incident response. With scoring thresholds."
-draft: false
 cover:
-  image: "/images/ai-agent-production-go-live-checklist-2026.png"
-  alt: "AI Agent Production Go-Live Checklist 2026"
+  alt: AI Agent Production Go-Live Checklist 2026
+  image: /images/ai-agent-production-go-live-checklist-2026.png
   relative: false
-schema: "schema-ai-agent-production-go-live-checklist-2026"
+date: 2026-06-20 12:00:00+00:00
+description: 45 production readiness checks for AI agents across 6 domains — security,
+  observability, cost controls, eval gates, HITL, and incident response. With sc...
+draft: false
+schema: schema-ai-agent-production-go-live-checklist-2026
+tags:
+- ai agent production readiness
+- agentic ai deployment checklist
+- enterprise ai agent go-live
+- ai agent governance
+- agent observability monitoring
+title: 'AI Agent Production Go-Live Checklist 2026: 45 Checks Before You Deploy'
 ---
 
 78% of enterprises have AI agent pilots running, but only 14% have scaled to production — that is an 88% failure-before-production rate, and the top barrier is not model capability but governance, observability, and operational readiness (LangChain, Zepic, and Harness Engineering surveys, all 2026). This checklist gives you 45 concrete pass/fail checks across 6 domains with scoring thresholds to gate your deployment decision.

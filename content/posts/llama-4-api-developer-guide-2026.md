@@ -1,14 +1,20 @@
 ---
-title: "Llama 4 API Developer Guide 2026: Scout, Maverick, MoE Architecture and Integration"
-date: 2026-05-02T21:07:51+00:00
-tags: ["llama-4", "llm-api", "open-source-llm", "moe-architecture", "ai-development"]
-description: "Complete developer guide to Llama 4 Scout and Maverick APIs: MoE architecture, 10M-token context, pricing, vLLM deployment, and OpenAI-compatible integration."
-draft: false
 cover:
-  image: "/images/llama-4-api-developer-guide-2026.png"
-  alt: "Llama 4 API Developer Guide 2026: Scout, Maverick, MoE Architecture and Integration"
+  alt: 'Llama 4 API Developer Guide 2026: Scout, Maverick, MoE Architecture and Integration'
+  image: /images/llama-4-api-developer-guide-2026.png
   relative: false
-schema: "schema-llama-4-api-developer-guide-2026"
+date: 2026-05-02 21:07:51+00:00
+description: 'Complete developer guide to Llama 4 Scout and Maverick APIs: MoE architecture,
+  10M-token context, pricing, vLLM deployment, and OpenAI-compatible integr...'
+draft: false
+schema: schema-llama-4-api-developer-guide-2026
+tags:
+- llama-4
+- llm-api
+- open-source-llm
+- moe-architecture
+- ai-development
+title: 'Llama 4 API Developer Guide 2026: Scout, Maverick, MoE Architecture and Integration'
 ---
 
 Llama 4 Scout and Maverick are Meta's open-weight multimodal models — available today via multiple API providers with OpenAI-compatible endpoints. Scout offers a 10M-token context window at $0.08–$0.15 per 1M input tokens; Maverick beats GPT-4o on MMLU, HumanEval, and SWE-bench. Here's how to integrate both.

@@ -1,14 +1,20 @@
 ---
-title: "Gemini 2.5 Pro vs Claude Opus 4: Frontier LLM Benchmark 2026"
-date: 2026-06-03T00:10:38+00:00
-tags: ["Gemini 2.5 Pro", "Claude Opus 4", "LLM benchmark", "AI comparison", "developer tools"]
-description: "Gemini 2.5 Pro vs Claude Opus 4 benchmark comparison 2026: coding scores, pricing, context windows, and which model wins for your use case."
-draft: false
 cover:
-  image: "/images/google-gemini-2-5-pro-vs-claude-opus-4-benchmark-2026.png"
-  alt: "Gemini 2.5 Pro vs Claude Opus 4: Frontier LLM Benchmark 2026"
+  alt: 'Gemini 2.5 Pro vs Claude Opus 4: Frontier LLM Benchmark 2026'
+  image: /images/google-gemini-2-5-pro-vs-claude-opus-4-benchmark-2026.png
   relative: false
-schema: "schema-google-gemini-2-5-pro-vs-claude-opus-4-benchmark-2026"
+date: 2026-06-03 00:10:38+00:00
+description: 'Gemini 2.5 Pro vs Claude Opus 4 benchmark comparison 2026: coding scores,
+  pricing, context windows, and which model wins for your use case.'
+draft: false
+schema: schema-google-gemini-2-5-pro-vs-claude-opus-4-benchmark-2026
+tags:
+- Gemini 2.5 Pro
+- Claude Opus 4
+- LLM benchmark
+- AI comparison
+- developer tools
+title: 'Gemini 2.5 Pro vs Claude Opus 4: Frontier LLM Benchmark 2026'
 ---
 
 Gemini 2.5 Pro wins on price, context window size, and video/audio understanding. Claude Opus 4 wins on agentic coding performance, creative writing quality, and enterprise trust. Neither is universally "better" — the right choice depends on your workload volume, quality threshold, and whether you're deploying autonomous agents or processing long documents.

@@ -1,14 +1,18 @@
 ---
-title: "Claude Mythos vs GPT-5.4: 2026 Frontier Model Comparison"
-date: 2026-06-15T10:04:13+00:00
-tags: ["AI models", "frontier AI", "developer tools"]
-description: "A practical 2026 comparison of Claude Mythos, GPT-5.4, and Gemini 3.1 Pro for developers and teams."
-draft: false
 cover:
-  image: "/images/claude-mythos-vs-gpt-5-4-vs-gemini-3-1-pro-2026.png"
-  alt: "Claude Mythos vs GPT-5.4: 2026 Frontier Model Comparison"
+  alt: 'Claude Mythos vs GPT-5.4: 2026 Frontier Model Comparison'
+  image: /images/claude-mythos-vs-gpt-5-4-vs-gemini-3-1-pro-2026.png
   relative: false
-schema: "schema-claude-mythos-vs-gpt-5-4-vs-gemini-3-1-pro-2026"
+date: 2026-06-15 10:04:13+00:00
+description: A practical 2026 comparison of Claude Mythos, GPT-5.4, and Gemini 3.1
+  Pro for developers and teams.
+draft: false
+schema: schema-claude-mythos-vs-gpt-5-4-vs-gemini-3-1-pro-2026
+tags:
+- AI models
+- frontier AI
+- developer tools
+title: 'Claude Mythos vs GPT-5.4: 2026 Frontier Model Comparison'
 ---
 
 Claude Mythos vs GPT-5.4 is not a single-winner comparison: Mythos is the restricted high-capability specialist, GPT-5.4 is the most practical professional-agent workhorse, and Gemini 3.1 Pro is the strongest long-context and multimodal value pick for many developer teams.

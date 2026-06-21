@@ -1,14 +1,21 @@
 ---
-title: "Multi-Agent System Design: Architecture Patterns for Production AI in 2026"
-date: 2026-05-18T21:03:56+00:00
-tags: ["multi-agent systems", "AI architecture", "LangGraph", "production AI", "agent design patterns"]
-description: "A practitioner's guide to multi-agent system design patterns in 2026, covering foundational architectures, framework selection, cost engineering, and observability."
-draft: false
 cover:
-  image: "/images/multi-agent-system-design-guide-2026.png"
-  alt: "Multi-Agent System Design: Architecture Patterns for Production AI in 2026"
+  alt: 'Multi-Agent System Design: Architecture Patterns for Production AI in 2026'
+  image: /images/multi-agent-system-design-guide-2026.png
   relative: false
-schema: "schema-multi-agent-system-design-guide-2026"
+date: 2026-05-18 21:03:56+00:00
+description: A practitioner's guide to multi-agent system design patterns in 2026,
+  covering foundational architectures, framework selection, cost engineering, and
+  ob...
+draft: false
+schema: schema-multi-agent-system-design-guide-2026
+tags:
+- multi-agent systems
+- AI architecture
+- LangGraph
+- production AI
+- agent design patterns
+title: 'Multi-Agent System Design: Architecture Patterns for Production AI in 2026'
 ---
 
 Multi-agent system design patterns are the architectural blueprints that determine how independent AI agents communicate, share state, and coordinate work in production systems. Choosing the wrong pattern is the primary reason enterprise multi-agent projects fail — not model quality or compute budget.

@@ -1,14 +1,20 @@
 ---
-title: "AI Agents SDK Comparison 2026: Strands vs OpenAI SDK vs Mastra"
-date: 2026-05-08T00:00:00+00:00
-tags: ["strands","openai-sdk","mastra","ai-agents","sdk"]
-description: "Side-by-side technical comparison of the three most important AI agent SDKs in 2026 — AWS Strands, OpenAI Agents SDK, and Mastra — covering features, pricing, and which to pick for your use case."
-draft: false
 cover:
-  image: "/images/ai-agents-sdk-comparison-2026.png"
-  alt: "AI Agents SDK Comparison 2026: Strands vs OpenAI SDK vs Mastra"
+  alt: 'AI Agents SDK Comparison 2026: Strands vs OpenAI SDK vs Mastra'
+  image: /images/ai-agents-sdk-comparison-2026.png
   relative: false
-schema: "schema-ai-agents-sdk-comparison-2026"
+date: 2026-05-08 00:00:00+00:00
+description: Side-by-side technical comparison of the three most important AI agent
+  SDKs in 2026 — AWS Strands, OpenAI Agents SDK, and Mastra — covering features, pr...
+draft: false
+schema: schema-ai-agents-sdk-comparison-2026
+tags:
+- strands
+- openai-sdk
+- mastra
+- ai-agents
+- sdk
+title: 'AI Agents SDK Comparison 2026: Strands vs OpenAI SDK vs Mastra'
 ---
 
 Three SDKs have emerged as the default starting points when teams reach for an AI agent framework in 2026: AWS Strands Agents, the OpenAI Agents SDK, and Mastra. Each reflects a different design philosophy — model-driven minimalism, industry-standard tooling, and batteries-included TypeScript — and each is genuinely good at what it targets. This comparison cuts through the marketing to give you a technical, opinionated view of all three so you can make the right call for your project without burning two weeks on trials.

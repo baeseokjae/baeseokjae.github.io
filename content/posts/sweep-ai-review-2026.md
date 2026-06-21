@@ -1,14 +1,20 @@
 ---
-title: "Sweep AI Review 2026: GitHub Issue to PR Automation — Is It Worth It?"
-date: 2026-05-03T12:04:33+00:00
-tags: ["sweep ai", "github automation", "ai coding agents", "pull request automation", "devsecops"]
-description: "Honest Sweep AI review for 2026: 92% issue resolution rate, GitHub-native workflow, pricing vs Devin, and whether the JetBrains pivot changes the value proposition."
-draft: false
 cover:
-  image: "/images/sweep-ai-review-2026.png"
-  alt: "Sweep AI Review 2026: GitHub Issue to PR Automation"
+  alt: 'Sweep AI Review 2026: GitHub Issue to PR Automation'
+  image: /images/sweep-ai-review-2026.png
   relative: false
-schema: "schema-sweep-ai-review-2026"
+date: 2026-05-03 12:04:33+00:00
+description: 'Honest Sweep AI review for 2026: 92% issue resolution rate, GitHub-native
+  workflow, pricing vs Devin, and whether the JetBrains pivot changes the value ...'
+draft: false
+schema: schema-sweep-ai-review-2026
+tags:
+- sweep ai
+- github automation
+- ai coding agents
+- pull request automation
+- devsecops
+title: 'Sweep AI Review 2026: GitHub Issue to PR Automation — Is It Worth It?'
 ---
 
 Sweep AI is a GitHub App that converts issues into pull requests autonomously — you add a `sweep` label to an issue, and Sweep analyzes the codebase, writes a plan, generates code changes, and opens a PR. With 7,600+ GitHub stars (Apache-2.0), a 92% issue resolution rate in controlled evaluations, and a free tier that starts at $0 versus Devin's $500/month, it occupies a specific and defensible niche. Here's whether it's the right tool for your team in 2026.

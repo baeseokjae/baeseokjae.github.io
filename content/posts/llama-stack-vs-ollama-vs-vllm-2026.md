@@ -1,14 +1,22 @@
 ---
-title: "llama-stack vs Ollama vs vLLM: Which Local LLM Stack Should You Use in 2026"
-date: 2026-05-21T09:34:00+00:00
-tags: ["llm", "local-ai", "vllm", "ollama", "llama-stack", "inference", "self-hosted"]
-description: "llama-stack, Ollama, vLLM 비교: 각 도구의 역할과 2026년 최적의 로컬 LLM 스택 조합을 실제 벤치마크와 함께 설명합니다."
-draft: false
 cover:
-  image: "/images/llama-stack-vs-ollama-vs-vllm-2026.png"
-  alt: "llama-stack vs Ollama vs vLLM: Which Local LLM Stack Should You Use in 2026"
+  alt: 'llama-stack vs Ollama vs vLLM: Which Local LLM Stack Should You Use in 2026'
+  image: /images/llama-stack-vs-ollama-vs-vllm-2026.png
   relative: false
-schema: "schema-llama-stack-vs-ollama-vs-vllm-2026"
+date: 2026-05-21 09:34:00+00:00
+description: 'llama-stack, Ollama, vLLM 비교: 각 도구의 역할과 2026년 최적의 로컬 LLM 스택 조합을 실제 벤치마크와
+  함께 설명합니다.'
+draft: false
+schema: schema-llama-stack-vs-ollama-vs-vllm-2026
+tags:
+- llm
+- local-ai
+- vllm
+- ollama
+- llama-stack
+- inference
+- self-hosted
+title: 'llama-stack vs Ollama vs vLLM: Which Local LLM Stack Should You Use in 2026'
 ---
 
 대부분의 llama-stack vs Ollama vs vLLM 비교 글은 핵심을 놓칩니다. 이 세 가지 도구는 서로 경쟁하는 게 아닙니다. **llama-stack은 오케스트레이션 API 레이어이고, Ollama와 vLLM은 추론 엔진입니다.** 올바른 질문은 "무엇을 선택할까?"가 아니라 "어떻게 조합할까?"입니다. 2026년 권장 스택은 셋 모두를 사용합니다.

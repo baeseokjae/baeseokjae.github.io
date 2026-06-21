@@ -1,14 +1,21 @@
 ---
-title: "Continue.dev Alternatives 2026: 6 Open-Source VS Code AI Plugins Compared"
-date: 2026-05-30T20:22:17+00:00
-tags: ["VS Code", "AI coding", "open source", "Continue.dev", "Cline", "Tabby"]
-description: "The 6 best open-source Continue.dev alternatives for VS Code in 2026, ranked by GitHub stars, features, and real developer use cases."
-draft: false
 cover:
-  image: "/images/continue-dev-alternatives-2026.png"
-  alt: "Continue.dev Alternatives 2026: 6 Open-Source VS Code AI Plugins Compared"
+  alt: 'Continue.dev Alternatives 2026: 6 Open-Source VS Code AI Plugins Compared'
+  image: /images/continue-dev-alternatives-2026.png
   relative: false
-schema: "schema-continue-dev-alternatives-2026"
+date: 2026-05-30 20:22:17+00:00
+description: The 6 best open-source Continue.dev alternatives for VS Code in 2026,
+  ranked by GitHub stars, features, and real developer use cases.
+draft: false
+schema: schema-continue-dev-alternatives-2026
+tags:
+- VS Code
+- AI coding
+- open source
+- Continue.dev
+- Cline
+- Tabby
+title: 'Continue.dev Alternatives 2026: 6 Open-Source VS Code AI Plugins Compared'
 ---
 
 Continue.dev is a solid open-source AI coding plugin, but it's not the only option. In 2026, Cline (62.5k GitHub stars), Tabby, Kilo Code, OpenCode, Void, and Roo Code all offer meaningful alternatives — each with different strengths around autonomy, privacy, and model flexibility.

@@ -1,14 +1,20 @@
 ---
-title: "Tabby AI Review 2026: Self-Hosted GitHub Copilot Alternative Worth It?"
-date: 2026-05-28T17:30:55+00:00
-tags: ["AI coding tools", "self-hosted", "open source", "code completion", "privacy"]
-description: "Honest Tabby AI review 2026: performance benchmarks, ROI math, setup guide, and who should actually switch from GitHub Copilot."
-draft: false
 cover:
-  image: "/images/tabby-ai-review-2026.png"
-  alt: "Tabby AI Review 2026: Self-Hosted GitHub Copilot Alternative"
+  alt: 'Tabby AI Review 2026: Self-Hosted GitHub Copilot Alternative'
+  image: /images/tabby-ai-review-2026.png
   relative: false
-schema: "schema-tabby-ai-review-2026"
+date: 2026-05-28 17:30:55+00:00
+description: 'Honest Tabby AI review 2026: performance benchmarks, ROI math, setup
+  guide, and who should actually switch from GitHub Copilot.'
+draft: false
+schema: schema-tabby-ai-review-2026
+tags:
+- AI coding tools
+- self-hosted
+- open source
+- code completion
+- privacy
+title: 'Tabby AI Review 2026: Self-Hosted GitHub Copilot Alternative Worth It?'
 ---
 
 Tabby AI delivers 85–90% of GitHub Copilot's completion quality with complete data sovereignty — no telemetry, no cloud routing, no vendor access to your code. For teams of 25+ developers, the hardware investment pays for itself in under seven months compared to Copilot's $19/seat/month pricing.

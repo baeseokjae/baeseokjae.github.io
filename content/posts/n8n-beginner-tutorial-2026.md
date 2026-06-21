@@ -1,14 +1,20 @@
 ---
-title: "n8n Tutorial for Beginners 2026: Build Your First AI Workflow"
-date: 2026-05-10T06:04:23+00:00
-tags: ["n8n", "workflow automation", "AI agents", "no-code", "tutorial"]
-description: "Step-by-step n8n tutorial for beginners in 2026: set up n8n, build your first AI workflow, and automate real tasks in under 30 minutes."
-draft: false
 cover:
-  image: "/images/n8n-beginner-tutorial-2026.png"
-  alt: "n8n Tutorial for Beginners 2026: Build Your First AI Workflow"
+  alt: 'n8n Tutorial for Beginners 2026: Build Your First AI Workflow'
+  image: /images/n8n-beginner-tutorial-2026.png
   relative: false
-schema: "schema-n8n-beginner-tutorial-2026"
+date: 2026-05-10 06:04:23+00:00
+description: 'Step-by-step n8n tutorial for beginners in 2026: set up n8n, build your
+  first AI workflow, and automate real tasks in under 30 minutes.'
+draft: false
+schema: schema-n8n-beginner-tutorial-2026
+tags:
+- n8n
+- workflow automation
+- AI agents
+- no-code
+- tutorial
+title: 'n8n Tutorial for Beginners 2026: Build Your First AI Workflow'
 ---
 
 n8n is an open-source workflow automation platform that lets developers and technical teams build automated pipelines — including AI-powered ones — without writing code for every integration. This guide walks you from zero to a working AI workflow in about 30 minutes, covering setup, core concepts, and two hands-on builds you can run today.

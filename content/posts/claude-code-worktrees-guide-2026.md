@@ -1,14 +1,20 @@
 ---
-title: "Claude Code Worktrees Guide 2026: Run Parallel Sessions Without Conflicts"
-date: 2026-05-08T00:00:00+00:00
-tags: ["claude-code","worktrees","git","parallel-agents","workflow"]
-description: "A complete guide to running multiple Claude Code sessions simultaneously without file conflicts. Covers the --worktree flag, subagent isolation, real parallel workflow patterns, and lifecycle management."
-draft: false
 cover:
-  image: "/images/claude-code-worktrees-guide-2026.png"
-  alt: "Claude Code Worktrees Guide 2026 - Run Parallel AI Sessions Without Conflicts"
+  alt: Claude Code Worktrees Guide 2026 - Run Parallel AI Sessions Without Conflicts
+  image: /images/claude-code-worktrees-guide-2026.png
   relative: false
-schema: "schema-claude-code-worktrees-guide-2026"
+date: 2026-05-08 00:00:00+00:00
+description: A complete guide to running multiple Claude Code sessions simultaneously
+  without file conflicts. Covers the --worktree flag, subagent isolation, real pa...
+draft: false
+schema: schema-claude-code-worktrees-guide-2026
+tags:
+- claude-code
+- worktrees
+- git
+- parallel-agents
+- workflow
+title: 'Claude Code Worktrees Guide 2026: Run Parallel Sessions Without Conflicts'
 ---
 
 If you have run two Claude Code sessions against the same repository at the same time, you already know the problem. One session rewrites a service file, the other reads a stale version of it, and you end up with broken logic split across an uncommitted diff that neither session produced intentionally. With 115,000 or more developers now using Claude Code and 195 million lines of code processed every week, this collision pattern has become one of the most reported friction points in agentic development workflows. Worktrees are the structural fix. Claude Code's built-in worktree support gives each session its own isolated working directory backed by a single shared `.git` folder, so two agents can write simultaneously to a codebase without ever touching the same file state.

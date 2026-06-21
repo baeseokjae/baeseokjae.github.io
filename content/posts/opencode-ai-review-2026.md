@@ -1,14 +1,21 @@
 ---
-title: "OpenCode AI Review 2026: Open-Source Terminal AI Agent Compared to Claude Code"
-date: 2026-04-29T03:02:03+00:00
-tags: ["open-source", "ai-coding", "terminal-tools", "developer-tools"]
-description: "OpenCode AI review 2026: 121K GitHub stars, MIT license, 75+ model providers. How it compares to Claude Code for real dev workflows."
-draft: false
 cover:
-  image: "/images/opencode-ai-review-2026.png"
-  alt: "OpenCode AI Review 2026: Open-Source Terminal AI Agent Compared to Claude Code"
+  alt: 'OpenCode AI Review 2026: Open-Source Terminal AI Agent Compared to Claude
+    Code'
+  image: /images/opencode-ai-review-2026.png
   relative: false
-schema: "schema-opencode-ai-review-2026"
+date: 2026-04-29 03:02:03+00:00
+description: 'OpenCode AI review 2026: 121K GitHub stars, MIT license, 75+ model providers.
+  How it compares to Claude Code for real dev workflows.'
+draft: false
+schema: schema-opencode-ai-review-2026
+tags:
+- open-source
+- ai-coding
+- terminal-tools
+- developer-tools
+title: 'OpenCode AI Review 2026: Open-Source Terminal AI Agent Compared to Claude
+  Code'
 ---
 
 OpenCode is a MIT-licensed terminal AI coding agent with 121K GitHub stars as of March 2026. It supports 75+ LLM providers, runs a client-server architecture with LSP integration, and costs nothing for the core product. Here's whether it's ready to replace Claude Code in your daily workflow.

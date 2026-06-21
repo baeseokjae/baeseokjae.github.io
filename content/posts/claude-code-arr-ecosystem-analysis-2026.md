@@ -1,14 +1,20 @@
 ---
-title: "Claude Code $2.5B ARR and AI Coding Revenue Growth Drivers in 2026"
-date: 2026-06-11T12:15:44+00:00
-tags: ["AI coding", "Claude", "software engineering", "developer productivity", "SaaS pricing"]
-description: "Claude Code’s $2.5B ARR reset shifts AI coding competition toward workflow control, enterprise safety, and unit economics."
-draft: false
 cover:
-  image: "/images/claude-code-arr-ecosystem-analysis-2026.png"
-  alt: "Claude Code $2.5B ARR and AI Coding Revenue Growth Drivers in 2026"
+  alt: Claude Code $2.5B ARR and AI Coding Revenue Growth Drivers in 2026
+  image: /images/claude-code-arr-ecosystem-analysis-2026.png
   relative: false
-schema: "schema-claude-code-arr-ecosystem-analysis-2026"
+date: 2026-06-11 12:15:44+00:00
+description: Claude Code’s $2.5B ARR reset shifts AI coding competition toward workflow
+  control, enterprise safety, and unit economics.
+draft: false
+schema: schema-claude-code-arr-ecosystem-analysis-2026
+tags:
+- AI coding
+- Claude
+- software engineering
+- developer productivity
+- SaaS pricing
+title: Claude Code $2.5B ARR and AI Coding Revenue Growth Drivers in 2026
 ---
 
 Claude Code’s $2.5B ARR result makes one thing obvious: AI coding is no longer a sidecar feature, it is software infrastructure money. As a developer, the practical implication is that tool choice in 2026 is about reliability, policy fit, and team throughput, not just autocomplete quality. If your workflow includes production releases, model latency, and human code review, the winning stack is the one that keeps shipping moving through controls, not hype cycles.

@@ -1,14 +1,18 @@
 ---
-title: "Microsoft Work IQ APIs GA Developer Guide for Enterprise AI Workflow Automation"
-date: 2026-06-13T04:04:39+00:00
-tags: ["Microsoft 365", "AI agents", "enterprise automation"]
-description: "Developer guide to Microsoft Work IQ APIs GA, protocols, pricing, governance, and enterprise AI workflow automation."
-draft: false
 cover:
-  image: "/images/microsoft-work-iq-apis-ga-june-2026-guide.png"
-  alt: "Microsoft Work IQ APIs GA Developer Guide for Enterprise AI Workflow Automation"
+  alt: Microsoft Work IQ APIs GA Developer Guide for Enterprise AI Workflow Automation
+  image: /images/microsoft-work-iq-apis-ga-june-2026-guide.png
   relative: false
-schema: "schema-microsoft-work-iq-apis-ga-june-2026-guide"
+date: 2026-06-13 04:04:39+00:00
+description: Developer guide to Microsoft Work IQ APIs GA, protocols, pricing, governance,
+  and enterprise AI workflow automation.
+draft: false
+schema: schema-microsoft-work-iq-apis-ga-june-2026-guide
+tags:
+- Microsoft 365
+- AI agents
+- enterprise automation
+title: Microsoft Work IQ APIs GA Developer Guide for Enterprise AI Workflow Automation
 ---
 
 Microsoft Work IQ APIs give developers a permission-aware way to build Microsoft 365 agents that reason over email, meetings, files, people, chats, and workflow context. For teams preparing for the June 16, 2026 GA release, the practical decision is how to use A2A, MCP, or REST without rebuilding Graph search and RAG plumbing from scratch.

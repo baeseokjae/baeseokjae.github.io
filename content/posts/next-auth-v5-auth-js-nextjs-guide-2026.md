@@ -1,14 +1,21 @@
 ---
-title: "NextAuth.js v5 / Auth.js: Authentication for Next.js AI Applications 2026"
-date: 2026-06-09T05:50:34+00:00
-tags: ["NextAuth.js", "Auth.js", "Next.js", "authentication", "AI applications", "security"]
-description: "Complete guide to Auth.js v5 for Next.js AI apps — setup, JWT vs database sessions, RBAC, MCP authentication, and migrating from v4."
-draft: false
 cover:
-  image: "/images/next-auth-v5-auth-js-nextjs-guide-2026.png"
-  alt: "NextAuth.js v5 / Auth.js: Authentication for Next.js AI Applications 2026"
+  alt: 'NextAuth.js v5 / Auth.js: Authentication for Next.js AI Applications 2026'
+  image: /images/next-auth-v5-auth-js-nextjs-guide-2026.png
   relative: false
-schema: "schema-next-auth-v5-auth-js-nextjs-guide-2026"
+date: 2026-06-09 05:50:34+00:00
+description: Complete guide to Auth.js v5 for Next.js AI apps — setup, JWT vs database
+  sessions, RBAC, MCP authentication, and migrating from v4.
+draft: false
+schema: schema-next-auth-v5-auth-js-nextjs-guide-2026
+tags:
+- NextAuth.js
+- Auth.js
+- Next.js
+- authentication
+- AI applications
+- security
+title: 'NextAuth.js v5 / Auth.js: Authentication for Next.js AI Applications 2026'
 ---
 
 Auth.js v5 (next-auth@beta) is the current production standard for Next.js authentication in 2026, offering native App Router support, Edge runtime compatibility, and a dramatically simplified API that replaces the v4 `getServerSession()` pattern with a single `auth()` function. For AI applications specifically, Auth.js v5 provides the foundation layer upon which token-aware rate limiting, MCP server authorization, and agent delegation chains can be built.

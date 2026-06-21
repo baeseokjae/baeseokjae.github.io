@@ -1,14 +1,20 @@
 ---
-title: "ComfyUI Workflow Guide: Build AI Image Generation Pipelines with Nodes (2026)"
-date: 2026-06-08T10:09:01+00:00
-tags: ["ComfyUI", "Stable Diffusion", "AI Image Generation", "FLUX", "Node-Based Workflows"]
-description: "Complete ComfyUI workflow guide: install, master the 5 essential nodes, build FLUX pipelines, and integrate the API — from first run to production."
-draft: false
 cover:
-  image: "/images/comfyui-workflow-ai-image-generation-guide-2026.png"
-  alt: "ComfyUI Workflow Guide: Build AI Image Generation Pipelines with Nodes (2026)"
+  alt: 'ComfyUI Workflow Guide: Build AI Image Generation Pipelines with Nodes (2026)'
+  image: /images/comfyui-workflow-ai-image-generation-guide-2026.png
   relative: false
-schema: "schema-comfyui-workflow-ai-image-generation-guide-2026"
+date: 2026-06-08 10:09:01+00:00
+description: 'Complete ComfyUI workflow guide: install, master the 5 essential nodes,
+  build FLUX pipelines, and integrate the API — from first run to production.'
+draft: false
+schema: schema-comfyui-workflow-ai-image-generation-guide-2026
+tags:
+- ComfyUI
+- Stable Diffusion
+- AI Image Generation
+- FLUX
+- Node-Based Workflows
+title: 'ComfyUI Workflow Guide: Build AI Image Generation Pipelines with Nodes (2026)'
 ---
 
 ComfyUI is a node-based graphical interface for running AI image generation models — including Stable Diffusion, FLUX.2, and HiDream-I1 — where each processing step is a draggable node connected by wires. Unlike prompt-based tools, ComfyUI lets you inspect, swap, and rewire every part of the pipeline, making it the standard tool for serious AI image work in 2026.

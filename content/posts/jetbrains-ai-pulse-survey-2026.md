@@ -1,14 +1,22 @@
 ---
-title: "JetBrains AI Pulse Survey 2026: 85% of Developers Now Use AI"
-date: 2026-05-24T06:05:17+00:00
-tags: ["jetbrains", "ai-tools", "developer-survey", "github-copilot", "claude-code", "cursor", "ai-coding"]
-description: "JetBrains surveyed 10,000+ developers in Jan 2026: 85-90% use AI, but only 29% trust it. Full breakdown of tool market share, productivity data, and what it means."
-draft: false
 cover:
-  image: "/images/jetbrains-ai-pulse-survey-2026.png"
-  alt: "JetBrains AI Pulse Survey 2026: 85% of Developers Now Use AI"
+  alt: 'JetBrains AI Pulse Survey 2026: 85% of Developers Now Use AI'
+  image: /images/jetbrains-ai-pulse-survey-2026.png
   relative: false
-schema: "schema-jetbrains-ai-pulse-survey-2026"
+date: 2026-05-24 06:05:17+00:00
+description: 'JetBrains surveyed 10,000+ developers in Jan 2026: 85-90% use AI, but
+  only 29% trust it. Full breakdown of tool market share, productivity data, and wha...'
+draft: false
+schema: schema-jetbrains-ai-pulse-survey-2026
+tags:
+- jetbrains
+- ai-tools
+- developer-survey
+- github-copilot
+- claude-code
+- cursor
+- ai-coding
+title: 'JetBrains AI Pulse Survey 2026: 85% of Developers Now Use AI'
 ---
 
 JetBrains surveyed over 10,000 professional developers across 8 languages in January 2026 and found that 85-90% now use AI tools regularly — but only 29% trust the output to be accurate. That trust gap, more than the adoption numbers, defines the state of AI-assisted development in 2026.

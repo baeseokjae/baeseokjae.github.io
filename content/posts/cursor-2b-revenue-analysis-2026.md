@@ -1,14 +1,20 @@
 ---
-title: "How Cursor Hit $2B ARR: Product Decisions That Shaped AI IDE Dominance"
-date: 2026-05-16T21:07:52+00:00
-tags: ["cursor", "ai-ide", "developer-tools", "saas-growth", "product-led-growth"]
-description: "Cursor reached $2B ARR in February 2026 — the fastest SaaS growth in history. Here are the specific product decisions that made it happen."
-draft: false
 cover:
-  image: "/images/cursor-2b-revenue-analysis-2026.png"
-  alt: "How Cursor Hit $2B ARR: Product Decisions That Shaped AI IDE Dominance"
+  alt: 'How Cursor Hit $2B ARR: Product Decisions That Shaped AI IDE Dominance'
+  image: /images/cursor-2b-revenue-analysis-2026.png
   relative: false
-schema: "schema-cursor-2b-revenue-analysis-2026"
+date: 2026-05-16 21:07:52+00:00
+description: Cursor reached $2B ARR in February 2026 — the fastest SaaS growth in
+  history. Here are the specific product decisions that made it happen.
+draft: false
+schema: schema-cursor-2b-revenue-analysis-2026
+tags:
+- cursor
+- ai-ide
+- developer-tools
+- saas-growth
+- product-led-growth
+title: 'How Cursor Hit $2B ARR: Product Decisions That Shaped AI IDE Dominance'
 ---
 
 Cursor hit $2B in annualized recurring revenue in February 2026 — doubling from $1B in a single quarter. Zero marketing dollars. Four MIT students. Three years. Here is the breakdown of every product decision that compounded into the fastest SaaS ramp in history.

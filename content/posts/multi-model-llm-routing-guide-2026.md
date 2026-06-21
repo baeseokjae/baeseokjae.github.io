@@ -1,14 +1,19 @@
 ---
-title: "Multi-Model LLM Routing Guide 2026: Cut AI Costs 85% with Smart Routing"
-date: 2026-04-30T00:11:22+00:00
-tags: ["developer-tools", "ai-cost-optimization", "llm", "infrastructure"]
-description: "Smart LLM routing cuts AI costs up to 85% by directing queries to cheaper models without sacrificing quality. Here's the complete 2026 guide."
-draft: false
 cover:
-  image: "/images/multi-model-llm-routing-guide-2026.png"
-  alt: "Multi-Model LLM Routing Guide 2026: Cut AI Costs 85% with Smart Routing"
+  alt: 'Multi-Model LLM Routing Guide 2026: Cut AI Costs 85% with Smart Routing'
+  image: /images/multi-model-llm-routing-guide-2026.png
   relative: false
-schema: "schema-multi-model-llm-routing-guide-2026"
+date: 2026-04-30 00:11:22+00:00
+description: Smart LLM routing cuts AI costs up to 85% by directing queries to cheaper
+  models without sacrificing quality. Here's the complete 2026 guide.
+draft: false
+schema: schema-multi-model-llm-routing-guide-2026
+tags:
+- developer-tools
+- ai-cost-optimization
+- llm
+- infrastructure
+title: 'Multi-Model LLM Routing Guide 2026: Cut AI Costs 85% with Smart Routing'
 ---
 
 Multi-model LLM routing is a strategy that directs each AI query to the most cost-efficient model capable of handling it — instead of routing everything to the most expensive one. In production systems, smart routing reduces LLM API costs by 57–85% while maintaining 95%+ of the quality you'd get from premium models alone.

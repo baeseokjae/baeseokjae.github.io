@@ -1,14 +1,20 @@
 ---
-title: "Zed AI Editor Guide 2026: ACP Protocol, AI Features, and Performance"
-date: 2026-04-26T07:03:17+00:00
-tags: ["zed editor", "zed ai", "ACP protocol", "agentic IDE", "code editor 2026"]
-description: "Complete guide to Zed AI in 2026: ACP protocol, 0.12s startup, 120fps GPU rendering, AI features, pricing, and Cursor vs VS Code."
-draft: false
 cover:
-  image: "/images/zed-ai-guide-2026.png"
-  alt: "Zed AI Editor Guide 2026: ACP Protocol, AI Features, and Performance"
+  alt: 'Zed AI Editor Guide 2026: ACP Protocol, AI Features, and Performance'
+  image: /images/zed-ai-guide-2026.png
   relative: false
-schema: "schema-zed-ai-guide-2026"
+date: 2026-04-26 07:03:17+00:00
+description: 'Complete guide to Zed AI in 2026: ACP protocol, 0.12s startup, 120fps
+  GPU rendering, AI features, pricing, and Cursor vs VS Code.'
+draft: false
+schema: schema-zed-ai-guide-2026
+tags:
+- zed editor
+- zed ai
+- ACP protocol
+- agentic IDE
+- code editor 2026
+title: 'Zed AI Editor Guide 2026: ACP Protocol, AI Features, and Performance'
 ---
 
 Zed is a Rust-powered, GPU-accelerated code editor that starts in 0.12 seconds, renders at 120fps, and ships built-in AI features backed by an open agent protocol. If you care about speed and want a native agentic IDE — not a bolted-on AI plugin — Zed is the most interesting editor to evaluate in 2026.

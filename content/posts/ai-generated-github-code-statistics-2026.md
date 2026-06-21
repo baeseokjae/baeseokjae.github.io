@@ -1,14 +1,20 @@
 ---
-title: "AI-Generated GitHub Code Statistics: 51% AI-Assisted Commits and What It Means for Developers"
-date: 2026-06-11T15:03:21+00:00
-tags: ["ai generated github code statistics", "ai coding tools", "software development"]
-description: "A practical playbook for teams shipping with 51% AI-generated code while keeping quality and ownership strong."
-draft: false
 cover:
-  image: "/images/ai-generated-github-code-statistics-2026.png"
-  alt: "AI-Generated GitHub Code Statistics: 51% AI-Assisted Commits and What It Means for Developers"
+  alt: 'AI-Generated GitHub Code Statistics: 51% AI-Assisted Commits and What It Means
+    for Developers'
+  image: /images/ai-generated-github-code-statistics-2026.png
   relative: false
-schema: "schema-ai-generated-github-code-statistics-2026"
+date: 2026-06-11 15:03:21+00:00
+description: A practical playbook for teams shipping with 51% AI-generated code while
+  keeping quality and ownership strong.
+draft: false
+schema: schema-ai-generated-github-code-statistics-2026
+tags:
+- ai generated github code statistics
+- ai coding tools
+- software development
+title: 'AI-Generated GitHub Code Statistics: 51% AI-Assisted Commits and What It Means
+  for Developers'
 ---
 
 AI coding tools are now part of everyday engineering reality. In early 2026, GitHub-reported telemetry put AI-generated or AI-assisted committed code at 51%, and Sonar estimates 42% today with 65% expected by 2027. If your team writes production code, the problem is no longer adoption; the problem is maintaining intent, correctness, and review quality at the new scale.

@@ -1,14 +1,18 @@
 ---
-title: "FastMCP 3.0 Python MCP Server Guide: Build Agent Tools in Minutes"
-date: 2026-06-14T18:04:40+00:00
-tags: ["FastMCP", "MCP", "Python"]
-description: "Build a FastMCP 3.0 Python MCP server with tools, resources, prompts, testing, clients, and production hardening."
-draft: false
 cover:
-  image: "/images/fastmcp-3-python-mcp-server-guide-2026.png"
-  alt: "FastMCP 3.0 Python MCP Server Guide: Build Agent Tools in Minutes"
+  alt: 'FastMCP 3.0 Python MCP Server Guide: Build Agent Tools in Minutes'
+  image: /images/fastmcp-3-python-mcp-server-guide-2026.png
   relative: false
-schema: "schema-fastmcp-3-python-mcp-server-guide-2026"
+date: 2026-06-14 18:04:40+00:00
+description: Build a FastMCP 3.0 Python MCP server with tools, resources, prompts,
+  testing, clients, and production hardening.
+draft: false
+schema: schema-fastmcp-3-python-mcp-server-guide-2026
+tags:
+- FastMCP
+- MCP
+- Python
+title: 'FastMCP 3.0 Python MCP Server Guide: Build Agent Tools in Minutes'
 ---
 
 FastMCP 3.0 is the quickest practical path to a Python MCP server: install the package, wrap typed Python functions with `@mcp.tool()`, run the server over stdio or HTTP, and connect it to an MCP host such as Claude Desktop or Cursor. Use it when you want agent-accessible tools without hand-writing the low-level protocol.

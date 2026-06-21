@@ -1,14 +1,21 @@
 ---
-title: "CTO AI Coding Tool Evaluation Checklist 2026: A Complete Enterprise Procurement Guide"
-date: 2026-06-03T19:47:44+00:00
-tags: ["AI coding tools", "enterprise procurement", "CTO checklist", "developer productivity", "security compliance"]
-description: "A complete CTO evaluation checklist for enterprise AI coding tool procurement in 2026—covering security, ROI, vendor questions, and governance."
-draft: false
 cover:
-  image: "/images/cto-ai-coding-tool-checklist-2026.png"
-  alt: "CTO AI Coding Tool Evaluation Checklist 2026"
+  alt: CTO AI Coding Tool Evaluation Checklist 2026
+  image: /images/cto-ai-coding-tool-checklist-2026.png
   relative: false
-schema: "schema-cto-ai-coding-tool-checklist-2026"
+date: 2026-06-03 19:47:44+00:00
+description: A complete CTO evaluation checklist for enterprise AI coding tool procurement
+  in 2026—covering security, ROI, vendor questions, and governance.
+draft: false
+schema: schema-cto-ai-coding-tool-checklist-2026
+tags:
+- AI coding tools
+- enterprise procurement
+- CTO checklist
+- developer productivity
+- security compliance
+title: 'CTO AI Coding Tool Evaluation Checklist 2026: A Complete Enterprise Procurement
+  Guide'
 ---
 
 84% of developers now use AI coding tools, yet 38% of Fortune 500 companies have already experienced security incidents from those tools. This checklist gives CTOs a structured framework to evaluate AI coding assistants across six critical dimensions—security, compliance, ROI, governance, and vendor accountability—before signing any enterprise contract.

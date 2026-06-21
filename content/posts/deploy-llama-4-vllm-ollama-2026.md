@@ -1,14 +1,20 @@
 ---
-title: "Deploy Llama 4 with vLLM and Ollama: Scout vs Maverick Setup Guide"
-date: 2026-06-12T03:03:04+00:00
-tags: ["llama4", "vllm", "ollama", "llm-deployment", "ai-infrastructure"]
-description: "Deploy Scout and Maverick with a decision-first workflow, practical commands, and migration checks for vLLM and Ollama."
-draft: false
 cover:
-  image: "/images/deploy-llama-4-vllm-ollama-2026.png"
-  alt: "Deploy Llama 4 with vLLM and Ollama: Scout vs Maverick Setup Guide"
+  alt: 'Deploy Llama 4 with vLLM and Ollama: Scout vs Maverick Setup Guide'
+  image: /images/deploy-llama-4-vllm-ollama-2026.png
   relative: false
-schema: "schema-deploy-llama-4-vllm-ollama-2026"
+date: 2026-06-12 03:03:04+00:00
+description: Deploy Scout and Maverick with a decision-first workflow, practical commands,
+  and migration checks for vLLM and Ollama.
+draft: false
+schema: schema-deploy-llama-4-vllm-ollama-2026
+tags:
+- llama4
+- vllm
+- ollama
+- llm-deployment
+- ai-infrastructure
+title: 'Deploy Llama 4 with vLLM and Ollama: Scout vs Maverick Setup Guide'
 ---
 
 If you want Llama 4 in production, start by matching hardware, concurrency, and context requirements before model size. In most teams, Scout is the first stable bet: faster startup, cheaper memory, and smoother local iteration, while Maverick becomes the right move when you need the bigger context and reasoning headroom under higher traffic. The path that works is not “which product is better,” it is “which constraint profile is cheaper to satisfy this quarter.”

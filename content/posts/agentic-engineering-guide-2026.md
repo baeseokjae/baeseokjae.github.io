@@ -1,14 +1,20 @@
 ---
-title: "Agentic Engineering: The Developer Guide Beyond Vibe Coding"
-date: 2026-05-16T00:00:00+00:00
-tags: ["agentic-engineering","vibe-coding","ai-coding","claude-code","developer-workflow"]
-description: "92% of developers now use vibe coding, yet 63% waste more time debugging AI-generated code than writing it. This guide covers the practices, tools, and workflow of agentic engineering for production-ready development."
-draft: false
 cover:
-  image: "/images/agentic-engineering-guide-2026.png"
-  alt: "Agentic Engineering: The Developer Guide Beyond Vibe Coding"
+  alt: 'Agentic Engineering: The Developer Guide Beyond Vibe Coding'
+  image: /images/agentic-engineering-guide-2026.png
   relative: false
-schema: "schema-agentic-engineering-guide-2026"
+date: 2026-05-16 00:00:00+00:00
+description: 92% of developers now use vibe coding, yet 63% waste more time debugging
+  AI-generated code than writing it. This guide covers the practices, tools, and ...
+draft: false
+schema: schema-agentic-engineering-guide-2026
+tags:
+- agentic-engineering
+- vibe-coding
+- ai-coding
+- claude-code
+- developer-workflow
+title: 'Agentic Engineering: The Developer Guide Beyond Vibe Coding'
 ---
 
 By early 2026, 92% of US-based developers had adopted vibe coding in some form. The appeal is obvious: describe what you want in plain language, let the AI generate the code, and ship faster than ever before. But a counter-trend has emerged just as quickly. Developers who pushed vibe coding into production-grade systems discovered that speed without oversight creates a new category of technical debt — one that is especially hard to unwind because there is no specification to return to. Agentic engineering is the structured answer: a deliberate workflow that keeps human engineers in command of AI agents rather than surrendering judgment to them. This guide covers everything you need to make the shift — the principles, the practices, the tools, and the repeatable workflow that separates prototypes from production systems.

@@ -1,14 +1,18 @@
 ---
-title: "GPT-6 API Developer Guide: Setup, Features & Migration (2026)"
-date: 2026-06-12T18:04:01+00:00
-tags: ["openai", "api", "migration"]
-description: "A practical GPT-6 API developer guide for 2026: current availability, setup, migration, routing, costs, and rollout gates."
-draft: false
 cover:
-  image: "/images/gpt-6-api-developer-guide-2026.png"
-  alt: "GPT-6 API Developer Guide: Setup, Features & Migration (2026)"
+  alt: 'GPT-6 API Developer Guide: Setup, Features & Migration (2026)'
+  image: /images/gpt-6-api-developer-guide-2026.png
   relative: false
-schema: "schema-gpt-6-api-developer-guide-2026"
+date: 2026-06-12 18:04:01+00:00
+description: 'A practical GPT-6 API developer guide for 2026: current availability,
+  setup, migration, routing, costs, and rollout gates.'
+draft: false
+schema: schema-gpt-6-api-developer-guide-2026
+tags:
+- openai
+- api
+- migration
+title: 'GPT-6 API Developer Guide: Setup, Features & Migration (2026)'
 ---
 
 The GPT-6 API is not officially available in OpenAI's API docs as of June 12, 2026. Build against GPT-5.5 and the Responses API today, then isolate model selection, evals, pricing checks, and rollout controls so a future GPT-6 model becomes a tested configuration change instead of a rewrite.

@@ -1,14 +1,20 @@
 ---
-title: "n8n MCP Integration Guide 2026: Connect Claude and AI Agents to Your Workflows"
-date: 2026-05-04T15:04:58+00:00
-tags: ["n8n", "MCP", "AI Agents", "Claude", "workflow-automation"]
-description: "How to integrate n8n with Model Context Protocol (MCP) in 2026 — set up n8n as an MCP server, connect Claude Desktop, and build workflows without touching the UI."
-draft: false
 cover:
-  image: "/images/n8n-mcp-integration-guide-2026.png"
-  alt: "n8n MCP Integration Guide 2026: Connect Claude and AI Agents to Your Workflows"
+  alt: 'n8n MCP Integration Guide 2026: Connect Claude and AI Agents to Your Workflows'
+  image: /images/n8n-mcp-integration-guide-2026.png
   relative: false
-schema: "schema-n8n-mcp-integration-guide-2026"
+date: 2026-05-04 15:04:58+00:00
+description: How to integrate n8n with Model Context Protocol (MCP) in 2026 — set
+  up n8n as an MCP server, connect Claude Desktop, and build workflows without touchi...
+draft: false
+schema: schema-n8n-mcp-integration-guide-2026
+tags:
+- n8n
+- MCP
+- AI Agents
+- Claude
+- workflow-automation
+title: 'n8n MCP Integration Guide 2026: Connect Claude and AI Agents to Your Workflows'
 ---
 
 n8n MCP integration lets you expose your n8n workflows as tools that Claude, Cursor, and other AI agents can call directly — and lets n8n workflows consume external MCP servers like GitHub, Slack, or any tool that speaks the Model Context Protocol. The result: AI agents that can actually trigger automation, not just describe it.

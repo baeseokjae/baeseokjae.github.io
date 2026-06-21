@@ -1,14 +1,20 @@
 ---
-title: "LangGraph Tutorial 2026: Build Stateful AI Agents with Graphs"
-date: 2026-04-19T16:32:57+00:00
-tags: ["langgraph", "ai-agents", "python", "llm", "tutorial"]
-description: "Step-by-step LangGraph tutorial 2026: install, define state, build graph nodes, add memory, deploy production agents."
-draft: false
 cover:
-  image: "/images/langgraph-tutorial-2026.png"
-  alt: "LangGraph Tutorial 2026: Build Stateful AI Agents with Graphs"
+  alt: 'LangGraph Tutorial 2026: Build Stateful AI Agents with Graphs'
+  image: /images/langgraph-tutorial-2026.png
   relative: false
-schema: "schema-langgraph-tutorial-2026"
+date: 2026-04-19 16:32:57+00:00
+description: 'Step-by-step LangGraph tutorial 2026: install, define state, build graph
+  nodes, add memory, deploy production agents.'
+draft: false
+schema: schema-langgraph-tutorial-2026
+tags:
+- langgraph
+- ai-agents
+- python
+- llm
+- tutorial
+title: 'LangGraph Tutorial 2026: Build Stateful AI Agents with Graphs'
 ---
 
 LangGraph is a Python and JavaScript framework for building stateful, graph-based AI agents. Unlike simple chain-based approaches, LangGraph lets you define agents as directed graphs where nodes are processing steps and edges determine flow — including loops, conditionals, and human approval gates. With 126,000+ GitHub stars as of April 2026, it's the most widely adopted open-source framework for production AI agents.

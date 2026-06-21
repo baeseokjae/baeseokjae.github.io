@@ -1,14 +1,22 @@
 ---
-title: "Gemini CLI vs Codex CLI 2026: Google's Free Tier vs OpenAI's Rust-Built Agent"
-date: 2026-04-18T14:12:01+00:00
-tags: ["gemini-cli", "codex-cli", "ai-coding-tools", "cli", "developer-tools"]
-description: "Gemini CLI vs Codex CLI 2026: free tier limits, Rust-powered speed, 1M token context, Terminal-Bench scores, and pricing compared."
-draft: false
 cover:
-  image: "/images/gemini-cli-vs-codex-cli-2026.png"
-  alt: "Gemini CLI vs Codex CLI 2026: Google's Free Tier vs OpenAI's Rust-Built Agent"
+  alt: 'Gemini CLI vs Codex CLI 2026: Google''s Free Tier vs OpenAI''s Rust-Built
+    Agent'
+  image: /images/gemini-cli-vs-codex-cli-2026.png
   relative: false
-schema: "schema-gemini-cli-vs-codex-cli-2026"
+date: 2026-04-18 14:12:01+00:00
+description: 'Gemini CLI vs Codex CLI 2026: free tier limits, Rust-powered speed,
+  1M token context, Terminal-Bench scores, and pricing compared.'
+draft: false
+schema: schema-gemini-cli-vs-codex-cli-2026
+tags:
+- gemini-cli
+- codex-cli
+- ai-coding-tools
+- cli
+- developer-tools
+title: 'Gemini CLI vs Codex CLI 2026: Google''s Free Tier vs OpenAI''s Rust-Built
+  Agent'
 ---
 
 Both tools are free and open source — but they're built on completely different philosophies. Gemini CLI gives you 1,000 requests/day with no credit card, backed by a 1M-token context window from Google's Gemini 2.5 Pro. Codex CLI, rebuilt in Rust in 2025, trades free-tier generosity for raw terminal performance — scoring 77.3% on Terminal-Bench 2.0, a 12-point lead over the competition.

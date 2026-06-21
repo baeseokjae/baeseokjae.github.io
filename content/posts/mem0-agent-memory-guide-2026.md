@@ -1,14 +1,20 @@
 ---
-title: "Mem0 Guide 2026: Add Persistent Memory to Your AI Agents"
-date: 2026-05-07T12:00:00+00:00
-tags: ["mem0", "agent-memory", "ai-agents", "langchain", "persistent-memory"]
-description: "Add persistent memory to AI agents with Mem0: architecture, quick start, memory scoping, LangChain integration, pricing, and production best practices."
-draft: false
 cover:
-  image: "/images/mem0-agent-memory-guide-2026.png"
-  alt: "Mem0 Guide 2026: Add Persistent Memory to Your AI Agents"
+  alt: 'Mem0 Guide 2026: Add Persistent Memory to Your AI Agents'
+  image: /images/mem0-agent-memory-guide-2026.png
   relative: false
-schema: "schema-mem0-agent-memory-guide-2026"
+date: 2026-05-07 12:00:00+00:00
+description: 'Add persistent memory to AI agents with Mem0: architecture, quick start,
+  memory scoping, LangChain integration, pricing, and production best practices.'
+draft: false
+schema: schema-mem0-agent-memory-guide-2026
+tags:
+- mem0
+- agent-memory
+- ai-agents
+- langchain
+- persistent-memory
+title: 'Mem0 Guide 2026: Add Persistent Memory to Your AI Agents'
 ---
 
 AI agents without persistent memory lose 80% of context between interactions — every session starts cold, the agent has no recollection of user preferences, past decisions, or accumulated knowledge, and users pay both in frustration and in token costs. Mem0 solves this with a managed memory layer that combines vector search, knowledge graph storage, and key-value caching into a single API. With ~48,000 GitHub stars, a $24M Series A closed in October 2025, and YC backing, Mem0 has become the default choice for teams that want to bolt production-grade memory onto an existing agent in under a day. This guide covers everything you need to go from zero to a memory-enabled agent: architecture internals, quick start code, memory scoping patterns, integration with LangChain and AutoGen, pricing tiers, and how Mem0 compares to Zep and LangGraph Store.

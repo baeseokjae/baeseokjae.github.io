@@ -1,14 +1,20 @@
 ---
-title: "Claude Code Max Plan Guide: Is the $100/month Worth It?"
-date: 2026-05-09T12:04:51+00:00
-tags: ["Claude Code", "AI Coding", "Developer Tools", "Pricing", "Subscription"]
-description: "Claude Code Max plan explained: 5x vs 20x tiers, real token math, API billing comparison, and which developer profiles should upgrade."
-draft: false
 cover:
-  image: "/images/claude-code-max-plan-guide-2026.png"
-  alt: "Claude Code Max Plan Guide: Is the $100/month Worth It?"
+  alt: 'Claude Code Max Plan Guide: Is the $100/month Worth It?'
+  image: /images/claude-code-max-plan-guide-2026.png
   relative: false
-schema: "schema-claude-code-max-plan-guide-2026"
+date: 2026-05-09 12:04:51+00:00
+description: 'Claude Code Max plan explained: 5x vs 20x tiers, real token math, API
+  billing comparison, and which developer profiles should upgrade.'
+draft: false
+schema: schema-claude-code-max-plan-guide-2026
+tags:
+- Claude Code
+- AI Coding
+- Developer Tools
+- Pricing
+- Subscription
+title: 'Claude Code Max Plan Guide: Is the $100/month Worth It?'
 ---
 
 The Claude Code Max plan at $100/month is worth it if you hit Pro's usage limits 2–3 times per week during active coding sessions, use Claude Code for 4+ hours daily, or run autonomous agentic workflows like nightly CI, scheduled PR generation, or test audits. Below the 4-hour daily threshold, Pro or the pay-as-you-go "extra usage" option almost always wins.

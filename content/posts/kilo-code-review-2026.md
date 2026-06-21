@@ -1,11 +1,17 @@
 ---
-title: "Kilo Code Review 2026: Cline Fork with Orchestrator Mode and Inline Autocomplete"
-date: 2026-05-13T00:00:00+00:00
+date: 2026-05-13 00:00:00+00:00
+description: 'A thorough 2026 review of Kilo Code: the Roo Code successor with 1.5M
+  users, Orchestrator Mode for multi-agent workflows, Memory Bank, inline autocomple...'
 draft: false
-tags: ["kilo-code","cline","roo-code","open-source-ai","vscode"]
-schema: "schema-kilo-code-review-2026"
-slug: "kilo-code-review-2026"
-description: "A thorough 2026 review of Kilo Code: the Roo Code successor with 1.5M users, Orchestrator Mode for multi-agent workflows, Memory Bank, inline autocomplete, JetBrains support, and a full comparison against Cline and Roo Code."
+schema: schema-kilo-code-review-2026
+slug: kilo-code-review-2026
+tags:
+- kilo-code
+- cline
+- roo-code
+- open-source-ai
+- vscode
+title: 'Kilo Code Review 2026: Cline Fork with Orchestrator Mode and Inline Autocomplete'
 ---
 
 ## Kilo Code Review 2026: The Roo Code Successor with 1.5M Users

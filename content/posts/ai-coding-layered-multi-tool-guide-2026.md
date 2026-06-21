@@ -1,17 +1,18 @@
 ---
-title: "Layered AI Coding Workflow: Building a 2-4 Tool Stack That Ships Safely"
-date: "2026-06-11T12:07:02+00:00"
-tags:
-  - layered ai coding workflow
-  - ai coding stack
-  - software engineering
-description: Design a three-layer AI coding workflow so 2-4 tools stay coordinated, cheap, and reviewable.
-draft: false
 cover:
+  alt: 'Layered AI Coding Workflow: Building a 2-4 Tool Stack That Ships Safely'
   image: /images/ai-coding-layered-multi-tool-guide-2026.png
-  alt: "Layered AI Coding Workflow: Building a 2-4 Tool Stack That Ships Safely"
   relative: false
+date: '2026-06-11T12:07:02+00:00'
+description: Design a three-layer AI coding workflow so 2-4 tools stay coordinated,
+  cheap, and reviewable.
+draft: false
 schema: schema-ai-coding-layered-multi-tool-guide-2026
+tags:
+- layered ai coding workflow
+- ai coding stack
+- software engineering
+title: 'Layered AI Coding Workflow: Building a 2-4 Tool Stack That Ships Safely'
 ---
 
 I build AI coding systems like production systems, not gadgets: one layer decides what to do, one layer edits code and tests, and one layer validates before merge. If a team already uses multiple AI tools, this is the fastest path to consistency because every output has a contract, not just a prompt.

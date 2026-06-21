@@ -1,14 +1,20 @@
 ---
-title: "Cline AI Review 2026: Open-Source VS Code Coding Agent Tested"
-date: 2026-04-28T03:02:18+00:00
-tags: ["ai-coding", "vs-code", "open-source", "developer-tools", "cline"]
-description: "Honest Cline AI review 2026: BYOK model, 5M+ installs, real-world costs, and how it compares to Cursor, Claude Code, and Roo Code."
-draft: false
 cover:
-  image: "/images/cline-ai-review-2026.png"
-  alt: "Cline AI Review 2026: Open-Source VS Code Coding Agent Tested"
+  alt: 'Cline AI Review 2026: Open-Source VS Code Coding Agent Tested'
+  image: /images/cline-ai-review-2026.png
   relative: false
-schema: "schema-cline-ai-review-2026"
+date: 2026-04-28 03:02:18+00:00
+description: 'Honest Cline AI review 2026: BYOK model, 5M+ installs, real-world costs,
+  and how it compares to Cursor, Claude Code, and Roo Code.'
+draft: false
+schema: schema-cline-ai-review-2026
+tags:
+- ai-coding
+- vs-code
+- open-source
+- developer-tools
+- cline
+title: 'Cline AI Review 2026: Open-Source VS Code Coding Agent Tested'
 ---
 
 Cline is an open-source autonomous coding agent for VS Code with 5M+ installs and 58,000+ GitHub stars. Unlike Cursor or Copilot, it runs inside your existing VS Code installation, uses your own API keys, and executes multi-step tasks autonomously — reading files, running terminal commands, and testing in a headless browser. It's not a code autocomplete tool. It's a full agent that works until the task is done.

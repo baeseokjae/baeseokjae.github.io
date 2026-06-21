@@ -1,14 +1,20 @@
 ---
-title: "OpenAI Codex Desktop Update 2026: 'For Almost Everything' Full Review"
-date: 2026-05-31T03:05:17+00:00
-tags: ["OpenAI Codex", "AI coding", "developer tools", "agentic coding", "GPT-5.5"]
-description: "OpenAI Codex April 2026 desktop update adds computer use, 90+ plugins, memory, and PR reviews — here's what actually changed and whether it beats Claude Code."
-draft: false
 cover:
-  image: "/images/openai-codex-for-everything-review-2026.png"
-  alt: "OpenAI Codex Desktop Update 2026: 'For Almost Everything' Full Review"
+  alt: 'OpenAI Codex Desktop Update 2026: ''For Almost Everything'' Full Review'
+  image: /images/openai-codex-for-everything-review-2026.png
   relative: false
-schema: "schema-openai-codex-for-everything-review-2026"
+date: 2026-05-31 03:05:17+00:00
+description: OpenAI Codex April 2026 desktop update adds computer use, 90+ plugins,
+  memory, and PR reviews — here's what actually changed and whether it beats Claude...
+draft: false
+schema: schema-openai-codex-for-everything-review-2026
+tags:
+- OpenAI Codex
+- AI coding
+- developer tools
+- agentic coding
+- GPT-5.5
+title: 'OpenAI Codex Desktop Update 2026: ''For Almost Everything'' Full Review'
 ---
 
 OpenAI Codex's April 16, 2026 desktop update shipped computer use, an in-app browser, 90+ plugins, memory, and PR review — transforming what was a capable coding agent into a full developer command center. Whether it displaces Claude Code or Cursor depends on your workflow, not benchmark scores.

@@ -1,14 +1,20 @@
 ---
-title: "Kimi K2 vs Claude Opus vs GPT-5 Coding 2026: Moonshot's Model Benchmark"
-date: 2026-05-08T00:00:00+00:00
-tags: ["kimi-k2","claude","gpt-5","coding-models","llm-comparison"]
-description: "A direct benchmark comparison of Kimi K2.5, Claude Opus 4.6, and GPT-5.3-Codex for coding in 2026. SWE-Bench, Terminal-Bench, LiveCodeBench, and pricing analysis."
-draft: false
 cover:
-  image: "/images/kimi-k2-vs-claude-vs-gpt5-coding-2026.png"
-  alt: "Kimi K2 vs Claude Opus vs GPT-5 Coding 2026"
+  alt: Kimi K2 vs Claude Opus vs GPT-5 Coding 2026
+  image: /images/kimi-k2-vs-claude-vs-gpt5-coding-2026.png
   relative: false
-schema: "schema-kimi-k2-vs-claude-vs-gpt5-coding-2026"
+date: 2026-05-08 00:00:00+00:00
+description: A direct benchmark comparison of Kimi K2.5, Claude Opus 4.6, and GPT-5.3-Codex
+  for coding in 2026. SWE-Bench, Terminal-Bench, LiveCodeBench, and pricing...
+draft: false
+schema: schema-kimi-k2-vs-claude-vs-gpt5-coding-2026
+tags:
+- kimi-k2
+- claude
+- gpt-5
+- coding-models
+- llm-comparison
+title: 'Kimi K2 vs Claude Opus vs GPT-5 Coding 2026: Moonshot''s Model Benchmark'
 ---
 
 Three frontier coding models shipped within nine days of each other in early 2026. Kimi K2.5 dropped on January 27, Claude Opus 4.6 followed on February 5, and GPT-5.3-Codex appeared twenty minutes after Anthropic's announcement. No single model wins every benchmark. Which one belongs in your stack depends entirely on what you are building and how much you are willing to pay for marginal performance gains.

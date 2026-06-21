@@ -1,14 +1,21 @@
 ---
-title: "AI Agent Governance Guide 2026: Compliance, Access Control, and Runtime Security"
-date: 2026-05-15T00:00:00+00:00
-tags: ["ai-governance","compliance","rbac","audit-trail","eu-ai-act"]
-description: "The AI governance market hits $9.2B by 2026. Build compliant AI agent governance with RBAC, audit trails, zero-trust, and EU AI Act mapping — practical guide for 2026."
-draft: false
 cover:
-  image: "/images/ai-agent-governance-guide-2026.png"
-  alt: "AI Agent Governance Guide 2026: Compliance, Access Control, and Runtime Security"
+  alt: 'AI Agent Governance Guide 2026: Compliance, Access Control, and Runtime Security'
+  image: /images/ai-agent-governance-guide-2026.png
   relative: false
-schema: "schema-ai-agent-governance-guide-2026"
+date: 2026-05-15 00:00:00+00:00
+description: The AI governance market hits $9.2B by 2026. Build compliant AI agent
+  governance with RBAC, audit trails, zero-trust, and EU AI Act mapping — practical
+  ...
+draft: false
+schema: schema-ai-agent-governance-guide-2026
+tags:
+- ai-governance
+- compliance
+- rbac
+- audit-trail
+- eu-ai-act
+title: 'AI Agent Governance Guide 2026: Compliance, Access Control, and Runtime Security'
 ---
 
 The AI governance market is on track to reach $9.2 billion by 2026 at a 25% compound annual growth rate, and 87% of enterprises will require formal AI agent governance frameworks by year end. The pressure is no longer hypothetical: autonomous agents that call APIs, write to databases, send external messages, and spawn sub-agents are in production across every regulated industry, and the window for treating governance as a future concern has closed. This guide covers the full governance stack — from regulatory mapping to RBAC design, audit logging specifications, zero-trust credential architecture, model versioning controls, and incident response playbooks — with enough operational specificity to move from awareness to implementation.

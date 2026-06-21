@@ -1,14 +1,21 @@
 ---
-title: "Cursor + Claude Code + Codex Composable Stack 2026: The New AI Coding Architecture"
-date: 2026-05-01T06:05:19+00:00
-tags: ["cursor", "claude-code", "codex", "ai-coding", "developer-tools", "mcp"]
-description: "How to combine Cursor, Claude Code, and OpenAI Codex into a composable AI coding stack — with setup guide, workflow patterns, and pricing breakdown."
-draft: false
 cover:
-  image: "/images/cursor-claude-code-codex-stack-2026.png"
-  alt: "Cursor + Claude Code + Codex Composable Stack 2026: The New AI Coding Architecture"
+  alt: 'Cursor + Claude Code + Codex Composable Stack 2026: The New AI Coding Architecture'
+  image: /images/cursor-claude-code-codex-stack-2026.png
   relative: false
-schema: "schema-cursor-claude-code-codex-stack-2026"
+date: 2026-05-01 06:05:19+00:00
+description: How to combine Cursor, Claude Code, and OpenAI Codex into a composable
+  AI coding stack — with setup guide, workflow patterns, and pricing breakdown.
+draft: false
+schema: schema-cursor-claude-code-codex-stack-2026
+tags:
+- cursor
+- claude-code
+- codex
+- ai-coding
+- developer-tools
+- mcp
+title: 'Cursor + Claude Code + Codex Composable Stack 2026: The New AI Coding Architecture'
 ---
 
 The best AI coding setup in 2026 isn't a single tool — it's a composable stack: Cursor as the IDE and orchestration layer, Claude Code as the deep-reasoning terminal agent, and OpenAI Codex as the cloud-native background automation engine. Using all three together costs as little as $40/month and delivers capabilities no single tool can match.

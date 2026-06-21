@@ -1,14 +1,21 @@
 ---
-title: "C3 Code Review 2026: Enterprise AI Coding Platform That Turns Natural Language Into Production Apps"
-date: 2026-05-08T15:05:50+00:00
-tags: ["C3 Code", "enterprise AI", "AI coding tools", "C3 AI", "agentic AI"]
-description: "Hands-on review of C3 Code, C3 AI's enterprise platform that converts natural language prompts into production-grade AI applications."
-draft: false
 cover:
-  image: "/images/c3-code-enterprise-review-2026.png"
-  alt: "C3 Code Review 2026: Enterprise AI Coding Platform"
+  alt: 'C3 Code Review 2026: Enterprise AI Coding Platform'
+  image: /images/c3-code-enterprise-review-2026.png
   relative: false
-schema: "schema-c3-code-enterprise-review-2026"
+date: 2026-05-08 15:05:50+00:00
+description: Hands-on review of C3 Code, C3 AI's enterprise platform that converts
+  natural language prompts into production-grade AI applications.
+draft: false
+schema: schema-c3-code-enterprise-review-2026
+tags:
+- C3 Code
+- enterprise AI
+- AI coding tools
+- C3 AI
+- agentic AI
+title: 'C3 Code Review 2026: Enterprise AI Coding Platform That Turns Natural Language
+  Into Production Apps'
 ---
 
 C3 Code is an enterprise AI development platform that converts natural language prompts into production-grade applications — targeting large organizations that need governed, domain-specific AI deployment rather than individual developers seeking faster autocomplete.

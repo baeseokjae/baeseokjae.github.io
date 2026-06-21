@@ -1,14 +1,20 @@
 ---
-title: "OpenAI Acquires PromptFoo: What It Means for AI Security Testing in 2026"
-date: 2026-05-10T00:00:00+00:00
-tags: ["promptfoo", "openai", "ai-security", "red-teaming", "llm-testing"]
-description: "OpenAI acquired PromptFoo, the 21,151-star open-source LLM security testing tool. Here's what changes for developers, what stays the same, and what the deal signals for AI security in 2026."
-draft: false
 cover:
-  image: "/images/openai-promptfoo-acquisition-2026.png"
-  alt: "OpenAI Acquires PromptFoo: What It Means for AI Security Testing in 2026"
+  alt: 'OpenAI Acquires PromptFoo: What It Means for AI Security Testing in 2026'
+  image: /images/openai-promptfoo-acquisition-2026.png
   relative: false
-schema: "schema-openai-promptfoo-acquisition-2026"
+date: 2026-05-10 00:00:00+00:00
+description: OpenAI acquired PromptFoo, the 21,151-star open-source LLM security testing
+  tool. Here's what changes for developers, what stays the same, and what the ...
+draft: false
+schema: schema-openai-promptfoo-acquisition-2026
+tags:
+- promptfoo
+- openai
+- ai-security
+- red-teaming
+- llm-testing
+title: 'OpenAI Acquires PromptFoo: What It Means for AI Security Testing in 2026'
 ---
 
 OpenAI acquiring PromptFoo is not a talent grab — it is a strategic acknowledgment that AI security testing is no longer optional infrastructure. With 93% of organizations now shipping AI-generated code and only 12% applying equivalent security standards, the attack surface is enormous and growing. PromptFoo was the most mature open-source tool purpose-built for LLM red-teaming, and OpenAI buying it means the company is betting that security evaluation needs to be a first-class part of the developer workflow, not an afterthought bolted on by a third-party CLI.

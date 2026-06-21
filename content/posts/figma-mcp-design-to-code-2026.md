@@ -1,14 +1,21 @@
 ---
-title: "Figma MCP Server Guide 2026: Design to Code with AI"
-date: 2026-05-03T15:04:32+00:00
-tags: ["Figma", "MCP", "Design to Code", "AI Coding", "Cursor", "Claude Code"]
-description: "Complete guide to the Figma MCP server: setup, remote vs desktop, Code Connect, and real-world design-to-code workflows with AI agents in 2026."
-draft: false
 cover:
-  image: "/images/figma-mcp-design-to-code-2026.png"
-  alt: "Figma MCP Server Guide 2026: Design to Code with AI"
+  alt: 'Figma MCP Server Guide 2026: Design to Code with AI'
+  image: /images/figma-mcp-design-to-code-2026.png
   relative: false
-schema: "schema-figma-mcp-design-to-code-2026"
+date: 2026-05-03 15:04:32+00:00
+description: 'Complete guide to the Figma MCP server: setup, remote vs desktop, Code
+  Connect, and real-world design-to-code workflows with AI agents in 2026.'
+draft: false
+schema: schema-figma-mcp-design-to-code-2026
+tags:
+- Figma
+- MCP
+- Design to Code
+- AI Coding
+- Cursor
+- Claude Code
+title: 'Figma MCP Server Guide 2026: Design to Code with AI'
 ---
 
 The Figma MCP server turns your design files into a live context source for AI agents — eliminating the screenshot-and-describe loop that slows down design implementation. With one properly configured endpoint, tools like Cursor, Claude Code, and Windsurf can read your exact component hierarchy, tokens, and constraints in real time.

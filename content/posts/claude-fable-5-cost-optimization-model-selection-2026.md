@@ -1,14 +1,18 @@
 ---
-title: "Claude Fable 5 Cost Pricing: When to Use It vs Opus 4.8 vs Haiku 4.5 in 2026"
-date: 2026-06-14T12:04:34+00:00
-tags: ["Claude", "AI Cost Optimization", "Model Routing"]
-description: "A practical 2026 guide to Claude Fable 5 cost pricing, routing, caching, and when to use Opus 4.8 or Haiku 4.5 instead."
-draft: false
 cover:
-  image: "/images/claude-fable-5-cost-optimization-model-selection-2026.png"
-  alt: "Claude Fable 5 Cost Pricing: When to Use It vs Opus 4.8 vs Haiku 4.5 in 2026"
+  alt: 'Claude Fable 5 Cost Pricing: When to Use It vs Opus 4.8 vs Haiku 4.5 in 2026'
+  image: /images/claude-fable-5-cost-optimization-model-selection-2026.png
   relative: false
-schema: "schema-claude-fable-5-cost-optimization-model-selection-2026"
+date: 2026-06-14 12:04:34+00:00
+description: A practical 2026 guide to Claude Fable 5 cost pricing, routing, caching,
+  and when to use Opus 4.8 or Haiku 4.5 instead.
+draft: false
+schema: schema-claude-fable-5-cost-optimization-model-selection-2026
+tags:
+- Claude
+- AI Cost Optimization
+- Model Routing
+title: 'Claude Fable 5 Cost Pricing: When to Use It vs Opus 4.8 vs Haiku 4.5 in 2026'
 ---
 
 Claude Fable 5 cost pricing is premium-model pricing: $10 per million input tokens and $50 per million output tokens, currently best treated as a planning and routing target while access is suspended. Use it only when stronger autonomy, fewer retries, or lower human review time can offset the 2x Opus 4.8 and 10x Haiku 4.5 list price.

@@ -1,14 +1,22 @@
 ---
-title: "AI Code Security Debt: How AI Tools Create Vulnerabilities Faster Than Teams Can Fix"
-date: 2026-06-03T00:54:03+00:00
-tags: ["AI security", "code security", "technical debt", "SAST", "developer tools"]
-description: "AI-generated code contains 2.74x more vulnerabilities than human code. Learn how to manage AI code security debt with concrete governance frameworks and tools."
-draft: false
 cover:
-  image: "/images/ai-code-security-debt-crisis-2026.png"
-  alt: "AI Code Security Debt: How AI Tools Create Vulnerabilities Faster Than Teams Can Fix"
+  alt: 'AI Code Security Debt: How AI Tools Create Vulnerabilities Faster Than Teams
+    Can Fix'
+  image: /images/ai-code-security-debt-crisis-2026.png
   relative: false
-schema: "schema-ai-code-security-debt-crisis-2026"
+date: 2026-06-03 00:54:03+00:00
+description: AI-generated code contains 2.74x more vulnerabilities than human code.
+  Learn how to manage AI code security debt with concrete governance frameworks and...
+draft: false
+schema: schema-ai-code-security-debt-crisis-2026
+tags:
+- AI security
+- code security
+- technical debt
+- SAST
+- developer tools
+title: 'AI Code Security Debt: How AI Tools Create Vulnerabilities Faster Than Teams
+  Can Fix'
 ---
 
 AI-generated code contains 2.74x more security vulnerabilities than human-written code, yet 93% of organizations use it in production workflows while only 12% apply equivalent security standards. At 42% AI code adoption in 2026 — projected to hit 65% by 2027 — the security debt is compounding faster than engineering teams can address it. This guide explains the scale of the crisis and what to do about it.

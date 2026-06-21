@@ -1,14 +1,21 @@
 ---
-title: "OpenAI Agents SDK v2 Tutorial: Sandbox Execution, Memory, and Long-Horizon Tasks (openai agents sdk v2 tutorial)"
-date: 2026-06-12T06:06:31+00:00
-tags: ["openai-agents", "agent-sandbox", "agent-memory", "long-horizon-workflows"]
-description: "Build a production-ready OpenAI Agents SDK v2 stack with sandbox execution, persistent memory, and resumable long-horizon workflows."
-draft: false
 cover:
-  image: "/images/openai-agents-sdk-v2-tutorial-2026.png"
-  alt: "OpenAI Agents SDK v2 Tutorial: Sandbox Execution, Memory, and Long-Horizon Tasks"
+  alt: 'OpenAI Agents SDK v2 Tutorial: Sandbox Execution, Memory, and Long-Horizon
+    Tasks'
+  image: /images/openai-agents-sdk-v2-tutorial-2026.png
   relative: false
-schema: "schema-openai-agents-sdk-v2-tutorial-2026"
+date: 2026-06-12 06:06:31+00:00
+description: Build a production-ready OpenAI Agents SDK v2 stack with sandbox execution,
+  persistent memory, and resumable long-horizon workflows.
+draft: false
+schema: schema-openai-agents-sdk-v2-tutorial-2026
+tags:
+- openai-agents
+- agent-sandbox
+- agent-memory
+- long-horizon-workflows
+title: 'OpenAI Agents SDK v2 Tutorial: Sandbox Execution, Memory, and Long-Horizon
+  Tasks (openai agents sdk v2 tutorial)'
 ---
 
 OpenAI Agents SDK v2 is designed for production agents that need safe execution, repeatable context, and multi-hour workflows. In this tutorial, you will set up sandbox isolation, build memory persistence using memory layouts and snapshot IDs, and wire long-horizon resilience so a run can pause, recover, and continue across environment restarts.

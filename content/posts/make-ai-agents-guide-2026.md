@@ -1,14 +1,20 @@
 ---
-title: "Make.com AI Agents Guide 2026: Build Autonomous Workflows with Maia"
-date: 2026-05-04T18:04:07+00:00
-tags: ["make.com", "ai-agents", "workflow-automation", "maia", "no-code"]
-description: "Step-by-step guide to building Make.com AI agents with Maia in 2026 — reasoning panel, multimodal inputs, and real-world use cases."
-draft: false
 cover:
-  image: "/images/make-ai-agents-guide-2026.png"
-  alt: "Make.com AI Agents Guide 2026: Build Autonomous Workflows with Maia"
+  alt: 'Make.com AI Agents Guide 2026: Build Autonomous Workflows with Maia'
+  image: /images/make-ai-agents-guide-2026.png
   relative: false
-schema: "schema-make-ai-agents-guide-2026"
+date: 2026-05-04 18:04:07+00:00
+description: Step-by-step guide to building Make.com AI agents with Maia in 2026 —
+  reasoning panel, multimodal inputs, and real-world use cases.
+draft: false
+schema: schema-make-ai-agents-guide-2026
+tags:
+- make.com
+- ai-agents
+- workflow-automation
+- maia
+- no-code
+title: 'Make.com AI Agents Guide 2026: Build Autonomous Workflows with Maia'
 ---
 
 Make.com AI agents are autonomous workflow components that perceive inputs, reason through multi-step decisions, and execute actions across 3,000+ integrations — without waiting for you to trigger each step manually. Released in open beta on February 2, 2026, Make AI Agents run on paid plans and let you build intelligent, self-directing automations using natural language through Maia, Make's built-in AI workflow builder.

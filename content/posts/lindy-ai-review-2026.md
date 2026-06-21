@@ -1,14 +1,20 @@
 ---
-title: "Lindy AI Review 2026: No-Code AI Agent Automation Platform"
-date: 2026-05-04T06:04:57+00:00
-tags: ["ai-agents", "no-code", "automation", "workflow-automation", "review"]
-description: "Hands-on Lindy AI review covering pricing, features, Gaia voice agent, Autopilot, and how it compares to Zapier, Make, and n8n in 2026."
-draft: false
 cover:
-  image: "/images/lindy-ai-review-2026.png"
-  alt: "Lindy AI Review 2026: No-Code AI Agent Automation Platform"
+  alt: 'Lindy AI Review 2026: No-Code AI Agent Automation Platform'
+  image: /images/lindy-ai-review-2026.png
   relative: false
-schema: "schema-lindy-ai-review-2026"
+date: 2026-05-04 06:04:57+00:00
+description: Hands-on Lindy AI review covering pricing, features, Gaia voice agent,
+  Autopilot, and how it compares to Zapier, Make, and n8n in 2026.
+draft: false
+schema: schema-lindy-ai-review-2026
+tags:
+- ai-agents
+- no-code
+- automation
+- workflow-automation
+- review
+title: 'Lindy AI Review 2026: No-Code AI Agent Automation Platform'
 ---
 
 Lindy AI is a no-code AI agent platform that lets non-technical users build autonomous agents for sales, support, and operations — no Python required. It earns a G2 rating of 4.9/5 from 170 verified reviews and supports 5,000+ integrations as of 2026.

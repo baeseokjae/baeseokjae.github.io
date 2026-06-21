@@ -1,14 +1,18 @@
 ---
-title: "MCP A2A Agent Coordination 2026: What Developers Should Expect in H2"
-date: 2026-06-14T13:04:26+00:00
-tags: ["MCP", "A2A", "AI agents"]
-description: "A developer guide to MCP and A2A agent coordination in 2026, including architecture, security, roadmap, and migration steps."
-draft: false
 cover:
-  image: "/images/mcp-agent-to-agent-a2a-coordination-guide-2026.png"
-  alt: "MCP A2A Agent Coordination 2026: What Developers Should Expect in H2"
+  alt: 'MCP A2A Agent Coordination 2026: What Developers Should Expect in H2'
+  image: /images/mcp-agent-to-agent-a2a-coordination-guide-2026.png
   relative: false
-schema: "schema-mcp-agent-to-agent-a2a-coordination-guide-2026"
+date: 2026-06-14 13:04:26+00:00
+description: A developer guide to MCP and A2A agent coordination in 2026, including
+  architecture, security, roadmap, and migration steps.
+draft: false
+schema: schema-mcp-agent-to-agent-a2a-coordination-guide-2026
+tags:
+- MCP
+- A2A
+- AI agents
+title: 'MCP A2A Agent Coordination 2026: What Developers Should Expect in H2'
 ---
 
 MCP A2A agent coordination in 2026 means using MCP for controlled tool and context access while using A2A for agent discovery, delegation, progress updates, and artifact exchange. The practical move for H2 2026 is not choosing one protocol; it is designing a governed stack where both have clear boundaries.

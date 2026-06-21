@@ -1,14 +1,18 @@
 ---
-title: "How to Build Secure AI Agents with Least Privilege in 2026"
-date: 2026-06-15T12:05:27+00:00
-tags: ["AI security", "least privilege", "agentic AI"]
-description: "A practical least-privilege architecture for secure AI agents, scoped tools, short-lived credentials, approvals, and audit logs."
-draft: false
 cover:
-  image: "/images/secure-ai-agents-least-privilege-2026.png"
-  alt: "How to Build Secure AI Agents with Least Privilege in 2026"
+  alt: How to Build Secure AI Agents with Least Privilege in 2026
+  image: /images/secure-ai-agents-least-privilege-2026.png
   relative: false
-schema: "schema-secure-ai-agents-least-privilege-2026"
+date: 2026-06-15 12:05:27+00:00
+description: A practical least-privilege architecture for secure AI agents, scoped
+  tools, short-lived credentials, approvals, and audit logs.
+draft: false
+schema: schema-secure-ai-agents-least-privilege-2026
+tags:
+- AI security
+- least privilege
+- agentic AI
+title: How to Build Secure AI Agents with Least Privilege in 2026
 ---
 
 Secure AI agents with least privilege by giving each agent a scoped identity, limiting tools and data, enforcing policy outside the prompt, using short-lived credentials, requiring approvals for high-impact actions, sandboxing execution, and logging every tool call for continuous permission review.

@@ -1,5 +1,5 @@
 ---
-date: 2026-05-10T00:00:00+00:00
+date: 2026-05-10 00:00:00+00:00
 description: 'Blaxel 2026 review: persistent AI agent sandbox with 25ms resume times.
   See how it compares to E2B, Daytona, and Modal for long-running autonomous agents.'
 draft: false

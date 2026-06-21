@@ -1,14 +1,20 @@
 ---
-title: "OpenAI Agents SDK TypeScript: Complete Developer Guide 2026"
-date: 2026-05-06T15:04:46+00:00
-tags: ["OpenAI Agents SDK", "TypeScript", "AI agents", "multi-agent", "MCP"]
-description: "Build production-ready AI agents in TypeScript with the OpenAI Agents SDK — handoffs, tools, guardrails, sessions, MCP, and voice agents explained."
-draft: false
 cover:
-  image: "/images/openai-agents-sdk-typescript-2026.png"
-  alt: "OpenAI Agents SDK TypeScript: Complete Developer Guide 2026"
+  alt: 'OpenAI Agents SDK TypeScript: Complete Developer Guide 2026'
+  image: /images/openai-agents-sdk-typescript-2026.png
   relative: false
-schema: "schema-openai-agents-sdk-typescript-2026"
+date: 2026-05-06 15:04:46+00:00
+description: Build production-ready AI agents in TypeScript with the OpenAI Agents
+  SDK — handoffs, tools, guardrails, sessions, MCP, and voice agents explained.
+draft: false
+schema: schema-openai-agents-sdk-typescript-2026
+tags:
+- OpenAI Agents SDK
+- TypeScript
+- AI agents
+- multi-agent
+- MCP
+title: 'OpenAI Agents SDK TypeScript: Complete Developer Guide 2026'
 ---
 
 The OpenAI Agents SDK for TypeScript (`@openai/agents`) is a production-ready framework for building multi-agent AI systems in Node.js and browser environments. It ships four core primitives — Agents, Tools, Handoffs, and Guardrails — with first-class Zod integration, MCP support, and a dedicated RealtimeAgent for voice workflows.

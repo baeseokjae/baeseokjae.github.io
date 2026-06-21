@@ -1,14 +1,21 @@
 ---
-title: "TanStack Query v5: Data Fetching and Caching for AI-Powered React Apps"
-date: 2026-06-02T06:04:31+00:00
-tags: ["TanStack Query", "React", "Data Fetching", "AI Apps", "Caching", "Next.js"]
-description: "TanStack Query v5 guide for AI-powered React apps: streamedQuery, optimistic updates, cross-tab sync, SSR, and production patterns."
-draft: false
 cover:
-  image: "/images/tanstack-query-v5-data-fetching-react-guide-2026.png"
-  alt: "TanStack Query v5: Data Fetching and Caching for AI-Powered React Apps"
+  alt: 'TanStack Query v5: Data Fetching and Caching for AI-Powered React Apps'
+  image: /images/tanstack-query-v5-data-fetching-react-guide-2026.png
   relative: false
-schema: "schema-tanstack-query-v5-data-fetching-react-guide-2026"
+date: 2026-06-02 06:04:31+00:00
+description: 'TanStack Query v5 guide for AI-powered React apps: streamedQuery, optimistic
+  updates, cross-tab sync, SSR, and production patterns.'
+draft: false
+schema: schema-tanstack-query-v5-data-fetching-react-guide-2026
+tags:
+- TanStack Query
+- React
+- Data Fetching
+- AI Apps
+- Caching
+- Next.js
+title: 'TanStack Query v5: Data Fetching and Caching for AI-Powered React Apps'
 ---
 
 TanStack Query v5 is the server state library for React that handles caching, background refetching, and stale-while-revalidate out of the box — with 12M+ weekly downloads in 2026, it's become the default choice for teams building AI-powered applications that need real-time data and LLM streaming.

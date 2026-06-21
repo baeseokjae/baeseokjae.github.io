@@ -1,14 +1,21 @@
 ---
-title: "Devin AI vs Claude Code vs SWE-agent: Autonomous Coding Agents Compared (2026)"
-date: 2026-04-21T22:24:00+00:00
-tags: ["Devin AI", "Claude Code", "SWE-agent", "autonomous coding agents", "AI software engineer", "AI coding assistants 2026"]
-description: "Devin AI, Claude Code, and SWE-agent take three radically different approaches to autonomous coding. Here's how to choose the right one."
-draft: false
 cover:
-  image: "/images/devin-vs-claude-code-vs-swe-agent-2026.png"
-  alt: "Devin AI vs Claude Code vs SWE-agent: Autonomous Coding Agents Compared"
+  alt: 'Devin AI vs Claude Code vs SWE-agent: Autonomous Coding Agents Compared'
+  image: /images/devin-vs-claude-code-vs-swe-agent-2026.png
   relative: false
-schema: "schema-devin-vs-claude-code-vs-swe-agent-2026"
+date: 2026-04-21 22:24:00+00:00
+description: Devin AI, Claude Code, and SWE-agent take three radically different approaches
+  to autonomous coding. Here's how to choose the right one.
+draft: false
+schema: schema-devin-vs-claude-code-vs-swe-agent-2026
+tags:
+- Devin AI
+- Claude Code
+- SWE-agent
+- autonomous coding agents
+- AI software engineer
+- AI coding assistants 2026
+title: 'Devin AI vs Claude Code vs SWE-agent: Autonomous Coding Agents Compared (2026)'
 ---
 
 The difference between Devin AI, Claude Code, and SWE-agent is not about which tool writes better code — it's about where you want to sit in the loop. Devin operates autonomously in the cloud while you sleep. Claude Code works alongside you in the terminal in real time. SWE-agent is an open-source framework you control and extend yourself. Each one solves a different problem for a different developer.

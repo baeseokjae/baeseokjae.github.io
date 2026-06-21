@@ -1,14 +1,20 @@
 ---
-title: "GitHub Copilot Semantic Code Search: Find Code by Concept, Not Keyword"
-date: 2026-05-22T23:19:54+00:00
-tags: ["github copilot", "semantic search", "ai coding", "vector search", "developer tools"]
-description: "GitHub Copilot's semantic code search finds code by meaning, not text. 40% better context recall vs grep, 2% faster task completion—here's how it works."
-draft: false
 cover:
-  image: "/images/github-copilot-semantic-code-search-2026.png"
-  alt: "GitHub Copilot Semantic Code Search"
+  alt: GitHub Copilot Semantic Code Search
+  image: /images/github-copilot-semantic-code-search-2026.png
   relative: false
-schema: "schema-github-copilot-semantic-code-search-2026"
+date: 2026-05-22 23:19:54+00:00
+description: GitHub Copilot's semantic code search finds code by meaning, not text.
+  40% better context recall vs grep, 2% faster task completion—here's how it works.
+draft: false
+schema: schema-github-copilot-semantic-code-search-2026
+tags:
+- github copilot
+- semantic search
+- ai coding
+- vector search
+- developer tools
+title: 'GitHub Copilot Semantic Code Search: Find Code by Concept, Not Keyword'
 ---
 
 GitHub Copilot's semantic code search replaces grep-style text matching with vector similarity search—finding code that *means* the same thing, even when the words don't match. Available since Copilot v1.200 (March 2026), it reduces task completion time by 2% and delivers 40% better context recall than keyword search, with no configuration required.

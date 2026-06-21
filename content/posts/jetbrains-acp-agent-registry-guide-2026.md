@@ -1,14 +1,20 @@
 ---
-title: "JetBrains ACP Agent Registry: Connect AI Agents to Your IDE (2026 Guide)"
-date: 2026-06-02T18:51:42+00:00
-tags: ["JetBrains", "AI Agents", "ACP", "IntelliJ IDEA", "Developer Tools"]
-description: "Learn how to use the JetBrains ACP Agent Registry to install Claude Code, Cursor, Gemini CLI and more directly into your IDE with one click."
-draft: false
 cover:
-  image: "/images/jetbrains-acp-agent-registry-guide-2026.png"
-  alt: "JetBrains ACP Agent Registry: Connect AI Agents to Your IDE"
+  alt: 'JetBrains ACP Agent Registry: Connect AI Agents to Your IDE'
+  image: /images/jetbrains-acp-agent-registry-guide-2026.png
   relative: false
-schema: "schema-jetbrains-acp-agent-registry-guide-2026"
+date: 2026-06-02 18:51:42+00:00
+description: Learn how to use the JetBrains ACP Agent Registry to install Claude Code,
+  Cursor, Gemini CLI and more directly into your IDE with one click.
+draft: false
+schema: schema-jetbrains-acp-agent-registry-guide-2026
+tags:
+- JetBrains
+- AI Agents
+- ACP
+- IntelliJ IDEA
+- Developer Tools
+title: 'JetBrains ACP Agent Registry: Connect AI Agents to Your IDE (2026 Guide)'
 ---
 
 The JetBrains ACP Agent Registry is a curated, one-click marketplace for AI coding agents inside IntelliJ IDEA, PyCharm, WebStorm, and other JetBrains IDEs. Launched January 28, 2026, it lets you install Claude Code, Cursor, Gemini CLI, and 30+ other agents in seconds — no manual JSON editing required.

@@ -1,14 +1,21 @@
 ---
-title: "Databricks Managed MCP Servers Guide: Developer Setup and Unity Catalog Integration"
-date: 2026-04-25T16:04:24+00:00
-tags: ["databricks", "mcp", "unity-catalog", "ai-agents", "python"]
-description: "Complete developer guide for Databricks managed MCP servers: setup, authentication, Genie/Vector Search/UC Functions integration, and Unity Catalog governance."
-draft: false
 cover:
-  image: "/images/databricks-mcp-managed-servers-guide-2026.png"
-  alt: "Databricks Managed MCP Servers Guide: Developer Setup and Unity Catalog Integration"
+  alt: 'Databricks Managed MCP Servers Guide: Developer Setup and Unity Catalog Integration'
+  image: /images/databricks-mcp-managed-servers-guide-2026.png
   relative: false
-schema: "schema-databricks-mcp-managed-servers-guide-2026"
+date: 2026-04-25 16:04:24+00:00
+description: 'Complete developer guide for Databricks managed MCP servers: setup,
+  authentication, Genie/Vector Search/UC Functions integration, and Unity Catalog
+  gove...'
+draft: false
+schema: schema-databricks-mcp-managed-servers-guide-2026
+tags:
+- databricks
+- mcp
+- unity-catalog
+- ai-agents
+- python
+title: 'Databricks Managed MCP Servers Guide: Developer Setup and Unity Catalog Integration'
 ---
 
 Databricks managed MCP servers give AI agents secure, governed access to your Lakehouse data — Genie (NL-to-SQL), Vector Search, and UC Functions — with zero infrastructure overhead and Unity Catalog permissions enforced automatically on every call.

@@ -1,14 +1,20 @@
 ---
-title: "Braintrust Review 2026: AI Observability, Evals & Production Monitoring"
-date: 2026-05-12T00:04:37+00:00
-tags: ["ai-observability", "llm-evaluation", "production-monitoring", "braintrust", "ai-tools"]
-description: "An honest Braintrust review for 2026: pricing, features, Brainstore performance, and how it compares to LangSmith and Langfuse."
-draft: false
 cover:
-  image: "/images/braintrust-review-2026.png"
-  alt: "Braintrust Review 2026: AI Observability, Evals & Production Monitoring"
+  alt: 'Braintrust Review 2026: AI Observability, Evals & Production Monitoring'
+  image: /images/braintrust-review-2026.png
   relative: false
-schema: "schema-braintrust-review-2026"
+date: 2026-05-12 00:04:37+00:00
+description: 'An honest Braintrust review for 2026: pricing, features, Brainstore
+  performance, and how it compares to LangSmith and Langfuse.'
+draft: false
+schema: schema-braintrust-review-2026
+tags:
+- ai-observability
+- llm-evaluation
+- production-monitoring
+- braintrust
+- ai-tools
+title: 'Braintrust Review 2026: AI Observability, Evals & Production Monitoring'
 ---
 
 Braintrust is a unified AI observability and evaluation platform that combines LLM tracing, dataset curation, prompt management, and automated evals in one product. After running it across three production LLM applications over six months, it's the most complete end-to-end evaluation toolchain available in 2026 — but it comes with real trade-offs worth understanding before committing.

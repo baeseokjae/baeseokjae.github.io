@@ -1,14 +1,18 @@
 ---
-title: "Claude Mythos API Access Guide 2026: How to Get In"
-date: 2026-06-14T10:04:47+00:00
-tags: ["Claude", "AI API", "Project Glasswing"]
-description: "How Claude Mythos API access works in 2026, who qualifies, and how to architect safely while access is restricted."
-draft: false
 cover:
-  image: "/images/claude-mythos-api-access-guide-2026.png"
-  alt: "Claude Mythos API Access Guide 2026: How to Get In"
+  alt: 'Claude Mythos API Access Guide 2026: How to Get In'
+  image: /images/claude-mythos-api-access-guide-2026.png
   relative: false
-schema: "schema-claude-mythos-api-access-guide-2026"
+date: 2026-06-14 10:04:47+00:00
+description: How Claude Mythos API access works in 2026, who qualifies, and how to
+  architect safely while access is restricted.
+draft: false
+schema: schema-claude-mythos-api-access-guide-2026
+tags:
+- Claude
+- AI API
+- Project Glasswing
+title: 'Claude Mythos API Access Guide 2026: How to Get In'
 ---
 
 Claude Mythos API access is not a normal self-serve signup in 2026. The credible route is vetted access through Project Glasswing or account-team sponsorship with Anthropic, AWS, or Google Cloud, and teams should build production systems around available Claude models until Mythos access is explicitly approved.

@@ -1,14 +1,20 @@
 ---
-title: "OpenTofu vs Terraform Migration Developer Guide 2026"
-date: 2026-05-18T15:07:01+00:00
-tags: ["opentofu", "terraform", "infrastructure-as-code", "migration", "devops"]
-description: "Complete developer guide to migrating from Terraform to OpenTofu in 2026: license comparison, step-by-step migration, CI/CD updates, and decision framework."
-draft: false
 cover:
-  image: "/images/opentofu-vs-terraform-migration-developer-guide-2026.png"
-  alt: "OpenTofu vs Terraform Migration Developer Guide 2026"
+  alt: OpenTofu vs Terraform Migration Developer Guide 2026
+  image: /images/opentofu-vs-terraform-migration-developer-guide-2026.png
   relative: false
-schema: "schema-opentofu-vs-terraform-migration-developer-guide-2026"
+date: 2026-05-18 15:07:01+00:00
+description: 'Complete developer guide to migrating from Terraform to OpenTofu in
+  2026: license comparison, step-by-step migration, CI/CD updates, and decision framew...'
+draft: false
+schema: schema-opentofu-vs-terraform-migration-developer-guide-2026
+tags:
+- opentofu
+- terraform
+- infrastructure-as-code
+- migration
+- devops
+title: OpenTofu vs Terraform Migration Developer Guide 2026
 ---
 
 OpenTofu is the Linux Foundation fork of Terraform, created after HashiCorp switched Terraform's license from MPL 2.0 to the Business Source License (BSL) in August 2023. As of 2026, OpenTofu has 12% adoption among IaC practitioners, 140+ corporate backers, and 13,000+ GitHub stars — making it the leading open-source alternative to Terraform's 76% market-share incumbent.

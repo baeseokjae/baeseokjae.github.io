@@ -1,14 +1,20 @@
 ---
-title: "Gumloop Review 2026: AI-Native Workflow Automation Platform"
-date: 2026-05-06T15:13:40+00:00
-tags: ["gumloop", "workflow-automation", "ai-agents", "no-code", "review"]
-description: "Gumloop review 2026: AI-native automation platform, credit pricing, 125+ integrations, $50M Series B, and who should use it vs Zapier and n8n."
-draft: false
 cover:
-  image: "/images/gumloop-review-2026.png"
-  alt: "Gumloop Review 2026: AI-Native Workflow Automation Platform"
+  alt: 'Gumloop Review 2026: AI-Native Workflow Automation Platform'
+  image: /images/gumloop-review-2026.png
   relative: false
-schema: "schema-gumloop-review-2026"
+date: 2026-05-06 15:13:40+00:00
+description: 'Gumloop review 2026: AI-native automation platform, credit pricing,
+  125+ integrations, $50M Series B, and who should use it vs Zapier and n8n.'
+draft: false
+schema: schema-gumloop-review-2026
+tags:
+- gumloop
+- workflow-automation
+- ai-agents
+- no-code
+- review
+title: 'Gumloop Review 2026: AI-Native Workflow Automation Platform'
 ---
 
 Gumloop raised $50M in a Series B led by Benchmark in March 2026 — a strong bet on a platform that started as a Y Combinator W24 startup with a single differentiating claim: automation built for AI workflows from the ground up, not retrofitted from legacy trigger-action systems. With $70M in total funding and a 4.8/5 rating on G2, Gumloop has traction. But the credit-based pricing model creates real cost surprises, and 125 integrations against Zapier's 6,000+ is a genuine gap. Here's the honest breakdown after putting it through its paces.

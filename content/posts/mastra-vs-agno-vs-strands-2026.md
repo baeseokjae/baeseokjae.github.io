@@ -1,14 +1,22 @@
 ---
-title: "Mastra vs Agno vs Strands 2026: TypeScript vs Python AI Agent Framework Compared"
-date: 2026-05-14T12:04:30+00:00
-tags: ["mastra", "agno", "strands", "ai-agents", "typescript", "python", "framework-comparison"]
-description: "Mastra (TypeScript), Agno (Python performance), and Strands (AWS-native) compared on speed, DX, and production fit for 2026 teams."
-draft: false
 cover:
-  image: "/images/mastra-vs-agno-vs-strands-2026.png"
-  alt: "Mastra vs Agno vs Strands 2026: TypeScript vs Python AI Agent Framework Compared"
+  alt: 'Mastra vs Agno vs Strands 2026: TypeScript vs Python AI Agent Framework Compared'
+  image: /images/mastra-vs-agno-vs-strands-2026.png
   relative: false
-schema: "schema-mastra-vs-agno-vs-strands-2026"
+date: 2026-05-14 12:04:30+00:00
+description: Mastra (TypeScript), Agno (Python performance), and Strands (AWS-native)
+  compared on speed, DX, and production fit for 2026 teams.
+draft: false
+schema: schema-mastra-vs-agno-vs-strands-2026
+tags:
+- mastra
+- agno
+- strands
+- ai-agents
+- typescript
+- python
+- framework-comparison
+title: 'Mastra vs Agno vs Strands 2026: TypeScript vs Python AI Agent Framework Compared'
 ---
 
 **Mastra wins for TypeScript full-stack teams, Agno wins on raw Python performance, and Strands wins for AWS-native infrastructure.** All three are production-ready in 2026, but your language ecosystem and infrastructure requirements should drive the choice — not hype.

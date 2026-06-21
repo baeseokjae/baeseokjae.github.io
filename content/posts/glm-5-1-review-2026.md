@@ -1,14 +1,21 @@
 ---
-title: "GLM-5.1 Review 2026: #1 SWE-bench Pro, MIT License, $1/M Tokens"
-date: 2026-05-15T03:03:02+00:00
-tags: ["GLM-5.1", "open source AI", "LLM comparison", "coding AI", "SWE-bench", "MoE"]
-description: "GLM-5.1 is the first open-weight model to top SWE-Bench Pro at 58.4, beating GPT-5.4 and Claude Opus 4.6 — for $1.40/M input tokens under an MIT license."
-draft: false
 cover:
-  image: "/images/glm-5-1-review-2026.png"
-  alt: "GLM-5.1 Review 2026"
+  alt: GLM-5.1 Review 2026
+  image: /images/glm-5-1-review-2026.png
   relative: false
-schema: "schema-glm-5-1-review-2026"
+date: 2026-05-15 03:03:02+00:00
+description: GLM-5.1 is the first open-weight model to top SWE-Bench Pro at 58.4,
+  beating GPT-5.4 and Claude Opus 4.6 — for $1.40/M input tokens under an MIT license.
+draft: false
+schema: schema-glm-5-1-review-2026
+tags:
+- GLM-5.1
+- open source AI
+- LLM comparison
+- coding AI
+- SWE-bench
+- MoE
+title: 'GLM-5.1 Review 2026: #1 SWE-bench Pro, MIT License, $1/M Tokens'
 ---
 
 GLM-5.1 is the first open-weight model to claim the #1 position on SWE-Bench Pro, scoring 58.4 — ahead of GPT-5.4 (57.7) and Claude Opus 4.6 (57.3). Released April 7, 2026 by Z.AI under an MIT license, it costs $1.40/M input tokens versus Claude Opus 4.7's $5.00/M, making it the most cost-effective frontier-class coding model available today.

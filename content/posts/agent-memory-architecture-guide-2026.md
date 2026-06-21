@@ -1,14 +1,22 @@
 ---
-title: "AI Agent Memory Architecture Guide 2026: Mem0, Zep, LangGraph Store Compared"
-date: 2026-05-07T00:00:00+00:00
-tags: ["ai-agents", "agent-memory", "mem0", "zep", "langgraph", "vector-database", "comparison"]
-description: "AI agent memory architecture guide 2026: Mem0 vs Zep vs Letta vs LangGraph Store — benchmarks, pricing, temporal knowledge graphs, and which framework fits your use case."
-draft: false
 cover:
-  image: "/images/agent-memory-architecture-guide-2026.png"
-  alt: "AI Agent Memory Architecture Guide 2026: Mem0, Zep, LangGraph Store Compared"
+  alt: 'AI Agent Memory Architecture Guide 2026: Mem0, Zep, LangGraph Store Compared'
+  image: /images/agent-memory-architecture-guide-2026.png
   relative: false
-schema: "schema-agent-memory-architecture-guide-2026"
+date: 2026-05-07 00:00:00+00:00
+description: 'AI agent memory architecture guide 2026: Mem0 vs Zep vs Letta vs LangGraph
+  Store — benchmarks, pricing, temporal knowledge graphs, and which framework f...'
+draft: false
+schema: schema-agent-memory-architecture-guide-2026
+tags:
+- ai-agents
+- agent-memory
+- mem0
+- zep
+- langgraph
+- vector-database
+- comparison
+title: 'AI Agent Memory Architecture Guide 2026: Mem0, Zep, LangGraph Store Compared'
 ---
 
 Zep scores 63.8% versus Mem0's 49.0% on the LongMemEval benchmark — a 15-point gap that comes entirely from Zep's temporal knowledge graph tracking when facts were true and when they changed. Mem0 has 48,000 GitHub stars, a $24M Series A, and the broadest standalone memory API. Letta raised $10M at a $70M valuation with Jeff Dean backing, building OS-inspired tiered memory where agents control their own context. Adding a memory context layer to a Snowflake data agent produced 20% accuracy improvement and 39% fewer tool calls. These numbers explain why agent memory architecture is now a first-class infrastructure decision — not an afterthought. Here's how the major approaches compare and which to use.

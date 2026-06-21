@@ -1,14 +1,24 @@
 ---
-title: "AI Code Security in Agentic Workflows 2026: SAST Tools for Cursor and Claude Code"
-date: 2026-05-08T12:04:34+00:00
-tags: ["AI code security", "SAST tools", "agentic workflows", "Claude Code", "Cursor", "MCP security", "DevSecOps"]
-description: "92% of AI-generated codebases contain critical vulnerabilities. Here's how to secure agentic coding workflows with the right SAST tools in 2026."
-draft: false
 cover:
-  image: "/images/ai-code-security-agentic-workflows-2026.png"
-  alt: "AI Code Security in Agentic Workflows 2026: SAST Tools for Cursor and Claude Code"
+  alt: 'AI Code Security in Agentic Workflows 2026: SAST Tools for Cursor and Claude
+    Code'
+  image: /images/ai-code-security-agentic-workflows-2026.png
   relative: false
-schema: "schema-ai-code-security-agentic-workflows-2026"
+date: 2026-05-08 12:04:34+00:00
+description: 92% of AI-generated codebases contain critical vulnerabilities. Here's
+  how to secure agentic coding workflows with the right SAST tools in 2026.
+draft: false
+schema: schema-ai-code-security-agentic-workflows-2026
+tags:
+- AI code security
+- SAST tools
+- agentic workflows
+- Claude Code
+- Cursor
+- MCP security
+- DevSecOps
+title: 'AI Code Security in Agentic Workflows 2026: SAST Tools for Cursor and Claude
+  Code'
 ---
 
 Agentic coding with Cursor and Claude Code ships real code at 10–50x the speed of manual development — and that speed advantage now applies equally to introducing vulnerabilities. According to the Sherlock Forensics AI Code Security Report 2026, 92% of AI-generated codebases contain at least one critical vulnerability, with an average of 8.3 exploitable findings per application. The answer is not to slow down AI coding but to integrate SAST tools that enforce security at machine speed inside the agentic loop.

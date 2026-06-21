@@ -1,14 +1,21 @@
 ---
-title: "Agentic Coding Patterns 2026: 8 Workflows That Ship Code 10x Faster"
-date: 2026-04-18T08:43:44+00:00
-tags: ["agentic coding", "AI coding tools", "developer productivity", "Claude Code", "Cursor AI", "software engineering"]
-description: "8 agentic coding patterns senior developers use to ship code 10x faster with AI agents: spec-first, iterative loops, quality gates, and more."
-draft: false
 cover:
-  image: "/images/agentic-coding-patterns-2026.png"
-  alt: "Agentic Coding Patterns 2026: 8 Workflows That Ship Code 10x Faster"
+  alt: 'Agentic Coding Patterns 2026: 8 Workflows That Ship Code 10x Faster'
+  image: /images/agentic-coding-patterns-2026.png
   relative: false
-schema: "schema-agentic-coding-patterns-2026"
+date: 2026-04-18 08:43:44+00:00
+description: '8 agentic coding patterns senior developers use to ship code 10x faster
+  with AI agents: spec-first, iterative loops, quality gates, and more.'
+draft: false
+schema: schema-agentic-coding-patterns-2026
+tags:
+- agentic coding
+- AI coding tools
+- developer productivity
+- Claude Code
+- Cursor AI
+- software engineering
+title: 'Agentic Coding Patterns 2026: 8 Workflows That Ship Code 10x Faster'
 ---
 
 Agentic coding patterns are repeatable workflows where AI agents autonomously plan, write, test, and refactor code — replacing the old prompt-copy-paste loop. In 2026, with 92% of US developers using AI coding tools daily and 41% of all code globally now AI-generated, the developers pulling ahead are not the ones with the best prompts; they're the ones with the best *patterns*.

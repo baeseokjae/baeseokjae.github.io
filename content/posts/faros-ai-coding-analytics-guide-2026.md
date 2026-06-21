@@ -1,14 +1,20 @@
 ---
-title: "Faros AI Review 2026: Measure the Real ROI of AI Coding Tools"
-date: 2026-05-11T03:04:28+00:00
-tags: ["faros-ai", "engineering-analytics", "ai-coding-tools", "dora-metrics", "developer-productivity"]
-description: "Faros AI review 2026: how the engineering intelligence platform measures real ROI from AI coding tools across 22,000 developers."
-draft: false
 cover:
-  image: "/images/faros-ai-coding-analytics-guide-2026.png"
-  alt: "Faros AI Review 2026: Measure the Real ROI of AI Coding Tools"
+  alt: 'Faros AI Review 2026: Measure the Real ROI of AI Coding Tools'
+  image: /images/faros-ai-coding-analytics-guide-2026.png
   relative: false
-schema: "schema-faros-ai-coding-analytics-guide-2026"
+date: 2026-05-11 03:04:28+00:00
+description: 'Faros AI review 2026: how the engineering intelligence platform measures
+  real ROI from AI coding tools across 22,000 developers.'
+draft: false
+schema: schema-faros-ai-coding-analytics-guide-2026
+tags:
+- faros-ai
+- engineering-analytics
+- ai-coding-tools
+- dora-metrics
+- developer-productivity
+title: 'Faros AI Review 2026: Measure the Real ROI of AI Coding Tools'
 ---
 
 Faros AI is an engineering intelligence platform that connects GitHub, Jira, and 100+ SDLC tools to give engineering leaders a single, accurate picture of developer productivity and AI coding tool ROI — measured in real financial terms, not vanity metrics.

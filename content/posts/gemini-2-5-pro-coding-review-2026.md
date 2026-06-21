@@ -1,14 +1,20 @@
 ---
-title: "Gemini 2.5 Pro Coding Review 2026: 2M Context Window vs Claude and GPT-5"
-date: 2026-04-27T14:19:20+00:00
-tags: ["gemini 2.5 pro", "ai coding", "google ai", "coding tools", "llm comparison"]
-description: "Gemini 2.5 Pro coding review 2026: 1M context window, native thinking mode, $1.25/M pricing vs Claude Opus and GPT-5 head-to-head."
-draft: false
 cover:
-  image: "/images/gemini-2-5-pro-coding-review-2026.png"
-  alt: "Gemini 2.5 Pro Coding Review 2026: 2M Context Window vs Claude and GPT-5"
+  alt: 'Gemini 2.5 Pro Coding Review 2026: 2M Context Window vs Claude and GPT-5'
+  image: /images/gemini-2-5-pro-coding-review-2026.png
   relative: false
-schema: "schema-gemini-2-5-pro-coding-review-2026"
+date: 2026-04-27 14:19:20+00:00
+description: 'Gemini 2.5 Pro coding review 2026: 1M context window, native thinking
+  mode, $1.25/M pricing vs Claude Opus and GPT-5 head-to-head.'
+draft: false
+schema: schema-gemini-2-5-pro-coding-review-2026
+tags:
+- gemini 2.5 pro
+- ai coding
+- google ai
+- coding tools
+- llm comparison
+title: 'Gemini 2.5 Pro Coding Review 2026: 2M Context Window vs Claude and GPT-5'
 ---
 
 Gemini 2.5 Pro is Google's most capable coding model as of 2026, offering a 1 million token context window, native thinking mode, and API pricing starting at $1.25 per million input tokens — roughly 12x cheaper than Claude Opus. For developers choosing between frontier AI coding tools, those numbers demand a close look.

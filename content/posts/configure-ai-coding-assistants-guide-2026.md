@@ -1,14 +1,23 @@
 ---
-title: "How to Configure Every AI Coding Assistant 2026: CLAUDE.md, Cursor Rules, Copilot"
-date: 2026-04-25T07:02:53+00:00
-tags: ["CLAUDE.md", "cursor rules", "github copilot", "AGENTS.md", "AI coding assistants", "configure ai coding assistants guide 2026"]
-description: "Complete guide to configuring CLAUDE.md, Cursor rules, Copilot instructions, AGENTS.md, and Windsurf in 2026—with comparison tables and best practices."
-draft: false
 cover:
-  image: "/images/configure-ai-coding-assistants-guide-2026.png"
-  alt: "How to Configure Every AI Coding Assistant 2026: CLAUDE.md, Cursor Rules, Copilot"
+  alt: 'How to Configure Every AI Coding Assistant 2026: CLAUDE.md, Cursor Rules,
+    Copilot'
+  image: /images/configure-ai-coding-assistants-guide-2026.png
   relative: false
-schema: "schema-configure-ai-coding-assistants-guide-2026"
+date: 2026-04-25 07:02:53+00:00
+description: Complete guide to configuring CLAUDE.md, Cursor rules, Copilot instructions,
+  AGENTS.md, and Windsurf in 2026—with comparison tables and best practices.
+draft: false
+schema: schema-configure-ai-coding-assistants-guide-2026
+tags:
+- CLAUDE.md
+- cursor rules
+- github copilot
+- AGENTS.md
+- AI coding assistants
+- configure ai coding assistants guide 2026
+title: 'How to Configure Every AI Coding Assistant 2026: CLAUDE.md, Cursor Rules,
+  Copilot'
 ---
 
 Five projects, three AI tools, and suddenly you're maintaining 15 configuration files. That's the reality for the 70% of engineers who now use two to four AI coding assistants simultaneously — and it's a mess that proper configuration strategy can fix.

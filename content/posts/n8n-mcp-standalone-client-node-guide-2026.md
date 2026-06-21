@@ -1,14 +1,18 @@
 ---
-title: "n8n MCP Client Node Standalone Workflow: Call MCP Servers Without an AI Agent"
-date: 2026-06-13T06:04:04+00:00
-tags: ["n8n", "MCP", "automation"]
-description: "Build an n8n MCP Client node standalone workflow that calls MCP servers from normal steps without an AI Agent."
-draft: false
 cover:
-  image: "/images/n8n-mcp-standalone-client-node-guide-2026.png"
-  alt: "n8n MCP Client Node Standalone Workflow: Call MCP Servers Without an AI Agent"
+  alt: 'n8n MCP Client Node Standalone Workflow: Call MCP Servers Without an AI Agent'
+  image: /images/n8n-mcp-standalone-client-node-guide-2026.png
   relative: false
-schema: "schema-n8n-mcp-standalone-client-node-guide-2026"
+date: 2026-06-13 06:04:04+00:00
+description: Build an n8n MCP Client node standalone workflow that calls MCP servers
+  from normal steps without an AI Agent.
+draft: false
+schema: schema-n8n-mcp-standalone-client-node-guide-2026
+tags:
+- n8n
+- MCP
+- automation
+title: 'n8n MCP Client Node Standalone Workflow: Call MCP Servers Without an AI Agent'
 ---
 
 An n8n MCP Client node standalone workflow lets you call MCP server tools from a normal workflow step without routing the action through an AI Agent. Use it when the workflow already knows which tool to call, what inputs to send, and how to handle the result.

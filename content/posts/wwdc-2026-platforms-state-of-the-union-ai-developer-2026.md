@@ -1,14 +1,18 @@
 ---
-title: "WWDC 2026 Platforms State of the Union: Every AI Developer Feature"
-date: 2026-06-14T15:03:59+00:00
-tags: ["WWDC 2026", "Apple Intelligence", "AI development"]
-description: "Every WWDC 2026 Platforms State of the Union AI developer feature, from Foundation Models to Xcode 27 agents."
-draft: false
 cover:
-  image: "/images/wwdc-2026-platforms-state-of-the-union-ai-developer-2026.png"
-  alt: "WWDC 2026 Platforms State of the Union: Every AI Developer Feature"
+  alt: 'WWDC 2026 Platforms State of the Union: Every AI Developer Feature'
+  image: /images/wwdc-2026-platforms-state-of-the-union-ai-developer-2026.png
   relative: false
-schema: "schema-wwdc-2026-platforms-state-of-the-union-ai-developer-2026"
+date: 2026-06-14 15:03:59+00:00
+description: Every WWDC 2026 Platforms State of the Union AI developer feature, from
+  Foundation Models to Xcode 27 agents.
+draft: false
+schema: schema-wwdc-2026-platforms-state-of-the-union-ai-developer-2026
+tags:
+- WWDC 2026
+- Apple Intelligence
+- AI development
+title: 'WWDC 2026 Platforms State of the Union: Every AI Developer Feature'
 ---
 
 The WWDC 2026 Platforms State of the Union made Apple Intelligence a real developer platform: Foundation Models, Private Cloud Compute, Core AI, App Intents, AppIntentsTesting, evaluations, and Xcode 27 agents now give Apple developers native ways to build, test, route, and ship AI features.

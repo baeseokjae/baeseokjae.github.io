@@ -1,14 +1,22 @@
 ---
-title: "GitHub Agent HQ Guide 2026: Run Claude, Copilot, and Codex from One Interface"
-date: 2026-05-22T03:00:29+00:00
-tags: ["github", "ai-agents", "github-copilot", "claude", "codex", "developer-tools"]
-description: "Complete guide to GitHub Agent HQ: assign issues to Claude, Copilot, and Codex from a single interface, compare PRs, and optimize agent selection for every task type."
-draft: false
 cover:
-  image: "/images/github-agent-hq-guide-2026.png"
-  alt: "GitHub Agent HQ Guide 2026: Run Claude, Copilot, and Codex from One Interface"
+  alt: 'GitHub Agent HQ Guide 2026: Run Claude, Copilot, and Codex from One Interface'
+  image: /images/github-agent-hq-guide-2026.png
   relative: false
-schema: "schema-github-agent-hq-guide-2026"
+date: 2026-05-22 03:00:29+00:00
+description: 'Complete guide to GitHub Agent HQ: assign issues to Claude, Copilot,
+  and Codex from a single interface, compare PRs, and optimize agent selection for
+  ev...'
+draft: false
+schema: schema-github-agent-hq-guide-2026
+tags:
+- github
+- ai-agents
+- github-copilot
+- claude
+- codex
+- developer-tools
+title: 'GitHub Agent HQ Guide 2026: Run Claude, Copilot, and Codex from One Interface'
 ---
 
 GitHub Agent HQ is GitHub's unified Mission Control interface that lets you assign issues to Claude, Copilot, and Codex agents side-by-side, compare their pull requests, and manage all AI coding sessions from one dashboard — no external subscriptions beyond your existing Copilot plan required.

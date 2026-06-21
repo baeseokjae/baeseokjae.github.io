@@ -1,14 +1,21 @@
 ---
-title: "YOLOX Object Detection Python Deployment Developer Guide 2026"
-date: 2026-05-18T03:04:17+00:00
-tags: ["yolox", "object-detection", "python", "deployment", "computer-vision", "deep-learning"]
-description: "Complete guide to deploying YOLOX object detection in Python: training, ONNX/TensorRT export, FastAPI Docker API, and production benchmarks."
-draft: false
 cover:
-  image: "/images/yolox-object-detection-python-deployment-developer-guide-2026.png"
-  alt: "YOLOX Object Detection Python Deployment Developer Guide 2026"
+  alt: YOLOX Object Detection Python Deployment Developer Guide 2026
+  image: /images/yolox-object-detection-python-deployment-developer-guide-2026.png
   relative: false
-schema: "schema-yolox-object-detection-python-deployment-developer-guide-2026"
+date: 2026-05-18 03:04:17+00:00
+description: 'Complete guide to deploying YOLOX object detection in Python: training,
+  ONNX/TensorRT export, FastAPI Docker API, and production benchmarks.'
+draft: false
+schema: schema-yolox-object-detection-python-deployment-developer-guide-2026
+tags:
+- yolox
+- object-detection
+- python
+- deployment
+- computer-vision
+- deep-learning
+title: YOLOX Object Detection Python Deployment Developer Guide 2026
 ---
 
 YOLOX is Megvii's anchor-free object detection framework that ships models from 0.91M to 99.1M parameters, all deployable via PyTorch, ONNX, TensorRT, OpenVINO, or ncnn with five lines of Python. This guide covers every stage: environment setup, custom dataset training, multi-backend export, TensorRT quantization, and wrapping inference in a FastAPI/Docker production service.

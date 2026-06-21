@@ -1,14 +1,20 @@
 ---
-title: "Canva AI 2.0 Review 2026: Agentic Design Platform with Memory"
-date: 2026-05-26T03:04:06+00:00
-tags: ["canva", "ai-design", "agentic-ai", "design-tools", "productivity"]
-description: "Canva AI 2.0 transforms from a design tool into an agentic platform with Living Memory, Connectors, and Layered Object Intelligence — here's the honest review."
-draft: false
 cover:
-  image: "/images/canva-ai-2-review-2026.png"
-  alt: "Canva AI 2.0 Review 2026: Agentic Design Platform with Memory"
+  alt: 'Canva AI 2.0 Review 2026: Agentic Design Platform with Memory'
+  image: /images/canva-ai-2-review-2026.png
   relative: false
-schema: "schema-canva-ai-2-review-2026"
+date: 2026-05-26 03:04:06+00:00
+description: Canva AI 2.0 transforms from a design tool into an agentic platform with
+  Living Memory, Connectors, and Layered Object Intelligence — here's the honest ...
+draft: false
+schema: schema-canva-ai-2-review-2026
+tags:
+- canva
+- ai-design
+- agentic-ai
+- design-tools
+- productivity
+title: 'Canva AI 2.0 Review 2026: Agentic Design Platform with Memory'
 ---
 
 Canva AI 2.0 is the biggest overhaul to Canva's platform since its founding in 2013 — it shifts the product from a template-based design editor into a conversational, agentic content platform powered by the proprietary Canva Design Model, with memory that learns your brand over time. Announced at Canva Create 2026 in Los Angeles on April 16, 2026, it's already live as a research preview for the first 1 million users.

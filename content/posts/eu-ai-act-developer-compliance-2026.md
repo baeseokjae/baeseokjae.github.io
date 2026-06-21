@@ -1,14 +1,20 @@
 ---
-title: "EU AI Act Compliance for Developers: August 2026 Deadline Guide"
-date: 2026-06-03T06:04:39+00:00
-tags: ["EU AI Act", "AI compliance", "developer guide", "GPAI", "high-risk AI"]
-description: "Complete developer guide to EU AI Act August 2026 deadlines: risk classifications, technical requirements, conformity assessment, and the AI Omnibus changes."
-draft: false
 cover:
-  image: "/images/eu-ai-act-developer-compliance-2026.png"
-  alt: "EU AI Act Compliance for Developers: August 2026 Deadline Guide"
+  alt: 'EU AI Act Compliance for Developers: August 2026 Deadline Guide'
+  image: /images/eu-ai-act-developer-compliance-2026.png
   relative: false
-schema: "schema-eu-ai-act-developer-compliance-2026"
+date: 2026-06-03 06:04:39+00:00
+description: 'Complete developer guide to EU AI Act August 2026 deadlines: risk classifications,
+  technical requirements, conformity assessment, and the AI Omnibus cha...'
+draft: false
+schema: schema-eu-ai-act-developer-compliance-2026
+tags:
+- EU AI Act
+- AI compliance
+- developer guide
+- GPAI
+- high-risk AI
+title: 'EU AI Act Compliance for Developers: August 2026 Deadline Guide'
 ---
 
 The EU AI Act imposes legally binding obligations on developers and deployers of AI systems in the EU, with the primary enforcement deadline of **August 2, 2026**. However, the AI Omnibus deal reached in May 2026 significantly changed which requirements apply on that date — extending certain Annex III high-risk AI system deadlines to December 2027. This guide tells you exactly what still hits in August 2026, what got delayed, and the specific technical steps engineering teams must take now.

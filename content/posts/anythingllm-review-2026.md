@@ -1,14 +1,21 @@
 ---
-title: "AnythingLLM Review 2026: Local AI Knowledge Base and Agent Runtime"
-date: 2026-05-04T00:04:55+00:00
-tags: ["AnythingLLM", "local AI", "RAG", "self-hosted", "knowledge base", "AI agents"]
-description: "An honest 2026 review of AnythingLLM covering RAG, agent runtime, MCP support, Docker setup, and how it compares to Open WebUI and PrivateGPT."
-draft: false
 cover:
-  image: "/images/anythingllm-review-2026.png"
-  alt: "AnythingLLM Review 2026: Local AI Knowledge Base and Agent Runtime"
+  alt: 'AnythingLLM Review 2026: Local AI Knowledge Base and Agent Runtime'
+  image: /images/anythingllm-review-2026.png
   relative: false
-schema: "schema-anythingllm-review-2026"
+date: 2026-05-04 00:04:55+00:00
+description: An honest 2026 review of AnythingLLM covering RAG, agent runtime, MCP
+  support, Docker setup, and how it compares to Open WebUI and PrivateGPT.
+draft: false
+schema: schema-anythingllm-review-2026
+tags:
+- AnythingLLM
+- local AI
+- RAG
+- self-hosted
+- knowledge base
+- AI agents
+title: 'AnythingLLM Review 2026: Local AI Knowledge Base and Agent Runtime'
 ---
 
 AnythingLLM is an open-source, self-hosted AI platform that bundles RAG document chat, multi-agent task automation, and multi-user workspace management into a single deployable package — with zero data leaving your infrastructure. As of early 2026, it has accumulated over 57,000 GitHub stars and remains MIT licensed.

@@ -1,14 +1,20 @@
 ---
-title: "Vibe Coding vs Agentic Engineering: Which Workflow Is Right for You?"
-date: 2026-05-15T18:10:54+00:00
-tags: ["vibe coding", "agentic engineering", "AI coding", "developer workflow", "Claude Code"]
-description: "Vibe coding and agentic engineering both use AI, but the oversight model is completely different. Here's how to choose the right workflow for your situation."
-draft: false
 cover:
-  image: "/images/vibe-coding-vs-agentic-engineering-2026.png"
-  alt: "Vibe Coding vs Agentic Engineering"
+  alt: Vibe Coding vs Agentic Engineering
+  image: /images/vibe-coding-vs-agentic-engineering-2026.png
   relative: false
-schema: "schema-vibe-coding-vs-agentic-engineering-2026"
+date: 2026-05-15 18:10:54+00:00
+description: Vibe coding and agentic engineering both use AI, but the oversight model
+  is completely different. Here's how to choose the right workflow for your situa...
+draft: false
+schema: schema-vibe-coding-vs-agentic-engineering-2026
+tags:
+- vibe coding
+- agentic engineering
+- AI coding
+- developer workflow
+- Claude Code
+title: 'Vibe Coding vs Agentic Engineering: Which Workflow Is Right for You?'
 ---
 
 Vibe coding lets AI write everything while you stay in "the vibe," accepting code without deep review. Agentic engineering keeps a human engineer orchestrating AI agents — setting specs, reviewing outputs, and owning the final system. The right choice depends on what you're building, who will use it, and whether production failures are an option.

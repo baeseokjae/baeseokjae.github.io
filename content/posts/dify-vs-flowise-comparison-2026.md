@@ -1,14 +1,21 @@
 ---
-title: "Dify vs Flowise 2026: Which Open-Source AI Workflow Builder Wins?"
-date: 2026-05-07T00:11:24+00:00
-tags: ["Dify", "Flowise", "open-source AI", "LLMOps", "RAG", "AI workflow builder"]
-description: "Dify vs Flowise compared for 2026: features, self-hosting requirements, RAG pipelines, pricing, and which to pick for your team."
-draft: false
 cover:
-  image: "/images/dify-vs-flowise-comparison-2026.png"
-  alt: "Dify vs Flowise 2026: Which Open-Source AI Workflow Builder Wins?"
+  alt: 'Dify vs Flowise 2026: Which Open-Source AI Workflow Builder Wins?'
+  image: /images/dify-vs-flowise-comparison-2026.png
   relative: false
-schema: "schema-dify-vs-flowise-comparison-2026"
+date: 2026-05-07 00:11:24+00:00
+description: 'Dify vs Flowise compared for 2026: features, self-hosting requirements,
+  RAG pipelines, pricing, and which to pick for your team.'
+draft: false
+schema: schema-dify-vs-flowise-comparison-2026
+tags:
+- Dify
+- Flowise
+- open-source AI
+- LLMOps
+- RAG
+- AI workflow builder
+title: 'Dify vs Flowise 2026: Which Open-Source AI Workflow Builder Wins?'
 ---
 
 Dify is the better choice for production teams that need enterprise RAG pipelines, observability, and multi-user governance out of the box. Flowise wins for solo developers and small teams that need a lightweight, minimal-footprint visual canvas on a $4/month VPS — though its 2025 acquisition by Workday raises long-term open-source questions worth considering before you commit.

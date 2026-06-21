@@ -1,14 +1,22 @@
 ---
-title: "GLM-5.1 vs Claude vs GPT-6: Open-Source Model That Beats Frontier Models"
-date: 2026-05-15T00:04:00+00:00
-tags: ["GLM-5.1", "open-source LLM", "AI benchmarks", "Claude", "GPT", "coding AI", "LLM comparison"]
-description: "GLM-5.1 scored 58.4 on SWE-Bench Pro—beating GPT-5.4 and Claude Opus 4.6—at 5–10x lower API cost. Here's what the benchmarks actually mean."
-draft: false
 cover:
-  image: "/images/glm-5-1-vs-claude-gpt-2026.png"
-  alt: "GLM-5.1 vs Claude vs GPT-6: Open-Source Model That Beats Frontier Models"
+  alt: 'GLM-5.1 vs Claude vs GPT-6: Open-Source Model That Beats Frontier Models'
+  image: /images/glm-5-1-vs-claude-gpt-2026.png
   relative: false
-schema: "schema-glm-5-1-vs-claude-gpt-2026"
+date: 2026-05-15 00:04:00+00:00
+description: GLM-5.1 scored 58.4 on SWE-Bench Pro—beating GPT-5.4 and Claude Opus
+  4.6—at 5–10x lower API cost. Here's what the benchmarks actually mean.
+draft: false
+schema: schema-glm-5-1-vs-claude-gpt-2026
+tags:
+- GLM-5.1
+- open-source LLM
+- AI benchmarks
+- Claude
+- GPT
+- coding AI
+- LLM comparison
+title: 'GLM-5.1 vs Claude vs GPT-6: Open-Source Model That Beats Frontier Models'
 ---
 
 GLM-5.1 is the first open-weight model to top SWE-Bench Pro, scoring 58.4 against GPT-5.4 (57.7) and Claude Opus 4.6 (57.3) — at API prices 5–10x lower than Anthropic's flagship. It is not a universal winner, but for coding and agentic tasks, it has genuinely closed the gap with frontier closed models.

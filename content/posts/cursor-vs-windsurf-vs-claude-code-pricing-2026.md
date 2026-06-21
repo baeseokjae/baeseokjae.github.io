@@ -1,14 +1,20 @@
 ---
-title: "Cursor vs Windsurf vs Claude Code Pricing: Full 2026 Comparison"
-date: 2026-05-09T06:06:09+00:00
-tags: ["cursor","windsurf","claude-code","ai-coding-tools","pricing"]
-description: "All three tools converged at $20/month Pro in 2026. Here is what actually separates them — token efficiency, hidden agent costs, and where your money goes."
-draft: false
 cover:
-  image: "/images/cursor-vs-windsurf-vs-claude-code-pricing-2026.png"
-  alt: "Cursor vs Windsurf vs Claude Code Pricing: Full 2026 Comparison"
+  alt: 'Cursor vs Windsurf vs Claude Code Pricing: Full 2026 Comparison'
+  image: /images/cursor-vs-windsurf-vs-claude-code-pricing-2026.png
   relative: false
-schema: "schema-cursor-vs-windsurf-vs-claude-code-pricing-2026"
+date: 2026-05-09 06:06:09+00:00
+description: All three tools converged at $20/month Pro in 2026. Here is what actually
+  separates them — token efficiency, hidden agent costs, and where your money goes.
+draft: false
+schema: schema-cursor-vs-windsurf-vs-claude-code-pricing-2026
+tags:
+- cursor
+- windsurf
+- claude-code
+- ai-coding-tools
+- pricing
+title: 'Cursor vs Windsurf vs Claude Code Pricing: Full 2026 Comparison'
 ---
 
 All three tools — Cursor, Windsurf, and Claude Code — now sit at $20/month for their Pro tier, and the sticker-price race is effectively over. But the convergence is misleading. Credit pools, token efficiency, agent retry loops, and overage billing can push your real monthly spend anywhere from $20 to $220 depending on how you actually code. The right choice depends on whether you live inside VS Code all day, do heavy autonomous refactors, or manage a team that needs audit trails and SSO. This comparison cuts through the marketing and shows you exactly what each dollar buys in May 2026.

@@ -1,14 +1,22 @@
 ---
-title: "The Composable AI Coding Stack: Using Cursor, Claude Code, and Codex Together (2026 Guide)"
-date: 2026-05-20T08:20:29+00:00
-tags: ["cursor", "claude-code", "codex", "AI coding", "developer productivity", "MCP"]
-description: "How to combine Cursor, Claude Code, and OpenAI Codex into one composable AI coding stack that multiplies developer output without tool sprawl."
-draft: false
 cover:
-  image: "/images/composable-ai-coding-stack-cursor-claude-codex-2026.png"
-  alt: "The Composable AI Coding Stack: Using Cursor, Claude Code, and Codex Together"
+  alt: 'The Composable AI Coding Stack: Using Cursor, Claude Code, and Codex Together'
+  image: /images/composable-ai-coding-stack-cursor-claude-codex-2026.png
   relative: false
-schema: "schema-composable-ai-coding-stack-cursor-claude-codex-2026"
+date: 2026-05-20 08:20:29+00:00
+description: How to combine Cursor, Claude Code, and OpenAI Codex into one composable
+  AI coding stack that multiplies developer output without tool sprawl.
+draft: false
+schema: schema-composable-ai-coding-stack-cursor-claude-codex-2026
+tags:
+- cursor
+- claude-code
+- codex
+- AI coding
+- developer productivity
+- MCP
+title: 'The Composable AI Coding Stack: Using Cursor, Claude Code, and Codex Together
+  (2026 Guide)'
 ---
 
 The composable AI coding stack pairs Cursor for interactive IDE flow, Claude Code for deep codebase reasoning, and OpenAI Codex for async fire-and-forget tasks. Used together, these three tools cover the full development loop — from architectural exploration to implementation to automated testing and PRs — without forcing you to choose a single winner.

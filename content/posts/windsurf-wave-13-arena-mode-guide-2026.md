@@ -1,14 +1,23 @@
 ---
-title: "Windsurf Wave 13 Guide: Arena Mode, Plan Mode and SWE-1.5 (2026)"
-date: 2026-05-09T03:05:17+00:00
-tags: ["windsurf", "ai-ide", "wave-13", "wave-14", "swe-1.5", "arena-mode", "plan-mode", "parallel-agents"]
-description: "Complete guide to Windsurf Wave 13 and Wave 14 features: SWE-1.5 free model, parallel Git worktree agents, Arena Mode, and Plan Mode."
-draft: false
 cover:
-  image: "/images/windsurf-wave-13-arena-mode-guide-2026.png"
-  alt: "Windsurf Wave 13 Guide: Arena Mode, Plan Mode and SWE-1.5"
+  alt: 'Windsurf Wave 13 Guide: Arena Mode, Plan Mode and SWE-1.5'
+  image: /images/windsurf-wave-13-arena-mode-guide-2026.png
   relative: false
-schema: "schema-windsurf-wave-13-arena-mode-guide-2026"
+date: 2026-05-09 03:05:17+00:00
+description: 'Complete guide to Windsurf Wave 13 and Wave 14 features: SWE-1.5 free
+  model, parallel Git worktree agents, Arena Mode, and Plan Mode.'
+draft: false
+schema: schema-windsurf-wave-13-arena-mode-guide-2026
+tags:
+- windsurf
+- ai-ide
+- wave-13
+- wave-14
+- swe-1.5
+- arena-mode
+- plan-mode
+- parallel-agents
+title: 'Windsurf Wave 13 Guide: Arena Mode, Plan Mode and SWE-1.5 (2026)'
 ---
 
 Windsurf Wave 13 (the "Shipmas Edition," released December 24, 2025) introduced three production-ready capabilities that reshaped the AI IDE landscape: the SWE-1.5 model free for all users, true parallel agents running in isolated Git worktrees, and a dedicated Cascade terminal with interactive zsh support. Wave 14 followed with Arena Mode for blind model comparison and Plan Mode for structured task planning. Together, these two releases represent the largest capability jump Windsurf has shipped to date.

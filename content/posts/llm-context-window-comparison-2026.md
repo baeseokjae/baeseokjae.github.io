@@ -1,14 +1,21 @@
 ---
-title: "LLM Context Window Comparison 2026: GPT-4o vs Claude vs Gemini"
-date: 2026-04-22T16:04:57+00:00
-tags: ["LLM", "context window", "GPT-4o", "Claude", "Gemini", "AI comparison"]
-description: "GPT-4.1, Claude Opus 4.6, and Gemini 2.5 Pro compared on context window size, effective performance, pricing cliffs, and real-world use cases."
-draft: false
 cover:
-  image: "/images/llm-context-window-comparison-2026.png"
-  alt: "LLM Context Window Comparison 2026: GPT-4o vs Claude vs Gemini"
+  alt: 'LLM Context Window Comparison 2026: GPT-4o vs Claude vs Gemini'
+  image: /images/llm-context-window-comparison-2026.png
   relative: false
-schema: "schema-llm-context-window-comparison-2026"
+date: 2026-04-22 16:04:57+00:00
+description: GPT-4.1, Claude Opus 4.6, and Gemini 2.5 Pro compared on context window
+  size, effective performance, pricing cliffs, and real-world use cases.
+draft: false
+schema: schema-llm-context-window-comparison-2026
+tags:
+- LLM
+- context window
+- GPT-4o
+- Claude
+- Gemini
+- AI comparison
+title: 'LLM Context Window Comparison 2026: GPT-4o vs Claude vs Gemini'
 ---
 
 Context windows have grown 2,500x in three years — from GPT-3's 4K tokens in 2023 to Qwen Long's 10M tokens in 2026. That growth is real, but advertised token counts and actual usable context are very different things. If you're choosing a model for long-document analysis, agentic workflows, or codebase Q&A, the headline number will mislead you. This guide cuts through the marketing to compare GPT-4.1, Claude Opus 4.6, and Gemini 2.5 Pro on what actually matters: real retrieval performance across context lengths, cost at scale, and hidden pricing traps you'll only discover on your first big invoice.

@@ -1,14 +1,20 @@
 ---
-title: "How to Set Up Cursor AI in 2026: Complete Beginner's Guide"
-date: 2026-04-23T01:04:18+00:00
-tags: ["cursor", "ai-coding", "setup-guide", "developer-tools", "ide"]
-description: "Step-by-step Cursor AI setup guide for 2026: install, configure models, master Tab Completion, Composer 2.0, Agent Mode, and .cursorrules in under an hour."
-draft: false
 cover:
-  image: "/images/cursor-ai-setup-guide-2026.png"
-  alt: "How to Set Up Cursor AI in 2026: Complete Beginner's Guide"
+  alt: 'How to Set Up Cursor AI in 2026: Complete Beginner''s Guide'
+  image: /images/cursor-ai-setup-guide-2026.png
   relative: false
-schema: "schema-cursor-ai-setup-guide-2026"
+date: 2026-04-23 01:04:18+00:00
+description: 'Step-by-step Cursor AI setup guide for 2026: install, configure models,
+  master Tab Completion, Composer 2.0, Agent Mode, and .cursorrules in under an hour.'
+draft: false
+schema: schema-cursor-ai-setup-guide-2026
+tags:
+- cursor
+- ai-coding
+- setup-guide
+- developer-tools
+- ide
+title: 'How to Set Up Cursor AI in 2026: Complete Beginner''s Guide'
 ---
 
 Cursor AI is a VS Code fork by Anysphere that adds native AI tab completion, inline editing, multi-file Composer 2.0, and autonomous Agent Mode directly into the editor. Install it in under five minutes, import your existing VS Code settings, pick a model, and you're writing AI-assisted code within the hour.

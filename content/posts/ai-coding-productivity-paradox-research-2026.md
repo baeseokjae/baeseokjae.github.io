@@ -1,14 +1,18 @@
 ---
-title: "AI Coding Productivity Paradox: Why Developers Feel Faster But Ship Slower"
-date: 2026-06-10T13:04:34+00:00
-tags: ["AI coding", "developer productivity", "software engineering"]
-description: "Why AI coding tools can make developers feel faster while teams still ship slower, and how to measure the real impact."
-draft: false
 cover:
-  image: "/images/ai-coding-productivity-paradox-research-2026.png"
-  alt: "AI Coding Productivity Paradox: Why Developers Feel Faster But Ship Slower"
+  alt: 'AI Coding Productivity Paradox: Why Developers Feel Faster But Ship Slower'
+  image: /images/ai-coding-productivity-paradox-research-2026.png
   relative: false
-schema: "schema-ai-coding-productivity-paradox-research-2026"
+date: 2026-06-10 13:04:34+00:00
+description: Why AI coding tools can make developers feel faster while teams still
+  ship slower, and how to measure the real impact.
+draft: false
+schema: schema-ai-coding-productivity-paradox-research-2026
+tags:
+- AI coding
+- developer productivity
+- software engineering
+title: 'AI Coding Productivity Paradox: Why Developers Feel Faster But Ship Slower'
 ---
 
 The AI coding productivity paradox is the gap between faster-feeling individual coding and slower or unchanged team delivery. AI removes typing, boilerplate, and search time, but shipping still depends on review, tests, architecture fit, security, deployment, and production feedback.

@@ -1,14 +1,18 @@
 ---
-title: "xAI Grok speech API STT TTS Guide for Developers in 2026"
-date: 2026-06-15T19:04:14+00:00
-tags: ["xai", "speech-api", "developer-tools"]
-description: "Developer guide to xAI Grok speech API STT and TTS endpoints, pricing, streaming, code examples, and production patterns."
-draft: false
 cover:
-  image: "/images/xai-grok-speech-api-guide-2026.png"
-  alt: "xAI Grok speech API STT TTS Guide for Developers in 2026"
+  alt: xAI Grok speech API STT TTS Guide for Developers in 2026
+  image: /images/xai-grok-speech-api-guide-2026.png
   relative: false
-schema: "schema-xai-grok-speech-api-guide-2026"
+date: 2026-06-15 19:04:14+00:00
+description: Developer guide to xAI Grok speech API STT and TTS endpoints, pricing,
+  streaming, code examples, and production patterns.
+draft: false
+schema: schema-xai-grok-speech-api-guide-2026
+tags:
+- xai
+- speech-api
+- developer-tools
+title: xAI Grok speech API STT TTS Guide for Developers in 2026
 ---
 
 The xAI Grok speech API gives developers separate STT and TTS endpoints for transcription, live captions, generated speech, and voice workflows. Use STT when audio becomes text, TTS when text becomes audio, and the Voice Agent API only when the product needs full two-way spoken conversation.

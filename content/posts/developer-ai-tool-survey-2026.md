@@ -1,14 +1,21 @@
 ---
-title: "What Developers Actually Use: JetBrains AI Tool Survey 2026"
-date: 2026-05-07T12:00:00+00:00
-tags: ["ai-tools", "developer-survey", "github-copilot", "claude-code", "cursor", "developer-productivity"]
-description: "JetBrains' 2026 survey reveals 85% of developers use AI tools regularly. Breakdown by tool, team size, region, and real productivity impact."
-draft: false
 cover:
-  image: "/images/developer-ai-tool-survey-2026.png"
-  alt: "What Developers Actually Use: JetBrains AI Tool Survey 2026"
+  alt: 'What Developers Actually Use: JetBrains AI Tool Survey 2026'
+  image: /images/developer-ai-tool-survey-2026.png
   relative: false
-schema: "schema-developer-ai-tool-survey-2026"
+date: 2026-05-07 12:00:00+00:00
+description: JetBrains' 2026 survey reveals 85% of developers use AI tools regularly.
+  Breakdown by tool, team size, region, and real productivity impact.
+draft: false
+schema: schema-developer-ai-tool-survey-2026
+tags:
+- ai-tools
+- developer-survey
+- github-copilot
+- claude-code
+- cursor
+- developer-productivity
+title: 'What Developers Actually Use: JetBrains AI Tool Survey 2026'
 ---
 
 JetBrains surveys tens of thousands of developers every year, and the 2026 data lands with a clear verdict: AI coding tools are no longer an experiment. Eighty-five percent of developers now use at least one AI tool regularly in their development work — up from 62% in the prior survey cycle — and 46% of all code in Copilot-enabled projects is AI-suggested. The tools have moved from novelty to infrastructure, and the real question has shifted from "should I use AI?" to "which combination of tools is worth paying for?"

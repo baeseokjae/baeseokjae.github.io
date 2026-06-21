@@ -3,8 +3,9 @@ cover:
   alt: 'AI Workflow Automation Benchmarks 2026: Real Performance Data Across Tools'
   image: /images/ai-workflow-automation-benchmarks-2026.png
   relative: false
-date: 2026-05-07T12:00:00+00:00
-description: 'Real 2026 benchmark data for n8n, Make, and Zapier: throughput, latency, cost at scale, AI step speed, and reliability metrics compared.'
+date: 2026-05-07 12:00:00+00:00
+description: 'Real 2026 benchmark data for n8n, Make, and Zapier: throughput, latency,
+  cost at scale, AI step speed, and reliability metrics compared.'
 draft: false
 schema: schema-ai-workflow-automation-benchmarks-2026
 tags:

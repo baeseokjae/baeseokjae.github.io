@@ -1,14 +1,21 @@
 ---
-title: "Cursor Rules Advanced Guide 2026: Framework-Specific Configs & .mdc Best Practices"
-date: 2026-05-12T00:04:11+00:00
-tags: ["cursor", "cursor-rules", "mdc", "ai-coding", "developer-tools"]
-description: "Master Cursor rules advanced configuration in 2026: .mdc frontmatter, four activation modes, framework templates for React/Next.js/FastAPI, and token optimization."
-draft: false
 cover:
-  image: "/images/cursor-rules-advanced-2026.png"
-  alt: "Cursor Rules Advanced Guide 2026: Framework-Specific Configs & .mdc Best Practices"
+  alt: 'Cursor Rules Advanced Guide 2026: Framework-Specific Configs & .mdc Best Practices'
+  image: /images/cursor-rules-advanced-2026.png
   relative: false
-schema: "schema-cursor-rules-advanced-2026"
+date: 2026-05-12 00:04:11+00:00
+description: 'Master Cursor rules advanced configuration in 2026: .mdc frontmatter,
+  four activation modes, framework templates for React/Next.js/FastAPI, and token
+  op...'
+draft: false
+schema: schema-cursor-rules-advanced-2026
+tags:
+- cursor
+- cursor-rules
+- mdc
+- ai-coding
+- developer-tools
+title: 'Cursor Rules Advanced Guide 2026: Framework-Specific Configs & .mdc Best Practices'
 ---
 
 Cursor rules are per-project instruction files that tell the AI model how to behave, what patterns to follow, and which constraints to apply. With Cursor hitting 1M+ daily users and $2B+ annualized revenue by early 2026, correctly configuring `.mdc` rules is now the difference between a 20% productivity gain and AI output you have to rewrite every time.

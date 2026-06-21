@@ -1,14 +1,23 @@
 ---
-title: "GPT-5.5 Batch API and Flex Mode: 50% Cost Savings for High-Volume AI Coding Tasks"
-date: 2026-04-25T12:04:50+00:00
-tags: ["gpt-5.5", "openai", "batch-api", "flex-mode", "cost-optimization", "ai-coding"]
-description: "GPT-5.5 Batch and Flex mode cut your API bill by 50%. Learn which coding workflows qualify and how to implement batch jobs in Python."
-draft: false
 cover:
-  image: "/images/gpt-5-5-batch-flex-pricing-guide-2026.png"
-  alt: "GPT-5.5 Batch API and Flex Mode: 50% Cost Savings for High-Volume AI Coding Tasks"
+  alt: 'GPT-5.5 Batch API and Flex Mode: 50% Cost Savings for High-Volume AI Coding
+    Tasks'
+  image: /images/gpt-5-5-batch-flex-pricing-guide-2026.png
   relative: false
-schema: "schema-gpt-5-5-batch-flex-pricing-guide-2026"
+date: 2026-04-25 12:04:50+00:00
+description: GPT-5.5 Batch and Flex mode cut your API bill by 50%. Learn which coding
+  workflows qualify and how to implement batch jobs in Python.
+draft: false
+schema: schema-gpt-5-5-batch-flex-pricing-guide-2026
+tags:
+- gpt-5.5
+- openai
+- batch-api
+- flex-mode
+- cost-optimization
+- ai-coding
+title: 'GPT-5.5 Batch API and Flex Mode: 50% Cost Savings for High-Volume AI Coding
+  Tasks'
 ---
 
 GPT-5.5 Batch API and Flex mode both offer 50% off standard pricing — $2.50 per 1M input tokens and $15 per 1M output tokens versus the standard $5/$30 — giving high-volume AI coding teams a direct path to halving their monthly API spend without changing models or degrading output quality.

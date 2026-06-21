@@ -1,14 +1,23 @@
 ---
-title: "OpenAI Agents SDK v2 Guide 2026: Configurable Memory, Sandbox Orchestration, Filesystem Tools"
-date: 2026-05-01T09:04:53+00:00
-tags: ["openai", "agents", "sdk", "python", "sandbox", "ai-agents"]
-description: "Complete guide to OpenAI Agents SDK v2 (April 2026): configurable memory, apply_patch filesystem tools, 7 sandbox providers, and AGENTS.md workspace config."
-draft: false
 cover:
-  image: "/images/openai-agents-sdk-v2-guide-2026.png"
-  alt: "OpenAI Agents SDK v2 Guide 2026: Configurable Memory, Sandbox Orchestration, Filesystem Tools"
+  alt: 'OpenAI Agents SDK v2 Guide 2026: Configurable Memory, Sandbox Orchestration,
+    Filesystem Tools'
+  image: /images/openai-agents-sdk-v2-guide-2026.png
   relative: false
-schema: "schema-openai-agents-sdk-v2-guide-2026"
+date: 2026-05-01 09:04:53+00:00
+description: 'Complete guide to OpenAI Agents SDK v2 (April 2026): configurable memory,
+  apply_patch filesystem tools, 7 sandbox providers, and AGENTS.md workspace con...'
+draft: false
+schema: schema-openai-agents-sdk-v2-guide-2026
+tags:
+- openai
+- agents
+- sdk
+- python
+- sandbox
+- ai-agents
+title: 'OpenAI Agents SDK v2 Guide 2026: Configurable Memory, Sandbox Orchestration,
+  Filesystem Tools'
 ---
 
 OpenAI Agents SDK v2, released April 15, 2026, transforms the framework from a pure orchestrator into a full execution environment with configurable memory, sandboxed code execution, `apply_patch` filesystem tools, and support for 100+ LLMs — the most significant overhaul since the SDK replaced the experimental Swarm library in March 2025.

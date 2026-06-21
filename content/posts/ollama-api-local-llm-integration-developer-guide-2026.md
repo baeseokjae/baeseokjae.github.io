@@ -1,14 +1,21 @@
 ---
-title: "Ollama API Guide: Run Local LLMs with REST API and OpenAI-Compatible SDK"
-date: 2026-06-02T14:42:11+00:00
-tags: ["ollama", "local-llm", "rest-api", "openai-compatible", "python", "developer-guide"]
-description: "Complete Ollama API guide: REST endpoints, OpenAI-compatible /v1/ drop-in, Python SDK, embeddings, RAG pipelines, and Docker production deployment."
-draft: false
 cover:
-  image: "/images/ollama-api-local-llm-integration-developer-guide-2026.png"
-  alt: "Ollama API Guide: Run Local LLMs with REST API and OpenAI-Compatible SDK"
+  alt: 'Ollama API Guide: Run Local LLMs with REST API and OpenAI-Compatible SDK'
+  image: /images/ollama-api-local-llm-integration-developer-guide-2026.png
   relative: false
-schema: "schema-ollama-api-local-llm-integration-developer-guide-2026"
+date: 2026-06-02 14:42:11+00:00
+description: 'Complete Ollama API guide: REST endpoints, OpenAI-compatible /v1/ drop-in,
+  Python SDK, embeddings, RAG pipelines, and Docker production deployment.'
+draft: false
+schema: schema-ollama-api-local-llm-integration-developer-guide-2026
+tags:
+- ollama
+- local-llm
+- rest-api
+- openai-compatible
+- python
+- developer-guide
+title: 'Ollama API Guide: Run Local LLMs with REST API and OpenAI-Compatible SDK'
 ---
 
 Ollama is an open-source local LLM runtime that exposes a REST API on `http://localhost:11434`, letting you run Llama 4, Qwen3, DeepSeek R1, Gemma 4, and 4,500+ other models entirely on your machine — with zero per-token cost and no data leaving your network. The OpenAI-compatible `/v1/` layer means most existing SDK code works after a one-line `base_url` change.

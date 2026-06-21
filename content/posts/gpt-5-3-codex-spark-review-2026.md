@@ -1,14 +1,18 @@
 ---
-title: "GPT-5.3 Codex Spark Review 2026: OpenAI Coding Model Benchmarked"
-date: 2026-04-30T00:13:56+00:00
-tags: ["ai-coding", "openai", "developer-tools"]
-description: "GPT-5.3 Codex Spark delivers 1,000+ tokens/sec on Cerebras hardware — here's how it benchmarks and when to use it."
-draft: false
 cover:
-  image: "/images/gpt-5-3-codex-spark-review-2026.png"
-  alt: "GPT-5.3 Codex Spark Review 2026: OpenAI Coding Model Benchmarked"
+  alt: 'GPT-5.3 Codex Spark Review 2026: OpenAI Coding Model Benchmarked'
+  image: /images/gpt-5-3-codex-spark-review-2026.png
   relative: false
-schema: "schema-gpt-5-3-codex-spark-review-2026"
+date: 2026-04-30 00:13:56+00:00
+description: GPT-5.3 Codex Spark delivers 1,000+ tokens/sec on Cerebras hardware —
+  here's how it benchmarks and when to use it.
+draft: false
+schema: schema-gpt-5-3-codex-spark-review-2026
+tags:
+- ai-coding
+- openai
+- developer-tools
+title: 'GPT-5.3 Codex Spark Review 2026: OpenAI Coding Model Benchmarked'
 ---
 
 GPT-5.3 Codex Spark is OpenAI's speed-first coding model, delivering over 1,000 tokens per second on Cerebras WSE-3 hardware — 15x faster than standard GPT-5.3 Codex, with a real-world task time of 50 seconds versus Codex's 6 minutes. It trades reasoning depth for raw throughput.

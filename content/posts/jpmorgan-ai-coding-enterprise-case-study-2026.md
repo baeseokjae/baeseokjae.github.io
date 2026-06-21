@@ -1,14 +1,22 @@
 ---
-title: "JPMorgan Chase AI Coding: 60,000 Developers, 30% Velocity Gain — Enterprise Case Study"
-date: 2026-06-09T21:04:18+00:00
-tags: ["AI coding", "enterprise AI", "GitHub Copilot", "JPMorgan Chase", "developer productivity"]
-description: "How JPMorgan Chase deployed AI coding tools to 60,000+ engineers, tied adoption to performance reviews, and grew AI-attributed benefits 30-40% YoY."
-draft: false
 cover:
-  image: "/images/jpmorgan-ai-coding-enterprise-case-study-2026.png"
-  alt: "JPMorgan Chase AI Coding: 60,000 Developers, 30% Velocity Gain — Enterprise Case Study"
+  alt: 'JPMorgan Chase AI Coding: 60,000 Developers, 30% Velocity Gain — Enterprise
+    Case Study'
+  image: /images/jpmorgan-ai-coding-enterprise-case-study-2026.png
   relative: false
-schema: "schema-jpmorgan-ai-coding-enterprise-case-study-2026"
+date: 2026-06-09 21:04:18+00:00
+description: How JPMorgan Chase deployed AI coding tools to 60,000+ engineers, tied
+  adoption to performance reviews, and grew AI-attributed benefits 30-40% YoY.
+draft: false
+schema: schema-jpmorgan-ai-coding-enterprise-case-study-2026
+tags:
+- AI coding
+- enterprise AI
+- GitHub Copilot
+- JPMorgan Chase
+- developer productivity
+title: 'JPMorgan Chase AI Coding: 60,000 Developers, 30% Velocity Gain — Enterprise
+  Case Study'
 ---
 
 JPMorgan Chase has deployed AI coding assistants to more than 60,000 engineers — making it the largest known enterprise AI coding rollout in financial services — and tied individual AI adoption directly to performance reviews. AI-attributed benefits have grown 30–40% year-over-year since the program's inception, with code deployments up more than 70% over two years.

@@ -1,14 +1,20 @@
 ---
-title: "Cursor MCP v2.1 Setup: Full Tool Discovery and Server Cards Configuration"
-date: 2026-05-24T00:06:13+00:00
-tags: ["cursor", "mcp", "ai-tools", "developer-tools", "configuration"]
-description: "Complete guide to setting up MCP servers in Cursor 2.x — Server Cards, tool discovery, mcp.json config, transport selection, and security after CVE-2025-54136."
-draft: false
 cover:
-  image: "/images/cursor-mcp-v2-1-setup-guide-2026.png"
-  alt: "Cursor MCP v2.1 Setup: Full Tool Discovery and Server Cards Configuration"
+  alt: 'Cursor MCP v2.1 Setup: Full Tool Discovery and Server Cards Configuration'
+  image: /images/cursor-mcp-v2-1-setup-guide-2026.png
   relative: false
-schema: "schema-cursor-mcp-v2-1-setup-guide-2026"
+date: 2026-05-24 00:06:13+00:00
+description: Complete guide to setting up MCP servers in Cursor 2.x — Server Cards,
+  tool discovery, mcp.json config, transport selection, and security after CVE-2025...
+draft: false
+schema: schema-cursor-mcp-v2-1-setup-guide-2026
+tags:
+- cursor
+- mcp
+- ai-tools
+- developer-tools
+- configuration
+title: 'Cursor MCP v2.1 Setup: Full Tool Discovery and Server Cards Configuration'
 ---
 
 Cursor MCP v2.1 lets you connect AI agents to external tools — databases, GitHub, Figma, Slack — through a standardized protocol. This guide covers every setup path: Server Cards auto-discovery, the Cursor Marketplace, manual `mcp.json` configuration, transport selection, and the security changes enforced after two critical CVEs in early 2026.

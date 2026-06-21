@@ -1,14 +1,20 @@
 ---
-title: "AI Coding Tool Adoption Statistics 2026: JetBrains Survey of 10K Developers"
-date: 2026-05-29T13:01:10+00:00
-tags: ["AI coding tools", "developer survey", "GitHub Copilot", "Claude Code", "Cursor"]
-description: "JetBrains AI Pulse survey of 10,000+ developers reveals 90% use AI at work, with Claude Code growing 6x and Copilot growth stalling."
-draft: false
 cover:
-  image: "/images/ai-coding-tool-adoption-statistics-2026.png"
-  alt: "AI Coding Tool Adoption Statistics 2026: JetBrains Survey of 10K Developers"
+  alt: 'AI Coding Tool Adoption Statistics 2026: JetBrains Survey of 10K Developers'
+  image: /images/ai-coding-tool-adoption-statistics-2026.png
   relative: false
-schema: "schema-ai-coding-tool-adoption-statistics-2026"
+date: 2026-05-29 13:01:10+00:00
+description: JetBrains AI Pulse survey of 10,000+ developers reveals 90% use AI at
+  work, with Claude Code growing 6x and Copilot growth stalling.
+draft: false
+schema: schema-ai-coding-tool-adoption-statistics-2026
+tags:
+- AI coding tools
+- developer survey
+- GitHub Copilot
+- Claude Code
+- Cursor
+title: 'AI Coding Tool Adoption Statistics 2026: JetBrains Survey of 10K Developers'
 ---
 
 90% of professional developers now regularly use at least one AI tool at work, and 74% have adopted specialized AI coding tools — not just general chatbots. Those are the headline numbers from JetBrains' January 2026 AI Pulse survey of over 10,000 developers across eight languages and multiple continents, the most credible real-work adoption data available today.

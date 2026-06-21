@@ -1,14 +1,22 @@
 ---
-title: "Claude Mythos Cybersecurity Guide 2026: Zero-Day Detection and Project Glasswing Explained"
-date: 2026-05-17T03:04:52+00:00
-tags: ["claude mythos", "cybersecurity", "project glasswing", "zero-day", "AI security"]
-description: "Complete guide to Claude Mythos cybersecurity capabilities, zero-day vulnerability detection, and how to access Project Glasswing in 2026."
-draft: false
 cover:
-  image: "/images/claude-mythos-cybersecurity-guide-2026.png"
-  alt: "Claude Mythos Cybersecurity Guide 2026: Zero-Day Detection and Project Glasswing Explained"
+  alt: 'Claude Mythos Cybersecurity Guide 2026: Zero-Day Detection and Project Glasswing
+    Explained'
+  image: /images/claude-mythos-cybersecurity-guide-2026.png
   relative: false
-schema: "schema-claude-mythos-cybersecurity-guide-2026"
+date: 2026-05-17 03:04:52+00:00
+description: Complete guide to Claude Mythos cybersecurity capabilities, zero-day
+  vulnerability detection, and how to access Project Glasswing in 2026.
+draft: false
+schema: schema-claude-mythos-cybersecurity-guide-2026
+tags:
+- claude mythos
+- cybersecurity
+- project glasswing
+- zero-day
+- AI security
+title: 'Claude Mythos Cybersecurity Guide 2026: Zero-Day Detection and Project Glasswing
+  Explained'
 ---
 
 Claude Mythos is Anthropic's most advanced AI security model, achieving a 73% success rate on expert-level CTF tasks and identifying thousands of zero-day vulnerabilities across every major OS and browser before its April 2026 release. Access is gated through Project Glasswing, a vetted defensive coalition of 12 named partners including Microsoft, Google, and CrowdStrike, plus 40+ critical infrastructure organizations.

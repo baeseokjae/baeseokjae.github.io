@@ -1,14 +1,20 @@
 ---
-title: "LinearB 2026 Engineering Benchmarks: AI PR Review Takes 5.3x Longer"
-date: 2026-05-26T07:15:44+00:00
-tags: ["AI code review", "engineering benchmarks", "DORA metrics", "developer productivity", "agentic AI"]
-description: "LinearB's 2026 benchmarks from 8.1M PRs reveal agentic AI PRs wait 5.3x longer for review. Here's why and how elite teams fix it."
-draft: false
 cover:
-  image: "/images/linearb-2026-engineering-benchmarks.png"
-  alt: "LinearB 2026 Engineering Benchmarks: AI PR Review Takes 5.3x Longer"
+  alt: 'LinearB 2026 Engineering Benchmarks: AI PR Review Takes 5.3x Longer'
+  image: /images/linearb-2026-engineering-benchmarks.png
   relative: false
-schema: "schema-linearb-2026-engineering-benchmarks"
+date: 2026-05-26 07:15:44+00:00
+description: LinearB's 2026 benchmarks from 8.1M PRs reveal agentic AI PRs wait 5.3x
+  longer for review. Here's why and how elite teams fix it.
+draft: false
+schema: schema-linearb-2026-engineering-benchmarks
+tags:
+- AI code review
+- engineering benchmarks
+- DORA metrics
+- developer productivity
+- agentic AI
+title: 'LinearB 2026 Engineering Benchmarks: AI PR Review Takes 5.3x Longer'
 ---
 
 LinearB's 2026 Software Engineering Benchmarks Report analyzed 8.1 million pull requests from 4,800+ organizations across 42 countries and found a clear, alarming pattern: agentic AI PRs wait 5.3x longer for review than unassisted human PRs. AI tools generate code faster, but review capacity has not kept pace — creating a bottleneck that erases most of the speed gains.

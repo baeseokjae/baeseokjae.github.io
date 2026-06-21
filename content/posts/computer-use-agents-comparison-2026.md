@@ -1,14 +1,18 @@
 ---
-title: "Computer Use Agents Comparison: Claude vs Codex vs Gemini for Developers"
-date: 2026-06-11T07:03:43+00:00
-tags: ["computer use agents", "AI coding", "developer workflow"]
-description: "Compare Claude Code, Codex, and Gemini CLI for real developer workflows across execution speed, reliability, governance, and cost."
-draft: false
 cover:
-  image: "/images/computer-use-agents-comparison-2026.png"
-  alt: "Computer Use Agents Comparison: Claude vs Codex vs Gemini for Developers"
+  alt: 'Computer Use Agents Comparison: Claude vs Codex vs Gemini for Developers'
+  image: /images/computer-use-agents-comparison-2026.png
   relative: false
-schema: "schema-computer-use-agents-comparison-2026"
+date: 2026-06-11 07:03:43+00:00
+description: Compare Claude Code, Codex, and Gemini CLI for real developer workflows
+  across execution speed, reliability, governance, and cost.
+draft: false
+schema: schema-computer-use-agents-comparison-2026
+tags:
+- computer use agents
+- AI coding
+- developer workflow
+title: 'Computer Use Agents Comparison: Claude vs Codex vs Gemini for Developers'
 ---
 
 If you compare Claude Code, Codex, and Gemini CLI for software teams in 2026, the right pick is not a leaderboard winner. Codex often moves faster from request to PR, Claude Code is stronger for controlled codebase operations, and Gemini CLI wins when you need open-source extensibility. Start with your workflow constraints, then map each task type to the agent that can own it end to end.

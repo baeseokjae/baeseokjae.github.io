@@ -1,14 +1,18 @@
 ---
-title: "Agent Control Specification ACS AI Agent Governance Guide"
-date: 2026-06-13T10:05:06+00:00
-tags: ["AI agents", "AI governance", "Microsoft ACS"]
-description: "A developer guide to Agent Control Specification ACS AI agent governance, runtime policy checks, and enterprise adoption."
-draft: false
 cover:
-  image: "/images/microsoft-acs-agent-control-specification-2026.png"
-  alt: "Agent Control Specification ACS AI Agent Governance Guide"
+  alt: Agent Control Specification ACS AI Agent Governance Guide
+  image: /images/microsoft-acs-agent-control-specification-2026.png
   relative: false
-schema: "schema-microsoft-acs-agent-control-specification-2026"
+date: 2026-06-13 10:05:06+00:00
+description: A developer guide to Agent Control Specification ACS AI agent governance,
+  runtime policy checks, and enterprise adoption.
+draft: false
+schema: schema-microsoft-acs-agent-control-specification-2026
+tags:
+- AI agents
+- AI governance
+- Microsoft ACS
+title: Agent Control Specification ACS AI Agent Governance Guide
 ---
 
 Agent Control Specification ACS AI agent governance is a portable way to apply policy checks while an agent runs, not just before it starts. ACS defines standard intervention points, policy manifests, evidence inputs, and auditable verdicts so teams can govern tool use, approvals, data handling, and shutdown behavior across agent frameworks.

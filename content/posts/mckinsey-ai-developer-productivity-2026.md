@@ -1,14 +1,20 @@
 ---
-title: "McKinsey AI Developer Productivity Study 2026: 46% Less Routine Coding Time"
-date: 2026-05-26T02:07:23+00:00
-tags: ["AI productivity", "developer tools", "McKinsey", "GitHub Copilot", "enterprise AI"]
-description: "McKinsey's 2026 study of 4,500 developers finds AI coding tools cut routine task time 46%—but complexity, experience, and oversight gaps tell a more nuanced story."
-draft: false
 cover:
-  image: "/images/mckinsey-ai-developer-productivity-2026.png"
-  alt: "McKinsey AI Developer Productivity Study 2026: 46% Less Routine Coding Time"
+  alt: 'McKinsey AI Developer Productivity Study 2026: 46% Less Routine Coding Time'
+  image: /images/mckinsey-ai-developer-productivity-2026.png
   relative: false
-schema: "schema-mckinsey-ai-developer-productivity-2026"
+date: 2026-05-26 02:07:23+00:00
+description: McKinsey's 2026 study of 4,500 developers finds AI coding tools cut routine
+  task time 46%—but complexity, experience, and oversight gaps tell a more nua...
+draft: false
+schema: schema-mckinsey-ai-developer-productivity-2026
+tags:
+- AI productivity
+- developer tools
+- McKinsey
+- GitHub Copilot
+- enterprise AI
+title: 'McKinsey AI Developer Productivity Study 2026: 46% Less Routine Coding Time'
 ---
 
 McKinsey's 2026 AI Developer Productivity Study surveyed 4,500 developers across 150 enterprises and found AI coding tools reduce routine coding task time by 46%. That headline number is real—but it applies to a narrower slice of developer work than most engineering leaders assume when budgeting AI tool spend.

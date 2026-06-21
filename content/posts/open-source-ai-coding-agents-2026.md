@@ -1,14 +1,20 @@
 ---
-title: "Best Open-Source AI Coding Agents 2026: Cline vs Roo vs Kilo vs Aider Ranked"
-date: 2026-05-12T00:00:00+00:00
-tags: ["cline","roo-code","kilo-code","aider","open-source-ai"]
-description: "Cline, Roo Code, Kilo Code, and Aider ranked by architecture, cost, git integration, and MCP support — find the right open-source AI coding agent for 2026."
-draft: false
 cover:
-  image: "/images/open-source-ai-coding-agents-2026.png"
-  alt: "Best Open-Source AI Coding Agents 2026: Cline vs Roo vs Kilo vs Aider Ranked"
+  alt: 'Best Open-Source AI Coding Agents 2026: Cline vs Roo vs Kilo vs Aider Ranked'
+  image: /images/open-source-ai-coding-agents-2026.png
   relative: false
-schema: "schema-open-source-ai-coding-agents-2026"
+date: 2026-05-12 00:00:00+00:00
+description: Cline, Roo Code, Kilo Code, and Aider ranked by architecture, cost, git
+  integration, and MCP support — find the right open-source AI coding agent for 2026.
+draft: false
+schema: schema-open-source-ai-coding-agents-2026
+tags:
+- cline
+- roo-code
+- kilo-code
+- aider
+- open-source-ai
+title: 'Best Open-Source AI Coding Agents 2026: Cline vs Roo vs Kilo vs Aider Ranked'
 ---
 
 Open-source AI coding agents are no longer a fringe choice. By early 2026, Cline alone had crossed 58,000 GitHub stars and 5 million installs — numbers that rival commercial tools like GitHub Copilot in raw community engagement. Cline, Roo Code, Kilo Code, and Aider are the four agents worth evaluating if you want full model freedom, no vendor lock-in, and a transparent codebase you can audit. This article ranks and compares all four on architecture, pricing, workflow fit, and the key differentiators that actually matter in a production coding environment.

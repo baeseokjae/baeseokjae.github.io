@@ -1,14 +1,18 @@
 ---
-title: "Grok 4 Multi-Agent API Developer Guide for xAI Parallel Reasoning"
-date: 2026-06-15T18:04:45+00:00
-tags: ["grok", "xai", "multi-agent"]
-description: "Developer guide to Grok 4.20 Multi-Agent architecture, API usage, pricing, limitations, and production patterns."
-draft: false
 cover:
-  image: "/images/grok-4-multi-agent-api-guide-2026.png"
-  alt: "Grok 4 Multi-Agent API Developer Guide for xAI Parallel Reasoning"
+  alt: Grok 4 Multi-Agent API Developer Guide for xAI Parallel Reasoning
+  image: /images/grok-4-multi-agent-api-guide-2026.png
   relative: false
-schema: "schema-grok-4-multi-agent-api-guide-2026"
+date: 2026-06-15 18:04:45+00:00
+description: Developer guide to Grok 4.20 Multi-Agent architecture, API usage, pricing,
+  limitations, and production patterns.
+draft: false
+schema: schema-grok-4-multi-agent-api-guide-2026
+tags:
+- grok
+- xai
+- multi-agent
+title: Grok 4 Multi-Agent API Developer Guide for xAI Parallel Reasoning
 ---
 
 Grok 4.20 Multi-Agent is xAI's beta API model for parallel research: a leader agent coordinates 4 or 16 sub-agents, uses server-side tools, and synthesizes one answer. Use it for source-heavy research workflows, not ordinary chat completion paths or low-latency product responses.

@@ -1,14 +1,21 @@
 ---
-title: "GitHub Model Selection Guide: Choosing Claude vs Codex for GitHub Coding Agents"
-date: 2026-05-18T21:08:00+00:00
-tags: ["github copilot", "claude", "codex", "ai agents", "model selection", "developer tools"]
-description: "A practical guide to choosing between Claude and Codex models for GitHub coding agents — with benchmarks, cost breakdown, and task-based decision matrix."
-draft: false
 cover:
-  image: "/images/github-model-selection-coding-agents-2026.png"
-  alt: "GitHub Model Selection Guide: Choosing Claude vs Codex for GitHub Coding Agents"
+  alt: 'GitHub Model Selection Guide: Choosing Claude vs Codex for GitHub Coding Agents'
+  image: /images/github-model-selection-coding-agents-2026.png
   relative: false
-schema: "schema-github-model-selection-coding-agents-2026"
+date: 2026-05-18 21:08:00+00:00
+description: A practical guide to choosing between Claude and Codex models for GitHub
+  coding agents — with benchmarks, cost breakdown, and task-based decision matrix.
+draft: false
+schema: schema-github-model-selection-coding-agents-2026
+tags:
+- github copilot
+- claude
+- codex
+- ai agents
+- model selection
+- developer tools
+title: 'GitHub Model Selection Guide: Choosing Claude vs Codex for GitHub Coding Agents'
 ---
 
 GitHub now lets you pick your AI model when kicking off a coding agent task. Claude Sonnet 4.6, Claude Opus 4.6, GPT-5.2-Codex, and GPT-5.4 are all available — and which one you choose has a direct impact on code quality, task completion rate, and your monthly bill. This guide cuts through the noise with benchmarks, cost data, and a concrete decision framework so you can stop guessing and start shipping.

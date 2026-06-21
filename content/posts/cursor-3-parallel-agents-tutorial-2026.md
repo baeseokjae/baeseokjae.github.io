@@ -1,14 +1,20 @@
 ---
-title: "Cursor 3 Parallel Agents Tutorial 2026: Run Multiple AI Agents Simultaneously"
-date: 2026-04-30T00:10:08+00:00
-tags: ["cursor", "parallel agents", "git worktrees", "ai coding", "cursor 3"]
-description: "Step-by-step tutorial for running multiple Cursor 3 AI agents simultaneously using the Agents Window, /multitask command, and git worktrees."
-draft: false
 cover:
-  image: "/images/cursor-3-parallel-agents-tutorial-2026.png"
-  alt: "Cursor 3 Parallel Agents Tutorial 2026: Run Multiple AI Agents Simultaneously"
+  alt: 'Cursor 3 Parallel Agents Tutorial 2026: Run Multiple AI Agents Simultaneously'
+  image: /images/cursor-3-parallel-agents-tutorial-2026.png
   relative: false
-schema: "schema-cursor-3-parallel-agents-tutorial-2026"
+date: 2026-04-30 00:10:08+00:00
+description: Step-by-step tutorial for running multiple Cursor 3 AI agents simultaneously
+  using the Agents Window, /multitask command, and git worktrees.
+draft: false
+schema: schema-cursor-3-parallel-agents-tutorial-2026
+tags:
+- cursor
+- parallel agents
+- git worktrees
+- ai coding
+- cursor 3
+title: 'Cursor 3 Parallel Agents Tutorial 2026: Run Multiple AI Agents Simultaneously'
 ---
 
 Cursor 3's parallel agents let you run up to 8 AI agents simultaneously across isolated git worktrees. Four agents working in parallel — UI, API, database, and tests — can cut wall-clock development time from 8 hours to 2 hours. This tutorial covers all three methods: the Agents Window, `/multitask` command, and manual worktree setup.

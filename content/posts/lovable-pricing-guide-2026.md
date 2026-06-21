@@ -1,14 +1,22 @@
 ---
-title: "Lovable Pricing 2026: Credits, Hidden Costs, and Whether the Free Plan Is Worth It"
-date: 2026-04-23T01:28:12+00:00
-tags: ["lovable", "ai app builder", "no-code", "pricing", "vibe coding"]
-description: "Complete breakdown of Lovable pricing in 2026: credit system explained, plan comparisons, hidden costs, and honest verdict on which plan fits your project."
-draft: false
 cover:
-  image: "/images/lovable-pricing-guide-2026.png"
-  alt: "Lovable Pricing 2026: Credits, Hidden Costs, and Whether the Free Plan Is Worth It"
+  alt: 'Lovable Pricing 2026: Credits, Hidden Costs, and Whether the Free Plan Is
+    Worth It'
+  image: /images/lovable-pricing-guide-2026.png
   relative: false
-schema: "schema-lovable-pricing-guide-2026"
+date: 2026-04-23 01:28:12+00:00
+description: 'Complete breakdown of Lovable pricing in 2026: credit system explained,
+  plan comparisons, hidden costs, and honest verdict on which plan fits your project.'
+draft: false
+schema: schema-lovable-pricing-guide-2026
+tags:
+- lovable
+- ai app builder
+- no-code
+- pricing
+- vibe coding
+title: 'Lovable Pricing 2026: Credits, Hidden Costs, and Whether the Free Plan Is
+  Worth It'
 ---
 
 Lovable pricing starts at $0 on the free plan (5 credits per day, 30/month) and scales from $25/month for 100 credits on Pro up to $2,250/month for 10,000 credits at the top tier. Whether that math works for you depends almost entirely on understanding how credits get consumed — and what the plans don't advertise.

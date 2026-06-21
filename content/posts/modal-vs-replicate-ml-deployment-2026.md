@@ -1,14 +1,20 @@
 ---
-title: "Modal vs Replicate 2026: Best Serverless ML Deployment for Developers"
-date: 2026-05-08T00:00:00+00:00
-tags: ["modal","replicate","serverless-ml","gpu","ml-deployment"]
-description: "Modal vs Replicate 2026 compared: cold starts, pricing, throughput, and which serverless ML platform fits your stack."
-draft: false
 cover:
-  image: "/images/modal-vs-replicate-ml-deployment-2026.png"
-  alt: "Modal vs Replicate 2026: Best Serverless ML Deployment for Developers"
+  alt: 'Modal vs Replicate 2026: Best Serverless ML Deployment for Developers'
+  image: /images/modal-vs-replicate-ml-deployment-2026.png
   relative: false
-schema: "schema-modal-vs-replicate-ml-deployment-2026"
+date: 2026-05-08 00:00:00+00:00
+description: 'Modal vs Replicate 2026 compared: cold starts, pricing, throughput,
+  and which serverless ML platform fits your stack.'
+draft: false
+schema: schema-modal-vs-replicate-ml-deployment-2026
+tags:
+- modal
+- replicate
+- serverless-ml
+- gpu
+- ml-deployment
+title: 'Modal vs Replicate 2026: Best Serverless ML Deployment for Developers'
 ---
 
 Modal and Replicate are the two most-cited serverless ML deployment platforms in 2026, but they solve completely different problems. If you are an ML engineer building custom pipelines, Modal is the answer. If you are a full-stack developer who wants to call open-source models via a REST API in under an hour, Replicate is the answer. This guide cuts through the marketing to give you the data you need: cold start benchmarks, GPU throughput numbers, per-second pricing breakdowns, and a clear decision framework for which platform belongs in your stack.

@@ -1,14 +1,23 @@
 ---
-title: "AI Agent Governance for Enterprise 2026: Regulatory Landscape, Frameworks, and Implementation"
-date: 2026-05-08T00:00:00+00:00
-tags: ["ai-governance", "enterprise", "ai-agents", "compliance", "regulation", "eu-ai-act"]
-description: "21.3% rise in AI legislation across 75 countries. Govern AI agents for EU AI Act, HIPAA, SOC 2, shadow AI, and five enterprise control dimensions."
-draft: false
 cover:
-  image: "/images/ai-agent-governance-enterprise-2026.png"
-  alt: "AI Agent Governance for Enterprise 2026: Regulatory Landscape, Frameworks, and Implementation"
+  alt: 'AI Agent Governance for Enterprise 2026: Regulatory Landscape, Frameworks,
+    and Implementation'
+  image: /images/ai-agent-governance-enterprise-2026.png
   relative: false
-schema: "schema-ai-agent-governance-enterprise-2026"
+date: 2026-05-08 00:00:00+00:00
+description: 21.3% rise in AI legislation across 75 countries. Govern AI agents for
+  EU AI Act, HIPAA, SOC 2, shadow AI, and five enterprise control dimensions.
+draft: false
+schema: schema-ai-agent-governance-enterprise-2026
+tags:
+- ai-governance
+- enterprise
+- ai-agents
+- compliance
+- regulation
+- eu-ai-act
+title: 'AI Agent Governance for Enterprise 2026: Regulatory Landscape, Frameworks,
+  and Implementation'
 ---
 
 AI agents — systems that autonomously execute multi-step tasks, call external APIs, edit files, send messages, and invoke downstream agents — have moved from research prototypes to production workloads inside enterprise environments faster than governance structures can accommodate. The regulatory response has been equally rapid: AI legislation has increased 21.3% across 75 countries since 2023, representing a ninefold growth since 2016. US federal agencies alone issued 59 AI regulations in 2024, double the 2023 count, and approximately 700 AI bills were introduced across 45 US states in 2024 — up from 191 the prior year. Boards, legal teams, and CISOs who treated AI governance as a future problem now face present-tense regulatory exposure. This guide provides the frameworks, compliance mappings, and implementation steps required to govern AI agents at enterprise scale in 2026.

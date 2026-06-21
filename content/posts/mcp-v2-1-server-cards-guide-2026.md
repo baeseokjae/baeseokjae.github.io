@@ -1,14 +1,20 @@
 ---
-title: "MCP v2.1 Server Cards: Auto-Discovery for AI Agent Tool Registries (2026 Guide)"
-date: 2026-05-21T19:24:37+00:00
-tags: ["mcp", "ai-agents", "tool-discovery", "model-context-protocol", "developer-tools"]
-description: "How to implement MCP v2.1 Server Cards and .well-known/mcp.json for automatic AI agent tool discovery — with Python and Node.js examples."
-draft: false
 cover:
-  image: "/images/mcp-v2-1-server-cards-guide-2026.png"
-  alt: "MCP v2.1 Server Cards: Auto-Discovery for AI Agent Tool Registries"
+  alt: 'MCP v2.1 Server Cards: Auto-Discovery for AI Agent Tool Registries'
+  image: /images/mcp-v2-1-server-cards-guide-2026.png
   relative: false
-schema: "schema-mcp-v2-1-server-cards-guide-2026"
+date: 2026-05-21 19:24:37+00:00
+description: How to implement MCP v2.1 Server Cards and .well-known/mcp.json for automatic
+  AI agent tool discovery — with Python and Node.js examples.
+draft: false
+schema: schema-mcp-v2-1-server-cards-guide-2026
+tags:
+- mcp
+- ai-agents
+- tool-discovery
+- model-context-protocol
+- developer-tools
+title: 'MCP v2.1 Server Cards: Auto-Discovery for AI Agent Tool Registries (2026 Guide)'
 ---
 
 MCP v2.1 Server Cards are standardized JSON documents hosted at `/.well-known/mcp/server-card.json` that let AI clients like Claude and Cursor discover your server's capabilities before making a single connection — no manual configuration required. If you're running an MCP server in 2026 without one, you're invisible to half the ecosystem.

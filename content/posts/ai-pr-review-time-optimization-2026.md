@@ -1,14 +1,18 @@
 ---
-title: "AI PR Review Time: How to Fix the 5.3x Bottleneck in 2026"
-date: 2026-05-27T06:01:50+00:00
-tags: ["AI code review", "developer productivity", "pull requests"]
-description: "Practical fixes for AI PR review time: size limits, review sandwich, risk routing, SLAs, and metrics that reduce cycle time."
-draft: false
 cover:
-  image: "/images/ai-pr-review-time-optimization-2026.png"
-  alt: "AI PR Review Time: How to Fix the 5.3x Bottleneck in 2026"
+  alt: 'AI PR Review Time: How to Fix the 5.3x Bottleneck in 2026'
+  image: /images/ai-pr-review-time-optimization-2026.png
   relative: false
-schema: "schema-ai-pr-review-time-optimization-2026"
+date: 2026-05-27 06:01:50+00:00
+description: 'Practical fixes for AI PR review time: size limits, review sandwich,
+  risk routing, SLAs, and metrics that reduce cycle time.'
+draft: false
+schema: schema-ai-pr-review-time-optimization-2026
+tags:
+- AI code review
+- developer productivity
+- pull requests
+title: 'AI PR Review Time: How to Fix the 5.3x Bottleneck in 2026'
 ---
 
 AI PR review time is now the hidden limiter on AI-assisted software delivery. Teams generate more code and open more pull requests, but review capacity has not scaled. The practical fix is to shrink PRs, pre-review with AI, route by risk, enforce review SLAs, and measure queue time as seriously as coding time.

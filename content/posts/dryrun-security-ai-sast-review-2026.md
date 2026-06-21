@@ -1,14 +1,21 @@
 ---
-title: "DryRun Security Review 2026: AI SAST Built for Agentic Coding Workflows"
-date: 2026-05-18T21:06:28+00:00
-tags: ["sast", "ai-security", "agentic-coding", "code-review", "appsec"]
-description: "DryRun Security review: how its Contextual Security Analysis engine catches 88% of vulnerabilities that pattern-matching tools like Snyk and Semgrep miss."
-draft: false
 cover:
-  image: "/images/dryrun-security-ai-sast-review-2026.png"
-  alt: "DryRun Security Review 2026: AI SAST Built for Agentic Coding Workflows"
+  alt: 'DryRun Security Review 2026: AI SAST Built for Agentic Coding Workflows'
+  image: /images/dryrun-security-ai-sast-review-2026.png
   relative: false
-schema: "schema-dryrun-security-ai-sast-review-2026"
+date: 2026-05-18 21:06:28+00:00
+description: 'DryRun Security review: how its Contextual Security Analysis engine
+  catches 88% of vulnerabilities that pattern-matching tools like Snyk and Semgrep
+  miss.'
+draft: false
+schema: schema-dryrun-security-ai-sast-review-2026
+tags:
+- sast
+- ai-security
+- agentic-coding
+- code-review
+- appsec
+title: 'DryRun Security Review 2026: AI SAST Built for Agentic Coding Workflows'
 ---
 
 DryRun Security is an AI-native SAST platform built specifically for teams shipping code with AI agents. Unlike traditional scanners that match patterns, it understands behavior — detecting logic-level flaws that Snyk, Semgrep, and CodeQL routinely miss.

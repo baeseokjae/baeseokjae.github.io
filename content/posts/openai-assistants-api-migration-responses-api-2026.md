@@ -1,14 +1,21 @@
 ---
-title: "OpenAI Assistants API to Responses API: Complete Migration Guide (openai assistants api migration responses api)"
-date: 2026-06-11T22:02:49+00:00
-tags: ["openai", "api migration", "responses api", "assistants api", "developer ops"]
-description: "Migrate from Assistants API to Responses API before Aug 26, 2026 with a practical sequence for mapping objects, state, tools, costs, and safe rollout."
-draft: false
 cover:
-  image: "/images/openai-assistants-api-migration-responses-api-2026.png"
-  alt: "OpenAI Assistants API to Responses API: Complete Migration Guide"
+  alt: 'OpenAI Assistants API to Responses API: Complete Migration Guide'
+  image: /images/openai-assistants-api-migration-responses-api-2026.png
   relative: false
-schema: "schema-openai-assistants-api-migration-responses-api-2026"
+date: 2026-06-11 22:02:49+00:00
+description: Migrate from Assistants API to Responses API before Aug 26, 2026 with
+  a practical sequence for mapping objects, state, tools, costs, and safe rollout.
+draft: false
+schema: schema-openai-assistants-api-migration-responses-api-2026
+tags:
+- openai
+- api migration
+- responses api
+- assistants api
+- developer ops
+title: 'OpenAI Assistants API to Responses API: Complete Migration Guide (openai assistants
+  api migration responses api)'
 ---
 
 If you are shipping on OpenAI Assistants API, migrate now because the platform has a fixed retirement timeline and the migration is an architecture rewrite, not a search-and-replace. The official deprecation notice was published with a one-year runway, so the hard part is usually your state model and tool integration, not endpoint syntax. In practice, you should move in phases: map resources, move prompts, manage history explicitly, and then harden observability before the 2026 shutdown.

@@ -1,14 +1,21 @@
 ---
-title: "OpenAI Agents SDK + Temporal Integration: Production Agent Guide 2026"
-date: 2026-06-10T03:45:54+00:00
-tags: ["openai-agents-sdk", "temporal", "ai-agents", "production", "durable-execution", "python"]
-description: "Build production-grade AI agents using OpenAI Agents SDK + Temporal. Code walkthroughs, architecture patterns, and real deployment lessons from 2026."
-draft: false
 cover:
-  image: "/images/openai-agents-sdk-temporal-integration-2026.png"
-  alt: "OpenAI Agents SDK + Temporal Integration: Production Agent Guide 2026"
+  alt: 'OpenAI Agents SDK + Temporal Integration: Production Agent Guide 2026'
+  image: /images/openai-agents-sdk-temporal-integration-2026.png
   relative: false
-schema: "schema-openai-agents-sdk-temporal-integration-2026"
+date: 2026-06-10 03:45:54+00:00
+description: Build production-grade AI agents using OpenAI Agents SDK + Temporal.
+  Code walkthroughs, architecture patterns, and real deployment lessons from 2026.
+draft: false
+schema: schema-openai-agents-sdk-temporal-integration-2026
+tags:
+- openai-agents-sdk
+- temporal
+- ai-agents
+- production
+- durable-execution
+- python
+title: 'OpenAI Agents SDK + Temporal Integration: Production Agent Guide 2026'
 ---
 
 The OpenAI Agents SDK paired with Temporal gives you a production-ready foundation where LLMs handle reasoning and Temporal handles durability — auto-retries, crash recovery, and state persistence included. Without Temporal, 76% of real-world agent deployments fail. With it, your agent survives Kubernetes restarts, rate limits, and multi-hour workflows.

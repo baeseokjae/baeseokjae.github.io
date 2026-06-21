@@ -1,14 +1,20 @@
 ---
-title: "Claude Opus 4.7 budget_tokens Removal: Migration from Extended Thinking"
-date: 2026-04-25T22:03:49+00:00
-tags: ["claude", "anthropic", "extended-thinking", "api", "migration"]
-description: "How to fix the 400 error from Claude Opus 4.7's budget_tokens removal and migrate to adaptive thinking in Python and TypeScript."
-draft: false
 cover:
-  image: "/images/claude-opus-4-7-budget-tokens-breaking-change-2026.png"
-  alt: "Claude Opus 4.7 budget_tokens Removal: Migration from Extended Thinking"
+  alt: 'Claude Opus 4.7 budget_tokens Removal: Migration from Extended Thinking'
+  image: /images/claude-opus-4-7-budget-tokens-breaking-change-2026.png
   relative: false
-schema: "schema-claude-opus-4-7-budget-tokens-breaking-change-2026"
+date: 2026-04-25 22:03:49+00:00
+description: How to fix the 400 error from Claude Opus 4.7's budget_tokens removal
+  and migrate to adaptive thinking in Python and TypeScript.
+draft: false
+schema: schema-claude-opus-4-7-budget-tokens-breaking-change-2026
+tags:
+- claude
+- anthropic
+- extended-thinking
+- api
+- migration
+title: 'Claude Opus 4.7 budget_tokens Removal: Migration from Extended Thinking'
 ---
 
 Claude Opus 4.7, released April 16, 2026, silently removed `budget_tokens` from its extended thinking API. Any code that passes `budget_tokens` to Opus 4.7 receives an immediate `400 Bad Request` error. The fix is a four-step migration: switch to `adaptive` thinking type, replace `budget_tokens` with the `effort` parameter, update agentic loops to use `task_budget`, and strip `temperature`, `top_p`, and `top_k`. This guide walks through each step with exact before/after code.

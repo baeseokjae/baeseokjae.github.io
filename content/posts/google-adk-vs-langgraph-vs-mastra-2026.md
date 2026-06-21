@@ -1,14 +1,20 @@
 ---
-title: "Google ADK vs LangGraph vs Mastra 2026: Choosing the Right Agent Framework"
-date: 2026-05-17T00:11:03+00:00
-tags: ["google-adk", "langgraph", "mastra", "agent-frameworks", "ai-agents"]
-description: "Google ADK, LangGraph, and Mastra compared on benchmarks, production adoption, developer experience, and use cases for 2026."
-draft: false
 cover:
-  image: "/images/google-adk-vs-langgraph-vs-mastra-2026.png"
-  alt: "Google ADK vs LangGraph vs Mastra 2026: Choosing the Right Agent Framework"
+  alt: 'Google ADK vs LangGraph vs Mastra 2026: Choosing the Right Agent Framework'
+  image: /images/google-adk-vs-langgraph-vs-mastra-2026.png
   relative: false
-schema: "schema-google-adk-vs-langgraph-vs-mastra-2026"
+date: 2026-05-17 00:11:03+00:00
+description: Google ADK, LangGraph, and Mastra compared on benchmarks, production
+  adoption, developer experience, and use cases for 2026.
+draft: false
+schema: schema-google-adk-vs-langgraph-vs-mastra-2026
+tags:
+- google-adk
+- langgraph
+- mastra
+- agent-frameworks
+- ai-agents
+title: 'Google ADK vs LangGraph vs Mastra 2026: Choosing the Right Agent Framework'
 ---
 
 The global AI agent market reached $7.84 billion in 2025 and is projected to hit $52.62 billion by 2030 at a 46.3% CAGR. Three frameworks account for most serious production deployments in 2026: Google ADK, LangGraph, and Mastra. Choosing between them is not a question of which is best — it is a question of which fits your language, cloud, and complexity requirements.

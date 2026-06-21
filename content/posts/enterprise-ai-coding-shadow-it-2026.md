@@ -1,14 +1,20 @@
 ---
-title: "Enterprise AI Coding Shadow IT: 57% Using AI Without Approval in 2026"
-date: 2026-06-03T04:48:01+00:00
-tags: ["shadow AI", "enterprise governance", "AI coding tools", "developer security", "compliance"]
-description: "57% of developers use unapproved AI coding tools that expose sensitive code. Here's how enterprise teams detect, govern, and manage shadow AI in 2026."
-draft: false
 cover:
-  image: "/images/enterprise-ai-coding-shadow-it-2026.png"
-  alt: "Enterprise AI Coding Shadow IT: 57% Using AI Without Approval in 2026"
+  alt: 'Enterprise AI Coding Shadow IT: 57% Using AI Without Approval in 2026'
+  image: /images/enterprise-ai-coding-shadow-it-2026.png
   relative: false
-schema: "schema-enterprise-ai-coding-shadow-it-2026"
+date: 2026-06-03 04:48:01+00:00
+description: 57% of developers use unapproved AI coding tools that expose sensitive
+  code. Here's how enterprise teams detect, govern, and manage shadow AI in 2026.
+draft: false
+schema: schema-enterprise-ai-coding-shadow-it-2026
+tags:
+- shadow AI
+- enterprise governance
+- AI coding tools
+- developer security
+- compliance
+title: 'Enterprise AI Coding Shadow IT: 57% Using AI Without Approval in 2026'
 ---
 
 Enterprise AI coding shadow IT is the fastest-growing governance blind spot in software development today. According to Menlo Security's 2025 report, 57% of employees using free-tier AI tools input sensitive company data — and 68% access these tools through personal accounts, completely bypassing enterprise security controls. This isn't a minor policy gap. It's a systemic exposure that's costing organizations millions and creating direct regulatory liability.

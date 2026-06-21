@@ -1,14 +1,20 @@
 ---
-title: "Windsurf vs Claude Code vs Cursor: Full Developer Workflow Comparison 2026"
-date: 2026-05-20T18:32:23+00:00
-tags: ["ai-coding-tools", "cursor", "windsurf", "claude-code", "developer-tools"]
-description: "Cursor, Windsurf, Claude Code 세 가지 AI 코딩 도구를 실제 워크플로우 기준으로 비교 — 벤치마크, 가격, 에이전트 기능 완전 분석."
-draft: false
 cover:
-  image: "/images/windsurf-vs-claude-code-vs-cursor-workflow-2026.png"
-  alt: "Windsurf vs Claude Code vs Cursor: Full Developer Workflow Comparison 2026"
+  alt: 'Windsurf vs Claude Code vs Cursor: Full Developer Workflow Comparison 2026'
+  image: /images/windsurf-vs-claude-code-vs-cursor-workflow-2026.png
   relative: false
-schema: "schema-windsurf-vs-claude-code-vs-cursor-workflow-2026"
+date: 2026-05-20 18:32:23+00:00
+description: Cursor, Windsurf, Claude Code 세 가지 AI 코딩 도구를 실제 워크플로우 기준으로 비교 — 벤치마크,
+  가격, 에이전트 기능 완전 분석.
+draft: false
+schema: schema-windsurf-vs-claude-code-vs-cursor-workflow-2026
+tags:
+- ai-coding-tools
+- cursor
+- windsurf
+- claude-code
+- developer-tools
+title: 'Windsurf vs Claude Code vs Cursor: Full Developer Workflow Comparison 2026'
 ---
 
 2026년 기준, 대부분의 시니어 개발자는 세 가지 도구 중 하나를 선택하는 게 아니라 조합해서 쓴다. 일상적인 편집엔 Cursor, 복잡한 리팩터링엔 Claude Code, 팀 예산이 빠듯할 땐 Windsurf — 이 세 도구의 차이를 정확히 이해해야 적절히 조합할 수 있다.

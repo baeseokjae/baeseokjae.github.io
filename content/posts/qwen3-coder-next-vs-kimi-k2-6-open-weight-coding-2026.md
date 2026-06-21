@@ -1,14 +1,20 @@
 ---
-title: "Qwen3-Coder-Next vs Kimi K2.6 Coding Comparison: Which Open-Weight Model Wins in 2026?"
-date: 2026-06-13T01:05:33+00:00
-tags: ["AI coding", "open-weight models", "developer tools"]
-description: "A practical 2026 comparison of Qwen3-Coder-Next and Kimi K2.6 for coding agents, benchmarks, cost, and local use."
-draft: false
 cover:
-  image: "/images/qwen3-coder-next-vs-kimi-k2-6-open-weight-coding-2026.png"
-  alt: "Qwen3-Coder-Next vs Kimi K2.6 Coding Comparison: Which Open-Weight Model Wins in 2026?"
+  alt: 'Qwen3-Coder-Next vs Kimi K2.6 Coding Comparison: Which Open-Weight Model Wins
+    in 2026?'
+  image: /images/qwen3-coder-next-vs-kimi-k2-6-open-weight-coding-2026.png
   relative: false
-schema: "schema-qwen3-coder-next-vs-kimi-k2-6-open-weight-coding-2026"
+date: 2026-06-13 01:05:33+00:00
+description: A practical 2026 comparison of Qwen3-Coder-Next and Kimi K2.6 for coding
+  agents, benchmarks, cost, and local use.
+draft: false
+schema: schema-qwen3-coder-next-vs-kimi-k2-6-open-weight-coding-2026
+tags:
+- AI coding
+- open-weight models
+- developer tools
+title: 'Qwen3-Coder-Next vs Kimi K2.6 Coding Comparison: Which Open-Weight Model Wins
+  in 2026?'
 ---
 
 Kimi K2.6 is the better open-weight coding model for hard autonomous software work in 2026, while Qwen3-Coder-Next is the better model for private, local, and high-volume coding. The practical answer is not one winner: route routine edits to Qwen and escalate difficult agentic work to Kimi.

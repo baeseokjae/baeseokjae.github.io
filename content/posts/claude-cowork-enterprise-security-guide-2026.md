@@ -1,11 +1,18 @@
 ---
-title: "Claude for Enterprise 2026: Security, Compliance, and Deployment Guide"
-date: 2026-05-08T00:00:00+00:00
-slug: "claude-cowork-enterprise-security-guide-2026"
-tags: ["claude","anthropic","enterprise","security","compliance","soc2"]
+date: 2026-05-08 00:00:00+00:00
+description: 'The definitive 2026 guide to Claude Enterprise security architecture:
+  SOC 2 Type II, HIPAA BAAs, GDPR data residency, SSO/SAML, audit logs, and side-by-...'
 draft: false
-schema: "schema-claude-cowork-enterprise-security-guide-2026"
-description: "The definitive 2026 guide to Claude Enterprise security architecture: SOC 2 Type II, HIPAA BAAs, GDPR data residency, SSO/SAML, audit logs, and side-by-side compliance comparisons against Microsoft Copilot, OpenAI Enterprise, and Google Gemini."
+schema: schema-claude-cowork-enterprise-security-guide-2026
+slug: claude-cowork-enterprise-security-guide-2026
+tags:
+- claude
+- anthropic
+- enterprise
+- security
+- compliance
+- soc2
+title: 'Claude for Enterprise 2026: Security, Compliance, and Deployment Guide'
 ---
 
 ## Claude Enterprise Security 2026: The Complete Compliance Guide

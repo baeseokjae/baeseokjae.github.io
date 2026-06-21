@@ -1,14 +1,20 @@
 ---
-title: "Cline vs Roo Code 2026: Best Open-Source VS Code AI Agent Compared"
-date: 2026-05-01T21:04:40+00:00
-tags: ["cline", "roo-code", "ai-coding", "vscode", "open-source"]
-description: "Cline vs Roo Code compared on architecture, Boomerang Tasks, cost control, and IDE support — find the right open-source VS Code AI agent for 2026."
-draft: false
 cover:
-  image: "/images/cline-vs-roo-code-2026.png"
-  alt: "Cline vs Roo Code 2026: Best Open-Source VS Code AI Agent Compared"
+  alt: 'Cline vs Roo Code 2026: Best Open-Source VS Code AI Agent Compared'
+  image: /images/cline-vs-roo-code-2026.png
   relative: false
-schema: "schema-cline-vs-roo-code-2026"
+date: 2026-05-01 21:04:40+00:00
+description: Cline vs Roo Code compared on architecture, Boomerang Tasks, cost control,
+  and IDE support — find the right open-source VS Code AI agent for 2026.
+draft: false
+schema: schema-cline-vs-roo-code-2026
+tags:
+- cline
+- roo-code
+- ai-coding
+- vscode
+- open-source
+title: 'Cline vs Roo Code 2026: Best Open-Source VS Code AI Agent Compared'
 ---
 
 Cline is the better choice when you need strict human-in-the-loop control and JetBrains support. Roo Code wins for autonomous multi-agent workflows, structured modes, and teams that want to cut API costs by assigning cheaper models to lighter tasks. Both are free, Apache 2.0 licensed, and use a bring-your-own-key model.

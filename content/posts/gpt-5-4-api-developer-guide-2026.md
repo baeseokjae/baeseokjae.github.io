@@ -1,14 +1,23 @@
 ---
-title: "GPT-5.4 API Developer Guide 2026: 1M Context, Computer Use, and 5 Reasoning Levels"
-date: 2026-04-30T09:04:26+00:00
-tags: ["gpt-5.4 api", "openai", "llm", "developer guide", "computer use", "reasoning"]
-description: "Complete GPT-5.4 API guide: 1M token context, 5 reasoning effort levels, native computer use, pricing tiers, and migration from gpt-4o/gpt-5.2."
-draft: false
 cover:
-  image: "/images/gpt-5-4-api-developer-guide-2026.png"
-  alt: "GPT-5.4 API Developer Guide 2026: 1M Context, Computer Use, and 5 Reasoning Levels"
+  alt: 'GPT-5.4 API Developer Guide 2026: 1M Context, Computer Use, and 5 Reasoning
+    Levels'
+  image: /images/gpt-5-4-api-developer-guide-2026.png
   relative: false
-schema: "schema-gpt-5-4-api-developer-guide-2026"
+date: 2026-04-30 09:04:26+00:00
+description: 'Complete GPT-5.4 API guide: 1M token context, 5 reasoning effort levels,
+  native computer use, pricing tiers, and migration from gpt-4o/gpt-5.2.'
+draft: false
+schema: schema-gpt-5-4-api-developer-guide-2026
+tags:
+- gpt-5.4 api
+- openai
+- llm
+- developer guide
+- computer use
+- reasoning
+title: 'GPT-5.4 API Developer Guide 2026: 1M Context, Computer Use, and 5 Reasoning
+  Levels'
 ---
 
 GPT-5.4 is OpenAI's most capable general-purpose model as of 2026, combining a 1,050,000-token context window, native computer use at 75% OSWorld accuracy, and five tunable reasoning effort levels in a single Chat Completions API drop-in. Released March 5, 2026, it replaces gpt-5.2 for most production workloads with no endpoint change required.

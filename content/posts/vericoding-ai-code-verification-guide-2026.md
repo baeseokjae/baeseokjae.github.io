@@ -1,14 +1,20 @@
 ---
-title: "Vericoding AI Formal Verification Code Correctness: How AI Proves Its Own Code Is Correct (2026)"
-date: 2026-06-15T19:10:54+00:00
-tags: ["vericoding", "formal verification", "AI coding"]
-description: "A practical 2026 guide to vericoding, AI formal verification, and machine-checked code correctness."
-draft: false
 cover:
-  image: "/images/vericoding-ai-code-verification-guide-2026.png"
-  alt: "Vericoding AI Formal Verification Code Correctness: How AI Proves Its Own Code Is Correct (2026)"
+  alt: 'Vericoding AI Formal Verification Code Correctness: How AI Proves Its Own
+    Code Is Correct (2026)'
+  image: /images/vericoding-ai-code-verification-guide-2026.png
   relative: false
-schema: "schema-vericoding-ai-code-verification-guide-2026"
+date: 2026-06-15 19:10:54+00:00
+description: A practical 2026 guide to vericoding, AI formal verification, and machine-checked
+  code correctness.
+draft: false
+schema: schema-vericoding-ai-code-verification-guide-2026
+tags:
+- vericoding
+- formal verification
+- AI coding
+title: 'Vericoding AI Formal Verification Code Correctness: How AI Proves Its Own
+  Code Is Correct (2026)'
 ---
 
 Vericoding is AI-assisted software development where code is generated with formal specifications and machine-checked correctness proofs, not only tests or review. In 2026, it matters because AI coding is common, but trust in “almost right” generated code is the limiting factor for serious production use.

@@ -1,14 +1,20 @@
 ---
-title: "n8n AI Agent Nodes Guide 2026: Build Workflows That Think and Act"
-date: 2026-04-27T10:05:19+00:00
-tags: ["n8n", "AI agents", "workflow automation", "LLM", "no-code"]
-description: "A hands-on guide to n8n AI Agent nodes in 2026: architecture, memory types, tool nodes, MCP patterns, and production deployment."
-draft: false
 cover:
-  image: "/images/n8n-ai-agent-nodes-guide-2026.png"
-  alt: "n8n AI Agent Nodes Guide 2026: Build Workflows That Think and Act"
+  alt: 'n8n AI Agent Nodes Guide 2026: Build Workflows That Think and Act'
+  image: /images/n8n-ai-agent-nodes-guide-2026.png
   relative: false
-schema: "schema-n8n-ai-agent-nodes-guide-2026"
+date: 2026-04-27 10:05:19+00:00
+description: 'A hands-on guide to n8n AI Agent nodes in 2026: architecture, memory
+  types, tool nodes, MCP patterns, and production deployment.'
+draft: false
+schema: schema-n8n-ai-agent-nodes-guide-2026
+tags:
+- n8n
+- AI agents
+- workflow automation
+- LLM
+- no-code
+title: 'n8n AI Agent Nodes Guide 2026: Build Workflows That Think and Act'
 ---
 
 n8n AI Agent nodes convert traditional trigger-action workflows into goal-oriented reasoning engines. Instead of executing a fixed sequence of steps, an AI Agent node perceives context, decides which tools to use, calls APIs, and loops until the job is done — all without rewriting business logic for each new task.

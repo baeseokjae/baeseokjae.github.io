@@ -1,14 +1,23 @@
 ---
-title: "Codegen (ClickUp) AI Coding Agent Review 2026: Orchestration for Enterprise Teams"
-date: 2026-05-12T03:05:09+00:00
-tags: ["codegen", "clickup", "ai-coding-agent", "enterprise", "orchestration", "code-review"]
-description: "Honest 2026 review of Codegen's AI coding agent after ClickUp acquisition: parallel agents, SOC 2 compliance, enterprise pricing, and how it compares to Devin and Copilot."
-draft: false
 cover:
-  image: "/images/codegen-clickup-review-2026.png"
-  alt: "Codegen (ClickUp) AI Coding Agent Review 2026: Orchestration for Enterprise Teams"
+  alt: 'Codegen (ClickUp) AI Coding Agent Review 2026: Orchestration for Enterprise
+    Teams'
+  image: /images/codegen-clickup-review-2026.png
   relative: false
-schema: "schema-codegen-clickup-review-2026"
+date: 2026-05-12 03:05:09+00:00
+description: 'Honest 2026 review of Codegen''s AI coding agent after ClickUp acquisition:
+  parallel agents, SOC 2 compliance, enterprise pricing, and how it compares to...'
+draft: false
+schema: schema-codegen-clickup-review-2026
+tags:
+- codegen
+- clickup
+- ai-coding-agent
+- enterprise
+- orchestration
+- code-review
+title: 'Codegen (ClickUp) AI Coding Agent Review 2026: Orchestration for Enterprise
+  Teams'
 ---
 
 Codegen is ClickUp's enterprise AI coding agent platform — acquired in December 2025 — that connects project management context directly to autonomous code generation, PR review, and multi-agent orchestration. It targets regulated-industry engineering teams that need SOC 2 compliance and audit trails alongside AI-assisted shipping velocity.

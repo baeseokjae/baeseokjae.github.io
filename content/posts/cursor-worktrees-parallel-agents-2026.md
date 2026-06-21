@@ -1,14 +1,19 @@
 ---
-title: "Cursor Worktrees Guide 2026: Parallel Agents Without File Conflicts"
-date: 2026-04-28T09:02:41+00:00
-tags: ["cursor", "ai-coding", "git-worktrees", "parallel-agents"]
-description: "Learn how to run multiple Cursor AI agents in parallel using Git worktrees — no file conflicts, faster feature delivery, and smarter model comparison."
-draft: false
 cover:
-  image: "/images/cursor-worktrees-parallel-agents-2026.png"
-  alt: "Cursor Worktrees Guide 2026: Parallel Agents Without File Conflicts"
+  alt: 'Cursor Worktrees Guide 2026: Parallel Agents Without File Conflicts'
+  image: /images/cursor-worktrees-parallel-agents-2026.png
   relative: false
-schema: "schema-cursor-worktrees-parallel-agents-2026"
+date: 2026-04-28 09:02:41+00:00
+description: Learn how to run multiple Cursor AI agents in parallel using Git worktrees
+  — no file conflicts, faster feature delivery, and smarter model comparison.
+draft: false
+schema: schema-cursor-worktrees-parallel-agents-2026
+tags:
+- cursor
+- ai-coding
+- git-worktrees
+- parallel-agents
+title: 'Cursor Worktrees Guide 2026: Parallel Agents Without File Conflicts'
 ---
 
 Cursor worktrees let you run multiple AI agents simultaneously — each in its own isolated Git checkout — so they never overwrite each other's files. You type `/worktree` in Cursor's chat, the agent spawns a separate branch and directory, and you review or discard the result independently from your main codebase.

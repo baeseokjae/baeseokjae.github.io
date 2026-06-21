@@ -1,14 +1,20 @@
 ---
-title: "OpenAI Codex Cloud Agent Guide 2026: Autonomous GitHub PR Generation"
-date: 2026-04-26T13:02:52+00:00
-tags: ["openai-codex", "ai-coding-agent", "github", "developer-tools", "automation"]
-description: "OpenAI Codex cloud agent in 2026 autonomously clones repos, writes code, runs tests, and opens PRs — a complete guide to async GitHub workflows."
-draft: false
 cover:
-  image: "/images/openai-codex-cloud-agent-guide-2026.png"
-  alt: "OpenAI Codex Cloud Agent Guide 2026: Autonomous GitHub PR Generation"
+  alt: 'OpenAI Codex Cloud Agent Guide 2026: Autonomous GitHub PR Generation'
+  image: /images/openai-codex-cloud-agent-guide-2026.png
   relative: false
-schema: "schema-openai-codex-cloud-agent-guide-2026"
+date: 2026-04-26 13:02:52+00:00
+description: OpenAI Codex cloud agent in 2026 autonomously clones repos, writes code,
+  runs tests, and opens PRs — a complete guide to async GitHub workflows.
+draft: false
+schema: schema-openai-codex-cloud-agent-guide-2026
+tags:
+- openai-codex
+- ai-coding-agent
+- github
+- developer-tools
+- automation
+title: 'OpenAI Codex Cloud Agent Guide 2026: Autonomous GitHub PR Generation'
 ---
 
 OpenAI Codex in 2026 is not the code-completion model you remember from 2021 — it is a fully autonomous cloud coding agent that takes a task description, clones your GitHub repo into a sandboxed environment, writes code across multiple files, runs tests, and opens a pull request for you to review. No IDE required.

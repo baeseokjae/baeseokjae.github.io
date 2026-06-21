@@ -1,14 +1,22 @@
 ---
-title: "Self-Hosted AI Coding Assistants 2026: Tabby vs Continue + Ollama vs Void"
-date: 2026-05-29T03:30:13+00:00
-tags: ["self-hosted AI", "Tabby", "Continue", "Ollama", "Void", "local LLM", "AI coding"]
-description: "Tabby, Continue+Ollama, and Void compared on cost, latency, and privacy for 2026—including Void's development pause."
-draft: false
 cover:
-  image: "/images/self-hosted-ai-coding-comparison-2026.png"
-  alt: "Self-Hosted AI Coding Assistants 2026: Tabby vs Continue + Ollama vs Void"
+  alt: 'Self-Hosted AI Coding Assistants 2026: Tabby vs Continue + Ollama vs Void'
+  image: /images/self-hosted-ai-coding-comparison-2026.png
   relative: false
-schema: "schema-self-hosted-ai-coding-comparison-2026"
+date: 2026-05-29 03:30:13+00:00
+description: Tabby, Continue+Ollama, and Void compared on cost, latency, and privacy
+  for 2026—including Void's development pause.
+draft: false
+schema: schema-self-hosted-ai-coding-comparison-2026
+tags:
+- self-hosted AI
+- Tabby
+- Continue
+- Ollama
+- Void
+- local LLM
+- AI coding
+title: 'Self-Hosted AI Coding Assistants 2026: Tabby vs Continue + Ollama vs Void'
 ---
 
 The best self-hosted AI coding assistant in 2026 depends entirely on your team size and hardware: **Tabby** for compliance-constrained enterprises, **Continue + Ollama** for individuals and teams under ~39 people who want zero cost, and **Void** should be avoided until its development resumes—it's been paused since mid-2025.

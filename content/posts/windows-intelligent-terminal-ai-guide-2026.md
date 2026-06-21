@@ -1,14 +1,18 @@
 ---
-title: "Windows Intelligent Terminal AI Agent Developer Guide for 2026"
-date: 2026-06-13T03:04:54+00:00
-tags: ["Windows Terminal", "AI Agents", "Developer Tools"]
-description: "A practical 2026 guide to Windows Intelligent Terminal, ACP agents, workflows, safety, and where it fits for developers."
-draft: false
 cover:
-  image: "/images/windows-intelligent-terminal-ai-guide-2026.png"
-  alt: "Windows Intelligent Terminal AI Agent Developer Guide for 2026"
+  alt: Windows Intelligent Terminal AI Agent Developer Guide for 2026
+  image: /images/windows-intelligent-terminal-ai-guide-2026.png
   relative: false
-schema: "schema-windows-intelligent-terminal-ai-guide-2026"
+date: 2026-06-13 03:04:54+00:00
+description: A practical 2026 guide to Windows Intelligent Terminal, ACP agents, workflows,
+  safety, and where it fits for developers.
+draft: false
+schema: schema-windows-intelligent-terminal-ai-guide-2026
+tags:
+- Windows Terminal
+- AI Agents
+- Developer Tools
+title: Windows Intelligent Terminal AI Agent Developer Guide for 2026
 ---
 
 Windows Intelligent Terminal is Microsoft's experimental AI-assisted fork of Windows Terminal for developers who want an agent to understand shell context, diagnose errors, and help manage command-line work. Treat the 0.1 release as a preview: useful for testing agentic workflows, not a replacement for your stable terminal.

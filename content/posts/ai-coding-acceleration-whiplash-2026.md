@@ -1,14 +1,20 @@
 ---
-title: "AI Coding Acceleration Whiplash: Why More AI Means More Bugs (2026 Data)"
-date: 2026-05-26T17:21:16+00:00
-tags: ["AI coding", "developer productivity", "AI tools", "code quality", "software engineering"]
-description: "AI coding tools make you write code faster but often create a downstream bug surge. Here's what the 2026 data shows about the acceleration whiplash effect."
-draft: false
 cover:
-  image: "/images/ai-coding-acceleration-whiplash-2026.png"
-  alt: "AI Coding Acceleration Whiplash: Why More AI Means More Bugs (2026 Data)"
+  alt: 'AI Coding Acceleration Whiplash: Why More AI Means More Bugs (2026 Data)'
+  image: /images/ai-coding-acceleration-whiplash-2026.png
   relative: false
-schema: "schema-ai-coding-acceleration-whiplash-2026"
+date: 2026-05-26 17:21:16+00:00
+description: AI coding tools make you write code faster but often create a downstream
+  bug surge. Here's what the 2026 data shows about the acceleration whiplash effect.
+draft: false
+schema: schema-ai-coding-acceleration-whiplash-2026
+tags:
+- AI coding
+- developer productivity
+- AI tools
+- code quality
+- software engineering
+title: 'AI Coding Acceleration Whiplash: Why More AI Means More Bugs (2026 Data)'
 ---
 
 The pitch is seductive: AI coding tools let you ship features 40–60% faster, so adopting them is a no-brainer. But the 2026 data tells a more complicated story. Teams that accelerate hardest are often the ones that hit the wall hardest — more PRs, more security holes, more churn, and reviewers buried under output they can't keep up with. Developers have a name for it: **acceleration whiplash**.

@@ -1,14 +1,21 @@
 ---
-title: "JetBrains Air Review 2026: Multi-Agent Development Environment from JetBrains"
-date: 2026-04-30T18:04:46+00:00
-tags: ["ai-agents", "developer-tools", "ide", "jetbrains", "coding-assistant"]
-description: "JetBrains Air review 2026: the agentic IDE that orchestrates Codex, Claude, Gemini, and Junie simultaneously — pricing, real-world results, and honest verdict."
-draft: false
 cover:
-  image: "/images/jetbrains-air-review-2026.png"
-  alt: "JetBrains Air Review 2026: Multi-Agent Development Environment from JetBrains"
+  alt: 'JetBrains Air Review 2026: Multi-Agent Development Environment from JetBrains'
+  image: /images/jetbrains-air-review-2026.png
   relative: false
-schema: "schema-jetbrains-air-review-2026"
+date: 2026-04-30 18:04:46+00:00
+description: 'JetBrains Air review 2026: the agentic IDE that orchestrates Codex,
+  Claude, Gemini, and Junie simultaneously — pricing, real-world results, and honest
+  v...'
+draft: false
+schema: schema-jetbrains-air-review-2026
+tags:
+- ai-agents
+- developer-tools
+- ide
+- jetbrains
+- coding-assistant
+title: 'JetBrains Air Review 2026: Multi-Agent Development Environment from JetBrains'
 ---
 
 JetBrains Air is a multi-agent development environment that lets you run Codex, Claude, Gemini, and Junie simultaneously on different tasks — not another AI code editor, but an orchestration layer that sits above your existing IDE. Launched as a free public preview in March 2026 for macOS, Air is JetBrains' answer to the question every enterprise developer team is wrestling with: how do you coordinate multiple AI agents without constant context-switching?

@@ -1,14 +1,20 @@
 ---
-title: "Enterprise AI Coding Security Guardrails: Standards and Tools for 2026"
-date: 2026-05-24T18:04:52+00:00
-tags: ["AI Security", "Enterprise", "DevSecOps", "AI Coding", "Guardrails"]
-description: "How enterprise teams implement AI coding security guardrails in 2026: OWASP LLM Top 10, NIST AI RMF, key tools, and a step-by-step implementation guide."
-draft: false
 cover:
-  image: "/images/enterprise-ai-coding-security-guardrails-2026.png"
-  alt: "Enterprise AI Coding Security Guardrails: Standards and Tools for 2026"
+  alt: 'Enterprise AI Coding Security Guardrails: Standards and Tools for 2026'
+  image: /images/enterprise-ai-coding-security-guardrails-2026.png
   relative: false
-schema: "schema-enterprise-ai-coding-security-guardrails-2026"
+date: 2026-05-24 18:04:52+00:00
+description: 'How enterprise teams implement AI coding security guardrails in 2026:
+  OWASP LLM Top 10, NIST AI RMF, key tools, and a step-by-step implementation guide.'
+draft: false
+schema: schema-enterprise-ai-coding-security-guardrails-2026
+tags:
+- AI Security
+- Enterprise
+- DevSecOps
+- AI Coding
+- Guardrails
+title: 'Enterprise AI Coding Security Guardrails: Standards and Tools for 2026'
 ---
 
 Enterprise AI coding security guardrails are policy-enforced controls that intercept, validate, and restrict what AI coding assistants can receive, generate, and execute — protecting codebases from secrets leakage, vulnerable output, and regulatory exposure. Without them, your AI tooling is a liability waiting to activate.

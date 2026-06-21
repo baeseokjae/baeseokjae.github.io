@@ -1,14 +1,20 @@
 ---
-title: "DeepSeek V4 Review 2026: 50x Cheaper Than GPT-5.4?"
-date: 2026-05-06T03:04:24+00:00
-tags: ["DeepSeek V4", "LLM comparison", "AI pricing", "open source LLM", "GPT-5 alternative"]
-description: "DeepSeek V4-Pro delivers near-frontier coding performance at $1.74/M input tokens — 70-80x cheaper than GPT-5.4 Pro. Here's what that means for developers."
-draft: false
 cover:
-  image: "/images/deepseek-v4-review-2026.png"
-  alt: "DeepSeek V4 Review 2026: 50x Cheaper Than GPT-5.4?"
+  alt: 'DeepSeek V4 Review 2026: 50x Cheaper Than GPT-5.4?'
+  image: /images/deepseek-v4-review-2026.png
   relative: false
-schema: "schema-deepseek-v4-review-2026"
+date: 2026-05-06 03:04:24+00:00
+description: DeepSeek V4-Pro delivers near-frontier coding performance at $1.74/M
+  input tokens — 70-80x cheaper than GPT-5.4 Pro. Here's what that means for developers.
+draft: false
+schema: schema-deepseek-v4-review-2026
+tags:
+- DeepSeek V4
+- LLM comparison
+- AI pricing
+- open source LLM
+- GPT-5 alternative
+title: 'DeepSeek V4 Review 2026: 50x Cheaper Than GPT-5.4?'
 ---
 
 DeepSeek V4-Pro, released April 24, 2026 under an MIT license, tops LiveCodeBench at 93.5% and costs $1.74/M input tokens — roughly 70-80x less than GPT-5.4 Pro's $30/M. For most coding workloads, it's the strongest cost-performance trade-off available today.

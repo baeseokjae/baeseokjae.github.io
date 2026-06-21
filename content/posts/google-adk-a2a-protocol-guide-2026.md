@@ -1,14 +1,18 @@
 ---
-title: "Google ADK A2A Protocol Guide for Cross-Framework Agent Interoperability"
-date: 2026-06-12T07:51:58+00:00
-tags: ["Google ADK", "A2A Protocol", "AI Agents"]
-description: "A practical Google ADK A2A protocol guide for building interoperable agents across frameworks, clouds, and teams."
-draft: false
 cover:
-  image: "/images/google-adk-a2a-protocol-guide-2026.png"
-  alt: "Google ADK A2A Protocol Guide for Cross-Framework Agent Interoperability"
+  alt: Google ADK A2A Protocol Guide for Cross-Framework Agent Interoperability
+  image: /images/google-adk-a2a-protocol-guide-2026.png
   relative: false
-schema: "schema-google-adk-a2a-protocol-guide-2026"
+date: 2026-06-12 07:51:58+00:00
+description: A practical Google ADK A2A protocol guide for building interoperable
+  agents across frameworks, clouds, and teams.
+draft: false
+schema: schema-google-adk-a2a-protocol-guide-2026
+tags:
+- Google ADK
+- A2A Protocol
+- AI Agents
+title: Google ADK A2A Protocol Guide for Cross-Framework Agent Interoperability
 ---
 
 The google adk a2a protocol pairing gives developers a practical way to build agents in Google ADK while exposing them through the open Agent2Agent protocol. Use ADK for agent logic, workflows, tools, and state; use A2A when those agents need to collaborate across frameworks, clouds, services, or organizational boundaries.

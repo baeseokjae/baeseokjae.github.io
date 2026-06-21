@@ -1,14 +1,20 @@
 ---
-title: "Antigravity IDE Review 2026: The Dark Horse AI Code Editor Worth Watching"
-date: 2026-04-21T19:02:53+00:00
-tags: ["AI IDE", "Antigravity", "agent-first IDE", "AI coding tools", "developer tools"]
-description: "Honest Antigravity IDE review 2026: agent-first architecture, multi-model support, pricing controversy, and whether the $20/mo AI Pro plan is worth it."
-draft: false
 cover:
-  image: "/images/antigravity-ide-review-2026.png"
-  alt: "Antigravity IDE Review 2026"
+  alt: Antigravity IDE Review 2026
+  image: /images/antigravity-ide-review-2026.png
   relative: false
-schema: "schema-antigravity-ide-review-2026"
+date: 2026-04-21 19:02:53+00:00
+description: 'Honest Antigravity IDE review 2026: agent-first architecture, multi-model
+  support, pricing controversy, and whether the $20/mo AI Pro plan is worth it.'
+draft: false
+schema: schema-antigravity-ide-review-2026
+tags:
+- AI IDE
+- Antigravity
+- agent-first IDE
+- AI coding tools
+- developer tools
+title: 'Antigravity IDE Review 2026: The Dark Horse AI Code Editor Worth Watching'
 ---
 
 Google Antigravity is an agent-first IDE that lets AI agents operate autonomously across your editor, terminal, and browser simultaneously — not just autocomplete, but fully autonomous multi-step execution. With 6% developer adoption within two months of launch and a deeply divided community, it's either the future of coding or a $20-per-month paperweight depending on your use case.

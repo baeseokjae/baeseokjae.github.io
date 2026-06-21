@@ -1,14 +1,22 @@
 ---
-title: "Cursor Rules Guide 2026: How to Write .cursorrules and .mdc Files for Your Project"
-date: 2026-04-18T15:29:10+00:00
-tags: ["cursor", "cursor rules", "ai coding", "developer tools", "IDE configuration"]
-description: "Complete guide to writing Cursor rules in 2026: .cursorrules vs .mdc format, four activation modes, ready-to-use templates, and token budget tips."
-draft: false
 cover:
-  image: "/images/cursor-rules-guide-2026.png"
-  alt: "Cursor Rules Guide 2026: How to Write .cursorrules and .mdc Files for Your Project"
+  alt: 'Cursor Rules Guide 2026: How to Write .cursorrules and .mdc Files for Your
+    Project'
+  image: /images/cursor-rules-guide-2026.png
   relative: false
-schema: "schema-cursor-rules-guide-2026"
+date: 2026-04-18 15:29:10+00:00
+description: 'Complete guide to writing Cursor rules in 2026: .cursorrules vs .mdc
+  format, four activation modes, ready-to-use templates, and token budget tips.'
+draft: false
+schema: schema-cursor-rules-guide-2026
+tags:
+- cursor
+- cursor rules
+- ai coding
+- developer tools
+- IDE configuration
+title: 'Cursor Rules Guide 2026: How to Write .cursorrules and .mdc Files for Your
+  Project'
 ---
 
 Cursor rules are project-level instructions that persist across every AI conversation in your editor — write them once and every Cursor session, every team member, and every new chat starts with your coding standards already loaded. Without rules, you repeat yourself every session; with them, the AI learns your stack once.

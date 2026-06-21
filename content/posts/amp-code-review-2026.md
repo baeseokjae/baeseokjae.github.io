@@ -1,11 +1,17 @@
 ---
-title: "Amp Code Review 2026: Sourcegraph's Autonomous Coding Agent Tested"
-date: 2026-05-08T00:00:00+00:00
+date: 2026-05-08 00:00:00+00:00
+description: A hands-on review of Amp Code, Sourcegraph's autonomous coding agent.
+  Covers multi-model routing, parallel subagents, Oracle Mode, Amp Tab, pricing, and...
 draft: false
-tags: ["amp","sourcegraph","ai-coding","autonomous-agent","code-review"]
-schema: "schema-amp-code-review-2026"
-slug: "amp-code-review-2026"
-description: "A hands-on review of Amp Code, Sourcegraph's autonomous coding agent. Covers multi-model routing, parallel subagents, Oracle Mode, Amp Tab, pricing, and how it stacks up against Cursor and Claude Code in 2026."
+schema: schema-amp-code-review-2026
+slug: amp-code-review-2026
+tags:
+- amp
+- sourcegraph
+- ai-coding
+- autonomous-agent
+- code-review
+title: 'Amp Code Review 2026: Sourcegraph''s Autonomous Coding Agent Tested'
 ---
 
 ## Amp Code Review 2026: Sourcegraph's Autonomous Agent Explained

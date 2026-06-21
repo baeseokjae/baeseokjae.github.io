@@ -1,14 +1,20 @@
 ---
-title: "Cursor 3 Review 2026: Agent-First IDE, Parallel Agents, and Design Mode"
-date: 2026-05-07T00:00:00+00:00
-tags: ["cursor", "ai-ide", "parallel-agents", "code-editor", "review"]
-description: "Cursor 3 review: $29.3B valuation, 8 parallel agents via git worktrees, Design Mode, Glass interface, and 78.2% SWE-bench score."
-draft: false
 cover:
-  image: "/images/cursor-3-review-2026.png"
-  alt: "Cursor 3 Review 2026: Agent-First IDE, Parallel Agents, and Design Mode"
+  alt: 'Cursor 3 Review 2026: Agent-First IDE, Parallel Agents, and Design Mode'
+  image: /images/cursor-3-review-2026.png
   relative: false
-schema: "schema-cursor-3-review-2026"
+date: 2026-05-07 00:00:00+00:00
+description: 'Cursor 3 review: $29.3B valuation, 8 parallel agents via git worktrees,
+  Design Mode, Glass interface, and 78.2% SWE-bench score.'
+draft: false
+schema: schema-cursor-3-review-2026
+tags:
+- cursor
+- ai-ide
+- parallel-agents
+- code-editor
+- review
+title: 'Cursor 3 Review 2026: Agent-First IDE, Parallel Agents, and Design Mode'
 ---
 
 Cursor 3 is the most consequential AI IDE release of 2026. With a $29.3B Series D valuation, 1M+ daily active users, and a 78.2% SWE-bench score — up 5.7 points from Cursor 2 — it defines what an agent-first IDE looks like when engineering execution finally catches up to the marketing.

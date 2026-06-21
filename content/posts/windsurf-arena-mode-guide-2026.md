@@ -1,14 +1,21 @@
 ---
-title: "Windsurf Arena Mode Guide 2026: Run Two AI Models Side-by-Side on Your Code"
-date: 2026-05-01T15:30:00+00:00
-tags: ["windsurf", "arena mode", "swe-1.5", "ai coding", "model comparison", "ide"]
-description: "Complete guide to Windsurf Arena Mode: how blind model comparison works, SWE-1.5 vs Claude benchmarks, leaderboard mechanics, and credit cost breakdown."
-draft: false
 cover:
-  image: "/images/windsurf-arena-mode-guide-2026.png"
-  alt: "Windsurf Arena Mode Guide 2026: Run Two AI Models Side-by-Side on Your Code"
+  alt: 'Windsurf Arena Mode Guide 2026: Run Two AI Models Side-by-Side on Your Code'
+  image: /images/windsurf-arena-mode-guide-2026.png
   relative: false
-schema: "schema-windsurf-arena-mode-guide-2026"
+date: 2026-05-01 15:30:00+00:00
+description: 'Complete guide to Windsurf Arena Mode: how blind model comparison works,
+  SWE-1.5 vs Claude benchmarks, leaderboard mechanics, and credit cost breakdown.'
+draft: false
+schema: schema-windsurf-arena-mode-guide-2026
+tags:
+- windsurf
+- arena mode
+- swe-1.5
+- ai coding
+- model comparison
+- ide
+title: 'Windsurf Arena Mode Guide 2026: Run Two AI Models Side-by-Side on Your Code'
 ---
 
 Windsurf Arena Mode, launched in February 2026 with Wave 13, lets you run two AI models on the same coding task simultaneously — inside your IDE, in real time — without knowing which model is which. You see both outputs, pick the better one, and your vote contributes to a global leaderboard that tracks model performance across real developer tasks. It's the most direct answer to the question most developers don't know they can answer: which model is actually better for *my* work, not some synthetic benchmark. This guide covers how Arena Mode works mechanically, how to interpret the leaderboards, which models perform best by task type, and how to use it without burning through credits.

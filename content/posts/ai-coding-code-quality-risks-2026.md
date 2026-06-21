@@ -1,14 +1,20 @@
 ---
-title: "AI-Generated Code Quality Risks: What 61% of Developers Know in 2026"
-date: 2026-05-09T09:05:23+00:00
-tags: ["ai-coding", "code-quality", "security", "technical-debt", "developer-tools"]
-description: "61% of developers say AI-generated code looks correct but isn't reliable. Here's the complete breakdown of risks, stats, and mitigation strategies."
-draft: false
 cover:
-  image: "/images/ai-coding-code-quality-risks-2026.png"
-  alt: "AI-Generated Code Quality Risks: What 61% of Developers Know in 2026"
+  alt: 'AI-Generated Code Quality Risks: What 61% of Developers Know in 2026'
+  image: /images/ai-coding-code-quality-risks-2026.png
   relative: false
-schema: "schema-ai-coding-code-quality-risks-2026"
+date: 2026-05-09 09:05:23+00:00
+description: 61% of developers say AI-generated code looks correct but isn't reliable.
+  Here's the complete breakdown of risks, stats, and mitigation strategies.
+draft: false
+schema: schema-ai-coding-code-quality-risks-2026
+tags:
+- ai-coding
+- code-quality
+- security
+- technical-debt
+- developer-tools
+title: 'AI-Generated Code Quality Risks: What 61% of Developers Know in 2026'
 ---
 
 AI-generated code quality risks are now the top concern for engineering teams shipping production software. According to Sonar's 2026 State of Code Developer Survey of 1,100+ professionals, 61% report that AI-generated code "looks correct but isn't reliable" — and yet 72% of those same developers use AI coding tools daily. Understanding what's actually failing, and why, is now a non-negotiable survival skill for any team touching production.

@@ -1,14 +1,20 @@
 ---
-title: "n8n AI Workflow Tutorial 2026: Build Your First AI-Powered Automation"
-date: 2026-04-20T10:12:45+00:00
-tags: ["ai-automation", "n8n", "workflow-automation", "ai-agents", "self-hosted"]
-description: "Step-by-step n8n AI workflow tutorial for 2026 — from setup to a production AI agent with tools, memory, and RAG in under 2 hours."
-draft: false
 cover:
-  image: "/images/n8n-ai-workflow-tutorial-2026.png"
-  alt: "n8n AI Workflow Tutorial 2026"
+  alt: n8n AI Workflow Tutorial 2026
+  image: /images/n8n-ai-workflow-tutorial-2026.png
   relative: false
-schema: "schema-n8n-ai-workflow-tutorial-2026"
+date: 2026-04-20 10:12:45+00:00
+description: Step-by-step n8n AI workflow tutorial for 2026 — from setup to a production
+  AI agent with tools, memory, and RAG in under 2 hours.
+draft: false
+schema: schema-n8n-ai-workflow-tutorial-2026
+tags:
+- ai-automation
+- n8n
+- workflow-automation
+- ai-agents
+- self-hosted
+title: 'n8n AI Workflow Tutorial 2026: Build Your First AI-Powered Automation'
 ---
 
 n8n is the most capable open-source platform for building AI workflows in 2026. With native LangChain nodes, an AI Agent node, and vector store integrations baked in, you can connect GPT-4 or Claude to any API, database, or app — and run the whole thing for $5–10/month on a self-hosted VPS instead of $50+/month on Zapier or Make.

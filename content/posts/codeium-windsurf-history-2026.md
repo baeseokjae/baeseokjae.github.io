@@ -1,14 +1,20 @@
 ---
-title: "Codeium to Windsurf: The Full History and What Changed"
-date: 2026-05-31T12:08:14+00:00
-tags: ["windsurf", "codeium", "ai-ide", "history", "developer-tools"]
-description: "From a GPU startup to a $3B AI IDE: the complete story of how Codeium became Windsurf and what it means for developers in 2026."
-draft: false
 cover:
-  image: "/images/codeium-windsurf-history-2026.png"
-  alt: "Codeium to Windsurf: The Full History and What Changed"
+  alt: 'Codeium to Windsurf: The Full History and What Changed'
+  image: /images/codeium-windsurf-history-2026.png
   relative: false
-schema: "schema-codeium-windsurf-history-2026"
+date: 2026-05-31 12:08:14+00:00
+description: 'From a GPU startup to a $3B AI IDE: the complete story of how Codeium
+  became Windsurf and what it means for developers in 2026.'
+draft: false
+schema: schema-codeium-windsurf-history-2026
+tags:
+- windsurf
+- codeium
+- ai-ide
+- history
+- developer-tools
+title: 'Codeium to Windsurf: The Full History and What Changed'
 ---
 
 Codeium became Windsurf because the product outgrew its original identity: what started as an autocomplete plugin for VS Code transformed into a full AI-native IDE with an agentic reasoning engine, and the old brand no longer fit. The rebrand in April 2025 was a formality — the real identity shift happened in November 2024 when the Windsurf Editor launched and attracted one million developers in four months.

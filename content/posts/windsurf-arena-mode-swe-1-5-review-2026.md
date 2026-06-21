@@ -1,14 +1,20 @@
 ---
-title: "Windsurf Arena Mode Deep Dive: Compare AI Models Side-by-Side in Your IDE"
-date: 2026-04-23T01:27:20+00:00
-tags: ["windsurf", "arena-mode", "ai-coding", "swe-1.5", "model-comparison"]
-description: "Windsurf Arena Mode lets you run two AI models simultaneously on the same prompt and vote for the winner — here's how to use it effectively."
-draft: false
 cover:
-  image: "/images/windsurf-arena-mode-swe-1-5-review-2026.png"
-  alt: "Windsurf Arena Mode Deep Dive: Compare AI Models Side-by-Side in Your IDE"
+  alt: 'Windsurf Arena Mode Deep Dive: Compare AI Models Side-by-Side in Your IDE'
+  image: /images/windsurf-arena-mode-swe-1-5-review-2026.png
   relative: false
-schema: "schema-windsurf-arena-mode-swe-1-5-review-2026"
+date: 2026-04-23 01:27:20+00:00
+description: Windsurf Arena Mode lets you run two AI models simultaneously on the
+  same prompt and vote for the winner — here's how to use it effectively.
+draft: false
+schema: schema-windsurf-arena-mode-swe-1-5-review-2026
+tags:
+- windsurf
+- arena-mode
+- ai-coding
+- swe-1.5
+- model-comparison
+title: 'Windsurf Arena Mode Deep Dive: Compare AI Models Side-by-Side in Your IDE'
 ---
 
 Windsurf Arena Mode is a feature inside the Windsurf IDE that runs two AI Cascade agents simultaneously on the same coding prompt, hides their identities, and asks you to vote for the better result. It launched in February 2026 as part of Wave 13 and gives developers a practical, unbiased way to discover which model actually performs best for their specific codebase — not just on benchmarks.

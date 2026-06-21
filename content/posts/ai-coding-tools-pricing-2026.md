@@ -1,14 +1,21 @@
 ---
-title: "AI Coding Tools Pricing Comparison 2026: Free vs Paid Plans Broken Down"
-date: 2026-04-23T01:11:02+00:00
-tags: ["AI coding tools", "pricing", "Cursor", "GitHub Copilot", "Claude Code", "Windsurf"]
-description: "Complete breakdown of AI coding tool pricing in 2026: free tiers, $20/month plans, power tiers, hidden costs, and budget-optimized stacks."
-draft: false
 cover:
-  image: "/images/ai-coding-tools-pricing-2026.png"
-  alt: "AI Coding Tools Pricing Comparison 2026: Free vs Paid Plans Broken Down"
+  alt: 'AI Coding Tools Pricing Comparison 2026: Free vs Paid Plans Broken Down'
+  image: /images/ai-coding-tools-pricing-2026.png
   relative: false
-schema: "schema-ai-coding-tools-pricing-2026"
+date: 2026-04-23 01:11:02+00:00
+description: 'Complete breakdown of AI coding tool pricing in 2026: free tiers, $20/month
+  plans, power tiers, hidden costs, and budget-optimized stacks.'
+draft: false
+schema: schema-ai-coding-tools-pricing-2026
+tags:
+- AI coding tools
+- pricing
+- Cursor
+- GitHub Copilot
+- Claude Code
+- Windsurf
+title: 'AI Coding Tools Pricing Comparison 2026: Free vs Paid Plans Broken Down'
 ---
 
 AI coding tool pricing in 2026 has converged on $20/month as the new standard for Pro tiers, while free options range from genuinely useful (Gemini Code Assist at 6,000 completions/day) to effectively decorative. This guide breaks down every major tool's real cost — including the hidden charges that make the headline price misleading.

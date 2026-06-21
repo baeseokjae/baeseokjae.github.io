@@ -1,14 +1,22 @@
 ---
-title: "Agent Cost Circuit Breaker Pattern Guide: How to Stop Runaway AI Spend Before It Starts"
-date: 2026-06-20T12:00:00+00:00
-tags: ["agent cost circuit breaker", "ai agent cost control", "token budget enforcement", "runaway agent prevention", "agent finops", "ai governance"]
-description: "Implement agent cost circuit breakers to prevent runaway AI spend — covering four trigger dimensions, three-layer hierarchy, retry budgets, semantic loop detection, and governance-plane enforcement with real cost data."
-draft: false
 cover:
-  image: "/images/agent-cost-circuit-breaker-pattern-guide-2026.png"
-  alt: "Agent Cost Circuit Breaker Pattern Guide 2026"
+  alt: Agent Cost Circuit Breaker Pattern Guide 2026
+  image: /images/agent-cost-circuit-breaker-pattern-guide-2026.png
   relative: false
-schema: "schema-agent-cost-circuit-breaker-pattern-guide-2026"
+date: 2026-06-20 12:00:00+00:00
+description: Implement agent cost circuit breakers to prevent runaway AI spend — covering
+  four trigger dimensions, three-layer hierarchy, retry budgets, semantic loo...
+draft: false
+schema: schema-agent-cost-circuit-breaker-pattern-guide-2026
+tags:
+- agent cost circuit breaker
+- ai agent cost control
+- token budget enforcement
+- runaway agent prevention
+- agent finops
+- ai governance
+title: 'Agent Cost Circuit Breaker Pattern Guide: How to Stop Runaway AI Spend Before
+  It Starts'
 ---
 
 An agent cost circuit breaker is an architectural control layer that monitors cost velocity, iteration count, consecutive failures, and scope violations in real time — then terminates execution when thresholds are exceeded, preventing the kind of runaway spend that has produced documented single-incident bills of $437, $47,000, and $2,847 from agents running unsupervised loops. This guide covers the four trigger dimensions, how to implement them at the provider/tool/session level, and why enforcement must live outside agent code at the governance plane.

@@ -1,14 +1,20 @@
 ---
-title: "GitHub Spark Review 2026: AI No-Code App Builder by GitHub"
-date: 2026-05-29T23:07:16+00:00
-tags: ["GitHub Spark", "AI app builder", "no-code", "GitHub Copilot", "rapid prototyping"]
-description: "Hands-on GitHub Spark review 2026: pricing, real costs, limitations, security risks, and how it compares to Lovable, Bolt.new, and v0."
-draft: false
 cover:
-  image: "/images/github-spark-review-2026.png"
-  alt: "GitHub Spark Review 2026: AI No-Code App Builder by GitHub"
+  alt: 'GitHub Spark Review 2026: AI No-Code App Builder by GitHub'
+  image: /images/github-spark-review-2026.png
   relative: false
-schema: "schema-github-spark-review-2026"
+date: 2026-05-29 23:07:16+00:00
+description: 'Hands-on GitHub Spark review 2026: pricing, real costs, limitations,
+  security risks, and how it compares to Lovable, Bolt.new, and v0.'
+draft: false
+schema: schema-github-spark-review-2026
+tags:
+- GitHub Spark
+- AI app builder
+- no-code
+- GitHub Copilot
+- rapid prototyping
+title: 'GitHub Spark Review 2026: AI No-Code App Builder by GitHub'
 ---
 
 GitHub Spark lets you describe an app in plain English and get a fully deployed, full-stack web app within minutes — no local environment, no Dockerfile, no deployment pipeline. Here's whether it's actually worth the subscription cost in 2026.

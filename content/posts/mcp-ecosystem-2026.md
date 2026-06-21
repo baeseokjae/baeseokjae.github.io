@@ -1,14 +1,20 @@
 ---
-title: "MCP Ecosystem 2026: 97 Million Installs, New Governance, and What Comes Next"
-date: 2026-05-06T15:42:49+00:00
-tags: ["MCP", "Model Context Protocol", "AI Agents", "Developer Tools", "Protocol"]
-description: "The MCP ecosystem hit 97M monthly downloads and 10K+ servers in 2026. Here's what changed, what broke, and where it's going."
-draft: false
 cover:
-  image: "/images/mcp-ecosystem-2026.png"
-  alt: "MCP Ecosystem 2026: 97 Million Installs, New Governance, and What Comes Next"
+  alt: 'MCP Ecosystem 2026: 97 Million Installs, New Governance, and What Comes Next'
+  image: /images/mcp-ecosystem-2026.png
   relative: false
-schema: "schema-mcp-ecosystem-2026"
+date: 2026-05-06 15:42:49+00:00
+description: The MCP ecosystem hit 97M monthly downloads and 10K+ servers in 2026.
+  Here's what changed, what broke, and where it's going.
+draft: false
+schema: schema-mcp-ecosystem-2026
+tags:
+- MCP
+- Model Context Protocol
+- AI Agents
+- Developer Tools
+- Protocol
+title: 'MCP Ecosystem 2026: 97 Million Installs, New Governance, and What Comes Next'
 ---
 
 The Model Context Protocol crossed 97 million monthly SDK downloads in March 2026. When Anthropic first released MCP in late 2024, it got roughly 100,000 downloads in its first month. That 970x growth in 18 months is not a vanity metric — it reflects genuine adoption by teams building production AI agents. I've been integrating MCP servers into Claude-based workflows since early 2025, and the shift from "experimental protocol" to "de facto standard" has been dramatic. This guide covers where the ecosystem actually stands today: the governance changes, the real enterprise adoption numbers, and the technical problems that still aren't solved.

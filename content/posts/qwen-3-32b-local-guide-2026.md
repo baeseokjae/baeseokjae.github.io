@@ -1,14 +1,22 @@
 ---
-title: "Qwen 3 32B Local Setup Guide 2026: Run on a 24GB GPU"
-date: 2026-05-08T10:23:11+00:00
-tags: ["Qwen3", "local LLM", "GPU", "Ollama", "llama.cpp", "LM Studio", "AI setup"]
-description: "Step-by-step guide to running Qwen3 32B locally on a 24GB GPU using Ollama, llama.cpp, or LM Studio with thinking mode explained."
-draft: false
 cover:
-  image: "/images/qwen-3-32b-local-guide-2026.png"
-  alt: "Qwen 3 32B Local Setup Guide 2026: Run on a 24GB GPU"
+  alt: 'Qwen 3 32B Local Setup Guide 2026: Run on a 24GB GPU'
+  image: /images/qwen-3-32b-local-guide-2026.png
   relative: false
-schema: "schema-qwen-3-32b-local-guide-2026"
+date: 2026-05-08 10:23:11+00:00
+description: Step-by-step guide to running Qwen3 32B locally on a 24GB GPU using Ollama,
+  llama.cpp, or LM Studio with thinking mode explained.
+draft: false
+schema: schema-qwen-3-32b-local-guide-2026
+tags:
+- Qwen3
+- local LLM
+- GPU
+- Ollama
+- llama.cpp
+- LM Studio
+- AI setup
+title: 'Qwen 3 32B Local Setup Guide 2026: Run on a 24GB GPU'
 ---
 
 Qwen3 32B fits on a single 24GB GPU using Q4_K_M quantization — it takes roughly 19.8GB VRAM, leaving ~4GB free for the KV cache. Install Ollama, run `ollama pull qwen3:32b`, and you have a frontier-class model running entirely on your hardware in under 10 minutes.

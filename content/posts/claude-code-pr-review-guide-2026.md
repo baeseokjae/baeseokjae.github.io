@@ -1,14 +1,20 @@
 ---
-title: "Claude Code PR Review Guide 2026: Parallel Agent Code Review Setup"
-date: 2026-04-26T15:02:33+00:00
-tags: ["claude code", "pr review", "ai code review", "github", "parallel agents"]
-description: "Complete guide to Claude Code PR review in 2026 — parallel agent setup, GitHub App configuration, pricing, and comparison with GitHub Copilot."
-draft: false
 cover:
-  image: "/images/claude-code-pr-review-guide-2026.png"
-  alt: "Claude Code PR Review Guide 2026: Parallel Agent Code Review Setup"
+  alt: 'Claude Code PR Review Guide 2026: Parallel Agent Code Review Setup'
+  image: /images/claude-code-pr-review-guide-2026.png
   relative: false
-schema: "schema-claude-code-pr-review-guide-2026"
+date: 2026-04-26 15:02:33+00:00
+description: Complete guide to Claude Code PR review in 2026 — parallel agent setup,
+  GitHub App configuration, pricing, and comparison with GitHub Copilot.
+draft: false
+schema: schema-claude-code-pr-review-guide-2026
+tags:
+- claude code
+- pr review
+- ai code review
+- github
+- parallel agents
+title: 'Claude Code PR Review Guide 2026: Parallel Agent Code Review Setup'
 ---
 
 Claude Code PR review is Anthropic's multi-agent pull request analysis system that dispatches specialized AI agents in parallel to inspect logic, security, and code quality — then posts ranked comments directly to GitHub. It launched March 9, 2026 to solve the bottleneck created by teams shipping 200% more AI-generated code than a year ago.

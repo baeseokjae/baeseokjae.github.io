@@ -1,14 +1,20 @@
 ---
-title: "Claude Code vs Codex CLI vs Gemini CLI 2026: Terminal AI Agents Compared"
-date: 2026-05-08T00:00:00+00:00
-tags: ["claude-code","codex-cli","gemini-cli","terminal-ai","comparison"]
-description: "Claude Code, Codex CLI, and Gemini CLI compared on benchmarks, pricing, setup, and real-world performance for 2026."
-draft: false
 cover:
-  image: "/images/claude-code-codex-cli-gemini-cli-2026.png"
-  alt: "Claude Code vs Codex CLI vs Gemini CLI 2026: Terminal AI Agents Compared"
+  alt: 'Claude Code vs Codex CLI vs Gemini CLI 2026: Terminal AI Agents Compared'
+  image: /images/claude-code-codex-cli-gemini-cli-2026.png
   relative: false
-schema: "schema-claude-code-codex-cli-gemini-cli-2026"
+date: 2026-05-08 00:00:00+00:00
+description: Claude Code, Codex CLI, and Gemini CLI compared on benchmarks, pricing,
+  setup, and real-world performance for 2026.
+draft: false
+schema: schema-claude-code-codex-cli-gemini-cli-2026
+tags:
+- claude-code
+- codex-cli
+- gemini-cli
+- terminal-ai
+- comparison
+title: 'Claude Code vs Codex CLI vs Gemini CLI 2026: Terminal AI Agents Compared'
 ---
 
 ## Claude Code vs Codex CLI vs Gemini CLI 2026: Terminal AI Agent Overview

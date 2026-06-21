@@ -1,14 +1,20 @@
 ---
-title: "Mem0 vs Zep in Production: Choosing the Right AI Agent Memory Framework"
-date: 2026-05-18T21:10:53+00:00
-tags: ["mem0", "zep", "ai agent memory", "llm", "production"]
-description: "Mem0 vs Zep compared on benchmarks, pricing, architecture, and self-hosting so you can pick the right AI agent memory framework for production."
-draft: false
 cover:
-  image: "/images/mem0-vs-zep-production-guide-2026.png"
-  alt: "Mem0 vs Zep in Production: Choosing the Right AI Agent Memory Framework"
+  alt: 'Mem0 vs Zep in Production: Choosing the Right AI Agent Memory Framework'
+  image: /images/mem0-vs-zep-production-guide-2026.png
   relative: false
-schema: "schema-mem0-vs-zep-production-guide-2026"
+date: 2026-05-18 21:10:53+00:00
+description: Mem0 vs Zep compared on benchmarks, pricing, architecture, and self-hosting
+  so you can pick the right AI agent memory framework for production.
+draft: false
+schema: schema-mem0-vs-zep-production-guide-2026
+tags:
+- mem0
+- zep
+- ai agent memory
+- llm
+- production
+title: 'Mem0 vs Zep in Production: Choosing the Right AI Agent Memory Framework'
 ---
 
 Mem0 is the right choice when you need broad framework integrations and chatbot personalization at scale; Zep is better when your agents must reason about relationships and time — and its graph memory costs 90% less than Mem0's equivalent tier.

@@ -1,14 +1,20 @@
 ---
-title: "Neurolink AI Framework Review 2026: One SDK for 12+ LLM Providers"
-date: 2026-05-06T18:05:40+00:00
-tags: ["neurolink", "llm-sdk", "ai-framework", "typescript", "mcp"]
-description: "An honest review of NeuroLink AI framework by Juspay: unified access to 13+ LLM providers, native MCP integration, and enterprise HITL in one TypeScript SDK."
-draft: false
 cover:
-  image: "/images/neurolink-ai-framework-review-2026.png"
-  alt: "Neurolink AI Framework Review 2026: One SDK for 12+ LLM Providers"
+  alt: 'Neurolink AI Framework Review 2026: One SDK for 12+ LLM Providers'
+  image: /images/neurolink-ai-framework-review-2026.png
   relative: false
-schema: "schema-neurolink-ai-framework-review-2026"
+date: 2026-05-06 18:05:40+00:00
+description: 'An honest review of NeuroLink AI framework by Juspay: unified access
+  to 13+ LLM providers, native MCP integration, and enterprise HITL in one TypeScript...'
+draft: false
+schema: schema-neurolink-ai-framework-review-2026
+tags:
+- neurolink
+- llm-sdk
+- ai-framework
+- typescript
+- mcp
+title: 'Neurolink AI Framework Review 2026: One SDK for 12+ LLM Providers'
 ---
 
 NeuroLink is an open-source TypeScript SDK by Juspay that gives you unified access to 13+ LLM providers — OpenAI, Anthropic, Google AI, AWS Bedrock, Azure, Vertex AI, Mistral, Ollama, HuggingFace, SageMaker, OpenRouter, and OpenAI-compatible endpoints — through a single `generate()` call, with zero provider lock-in.

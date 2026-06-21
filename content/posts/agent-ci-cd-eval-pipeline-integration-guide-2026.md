@@ -1,14 +1,21 @@
 ---
-title: "Agent CI/CD Eval Pipeline Integration Guide 2026"
-date: 2026-06-19T12:00:00+00:00
-tags: ["agent CI/CD", "eval pipeline", "golden datasets", "LLM-as-judge", "AI agent testing", "production monitoring"]
-description: "A practical 2026 guide to integrating evaluation gates into your agent CI/CD pipeline — golden datasets, tiered evals, threshold policies, and closed-loop feedback."
-draft: false
 cover:
-  image: "/images/agent-ci-cd-eval-pipeline-integration-guide-2026.png"
-  alt: "Agent CI/CD Eval Pipeline Integration Guide 2026"
+  alt: Agent CI/CD Eval Pipeline Integration Guide 2026
+  image: /images/agent-ci-cd-eval-pipeline-integration-guide-2026.png
   relative: false
-schema: "schema-agent-ci-cd-eval-pipeline-integration-guide-2026"
+date: 2026-06-19 12:00:00+00:00
+description: A practical 2026 guide to integrating evaluation gates into your agent
+  CI/CD pipeline — golden datasets, tiered evals, threshold policies, and closed-lo...
+draft: false
+schema: schema-agent-ci-cd-eval-pipeline-integration-guide-2026
+tags:
+- agent CI/CD
+- eval pipeline
+- golden datasets
+- LLM-as-judge
+- AI agent testing
+- production monitoring
+title: Agent CI/CD Eval Pipeline Integration Guide 2026
 ---
 
 Agent CI/CD in 2026 requires five evaluation gates that don't exist in traditional pipelines: golden dataset offline eval, regression blocks, cost gates, shadow evaluation against production traces, and canary rollout with auto-rollback. If you're shipping agent updates against only lint and unit tests, you're shipping blind — 89% of production agent teams run observability but only 52% run evals, and that 37-point gap is where quality silently decays (LangChain State of Agent Engineering Survey, 2026).

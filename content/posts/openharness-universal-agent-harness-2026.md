@@ -1,14 +1,21 @@
 ---
-title: "OpenHarness: Universal Agent Harness for Any LLM (2026 Review)"
-date: 2026-05-20T00:04:29+00:00
-tags: ["openharness", "agent harness", "LLM", "open-source", "AI agents", "CLI"]
-description: "OpenHarness is an open-source universal agent harness supporting Claude, GPT, Gemini, Ollama and any LLM under a single CLI runtime."
-draft: false
 cover:
-  image: "/images/openharness-universal-agent-harness-2026.png"
-  alt: "OpenHarness: Universal Agent Harness for Any LLM"
+  alt: 'OpenHarness: Universal Agent Harness for Any LLM'
+  image: /images/openharness-universal-agent-harness-2026.png
   relative: false
-schema: "schema-openharness-universal-agent-harness-2026"
+date: 2026-05-20 00:04:29+00:00
+description: OpenHarness is an open-source universal agent harness supporting Claude,
+  GPT, Gemini, Ollama and any LLM under a single CLI runtime.
+draft: false
+schema: schema-openharness-universal-agent-harness-2026
+tags:
+- openharness
+- agent harness
+- LLM
+- open-source
+- AI agents
+- CLI
+title: 'OpenHarness: Universal Agent Harness for Any LLM (2026 Review)'
 ---
 
 OpenHarness is an open-source, CLI-first agent runtime that lets you run autonomous AI agents against any LLM — Claude, GPT-5, Gemini, Ollama, or any OpenAI-compatible endpoint — without rewriting your harness each time you switch providers. As of April 2026, the HKUDS/OpenHarness project has 9,100 GitHub stars and ships 43+ built-in tools out of the box.

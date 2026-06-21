@@ -1,14 +1,21 @@
 ---
-title: "AI Junior Developer Tools 2026: Sweep, Devin, SWE-Agent Compared"
-date: 2026-05-29T18:01:46+00:00
-tags: ["AI coding agents", "Devin AI", "Sweep AI", "SWE-Agent", "autonomous coding", "developer tools"]
-description: "Sweep, Devin, and SWE-Agent compared for 2026 — real-world performance, pricing, SWE-bench scores, and which fits your team."
-draft: false
 cover:
-  image: "/images/ai-junior-developer-tools-2026.png"
-  alt: "AI Junior Developer Tools 2026: Sweep, Devin, SWE-Agent Compared"
+  alt: 'AI Junior Developer Tools 2026: Sweep, Devin, SWE-Agent Compared'
+  image: /images/ai-junior-developer-tools-2026.png
   relative: false
-schema: "schema-ai-junior-developer-tools-2026"
+date: 2026-05-29 18:01:46+00:00
+description: Sweep, Devin, and SWE-Agent compared for 2026 — real-world performance,
+  pricing, SWE-bench scores, and which fits your team.
+draft: false
+schema: schema-ai-junior-developer-tools-2026
+tags:
+- AI coding agents
+- Devin AI
+- Sweep AI
+- SWE-Agent
+- autonomous coding
+- developer tools
+title: 'AI Junior Developer Tools 2026: Sweep, Devin, SWE-Agent Compared'
 ---
 
 AI junior developer tools — Sweep, Devin, and SWE-Agent — are software agents that autonomously write code, open pull requests, and resolve GitHub issues. Each takes a different approach: Devin is a fully managed cloud agent aimed at enterprises, Sweep is a GitHub-native bot wired into your issue tracker, and SWE-Agent is a free, self-hosted research framework from Princeton. Choosing correctly between them can save your team thousands per month or cost you hours of cleanup.

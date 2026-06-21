@@ -1,14 +1,21 @@
 ---
-title: "LLM Prompt Caching Guide 2026: Cut API Costs 70% with Anthropic and OpenAI"
-date: 2026-04-21T01:02:58+00:00
-tags: ["prompt caching", "LLM", "Anthropic", "OpenAI", "API cost optimization", "AI development"]
-description: "LLM prompt caching guide 2026: Anthropic, OpenAI, Gemini code examples, cost calculators, anti-patterns, and production monitoring tips."
-draft: false
 cover:
-  image: "/images/llm-prompt-caching-guide-2026.png"
-  alt: "LLM Prompt Caching Guide 2026: Cut API Costs 70% with Anthropic and OpenAI"
+  alt: 'LLM Prompt Caching Guide 2026: Cut API Costs 70% with Anthropic and OpenAI'
+  image: /images/llm-prompt-caching-guide-2026.png
   relative: false
-schema: "schema-llm-prompt-caching-guide-2026"
+date: 2026-04-21 01:02:58+00:00
+description: 'LLM prompt caching guide 2026: Anthropic, OpenAI, Gemini code examples,
+  cost calculators, anti-patterns, and production monitoring tips.'
+draft: false
+schema: schema-llm-prompt-caching-guide-2026
+tags:
+- prompt caching
+- LLM
+- Anthropic
+- OpenAI
+- API cost optimization
+- AI development
+title: 'LLM Prompt Caching Guide 2026: Cut API Costs 70% with Anthropic and OpenAI'
 ---
 
 Prompt caching is the single highest-ROI optimization available for production LLM applications. If you run 10,000 requests per day with an 8K-token cached system prompt on Anthropic Claude, you save roughly $576/month — with a few lines of code change. OpenAI's automatic caching requires zero code changes and gives you a 50% discount on repeated input tokens. Anthropic's explicit caching offers up to 90% savings. This guide covers both, plus Gemini, with production code examples, real cost numbers, and the anti-patterns that silently destroy your cache hit rate.

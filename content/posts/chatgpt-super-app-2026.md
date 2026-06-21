@@ -1,14 +1,22 @@
 ---
-title: "ChatGPT Super App Review 2026: Unified AI Platform with Codex, Atlas, and GPT-6"
-date: 2026-05-08T00:00:00+00:00
-tags: ["chatgpt","openai","super-app","gpt-5-5","ai-platform"]
-description: "Full review of the ChatGPT Super App 2026: Codex coding agent, Atlas browser automation, GPT-5.5 benchmarks, pricing, and a head-to-head comparison with Claude and Gemini."
-draft: false
 cover:
-  image: "/images/chatgpt-super-app-2026.png"
-  alt: "ChatGPT Super App Review 2026: Unified AI Platform with Codex, Atlas, and GPT-6"
+  alt: 'ChatGPT Super App Review 2026: Unified AI Platform with Codex, Atlas, and
+    GPT-6'
+  image: /images/chatgpt-super-app-2026.png
   relative: false
-schema: "schema-chatgpt-super-app-2026"
+date: 2026-05-08 00:00:00+00:00
+description: 'Full review of the ChatGPT Super App 2026: Codex coding agent, Atlas
+  browser automation, GPT-5.5 benchmarks, pricing, and a head-to-head comparison with...'
+draft: false
+schema: schema-chatgpt-super-app-2026
+tags:
+- chatgpt
+- openai
+- super-app
+- gpt-5-5
+- ai-platform
+title: 'ChatGPT Super App Review 2026: Unified AI Platform with Codex, Atlas, and
+  GPT-6'
 ---
 
 OpenAI launched the ChatGPT Super App on April 6, 2026, positioning it not as a chatbot upgrade but as an AI operating system. With 800 million weekly active users as of Q1 2026 and over 7 million enterprise seats, the platform merges ChatGPT 5.5, the Codex software engineering agent, and the Atlas browser automation agent into a single unified workspace. If you have been switching between a chat window, a coding IDE, and a browser automation tool, this is the product that is supposed to eliminate that context-switching entirely.

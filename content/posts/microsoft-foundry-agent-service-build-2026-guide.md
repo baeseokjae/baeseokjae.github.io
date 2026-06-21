@@ -1,14 +1,19 @@
 ---
-title: "Microsoft Foundry Agent Service Build 2026 Guide: Hosted Agents, Memory, Toolboxes, Evaluations, and Governance"
-date: 2026-06-13T07:04:28+00:00
-tags: ["Microsoft Foundry", "AI agents", "Azure"]
-description: "A developer guide to Microsoft Foundry Agent Service Build 2026 hosted agents, memory, tools, evaluation, and governance."
-draft: false
 cover:
-  image: "/images/microsoft-foundry-agent-service-build-2026-guide.png"
-  alt: "Microsoft Foundry Agent Service Build 2026 Guide"
+  alt: Microsoft Foundry Agent Service Build 2026 Guide
+  image: /images/microsoft-foundry-agent-service-build-2026-guide.png
   relative: false
-schema: "schema-microsoft-foundry-agent-service-build-2026-guide"
+date: 2026-06-13 07:04:28+00:00
+description: A developer guide to Microsoft Foundry Agent Service Build 2026 hosted
+  agents, memory, tools, evaluation, and governance.
+draft: false
+schema: schema-microsoft-foundry-agent-service-build-2026-guide
+tags:
+- Microsoft Foundry
+- AI agents
+- Azure
+title: 'Microsoft Foundry Agent Service Build 2026 Guide: Hosted Agents, Memory, Toolboxes,
+  Evaluations, and Governance'
 ---
 
 Microsoft Foundry Agent Service Build 2026 is Microsoft's production platform for running AI agents with managed hosting, memory, tool access, evaluations, and governance. The practical shift is that teams can keep their preferred agent framework while moving runtime, identity, observability, and policy controls into a managed Azure control plane.

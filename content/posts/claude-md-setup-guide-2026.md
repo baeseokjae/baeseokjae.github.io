@@ -1,14 +1,21 @@
 ---
-title: "CLAUDE.md Setup Guide 2026: The Config File That Makes Claude Code Actually Useful"
-date: 2026-04-23T01:10:34+00:00
-tags: ["claude-code", "ai-coding", "developer-tools", "configuration", "productivity"]
-description: "Complete CLAUDE.md setup guide for 2026: structure, examples, hierarchy, hooks, and best practices to maximize Claude Code in any project."
-draft: false
 cover:
-  image: "/images/claude-md-setup-guide-2026.png"
-  alt: "CLAUDE.md Setup Guide 2026"
+  alt: CLAUDE.md Setup Guide 2026
+  image: /images/claude-md-setup-guide-2026.png
   relative: false
-schema: "schema-claude-md-setup-guide-2026"
+date: 2026-04-23 01:10:34+00:00
+description: 'Complete CLAUDE.md setup guide for 2026: structure, examples, hierarchy,
+  hooks, and best practices to maximize Claude Code in any project.'
+draft: false
+schema: schema-claude-md-setup-guide-2026
+tags:
+- claude-code
+- ai-coding
+- developer-tools
+- configuration
+- productivity
+title: 'CLAUDE.md Setup Guide 2026: The Config File That Makes Claude Code Actually
+  Useful'
 ---
 
 CLAUDE.md is the project instructions file that Claude Code reads before every session — it's the single most impactful configuration you can make. Drop it in your repo root, add your coding conventions and architecture notes, and Claude stops asking the same questions every session.

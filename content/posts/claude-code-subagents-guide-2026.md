@@ -1,14 +1,19 @@
 ---
-title: "Claude Code Subagents Guide 2026: Parallel Agents for Faster Development"
-date: 2026-04-24T07:12:07+00:00
-tags: ["claude-code", "ai-agents", "developer-tools", "parallel-development"]
-description: "Complete guide to Claude Code subagents: create custom agents, run parallel workflows, optimize costs with model routing, and ship faster."
-draft: false
 cover:
-  image: "/images/claude-code-subagents-guide-2026.png"
-  alt: "Claude Code Subagents Guide 2026: Parallel Agents for Faster Development"
+  alt: 'Claude Code Subagents Guide 2026: Parallel Agents for Faster Development'
+  image: /images/claude-code-subagents-guide-2026.png
   relative: false
-schema: "schema-claude-code-subagents-guide-2026"
+date: 2026-04-24 07:12:07+00:00
+description: 'Complete guide to Claude Code subagents: create custom agents, run parallel
+  workflows, optimize costs with model routing, and ship faster.'
+draft: false
+schema: schema-claude-code-subagents-guide-2026
+tags:
+- claude-code
+- ai-agents
+- developer-tools
+- parallel-development
+title: 'Claude Code Subagents Guide 2026: Parallel Agents for Faster Development'
 ---
 
 Claude Code subagents are isolated AI workers that your main Claude session can spin up, delegate tasks to, and collect results from — letting you run multiple jobs in parallel instead of waiting for each one to finish sequentially. If you've ever watched Claude slowly work through a 10-file refactor one file at a time, subagents are the fix.

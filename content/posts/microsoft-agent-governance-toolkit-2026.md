@@ -1,14 +1,20 @@
 ---
-title: "Microsoft Agent Governance Toolkit: Open-Source Runtime Security for AI Agents"
-date: 2026-05-15T12:07:30+00:00
-tags: ["microsoft","agent-governance","open-source","owasp","ai-security"]
-description: "Microsoft's Agent Governance Toolkit is the first open-source framework covering all 10 OWASP Agentic AI risks with sub-5ms deterministic policy enforcement at runtime."
-draft: false
 cover:
-  image: "/images/microsoft-agent-governance-toolkit-2026.png"
-  alt: "Microsoft Agent Governance Toolkit: Open-Source Runtime Security for AI Agents"
+  alt: 'Microsoft Agent Governance Toolkit: Open-Source Runtime Security for AI Agents'
+  image: /images/microsoft-agent-governance-toolkit-2026.png
   relative: false
-schema: "schema-microsoft-agent-governance-toolkit-2026"
+date: 2026-05-15 12:07:30+00:00
+description: Microsoft's Agent Governance Toolkit is the first open-source framework
+  covering all 10 OWASP Agentic AI risks with sub-5ms deterministic policy enforce...
+draft: false
+schema: schema-microsoft-agent-governance-toolkit-2026
+tags:
+- microsoft
+- agent-governance
+- open-source
+- owasp
+- ai-security
+title: 'Microsoft Agent Governance Toolkit: Open-Source Runtime Security for AI Agents'
 ---
 
 Released on April 2, 2026, the Microsoft Agent Governance Toolkit is the first open-source runtime security framework to address all ten risks on the OWASP Agentic AI Top 10. Shipped under the MIT license, it provides deterministic policy enforcement at the agent action layer with less than 5ms overhead per evaluated action. As the agentic AI security market grows from a projected $1.65 billion in 2026 toward an estimated $13.52 billion by 2032 at roughly 42% CAGR, this toolkit arrives at exactly the moment enterprises need a vendor-neutral, community-owned standard for governing what their AI agents are actually permitted to do.

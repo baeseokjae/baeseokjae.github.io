@@ -1,14 +1,20 @@
 ---
-title: "Cursor Composer 2 Guide 2026: Frontier Coding Model at $0.50/M Tokens"
-date: 2026-04-27T14:08:42+00:00
-tags: ["cursor", "ai-coding", "composer-2", "ide", "agentic-coding"]
-description: "Complete guide to Cursor Composer 2: benchmarks, pricing, architecture, and how it compares to Claude Code, Copilot, and GPT-5.4."
-draft: false
 cover:
-  image: "/images/cursor-composer-2-guide-2026.png"
-  alt: "Cursor Composer 2 Guide 2026: Frontier Coding Model at $0.50/M Tokens"
+  alt: 'Cursor Composer 2 Guide 2026: Frontier Coding Model at $0.50/M Tokens'
+  image: /images/cursor-composer-2-guide-2026.png
   relative: false
-schema: "schema-cursor-composer-2-guide-2026"
+date: 2026-04-27 14:08:42+00:00
+description: 'Complete guide to Cursor Composer 2: benchmarks, pricing, architecture,
+  and how it compares to Claude Code, Copilot, and GPT-5.4.'
+draft: false
+schema: schema-cursor-composer-2-guide-2026
+tags:
+- cursor
+- ai-coding
+- composer-2
+- ide
+- agentic-coding
+title: 'Cursor Composer 2 Guide 2026: Frontier Coding Model at $0.50/M Tokens'
 ---
 
 Cursor Composer 2 is Anysphere's first in-house frontier AI model, released March 19, 2026, built specifically for autonomous project-scale coding inside Cursor IDE. Priced at $0.50/M input tokens — 86% cheaper than its predecessor — it outperforms Claude Opus 4.6 on Terminal-Bench 2.0 while being the only frontier coding model that runs exclusively inside an IDE rather than as an external API.

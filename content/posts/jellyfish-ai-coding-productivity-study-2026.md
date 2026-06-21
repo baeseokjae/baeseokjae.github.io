@@ -1,14 +1,20 @@
 ---
-title: "Jellyfish AI Coding Productivity Study 2026: More Tokens ≠ Better Output"
-date: 2026-06-07T00:14:14+00:00
-tags: ["developer productivity", "AI coding tools", "engineering metrics", "tokenmaxxing", "ROI"]
-description: "Jellyfish studied 7,548 engineers and found that the top token consumers got 2x throughput at 10x the cost — a dangerous efficiency trap."
-draft: false
 cover:
-  image: "/images/jellyfish-ai-coding-productivity-study-2026.png"
-  alt: "Jellyfish AI Coding Productivity Study 2026: More Tokens ≠ Better Output"
+  alt: 'Jellyfish AI Coding Productivity Study 2026: More Tokens ≠ Better Output'
+  image: /images/jellyfish-ai-coding-productivity-study-2026.png
   relative: false
-schema: "schema-jellyfish-ai-coding-productivity-study-2026"
+date: 2026-06-07 00:14:14+00:00
+description: Jellyfish studied 7,548 engineers and found that the top token consumers
+  got 2x throughput at 10x the cost — a dangerous efficiency trap.
+draft: false
+schema: schema-jellyfish-ai-coding-productivity-study-2026
+tags:
+- developer productivity
+- AI coding tools
+- engineering metrics
+- tokenmaxxing
+- ROI
+title: 'Jellyfish AI Coding Productivity Study 2026: More Tokens ≠ Better Output'
 ---
 
 The Jellyfish AI Engineering Trends study of 7,548 engineers found a stark pattern: the heaviest AI token users produced twice the PR throughput but consumed ten times the token budget. More tokens do not equal more productivity — they equal a steeper cost curve that most engineering leaders aren't measuring.

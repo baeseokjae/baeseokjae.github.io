@@ -1,14 +1,20 @@
 ---
-title: "GitHub Copilot Agent Mode Guide 2026: Multi-File Edits and Autonomous Tasks"
-date: 2026-04-21T07:21:53+00:00
-tags: ["github-copilot", "ai-coding", "agent-mode", "developer-tools", "productivity"]
-description: "Complete guide to GitHub Copilot Agent Mode 2026 — setup, multi-file edits, coding agent, MCP integration, and cost optimization."
-draft: false
 cover:
-  image: "/images/github-copilot-agent-mode-2026.png"
-  alt: "GitHub Copilot Agent Mode Guide 2026: Multi-File Edits and Autonomous Tasks"
+  alt: 'GitHub Copilot Agent Mode Guide 2026: Multi-File Edits and Autonomous Tasks'
+  image: /images/github-copilot-agent-mode-2026.png
   relative: false
-schema: "schema-github-copilot-agent-mode-2026"
+date: 2026-04-21 07:21:53+00:00
+description: Complete guide to GitHub Copilot Agent Mode 2026 — setup, multi-file
+  edits, coding agent, MCP integration, and cost optimization.
+draft: false
+schema: schema-github-copilot-agent-mode-2026
+tags:
+- github-copilot
+- ai-coding
+- agent-mode
+- developer-tools
+- productivity
+title: 'GitHub Copilot Agent Mode Guide 2026: Multi-File Edits and Autonomous Tasks'
 ---
 
 GitHub Copilot Agent Mode is now generally available in 2026, transforming Copilot from an autocomplete tool into a fully autonomous coding partner that can edit multiple files, run terminal commands, fix its own errors, and even open pull requests while you sleep. If you've been using Copilot only for inline completions, you're leaving 80% of its value on the table.

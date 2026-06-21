@@ -1,14 +1,22 @@
 ---
-title: "MiniGPT-4 vs LLaVA-1.5 Multimodal Fine-Tune Benchmark 2026: Developer's Definitive Guide"
-date: 2026-05-18T00:05:02+00:00
-tags: ["multimodal AI", "LLaVA", "MiniGPT-4", "fine-tuning", "VQA benchmark", "vision language model"]
-description: "LLaVA-1.5 wins on every major benchmark, but MiniGPT-4's architecture still matters for spatial tasks. Here's which to fine-tune in 2026."
-draft: false
 cover:
-  image: "/images/minigpt-4-vs-llava-1-5-multimodal-fine-tune-benchmark-2026.png"
-  alt: "MiniGPT-4 vs LLaVA-1.5 Multimodal Fine-Tune Benchmark 2026"
+  alt: MiniGPT-4 vs LLaVA-1.5 Multimodal Fine-Tune Benchmark 2026
+  image: /images/minigpt-4-vs-llava-1-5-multimodal-fine-tune-benchmark-2026.png
   relative: false
-schema: "schema-minigpt-4-vs-llava-1-5-multimodal-fine-tune-benchmark-2026"
+date: 2026-05-18 00:05:02+00:00
+description: LLaVA-1.5 wins on every major benchmark, but MiniGPT-4's architecture
+  still matters for spatial tasks. Here's which to fine-tune in 2026.
+draft: false
+schema: schema-minigpt-4-vs-llava-1-5-multimodal-fine-tune-benchmark-2026
+tags:
+- multimodal AI
+- LLaVA
+- MiniGPT-4
+- fine-tuning
+- VQA benchmark
+- vision language model
+title: 'MiniGPT-4 vs LLaVA-1.5 Multimodal Fine-Tune Benchmark 2026: Developer''s Definitive
+  Guide'
 ---
 
 If you're choosing between MiniGPT-4 and LLaVA-1.5 for multimodal fine-tuning in 2026, the answer is nearly always LLaVA-1.5: it achieves state-of-the-art on 11/12 benchmarks with 1.2M training samples, trains in under a day on a single 8×A100 node, and has mature HuggingFace tooling. MiniGPT-4 remains relevant only for specific spatial reasoning tasks where its Q-Former architecture still competes.

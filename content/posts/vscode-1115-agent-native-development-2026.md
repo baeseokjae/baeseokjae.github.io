@@ -1,14 +1,18 @@
 ---
-title: "VS Code 1.115 Agents: What Changed for Agent-Native Development"
-date: 2026-06-15T04:04:25+00:00
-tags: ["VS Code", "AI agents", "developer tools"]
-description: "A practical guide to VS Code 1.115 agents, the new Agents app, worktrees, browser tools, terminals, and team governance."
-draft: false
 cover:
-  image: "/images/vscode-1115-agent-native-development-2026.png"
-  alt: "VS Code 1.115 Agents: What Changed for Agent-Native Development"
+  alt: 'VS Code 1.115 Agents: What Changed for Agent-Native Development'
+  image: /images/vscode-1115-agent-native-development-2026.png
   relative: false
-schema: "schema-vscode-1115-agent-native-development-2026"
+date: 2026-06-15 04:04:25+00:00
+description: A practical guide to VS Code 1.115 agents, the new Agents app, worktrees,
+  browser tools, terminals, and team governance.
+draft: false
+schema: schema-vscode-1115-agent-native-development-2026
+tags:
+- VS Code
+- AI agents
+- developer tools
+title: 'VS Code 1.115 Agents: What Changed for Agent-Native Development'
 ---
 
 VS Code 1.115 agents matter because Microsoft moved beyond chat assistance and added execution infrastructure: an Agents preview app, isolated worktrees, parallel sessions, review surfaces, browser transparency, and stronger terminal tooling. The practical takeaway is simple: VS Code is becoming a host for delegated coding work, not just an editor with AI features.

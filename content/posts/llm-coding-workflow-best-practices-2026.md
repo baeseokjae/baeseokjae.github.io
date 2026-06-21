@@ -1,14 +1,18 @@
 ---
-title: "LLM Coding Workflow Best Practices 2026: A Senior Developer's Playbook"
-date: 2026-06-15T22:04:08+00:00
-tags: ["AI coding", "LLM workflows", "software engineering"]
-description: "A senior developer playbook for using LLM coding tools with specs, context, tests, review, and practical guardrails."
-draft: false
 cover:
-  image: "/images/llm-coding-workflow-best-practices-2026.png"
-  alt: "LLM Coding Workflow Best Practices 2026: A Senior Developer's Playbook"
+  alt: 'LLM Coding Workflow Best Practices 2026: A Senior Developer''s Playbook'
+  image: /images/llm-coding-workflow-best-practices-2026.png
   relative: false
-schema: "schema-llm-coding-workflow-best-practices-2026"
+date: 2026-06-15 22:04:08+00:00
+description: A senior developer playbook for using LLM coding tools with specs, context,
+  tests, review, and practical guardrails.
+draft: false
+schema: schema-llm-coding-workflow-best-practices-2026
+tags:
+- AI coding
+- LLM workflows
+- software engineering
+title: 'LLM Coding Workflow Best Practices 2026: A Senior Developer''s Playbook'
 ---
 
 LLM coding workflow best practices in 2026 are about controlled acceleration: write a clear spec, package context, work in small diffs, run tests continuously, review intent and security, and stop agents when they drift. The senior developer's job is not to type less; it is to make generated code trustworthy.

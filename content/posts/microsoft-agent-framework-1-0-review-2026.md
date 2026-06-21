@@ -1,14 +1,20 @@
 ---
-title: "Microsoft Agent Framework 1.0 Review: Semantic Kernel and AutoGen Finally Converge"
-date: 2026-06-15T06:18:33+00:00
-tags: ["Microsoft Agent Framework", "AI agents", "Semantic Kernel"]
-description: "A practical Microsoft Agent Framework 1.0 review for .NET and Python teams choosing an agent runtime in 2026."
-draft: false
 cover:
-  image: "/images/microsoft-agent-framework-1-0-review-2026.png"
-  alt: "Microsoft Agent Framework 1.0 Review: Semantic Kernel and AutoGen Finally Converge"
+  alt: 'Microsoft Agent Framework 1.0 Review: Semantic Kernel and AutoGen Finally
+    Converge'
+  image: /images/microsoft-agent-framework-1-0-review-2026.png
   relative: false
-schema: "schema-microsoft-agent-framework-1-0-review-2026"
+date: 2026-06-15 06:18:33+00:00
+description: A practical Microsoft Agent Framework 1.0 review for .NET and Python
+  teams choosing an agent runtime in 2026.
+draft: false
+schema: schema-microsoft-agent-framework-1-0-review-2026
+tags:
+- Microsoft Agent Framework
+- AI agents
+- Semantic Kernel
+title: 'Microsoft Agent Framework 1.0 Review: Semantic Kernel and AutoGen Finally
+  Converge'
 ---
 
 Microsoft Agent Framework 1.0 is worth adopting if your team builds production agents in .NET or Python and already lives near Azure, Semantic Kernel, AutoGen, OpenTelemetry, or Microsoft.Extensions.AI. It is not just a rename; it is Microsoft turning overlapping agent projects into one supported runtime.

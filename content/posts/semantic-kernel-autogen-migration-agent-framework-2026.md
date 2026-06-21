@@ -1,14 +1,18 @@
 ---
-title: "Semantic Kernel AutoGen migration to Microsoft Agent Framework 1.0"
-date: 2026-06-14T08:31:57+00:00
-tags: ["Microsoft Agent Framework", "Semantic Kernel", "AutoGen"]
-description: "A practical Semantic Kernel AutoGen migration guide for moving agents, tools, workflows, and evals to Agent Framework 1.0."
-draft: false
 cover:
-  image: "/images/semantic-kernel-autogen-migration-agent-framework-2026.png"
-  alt: "Semantic Kernel AutoGen migration to Microsoft Agent Framework 1.0"
+  alt: Semantic Kernel AutoGen migration to Microsoft Agent Framework 1.0
+  image: /images/semantic-kernel-autogen-migration-agent-framework-2026.png
   relative: false
-schema: "schema-semantic-kernel-autogen-migration-agent-framework-2026"
+date: 2026-06-14 08:31:57+00:00
+description: A practical Semantic Kernel AutoGen migration guide for moving agents,
+  tools, workflows, and evals to Agent Framework 1.0.
+draft: false
+schema: schema-semantic-kernel-autogen-migration-agent-framework-2026
+tags:
+- Microsoft Agent Framework
+- Semantic Kernel
+- AutoGen
+title: Semantic Kernel AutoGen migration to Microsoft Agent Framework 1.0
 ---
 
 Semantic Kernel AutoGen migration should start with inventory, not package replacement. Move simple single-agent paths to Microsoft Agent Framework 1.0 first, preserve working tool contracts, then migrate state, memory, multi-agent workflows, checkpointing, observability, and deployment in controlled phases with rollback coverage.

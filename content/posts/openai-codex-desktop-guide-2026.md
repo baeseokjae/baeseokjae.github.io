@@ -1,14 +1,20 @@
 ---
-title: "OpenAI Codex Desktop Guide 2026: Full Agentic IDE Workflows and GPT-5-Codex"
-date: 2026-05-16T19:41:01+00:00
-tags: ["openai-codex", "agentic-coding", "gpt-5", "ide-tools", "developer-tools"]
-description: "OpenAI Codex Desktop 설치부터 병렬 에이전트, AGENTS.md 설정, GitHub PR 자동화까지 — 2026년 완전 가이드."
-draft: false
 cover:
-  image: "/images/openai-codex-desktop-guide-2026.png"
-  alt: "OpenAI Codex Desktop Guide 2026: Full Agentic IDE Workflows and GPT-5-Codex"
+  alt: 'OpenAI Codex Desktop Guide 2026: Full Agentic IDE Workflows and GPT-5-Codex'
+  image: /images/openai-codex-desktop-guide-2026.png
   relative: false
-schema: "schema-openai-codex-desktop-guide-2026"
+date: 2026-05-16 19:41:01+00:00
+description: OpenAI Codex Desktop 설치부터 병렬 에이전트, AGENTS.md 설정, GitHub PR 자동화까지 — 2026년
+  완전 가이드.
+draft: false
+schema: schema-openai-codex-desktop-guide-2026
+tags:
+- openai-codex
+- agentic-coding
+- gpt-5
+- ide-tools
+- developer-tools
+title: 'OpenAI Codex Desktop Guide 2026: Full Agentic IDE Workflows and GPT-5-Codex'
 ---
 
 OpenAI Codex Desktop는 GPT-5-Codex 모델을 기반으로 코드를 자율적으로 작성·수정·테스트하고 GitHub PR까지 생성하는 에이전트형 IDE 도구다. 단순한 자동완성 도구가 아니라, 하나의 지시만으로 멀티 파일 수정 → 테스트 실행 → PR 제출을 30분 안에 완료하는 완전 자율 코딩 에이전트다.

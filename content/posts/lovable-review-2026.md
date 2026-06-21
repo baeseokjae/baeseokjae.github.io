@@ -1,14 +1,20 @@
 ---
-title: "Lovable Review 2026: The $6.6B AI App Builder That Ships Real Products"
-date: 2026-05-01T15:05:03+00:00
-tags: ["lovable review", "ai app builder", "vibe coding", "no-code", "lovable 2.0"]
-description: "Honest Lovable review for 2026: pricing, agent mode, real build tests, and how it compares to Bolt and v0."
-draft: false
 cover:
-  image: "/images/lovable-review-2026.png"
-  alt: "Lovable Review 2026: The $6.6B AI App Builder That Ships Real Products"
+  alt: 'Lovable Review 2026: The $6.6B AI App Builder That Ships Real Products'
+  image: /images/lovable-review-2026.png
   relative: false
-schema: "schema-lovable-review-2026"
+date: 2026-05-01 15:05:03+00:00
+description: 'Honest Lovable review for 2026: pricing, agent mode, real build tests,
+  and how it compares to Bolt and v0.'
+draft: false
+schema: schema-lovable-review-2026
+tags:
+- lovable review
+- ai app builder
+- vibe coding
+- no-code
+- lovable 2.0
+title: 'Lovable Review 2026: The $6.6B AI App Builder That Ships Real Products'
 ---
 
 Lovable is a browser-based AI app builder that converts natural language prompts into full-stack React applications — with working auth, database connections, and deployable code — without requiring you to write a single line. In 2026, it is the fastest-growing AI developer tool on the market.

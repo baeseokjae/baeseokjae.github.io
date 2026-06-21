@@ -1,14 +1,20 @@
 ---
-title: "Claude Opus 4.7 Tokenizer Cost Trap: Up to 35% More Tokens Explained"
-date: 2026-04-26T21:04:29+00:00
-tags: ["claude", "api-cost", "tokenizer", "anthropic", "cost-optimization"]
-description: "Claude Opus 4.7 tokenizer uses 1.20x–1.47x more tokens for code. Same price, higher cost. Here's who pays more and how to reduce it."
-draft: false
 cover:
-  image: "/images/claude-opus-4-7-tokenizer-cost-guide-2026.png"
-  alt: "Claude Opus 4.7 Tokenizer Cost Trap: Up to 35% More Tokens Explained"
+  alt: 'Claude Opus 4.7 Tokenizer Cost Trap: Up to 35% More Tokens Explained'
+  image: /images/claude-opus-4-7-tokenizer-cost-guide-2026.png
   relative: false
-schema: "schema-claude-opus-4-7-tokenizer-cost-guide-2026"
+date: 2026-04-26 21:04:29+00:00
+description: Claude Opus 4.7 tokenizer uses 1.20x–1.47x more tokens for code. Same
+  price, higher cost. Here's who pays more and how to reduce it.
+draft: false
+schema: schema-claude-opus-4-7-tokenizer-cost-guide-2026
+tags:
+- claude
+- api-cost
+- tokenizer
+- anthropic
+- cost-optimization
+title: 'Claude Opus 4.7 Tokenizer Cost Trap: Up to 35% More Tokens Explained'
 ---
 
 Claude Opus 4.7 launched on April 16, 2026 at the same $5/$25 per million token price as Opus 4.6 — but a redesigned tokenizer silently inflates English and code inputs by 1.20x–1.47x, meaning your real bill can jump 12–35% with zero sticker price change.

@@ -1,14 +1,21 @@
 ---
-title: "AG2 (AutoGen v0.4) Guide: Event-Driven Multi-Agent Framework for Python Developers"
-date: 2026-04-19T16:31:58+00:00
-tags: ["ag2", "autogen", "multi-agent", "python", "ai-agents", "llm"]
-description: "Complete guide to AG2 (AutoGen v0.4): architecture, ConversableAgent, GroupChat, async messaging, and production best practices for Python developers."
-draft: false
 cover:
-  image: "/images/ag2-autogen-v0-4-guide-2026.png"
-  alt: "AG2 (AutoGen v0.4) Guide: Event-Driven Multi-Agent Framework for Python Developers"
+  alt: 'AG2 (AutoGen v0.4) Guide: Event-Driven Multi-Agent Framework for Python Developers'
+  image: /images/ag2-autogen-v0-4-guide-2026.png
   relative: false
-schema: "schema-ag2-autogen-v0-4-guide-2026"
+date: 2026-04-19 16:31:58+00:00
+description: 'Complete guide to AG2 (AutoGen v0.4): architecture, ConversableAgent,
+  GroupChat, async messaging, and production best practices for Python developers.'
+draft: false
+schema: schema-ag2-autogen-v0-4-guide-2026
+tags:
+- ag2
+- autogen
+- multi-agent
+- python
+- ai-agents
+- llm
+title: 'AG2 (AutoGen v0.4) Guide: Event-Driven Multi-Agent Framework for Python Developers'
 ---
 
 AG2 (formerly Microsoft AutoGen, now maintained by the ag2ai community) is a Python framework for building multi-agent AI systems where multiple LLM-powered agents collaborate, debate, and execute tasks autonomously. The v0.4 rewrite introduced an async-first, event-driven architecture that makes AG2 one of the most capable frameworks for complex conversational agent pipelines in 2026.

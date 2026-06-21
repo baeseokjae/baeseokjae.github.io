@@ -1,14 +1,21 @@
 ---
-title: "Terminal-Bench 2.0 Explained: The New Standard for AI Agent Benchmarks (2026 Guide)"
-date: 2026-05-09T00:00:00+00:00
-tags: ["terminal-bench","ai-benchmarks","llm-evaluation","ai-coding","developer-tools"]
-description: "Terminal-Bench 2.0 evaluates AI agents on real terminal tasks — compiling code, administering systems, running security workflows. Here's how the 2026 leaderboard breaks down and how to use the scores to choose your model."
-draft: false
 cover:
-  image: "/images/terminal-bench-2026-guide.png"
-  alt: "Terminal-Bench 2.0 Explained: The New Standard for AI Agent Benchmarks"
+  alt: 'Terminal-Bench 2.0 Explained: The New Standard for AI Agent Benchmarks'
+  image: /images/terminal-bench-2026-guide.png
   relative: false
-schema: "schema-terminal-bench-2026-guide"
+date: 2026-05-09 00:00:00+00:00
+description: Terminal-Bench 2.0 evaluates AI agents on real terminal tasks — compiling
+  code, administering systems, running security workflows. Here's how the 2026 l...
+draft: false
+schema: schema-terminal-bench-2026-guide
+tags:
+- terminal-bench
+- ai-benchmarks
+- llm-evaluation
+- ai-coding
+- developer-tools
+title: 'Terminal-Bench 2.0 Explained: The New Standard for AI Agent Benchmarks (2026
+  Guide)'
 ---
 
 Terminal-Bench 2.0 is the benchmark the DevOps and MLOps communities have needed for years. Unlike SWE-bench, which focuses narrowly on Python bug fixes in open-source repos, Terminal-Bench drops AI agents into a live terminal environment and asks them to do what senior engineers actually spend their days doing: compile unfamiliar codebases, configure servers, train models, write and debug scripts, and complete multi-step system administration tasks. As of May 2026, 39 models have been evaluated and the average score sits at 56.4% — a gap that reveals just how hard real terminal work is for even the most capable AI agents.

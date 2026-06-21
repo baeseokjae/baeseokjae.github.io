@@ -1,14 +1,21 @@
 ---
-title: "Vibe Coding Explained: The Complete Developer Guide for 2026"
-date: 2026-04-30T00:04:33+00:00
-tags: ["vibe-coding", "ai-tools", "developer-productivity", "cursor", "github-copilot", "llm"]
-description: "Vibe coding lets developers build software by describing intent in natural language and letting AI write the code — here's everything you need to know in 2026."
-draft: false
 cover:
-  image: "/images/vibe-coding-explained-the-complete-developer-guide-for-2026.png"
-  alt: "Vibe Coding Explained: The Complete Developer Guide for 2026"
+  alt: 'Vibe Coding Explained: The Complete Developer Guide for 2026'
+  image: /images/vibe-coding-explained-the-complete-developer-guide-for-2026.png
   relative: false
-schema: "schema-vibe-coding-explained-the-complete-developer-guide-for-2026"
+date: 2026-04-30 00:04:33+00:00
+description: Vibe coding lets developers build software by describing intent in natural
+  language and letting AI write the code — here's everything you need to know i...
+draft: false
+schema: schema-vibe-coding-explained-the-complete-developer-guide-for-2026
+tags:
+- vibe-coding
+- ai-tools
+- developer-productivity
+- cursor
+- github-copilot
+- llm
+title: 'Vibe Coding Explained: The Complete Developer Guide for 2026'
 ---
 
 Vibe coding is a development approach where you describe what you want in natural language and let an AI model write the code — you steer with intent, not keystrokes. Coined by Andrej Karpathy in February 2025, the technique went from viral tweet to mainstream workflow in under a year, reshaping how developers, designers, and non-engineers build software in 2026.

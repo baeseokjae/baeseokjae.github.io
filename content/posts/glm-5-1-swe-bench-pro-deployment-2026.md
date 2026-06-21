@@ -1,14 +1,20 @@
 ---
-title: "GLM-5.1 Deployment Guide: 744B SWE-Bench Pro Leader Self-Hosted Rollout"
-date: 2026-06-11T16:02:55+00:00
-tags: ["glm-5.1", "swe-bench-pro", "llm-deployment", "vllm", "sglang"]
-description: "A senior-engineer playbook for deploying GLM-5.1 on vLLM, SGLang, and Ascend with SWE-Bench Pro production constraints in mind."
-draft: false
 cover:
-  image: "/images/glm-5-1-swe-bench-pro-deployment-2026.png"
-  alt: "GLM-5.1 Deployment Guide: 744B SWE-Bench Pro Leader Self-Hosted Rollout"
+  alt: 'GLM-5.1 Deployment Guide: 744B SWE-Bench Pro Leader Self-Hosted Rollout'
+  image: /images/glm-5-1-swe-bench-pro-deployment-2026.png
   relative: false
-schema: "schema-glm-5-1-swe-bench-pro-deployment-2026"
+date: 2026-06-11 16:02:55+00:00
+description: A senior-engineer playbook for deploying GLM-5.1 on vLLM, SGLang, and
+  Ascend with SWE-Bench Pro production constraints in mind.
+draft: false
+schema: schema-glm-5-1-swe-bench-pro-deployment-2026
+tags:
+- glm-5.1
+- swe-bench-pro
+- llm-deployment
+- vllm
+- sglang
+title: 'GLM-5.1 Deployment Guide: 744B SWE-Bench Pro Leader Self-Hosted Rollout'
 ---
 
 GLM-5.1 is a 744B parameter MoE model with 40B active tokens, and it is best deployed for SWE-Bench Pro workloads when you match stack, quantization, and API behavior to your latency and tool-call requirements. This guide gives practical production defaults for vLLM, SGLang, and Ascend, with a DeepSeek-V3.1 baseline comparison and a live-check workflow you can apply in less than a day.

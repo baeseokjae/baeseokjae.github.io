@@ -1,14 +1,18 @@
 ---
-title: "AI Coding Tool Switching Costs: How to Evaluate BYOK Portability"
-date: 2026-06-13T15:04:37+00:00
-tags: ["ai-coding-tools", "byok", "developer-tools"]
-description: "Evaluate AI coding tool switching costs with a practical BYOK portability scorecard for developers and engineering teams."
-draft: false
 cover:
-  image: "/images/ai-coding-tool-switching-costs-byok-2026.png"
-  alt: "AI Coding Tool Switching Costs: How to Evaluate BYOK Portability"
+  alt: 'AI Coding Tool Switching Costs: How to Evaluate BYOK Portability'
+  image: /images/ai-coding-tool-switching-costs-byok-2026.png
   relative: false
-schema: "schema-ai-coding-tool-switching-costs-byok-2026"
+date: 2026-06-13 15:04:37+00:00
+description: Evaluate AI coding tool switching costs with a practical BYOK portability
+  scorecard for developers and engineering teams.
+draft: false
+schema: schema-ai-coding-tool-switching-costs-byok-2026
+tags:
+- ai-coding-tools
+- byok
+- developer-tools
+title: 'AI Coding Tool Switching Costs: How to Evaluate BYOK Portability'
 ---
 
 AI coding tool switching costs are the engineering, security, billing, and workflow costs of leaving one coding assistant for another. BYOK can reduce lock-in, but only when prompts, rules, model access, audit logs, budget controls, and developer habits can move with the team.

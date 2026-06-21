@@ -1,14 +1,18 @@
 ---
-title: "Groq API Guide 2026: Fastest LLM Inference for Developers (Free Tier Included)"
-date: 2026-06-12T06:11:12+00:00
-tags: ["groq api", "llm api", "openai compatibility"]
-description: "A practical 2026 Groq API playbook with free-tier limits, latency truth, and routing patterns for production workloads."
-draft: false
 cover:
-  image: "/images/groq-api-developer-guide-2026.png"
-  alt: "Groq API Guide 2026: Fastest LLM Inference for Developers (Free Tier Included)"
+  alt: 'Groq API Guide 2026: Fastest LLM Inference for Developers (Free Tier Included)'
+  image: /images/groq-api-developer-guide-2026.png
   relative: false
-schema: "schema-groq-api-developer-guide-2026"
+date: 2026-06-12 06:11:12+00:00
+description: A practical 2026 Groq API playbook with free-tier limits, latency truth,
+  and routing patterns for production workloads.
+draft: false
+schema: schema-groq-api-developer-guide-2026
+tags:
+- groq api
+- llm api
+- openai compatibility
+title: 'Groq API Guide 2026: Fastest LLM Inference for Developers (Free Tier Included)'
 ---
 
 Groq is the pragmatic choice when your product needs immediate, human-visible responses instead of theoretical model benchmarks. In 2026, Groq’s open-source-first model lineup, OpenAI-style endpoint, and sub-second latency profile let teams ship real-time chat, transcription, and autocomplete features without rewriting their API layer. In this guide, I explain what to keep on Groq, what to route away, and how to avoid hitting the free-tier limits the hard way.

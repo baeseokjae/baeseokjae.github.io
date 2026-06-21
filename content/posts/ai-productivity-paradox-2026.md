@@ -1,14 +1,20 @@
 ---
-title: "The AI Productivity Paradox: 75% Use AI Tools but No Measurable Gains"
-date: 2026-05-24T11:55:36+00:00
-tags: ["developer-productivity", "ai-tools", "software-engineering", "metrics", "ai-coding"]
-description: "75% of developers use AI coding tools, yet most orgs see no measurable gains. Here's why — and what the top 20% do differently."
-draft: false
 cover:
-  image: "/images/ai-productivity-paradox-2026.png"
-  alt: "The AI Productivity Paradox: 75% Use AI Tools but No Measurable Gains"
+  alt: 'The AI Productivity Paradox: 75% Use AI Tools but No Measurable Gains'
+  image: /images/ai-productivity-paradox-2026.png
   relative: false
-schema: "schema-ai-productivity-paradox-2026"
+date: 2026-05-24 11:55:36+00:00
+description: 75% of developers use AI coding tools, yet most orgs see no measurable
+  gains. Here's why — and what the top 20% do differently.
+draft: false
+schema: schema-ai-productivity-paradox-2026
+tags:
+- developer-productivity
+- ai-tools
+- software-engineering
+- metrics
+- ai-coding
+title: 'The AI Productivity Paradox: 75% Use AI Tools but No Measurable Gains'
 ---
 
 Three out of four developers now use AI coding assistants daily, yet the Faros AI Engineering Report tracked 22,000 developers across 4,000 teams and found no measurable improvement in DORA metrics at the organizational level. The individual experience of speed clashes directly with what the data shows — and understanding why that gap exists is the first step to closing it.

@@ -1,14 +1,20 @@
 ---
-title: "Gemini 3.1 Pro Review 2026: Developer Benchmark and Coding Performance"
-date: 2026-04-19T22:04:48+00:00
-tags: ["gemini", "llm-benchmark", "ai-coding", "google-ai", "developer-tools"]
-description: "Gemini 3.1 Pro claims #1 on AI benchmarks with 77.1% ARC-AGI-2 — but 29s latency and enterprise gaps make it a nuanced choice for developers."
-draft: false
 cover:
-  image: "/images/gemini-3-1-pro-review-2026.png"
-  alt: "Gemini 3.1 Pro Review 2026: Developer Benchmark and Coding Performance"
+  alt: 'Gemini 3.1 Pro Review 2026: Developer Benchmark and Coding Performance'
+  image: /images/gemini-3-1-pro-review-2026.png
   relative: false
-schema: "schema-gemini-3-1-pro-review-2026"
+date: 2026-04-19 22:04:48+00:00
+description: 'Gemini 3.1 Pro claims #1 on AI benchmarks with 77.1% ARC-AGI-2 — but
+  29s latency and enterprise gaps make it a nuanced choice for developers.'
+draft: false
+schema: schema-gemini-3-1-pro-review-2026
+tags:
+- gemini
+- llm-benchmark
+- ai-coding
+- google-ai
+- developer-tools
+title: 'Gemini 3.1 Pro Review 2026: Developer Benchmark and Coding Performance'
 ---
 
 Gemini 3.1 Pro is Google's most capable reasoning model as of early 2026, launching February 19 to immediately claim the #1 spot on Artificial Analysis' Intelligence Index across 115 models — with an overall score of 57 against a peer median of 26. For developers evaluating coding assistants and agentic workflows, the core question isn't whether it benchmarks well. It's whether those benchmarks translate to tasks you actually run in production, and whether the 29-second time-to-first-token penalty is a dealbreaker for your architecture.

@@ -1,14 +1,22 @@
 ---
-title: "OpenAI Codex Multi-Agent Enterprise Guide: Plugins, Persistent Memory & Multi-Day Workflows (2026)"
-date: 2026-05-18T21:05:45+00:00
-tags: ["openai-codex", "multi-agent", "enterprise", "ai-coding", "automation"]
-description: "OpenAI Codex's 2026 multi-agent update ships 90+ enterprise plugins, persistent memory, and multi-day autonomous workflows. Here's what actually matters for teams."
-draft: false
 cover:
-  image: "/images/codex-multi-agent-enterprise-2026.png"
-  alt: "OpenAI Codex Multi-Agent Enterprise Guide: Plugins, Persistent Memory & Multi-Day Workflows (2026)"
+  alt: 'OpenAI Codex Multi-Agent Enterprise Guide: Plugins, Persistent Memory & Multi-Day
+    Workflows (2026)'
+  image: /images/codex-multi-agent-enterprise-2026.png
   relative: false
-schema: "schema-codex-multi-agent-enterprise-2026"
+date: 2026-05-18 21:05:45+00:00
+description: OpenAI Codex's 2026 multi-agent update ships 90+ enterprise plugins,
+  persistent memory, and multi-day autonomous workflows. Here's what actually matters...
+draft: false
+schema: schema-codex-multi-agent-enterprise-2026
+tags:
+- openai-codex
+- multi-agent
+- enterprise
+- ai-coding
+- automation
+title: 'OpenAI Codex Multi-Agent Enterprise Guide: Plugins, Persistent Memory & Multi-Day
+  Workflows (2026)'
 ---
 
 OpenAI Codex's April 2026 update transformed it from a capable coding assistant into a full enterprise multi-agent platform: 90+ plugins connecting Jira, Salesforce, and Microsoft 365; persistent memory that retains context across sessions; and multi-day autonomous agents that schedule and execute work without human intervention. More than 1 million developers used Codex in the month after launch.

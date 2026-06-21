@@ -1,14 +1,18 @@
 ---
-title: "Microsoft Agent Framework 1.0 vs AutoGen LangGraph: Developer Guide 2026"
-date: 2026-06-10T10:07:10+00:00
-tags: ["AI agents", "Microsoft Agent Framework", "LangGraph"]
-description: "Compare Microsoft Agent Framework 1.0, AutoGen, and LangGraph for production AI agent development in 2026."
-draft: false
 cover:
-  image: "/images/microsoft-agent-framework-1-0-vs-autogen-langgraph-2026.png"
-  alt: "Microsoft Agent Framework 1.0 vs AutoGen LangGraph: Developer Guide 2026"
+  alt: 'Microsoft Agent Framework 1.0 vs AutoGen LangGraph: Developer Guide 2026'
+  image: /images/microsoft-agent-framework-1-0-vs-autogen-langgraph-2026.png
   relative: false
-schema: "schema-microsoft-agent-framework-1-0-vs-autogen-langgraph-2026"
+date: 2026-06-10 10:07:10+00:00
+description: Compare Microsoft Agent Framework 1.0, AutoGen, and LangGraph for production
+  AI agent development in 2026.
+draft: false
+schema: schema-microsoft-agent-framework-1-0-vs-autogen-langgraph-2026
+tags:
+- AI agents
+- Microsoft Agent Framework
+- LangGraph
+title: 'Microsoft Agent Framework 1.0 vs AutoGen LangGraph: Developer Guide 2026'
 ---
 
 Microsoft Agent Framework 1.0 is the best 2026 choice for Azure, .NET, Semantic Kernel, and AutoGen migration teams; LangGraph is the strongest independent runtime for durable Python state graphs; AutoGen is now mainly for existing research prototypes and legacy multi-agent experiments.

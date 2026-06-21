@@ -3,8 +3,9 @@ cover:
   alt: 'AI for Healthcare 2026: Clinical NLP, Ambient Scribes, and Medical AI Tools'
   image: /images/ai-healthcare-clinical-nlp-2026.png
   relative: false
-date: 2026-05-08T00:00:00+00:00
-description: The AI healthcare market hits $45.2B in 2026. Here is what clinical teams need to know about ambient scribes, clinical NLP, medical imaging AI, drug discovery, and compliance.
+date: 2026-05-08 00:00:00+00:00
+description: The AI healthcare market hits $45.2B in 2026. Here is what clinical teams
+  need to know about ambient scribes, clinical NLP, medical imaging AI, drug dis...
 draft: false
 schema: schema-ai-healthcare-clinical-nlp-2026
 tags:

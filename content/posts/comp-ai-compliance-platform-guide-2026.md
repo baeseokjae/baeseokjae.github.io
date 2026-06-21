@@ -1,14 +1,21 @@
 ---
-title: "Comp AI Compliance Platform Review 2026: Open-Source Agentic Compliance"
-date: 2026-05-08T00:00:00+00:00
-tags: ["compliance", "soc2", "open-source", "hipaa", "grc", "comp-ai"]
-description: "Comp AI review 2026: open-source agentic compliance platform for SOC 2, HIPAA, ISO 27001, and GDPR—compared to Vanta, Drata, and Secureframe."
-draft: false
 cover:
-  image: "/images/comp-ai-compliance-platform-guide-2026.png"
-  alt: "Comp AI Compliance Platform Review 2026"
+  alt: Comp AI Compliance Platform Review 2026
+  image: /images/comp-ai-compliance-platform-guide-2026.png
   relative: false
-schema: "schema-comp-ai-compliance-platform-guide-2026"
+date: 2026-05-08 00:00:00+00:00
+description: 'Comp AI review 2026: open-source agentic compliance platform for SOC
+  2, HIPAA, ISO 27001, and GDPR—compared to Vanta, Drata, and Secureframe.'
+draft: false
+schema: schema-comp-ai-compliance-platform-guide-2026
+tags:
+- compliance
+- soc2
+- open-source
+- hipaa
+- grc
+- comp-ai
+title: 'Comp AI Compliance Platform Review 2026: Open-Source Agentic Compliance'
 ---
 
 The global compliance management market reached $48.5 billion in 2025 and is accelerating as regulatory requirements multiply across SOC 2, HIPAA, ISO 27001, and GDPR simultaneously. For most engineering and security teams, the bottleneck is not understanding what compliance requires — it is the relentless manual labor of collecting evidence, generating policy documents, and mapping artifacts to specific controls. Comp AI attacks that bottleneck directly with an open-source, agent-driven architecture that replaces manual GRC workflows with autonomous agents running continuously against your live infrastructure.

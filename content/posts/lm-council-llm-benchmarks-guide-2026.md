@@ -1,14 +1,20 @@
 ---
-title: "LM Council Benchmarks: The Independent LLM Leaderboard Developers Should Trust"
-date: 2026-05-10T00:00:00+00:00
-tags: ["llm-benchmarks","lm-council","ai-evaluation","swe-bench","developer-tools"]
-description: "LM Council benchmarks explained: SWE-bench, LiveCodeBench, GPQA Diamond, LMSYS Chatbot Arena, Artificial Analysis, and how to build your own LLM evaluation framework in 2026."
-draft: false
 cover:
-  image: "/images/lm-council-llm-benchmarks-guide-2026.png"
-  alt: "LM Council Benchmarks: The Independent LLM Leaderboard Developers Should Trust"
+  alt: 'LM Council Benchmarks: The Independent LLM Leaderboard Developers Should Trust'
+  image: /images/lm-council-llm-benchmarks-guide-2026.png
   relative: false
-schema: "schema-lm-council-llm-benchmarks-guide-2026"
+date: 2026-05-10 00:00:00+00:00
+description: 'LM Council benchmarks explained: SWE-bench, LiveCodeBench, GPQA Diamond,
+  LMSYS Chatbot Arena, Artificial Analysis, and how to build your own LLM evaluat...'
+draft: false
+schema: schema-lm-council-llm-benchmarks-guide-2026
+tags:
+- llm-benchmarks
+- lm-council
+- ai-evaluation
+- swe-bench
+- developer-tools
+title: 'LM Council Benchmarks: The Independent LLM Leaderboard Developers Should Trust'
 ---
 
 Claude Opus 4.6 resolves 80.8% of real GitHub issues on SWE-bench Verified while GPT-5.5 leads Terminal-Bench 2.0 at 82.7% — numbers that mean something precisely because they come from independent evaluation pipelines, not vendor press releases. Choosing an LLM in 2026 without understanding how these benchmarks work is like buying a server based solely on manufacturer marketing sheets. This guide covers the LM Council evaluation framework, the top independent leaderboards developers actually rely on, and how to read benchmark results without getting misled.

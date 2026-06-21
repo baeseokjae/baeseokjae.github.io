@@ -1,14 +1,20 @@
 ---
-title: "Claude Code Hooks Guide 2026: Automate Your Workflow with Shell Triggers"
-date: 2026-04-18T10:04:50+00:00
-tags: ["claude code", "developer tools", "automation", "AI coding", "hooks"]
-description: "Complete Claude Code hooks guide: configure shell triggers for auto-formatting, security gates, and CI/CD integration with all 18 hook events."
-draft: false
 cover:
-  image: "/images/claude-code-hooks-guide-2026.png"
-  alt: "Claude Code Hooks Guide 2026: Automate Your Workflow with Shell Triggers"
+  alt: 'Claude Code Hooks Guide 2026: Automate Your Workflow with Shell Triggers'
+  image: /images/claude-code-hooks-guide-2026.png
   relative: false
-schema: "schema-claude-code-hooks-guide-2026"
+date: 2026-04-18 10:04:50+00:00
+description: 'Complete Claude Code hooks guide: configure shell triggers for auto-formatting,
+  security gates, and CI/CD integration with all 18 hook events.'
+draft: false
+schema: schema-claude-code-hooks-guide-2026
+tags:
+- claude code
+- developer tools
+- automation
+- AI coding
+- hooks
+title: 'Claude Code Hooks Guide 2026: Automate Your Workflow with Shell Triggers'
 ---
 
 Claude Code hooks are shell commands that execute automatically at specific points in the AI agent lifecycle — before or after tool calls, on completion, on errors, and during configuration changes. Unlike CLAUDE.md instructions that rely on the LLM reading and interpreting text, hooks are deterministic: they run every single time, regardless of context length, model behavior, or prompt drift. For production workflows where "Claude, always run prettier" isn't reliable enough, hooks are the answer.

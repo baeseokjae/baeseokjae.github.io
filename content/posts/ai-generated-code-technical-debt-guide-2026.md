@@ -1,14 +1,20 @@
 ---
-title: "AI-Generated Code Technical Debt: How to Manage It in 2026"
-date: 2026-06-08T14:49:08+00:00
-tags: ["technical debt", "AI code quality", "software engineering", "static analysis", "refactoring"]
-description: "AI-generated code creates 1.7x more issues than human code. Here's how to audit, prevent, and remediate AI technical debt before it quadruples your costs."
-draft: false
 cover:
-  image: "/images/ai-generated-code-technical-debt-guide-2026.png"
-  alt: "AI-Generated Code Technical Debt: How to Manage It in 2026"
+  alt: 'AI-Generated Code Technical Debt: How to Manage It in 2026'
+  image: /images/ai-generated-code-technical-debt-guide-2026.png
   relative: false
-schema: "schema-ai-generated-code-technical-debt-guide-2026"
+date: 2026-06-08 14:49:08+00:00
+description: AI-generated code creates 1.7x more issues than human code. Here's how
+  to audit, prevent, and remediate AI technical debt before it quadruples your costs.
+draft: false
+schema: schema-ai-generated-code-technical-debt-guide-2026
+tags:
+- technical debt
+- AI code quality
+- software engineering
+- static analysis
+- refactoring
+title: 'AI-Generated Code Technical Debt: How to Manage It in 2026'
 ---
 
 AI-generated code now accounts for 41% of all new code written in 2026, and it introduces 1.7x more total issues than human-written code. Teams that don't actively manage this debt are watching maintenance costs compound to 4x traditional levels by year two — turning a productivity win into a long-term liability.

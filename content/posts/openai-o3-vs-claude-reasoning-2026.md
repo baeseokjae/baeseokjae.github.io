@@ -3,8 +3,9 @@ cover:
   alt: 'OpenAI o3 vs Claude Sonnet 2026: Reasoning Models for Developers Compared'
   image: /images/openai-o3-vs-claude-reasoning-2026.png
   relative: false
-date: 2026-05-07T12:00:00+00:00
-description: 'OpenAI o3 vs Claude Sonnet 4.6 in 2026: benchmarks, pricing, API usage, and which reasoning model wins for your dev workflow.'
+date: 2026-05-07 12:00:00+00:00
+description: 'OpenAI o3 vs Claude Sonnet 4.6 in 2026: benchmarks, pricing, API usage,
+  and which reasoning model wins for your dev workflow.'
 draft: false
 schema: schema-openai-o3-vs-claude-reasoning-2026
 tags:

@@ -1,14 +1,20 @@
 ---
-title: "Claude API 300K Output Tokens: Complete Guide to Long-Form Generation (2026)"
-date: 2026-04-27T01:04:22+00:00
-tags: ["Claude API", "Anthropic", "LLM", "batch processing", "long-form generation"]
-description: "How to unlock Claude API 300K output tokens via the Message Batches API with the output-300k-2026-03-24 beta header — with Python code examples."
-draft: false
 cover:
-  image: "/images/claude-api-max-tokens-300k-guide-2026.png"
-  alt: "Claude API 300K Output Tokens: Complete Guide to Long-Form Generation (2026)"
+  alt: 'Claude API 300K Output Tokens: Complete Guide to Long-Form Generation (2026)'
+  image: /images/claude-api-max-tokens-300k-guide-2026.png
   relative: false
-schema: "schema-claude-api-max-tokens-300k-guide-2026"
+date: 2026-04-27 01:04:22+00:00
+description: How to unlock Claude API 300K output tokens via the Message Batches API
+  with the output-300k-2026-03-24 beta header — with Python code examples.
+draft: false
+schema: schema-claude-api-max-tokens-300k-guide-2026
+tags:
+- Claude API
+- Anthropic
+- LLM
+- batch processing
+- long-form generation
+title: 'Claude API 300K Output Tokens: Complete Guide to Long-Form Generation (2026)'
 ---
 
 The Claude API now supports up to 300,000 output tokens per request — roughly 460 pages of text in a single API call — but only through the Message Batches API with a specific beta header. The synchronous API remains capped at 64K tokens. This guide explains exactly how to enable 300K output, which models support it, when to use it, and what it costs.

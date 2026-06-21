@@ -1,14 +1,20 @@
 ---
-title: "Qwen3-Coder Review 2026: The Open-Source Model That Rivals GPT-5"
-date: 2026-04-24T09:03:16+00:00
-tags: ["qwen3-coder", "open-source-llm", "coding-ai", "benchmark", "ai-agents"]
-description: "Qwen3-Coder 2026 review: benchmarks, pricing, local setup, and head-to-head vs Claude Opus 4.6 and GPT-5 — is it worth switching?"
-draft: false
 cover:
-  image: "/images/qwen3-coder-review-2026.png"
-  alt: "Qwen3-Coder Review 2026: The Open-Source Model That Rivals GPT-5"
+  alt: 'Qwen3-Coder Review 2026: The Open-Source Model That Rivals GPT-5'
+  image: /images/qwen3-coder-review-2026.png
   relative: false
-schema: "schema-qwen3-coder-review-2026"
+date: 2026-04-24 09:03:16+00:00
+description: 'Qwen3-Coder 2026 review: benchmarks, pricing, local setup, and head-to-head
+  vs Claude Opus 4.6 and GPT-5 — is it worth switching?'
+draft: false
+schema: schema-qwen3-coder-review-2026
+tags:
+- qwen3-coder
+- open-source-llm
+- coding-ai
+- benchmark
+- ai-agents
+title: 'Qwen3-Coder Review 2026: The Open-Source Model That Rivals GPT-5'
 ---
 
 Qwen3-Coder is Alibaba's open-source coding LLM family that scores 69–70% on SWE-bench Verified while costing 85x less than Claude Opus 4.6 — and the 80B Next variant runs on a single MacBook Pro with 48GB unified memory. If you're running multi-model coding pipelines or need a cost-effective alternative for overnight refactors and batch PR triage, this is the model to benchmark first.

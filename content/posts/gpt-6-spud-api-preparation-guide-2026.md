@@ -1,14 +1,20 @@
 ---
-title: "GPT-6 API Developer Guide: 7 Steps to Prepare Before It Ships"
-date: 2026-06-01T18:00:23+00:00
-tags: ["GPT-6", "OpenAI API", "developer guide", "LLM migration", "Responses API"]
-description: "A practical GPT-6 API developer guide covering Spud naming confusion, 7 preparation steps, token budgeting, model routing, and Responses API migration."
-draft: false
 cover:
-  image: "/images/gpt-6-spud-api-preparation-guide-2026.png"
-  alt: "GPT-6 API Developer Guide: 7 Steps to Prepare Before It Ships"
+  alt: 'GPT-6 API Developer Guide: 7 Steps to Prepare Before It Ships'
+  image: /images/gpt-6-spud-api-preparation-guide-2026.png
   relative: false
-schema: "schema-gpt-6-spud-api-preparation-guide-2026"
+date: 2026-06-01 18:00:23+00:00
+description: A practical GPT-6 API developer guide covering Spud naming confusion,
+  7 preparation steps, token budgeting, model routing, and Responses API migration.
+draft: false
+schema: schema-gpt-6-spud-api-preparation-guide-2026
+tags:
+- GPT-6
+- OpenAI API
+- developer guide
+- LLM migration
+- Responses API
+title: 'GPT-6 API Developer Guide: 7 Steps to Prepare Before It Ships'
 ---
 
 GPT-6 is not Spud. Spud shipped as GPT-5.5 on April 23, 2026 — a significant but differently-named model. The real GPT-6 is the next-generation system in OpenAI's pipeline, and Polymarket traders give it 84% odds of releasing by December 31, 2026. Here is exactly what to change in your codebase now so that GPT-6 is a one-config-line upgrade, not a week-long rewrite.

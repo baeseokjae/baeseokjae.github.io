@@ -1,14 +1,20 @@
 ---
-title: "Comet Opik Review 2026: Open-Source LLM Evaluation and Observability Platform"
-date: 2026-05-16T06:05:23+00:00
-tags: ["llm-observability", "llm-evaluation", "open-source", "mlops", "llmops"]
-description: "In-depth review of Comet Opik: open-source LLM tracing, evaluation, and agent optimization with self-hosting support and 40M+ daily traces."
-draft: false
 cover:
-  image: "/images/comet-opik-review-2026.png"
-  alt: "Comet Opik Review 2026: Open-Source LLM Evaluation and Observability Platform"
+  alt: 'Comet Opik Review 2026: Open-Source LLM Evaluation and Observability Platform'
+  image: /images/comet-opik-review-2026.png
   relative: false
-schema: "schema-comet-opik-review-2026"
+date: 2026-05-16 06:05:23+00:00
+description: 'In-depth review of Comet Opik: open-source LLM tracing, evaluation,
+  and agent optimization with self-hosting support and 40M+ daily traces.'
+draft: false
+schema: schema-comet-opik-review-2026
+tags:
+- llm-observability
+- llm-evaluation
+- open-source
+- mlops
+- llmops
+title: 'Comet Opik Review 2026: Open-Source LLM Evaluation and Observability Platform'
 ---
 
 Comet Opik is a fully open-source LLM evaluation and observability platform that lets teams trace LLM calls, run automated evaluations, and optimize prompts — all under the Apache 2.0 license with no feature gating between free and paid tiers.

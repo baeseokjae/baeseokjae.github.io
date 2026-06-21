@@ -1,14 +1,20 @@
 ---
-title: "OpenAI Responses API Tutorial 2026: Build Stateful AI Apps in Python"
-date: 2026-04-21T00:11:38+00:00
-tags: ["openai", "api", "python", "ai-agents", "tutorial"]
-description: "Complete OpenAI Responses API tutorial 2026: stateful conversations, built-in tools, function calling, and migration from Chat Completions."
-draft: false
 cover:
-  image: "/images/openai-responses-api-tutorial-2026.png"
-  alt: "OpenAI Responses API Tutorial 2026: Build Stateful AI Apps in Python"
+  alt: 'OpenAI Responses API Tutorial 2026: Build Stateful AI Apps in Python'
+  image: /images/openai-responses-api-tutorial-2026.png
   relative: false
-schema: "schema-openai-responses-api-tutorial-2026"
+date: 2026-04-21 00:11:38+00:00
+description: 'Complete OpenAI Responses API tutorial 2026: stateful conversations,
+  built-in tools, function calling, and migration from Chat Completions.'
+draft: false
+schema: schema-openai-responses-api-tutorial-2026
+tags:
+- openai
+- api
+- python
+- ai-agents
+- tutorial
+title: 'OpenAI Responses API Tutorial 2026: Build Stateful AI Apps in Python'
 ---
 
 The OpenAI Responses API is the new primary interface for building stateful, agentic AI applications — replacing the Assistants API (being sunset H1 2026) and extending beyond what Chat Completions can do. This tutorial walks through everything from your first API call to building multi-step agents with built-in tools like web search and file retrieval.

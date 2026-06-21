@@ -1,13 +1,20 @@
 ---
-title: "DeepSeek V3 Cost Comparison vs GPT-5 in 2026"
-date: 2026-04-21
-tags: ["deepseek", "gpt-5", "api-pricing", "cost-comparison", "llm", "developer-tools"]
-description: "DeepSeek V3.2 vs GPT-5.4 cost comparison with pricing, benchmarks, and recommendations for developer workflows."
-draft: false
 cover:
-  image: "/images/deepseek-v3-cost-comparison-2026.png"
-  alt: "DeepSeek V3 vs GPT-5 cost comparison chart showing API pricing differences"
-schema: "schema-deepseek-v3-cost-comparison-2026"
+  alt: DeepSeek V3 vs GPT-5 cost comparison chart showing API pricing differences
+  image: /images/deepseek-v3-cost-comparison-2026.png
+date: 2026-04-21
+description: DeepSeek V3.2 vs GPT-5.4 cost comparison with pricing, benchmarks, and
+  recommendations for developer workflows.
+draft: false
+schema: schema-deepseek-v3-cost-comparison-2026
+tags:
+- deepseek
+- gpt-5
+- api-pricing
+- cost-comparison
+- llm
+- developer-tools
+title: DeepSeek V3 Cost Comparison vs GPT-5 in 2026
 ---
 
 ## Introduction: The AI Pricing Landscape Has Shifted

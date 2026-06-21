@@ -1,14 +1,22 @@
 ---
-title: "OpenAI Codex Computer Use Guide 2026: Background Agents That Operate Your Mac"
-date: 2026-05-03T09:04:38+00:00
-tags: ["openai-codex", "computer-use", "background-agents", "mac-automation", "ai-agents"]
-description: "OpenAI Codex computer use lets background agents operate your Mac autonomously — here's the complete setup guide with security, plugins, and real use cases."
-draft: false
 cover:
-  image: "/images/openai-codex-computer-use-guide-2026.png"
-  alt: "OpenAI Codex Computer Use Guide 2026: Background Agents That Operate Your Mac"
+  alt: 'OpenAI Codex Computer Use Guide 2026: Background Agents That Operate Your
+    Mac'
+  image: /images/openai-codex-computer-use-guide-2026.png
   relative: false
-schema: "schema-openai-codex-computer-use-guide-2026"
+date: 2026-05-03 09:04:38+00:00
+description: OpenAI Codex computer use lets background agents operate your Mac autonomously
+  — here's the complete setup guide with security, plugins, and real use ca...
+draft: false
+schema: schema-openai-codex-computer-use-guide-2026
+tags:
+- openai-codex
+- computer-use
+- background-agents
+- mac-automation
+- ai-agents
+title: 'OpenAI Codex Computer Use Guide 2026: Background Agents That Operate Your
+  Mac'
 ---
 
 OpenAI Codex computer use is a macOS feature released in April 2026 that lets AI background agents see your screen, click interface elements, and type across any app — without you being present. Agents run in a sandboxed virtual workspace, execute tasks in parallel, and hand results back when done.

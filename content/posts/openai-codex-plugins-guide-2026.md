@@ -1,14 +1,20 @@
 ---
-title: "OpenAI Codex Plugins Guide: 90+ Enterprise AI Workflow Integrations (2026)"
-date: 2026-05-19T00:04:41+00:00
-tags: ["openai-codex", "enterprise-ai", "plugins", "workflow-automation", "devops"]
-description: "Complete guide to OpenAI Codex's 90+ plugins for enterprise teams — categories, governance, CLI setup, custom development, and competitor comparison."
-draft: false
 cover:
-  image: "/images/openai-codex-plugins-guide-2026.png"
-  alt: "OpenAI Codex Plugins Guide: 90+ Enterprise AI Workflow Integrations"
+  alt: 'OpenAI Codex Plugins Guide: 90+ Enterprise AI Workflow Integrations'
+  image: /images/openai-codex-plugins-guide-2026.png
   relative: false
-schema: "schema-openai-codex-plugins-guide-2026"
+date: 2026-05-19 00:04:41+00:00
+description: Complete guide to OpenAI Codex's 90+ plugins for enterprise teams — categories,
+  governance, CLI setup, custom development, and competitor comparison.
+draft: false
+schema: schema-openai-codex-plugins-guide-2026
+tags:
+- openai-codex
+- enterprise-ai
+- plugins
+- workflow-automation
+- devops
+title: 'OpenAI Codex Plugins Guide: 90+ Enterprise AI Workflow Integrations (2026)'
 ---
 
 OpenAI Codex plugins are pre-built integrations that connect Codex's AI coding agent to external tools — from Slack and GitHub to Jira and CircleCI — letting developers trigger multi-step workflows across your entire software stack without switching contexts. As of April 2026, the marketplace offers 90+ plugins across seven categories, and enterprise teams at Cisco, Rakuten, and Ramp are using them to automate developer workflows that previously required custom tooling.

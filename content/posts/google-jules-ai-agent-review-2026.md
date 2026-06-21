@@ -1,14 +1,21 @@
 ---
-title: "Google Jules AI Agent Review 2026: Async GitHub Coding Agent Tested"
-date: 2026-04-30T00:04:04+00:00
-tags: ["ai-agents", "developer-tools", "github", "google", "coding-automation"]
-description: "Google Jules AI agent review 2026: async GitHub coding agent powered by Gemini 2.5 Pro, free beta, VM isolation, and how it stacks up against Devin and Cursor."
-draft: false
 cover:
-  image: "/images/google-jules-ai-agent-review-2026.png"
-  alt: "Google Jules AI Agent Review 2026: Async GitHub Coding Agent Tested"
+  alt: 'Google Jules AI Agent Review 2026: Async GitHub Coding Agent Tested'
+  image: /images/google-jules-ai-agent-review-2026.png
   relative: false
-schema: "schema-google-jules-ai-agent-review-2026"
+date: 2026-04-30 00:04:04+00:00
+description: 'Google Jules AI agent review 2026: async GitHub coding agent powered
+  by Gemini 2.5 Pro, free beta, VM isolation, and how it stacks up against Devin and
+  ...'
+draft: false
+schema: schema-google-jules-ai-agent-review-2026
+tags:
+- ai-agents
+- developer-tools
+- github
+- google
+- coding-automation
+title: 'Google Jules AI Agent Review 2026: Async GitHub Coding Agent Tested'
 ---
 
 Google Jules is a free asynchronous AI coding agent from Google Labs that clones your GitHub repository into a secure cloud VM, reads your full codebase, and autonomously completes tasks — bug fixes, dependency bumps, test generation, and feature implementation — while you work on other things. It entered public beta on May 20, 2025, runs on Gemini 2.5 Pro, and is currently the only major autonomous coding agent available at no cost.

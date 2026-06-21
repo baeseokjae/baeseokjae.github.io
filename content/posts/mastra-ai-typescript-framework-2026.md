@@ -1,20 +1,22 @@
 ---
-title: "Mastra AI: The TypeScript AI Agent Framework for 2026"
-date: 2026-04-21
-tags:
-  - ai
-  - typescript
-  - mastra
-  - llm
-  - mcp
-  - agents
-  - developer-tools
-description: "A practical guide to Mastra AI, the TypeScript-first framework for building production AI agents. Covers setup, agents, tools, MCP, workflows, RAG, evals"
-draft: false
 cover:
+  alt: Mastra AI TypeScript Framework for 2026 – agents, tools, workflows, and production
+    deployment
   image: /images/mastra-ai-typescript-framework-2026.png
-  alt: "Mastra AI TypeScript Framework for 2026 – agents, tools, workflows, and production deployment"
-schema: "mastra-ai-typescript-framework-2026"
+date: 2026-04-21
+description: A practical guide to Mastra AI, the TypeScript-first framework for building
+  production AI agents. Covers setup, agents, tools, MCP, workflows, RAG, evals
+draft: false
+schema: mastra-ai-typescript-framework-2026
+tags:
+- ai
+- typescript
+- mastra
+- llm
+- mcp
+- agents
+- developer-tools
+title: 'Mastra AI: The TypeScript AI Agent Framework for 2026'
 ---
 
 ## Introduction: Why Mastra Is the TypeScript AI Framework to Watch in 2026

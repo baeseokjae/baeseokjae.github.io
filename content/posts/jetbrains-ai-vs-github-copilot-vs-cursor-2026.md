@@ -1,14 +1,22 @@
 ---
-title: "JetBrains AI vs GitHub Copilot vs Cursor 2026: Best AI IDE for Java and Kotlin Devs"
-date: 2026-04-18T11:43:53+00:00
-tags: ["JetBrains AI", "GitHub Copilot", "Cursor", "Java", "Kotlin", "AI coding tools"]
-description: "JetBrains AI, GitHub Copilot, and Cursor compared for Java and Kotlin developers in 2026 — pricing, benchmarks, and which to pick."
-draft: false
 cover:
-  image: "/images/jetbrains-ai-vs-github-copilot-vs-cursor-2026.png"
-  alt: "JetBrains AI vs GitHub Copilot vs Cursor 2026"
+  alt: JetBrains AI vs GitHub Copilot vs Cursor 2026
+  image: /images/jetbrains-ai-vs-github-copilot-vs-cursor-2026.png
   relative: false
-schema: "schema-jetbrains-ai-vs-github-copilot-vs-cursor-2026"
+date: 2026-04-18 11:43:53+00:00
+description: JetBrains AI, GitHub Copilot, and Cursor compared for Java and Kotlin
+  developers in 2026 — pricing, benchmarks, and which to pick.
+draft: false
+schema: schema-jetbrains-ai-vs-github-copilot-vs-cursor-2026
+tags:
+- JetBrains AI
+- GitHub Copilot
+- Cursor
+- Java
+- Kotlin
+- AI coding tools
+title: 'JetBrains AI vs GitHub Copilot vs Cursor 2026: Best AI IDE for Java and Kotlin
+  Devs'
 ---
 
 For Java and Kotlin developers in 2026, the AI coding assistant choice is no longer "do I use AI?" — it's "which AI is worth paying for inside IntelliJ?" JetBrains AI has a native advantage, but GitHub Copilot and Cursor both landed in JetBrains IDEs in March 2026. Here's what actually matters.

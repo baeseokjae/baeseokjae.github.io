@@ -1,14 +1,20 @@
 ---
-title: "Vibe Coding Technical Debt Crisis: What Developers Need to Know"
-date: 2026-06-09T00:49:32+00:00
-tags: ["vibe coding", "technical debt", "AI coding", "software quality", "security"]
-description: "Vibe coding creates hidden technical debt that costs 300% more to maintain within 18 months. Here's what the data shows and how to protect your team."
-draft: false
 cover:
-  image: "/images/vibe-coding-technical-debt-crisis-2026.png"
-  alt: "Vibe Coding Technical Debt Crisis: What Developers Need to Know"
+  alt: 'Vibe Coding Technical Debt Crisis: What Developers Need to Know'
+  image: /images/vibe-coding-technical-debt-crisis-2026.png
   relative: false
-schema: "schema-vibe-coding-technical-debt-crisis-2026"
+date: 2026-06-09 00:49:32+00:00
+description: Vibe coding creates hidden technical debt that costs 300% more to maintain
+  within 18 months. Here's what the data shows and how to protect your team.
+draft: false
+schema: schema-vibe-coding-technical-debt-crisis-2026
+tags:
+- vibe coding
+- technical debt
+- AI coding
+- software quality
+- security
+title: 'Vibe Coding Technical Debt Crisis: What Developers Need to Know'
 ---
 
 Vibe coding technical debt refers to the accumulated quality problems — duplicated logic, missing tests, hidden security flaws — created when developers accept AI-generated code without rigorous review. The data is stark: maintenance costs balloon 300% within 18 months, test coverage drops to 12% from the industry norm of 68%, and 40% of AI-heavy projects face cancellation or major rework by 2028.

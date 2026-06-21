@@ -1,10 +1,15 @@
 ---
-title: "LLM Red Teaming Guide 2026: Security Testing for AI Agents"
-date: 2026-05-10T00:00:00+00:00
-slug: "llm-red-teaming-guide-2026"
-tags: ["red-teaming","ai-security","llm","prompt-injection","security"]
+date: 2026-05-10 00:00:00+00:00
 draft: false
-schema: "schema-llm-red-teaming-guide-2026"
+schema: schema-llm-red-teaming-guide-2026
+slug: llm-red-teaming-guide-2026
+tags:
+- red-teaming
+- ai-security
+- llm
+- prompt-injection
+- security
+title: 'LLM Red Teaming Guide 2026: Security Testing for AI Agents'
 ---
 
 The threat surface for large language models has expanded beyond what most security teams anticipated three years ago. What began as a concern about chatbot misuse has evolved into a full-spectrum attack discipline targeting autonomous AI agents that browse the web, execute code, manage files, and call external APIs on behalf of users. This guide consolidates the current state of LLM red teaming as of 2026, covering the attack categories, specialized tooling, and operational processes that security teams need to protect AI-powered systems in production.

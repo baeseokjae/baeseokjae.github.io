@@ -1,14 +1,20 @@
 ---
-title: "Cursor Background Agents Guide 2026: Run Autonomous Coding Tasks in the Background"
-date: 2026-04-21T13:05:10+00:00
-tags: ["cursor", "ai-agents", "autonomous-coding", "developer-tools", "agentic-ai"]
-description: "Complete guide to Cursor background agents in 2026: setup, pricing, Computer Use, best practices, and when to use them vs Claude Code or Codex."
-draft: false
 cover:
-  image: "/images/cursor-background-agents-2026.png"
-  alt: "Cursor Background Agents Guide 2026"
+  alt: Cursor Background Agents Guide 2026
+  image: /images/cursor-background-agents-2026.png
   relative: false
-schema: "schema-cursor-background-agents-2026"
+date: 2026-04-21 13:05:10+00:00
+description: 'Complete guide to Cursor background agents in 2026: setup, pricing,
+  Computer Use, best practices, and when to use them vs Claude Code or Codex.'
+draft: false
+schema: schema-cursor-background-agents-2026
+tags:
+- cursor
+- ai-agents
+- autonomous-coding
+- developer-tools
+- agentic-ai
+title: 'Cursor Background Agents Guide 2026: Run Autonomous Coding Tasks in the Background'
 ---
 
 Cursor background agents let you fire off a coding task — a bug fix, test suite, refactor, or feature — and walk away while a cloud VM handles it asynchronously, returning a pull request when it's done. Unlike in-editor Agent Mode that runs interactively beside you, background agents run in parallel on isolated remote machines, freeing you to work on something else entirely.

@@ -1,14 +1,23 @@
 ---
-title: "Llama 4 Scout Developer Guide 2026: 10M Token Context Window for Full Codebase Analysis"
-date: 2026-04-30T21:09:48+00:00
-tags: ["llama 4 scout", "llm", "context window", "open-source ai", "codebase analysis", "developer guide"]
-description: "Practical guide to Llama 4 Scout's 10M token context window: API setup, full codebase loading, local deployment with Ollama and vLLM, and real pricing comparisons."
-draft: false
 cover:
-  image: "/images/llama-4-scout-guide-2026.png"
-  alt: "Llama 4 Scout Developer Guide 2026: 10M Token Context Window for Full Codebase Analysis"
+  alt: 'Llama 4 Scout Developer Guide 2026: 10M Token Context Window for Full Codebase
+    Analysis'
+  image: /images/llama-4-scout-guide-2026.png
   relative: false
-schema: "schema-llama-4-scout-guide-2026"
+date: 2026-04-30 21:09:48+00:00
+description: 'Practical guide to Llama 4 Scout''s 10M token context window: API setup,
+  full codebase loading, local deployment with Ollama and vLLM, and real pricing c...'
+draft: false
+schema: schema-llama-4-scout-guide-2026
+tags:
+- llama 4 scout
+- llm
+- context window
+- open-source ai
+- codebase analysis
+- developer guide
+title: 'Llama 4 Scout Developer Guide 2026: 10M Token Context Window for Full Codebase
+  Analysis'
 ---
 
 Llama 4 Scout is Meta's open-weight model with a 10 million token context window — the largest of any open-weight model released in 2026. At roughly 4 tokens per line of code, that covers approximately 2.5 million lines of code in a single prompt. In practice this means you can load an entire mid-size production repository — including tests, docs, and config — without chunking, vector databases, or retrieval pipelines.

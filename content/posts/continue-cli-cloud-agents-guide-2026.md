@@ -1,14 +1,20 @@
 ---
-title: "Continue CLI Guide: Async Cloud Agents for Developers (2026)"
-date: 2026-05-09T21:04:44+00:00
-tags: ["Continue CLI", "AI coding tools", "async agents", "CI/CD", "developer tools"]
-description: "Complete guide to Continue CLI (cn) for async cloud agents — install, config.yaml, headless mode, GitHub Actions, and parallel agent execution."
-draft: false
 cover:
-  image: "/images/continue-cli-cloud-agents-guide-2026.png"
-  alt: "Continue CLI Guide: Async Cloud Agents for Developers"
+  alt: 'Continue CLI Guide: Async Cloud Agents for Developers'
+  image: /images/continue-cli-cloud-agents-guide-2026.png
   relative: false
-schema: "schema-continue-cli-cloud-agents-guide-2026"
+date: 2026-05-09 21:04:44+00:00
+description: Complete guide to Continue CLI (cn) for async cloud agents — install,
+  config.yaml, headless mode, GitHub Actions, and parallel agent execution.
+draft: false
+schema: schema-continue-cli-cloud-agents-guide-2026
+tags:
+- Continue CLI
+- AI coding tools
+- async agents
+- CI/CD
+- developer tools
+title: 'Continue CLI Guide: Async Cloud Agents for Developers (2026)'
 ---
 
 Continue CLI (`cn`) is a headless, model-agnostic AI coding agent that runs tasks asynchronously in the cloud or background — without blocking your terminal. Unlike interactive tools such as Cursor or GitHub Copilot Chat, `cn` executes entire workflows (PR reviews, code migrations, issue triage) as background jobs you can trigger from a shell, a GitHub Actions YAML, or a cron schedule. With 10M+ VS Code extension installs and a growing open-source CLI in Alpha as of 2026, Continue is positioning itself as the automation layer for AI-assisted development at team scale.

@@ -1,14 +1,20 @@
 ---
-title: "Microsoft Agent Framework 1.0: Build Production AI Agents in .NET and Python"
-date: 2026-05-15T00:00:00+00:00
-tags: ["microsoft","agent-framework","dotnet","python","ai-agents"]
-description: "Complete guide to Microsoft Agent Framework 1.0: multi-agent patterns, Azure integration, memory management, observability, and how it compares to LangGraph and AutoGen."
-draft: false
 cover:
-  image: "/images/microsoft-agent-framework-1-0-guide-2026.png"
-  alt: "Microsoft Agent Framework 1.0: Build Production AI Agents in .NET and Python"
+  alt: 'Microsoft Agent Framework 1.0: Build Production AI Agents in .NET and Python'
+  image: /images/microsoft-agent-framework-1-0-guide-2026.png
   relative: false
-schema: "schema-microsoft-agent-framework-1-0-guide-2026"
+date: 2026-05-15 00:00:00+00:00
+description: 'Complete guide to Microsoft Agent Framework 1.0: multi-agent patterns,
+  Azure integration, memory management, observability, and how it compares to LangG...'
+draft: false
+schema: schema-microsoft-agent-framework-1-0-guide-2026
+tags:
+- microsoft
+- agent-framework
+- dotnet
+- python
+- ai-agents
+title: 'Microsoft Agent Framework 1.0: Build Production AI Agents in .NET and Python'
 ---
 
 Microsoft Agent Framework 1.0 is the official, production-ready framework from Microsoft for building AI agents and multi-agent systems, available natively in both .NET (C#) and Python. Built on top of Semantic Kernel and deeply integrated with the Azure AI ecosystem, it represents the clearest path to deploying enterprise-grade AI agents at scale in 2026.

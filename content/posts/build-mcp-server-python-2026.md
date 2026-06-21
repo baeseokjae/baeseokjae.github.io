@@ -1,14 +1,20 @@
 ---
-title: "How to Build an MCP Server with Python 2026: Step-by-Step Tutorial"
-date: 2026-04-24T21:08:12+00:00
-tags: ["mcp", "python", "fastmcp", "ai-tools", "tutorial"]
-description: "Build a production-ready MCP server in Python using FastMCP — from 9-line hello world to Docker, auth, and security hardening."
-draft: false
 cover:
-  image: "/images/build-mcp-server-python-2026.png"
-  alt: "How to Build an MCP Server with Python 2026: Step-by-Step Tutorial"
+  alt: 'How to Build an MCP Server with Python 2026: Step-by-Step Tutorial'
+  image: /images/build-mcp-server-python-2026.png
   relative: false
-schema: "schema-build-mcp-server-python-2026"
+date: 2026-04-24 21:08:12+00:00
+description: Build a production-ready MCP server in Python using FastMCP — from 9-line
+  hello world to Docker, auth, and security hardening.
+draft: false
+schema: schema-build-mcp-server-python-2026
+tags:
+- mcp
+- python
+- fastmcp
+- ai-tools
+- tutorial
+title: 'How to Build an MCP Server with Python 2026: Step-by-Step Tutorial'
 ---
 
 Building an MCP server in Python takes under 30 minutes with FastMCP. Install `fastmcp`, decorate a Python function with `@mcp.tool()`, and any AI client — Claude, ChatGPT, Cursor, or Copilot — can call it immediately. This tutorial walks from a 9-line working server through PostgreSQL integration, Docker deployment, and security hardening.

@@ -1,14 +1,23 @@
 ---
-title: "Anthropic Enterprise Security 2026: Claude, Data Handling, and Compliance Guide"
-date: 2026-05-08T00:00:00+00:00
-tags: ["anthropic", "claude", "enterprise", "security", "compliance", "soc2"]
-description: "Complete 2026 guide to Anthropic Claude enterprise security: SOC 2 Type II, HIPAA BAA, zero-day retention, GDPR, SSO, and compliance head-to-head."
-draft: false
 cover:
-  image: "/images/project-glasswing-guide-2026.png"
-  alt: "Anthropic Enterprise Security 2026: Claude, Data Handling, and Compliance Guide"
+  alt: 'Anthropic Enterprise Security 2026: Claude, Data Handling, and Compliance
+    Guide'
+  image: /images/project-glasswing-guide-2026.png
   relative: false
-schema: "schema-project-glasswing-guide-2026"
+date: 2026-05-08 00:00:00+00:00
+description: 'Complete 2026 guide to Anthropic Claude enterprise security: SOC 2 Type
+  II, HIPAA BAA, zero-day retention, GDPR, SSO, and compliance head-to-head.'
+draft: false
+schema: schema-project-glasswing-guide-2026
+tags:
+- anthropic
+- claude
+- enterprise
+- security
+- compliance
+- soc2
+title: 'Anthropic Enterprise Security 2026: Claude, Data Handling, and Compliance
+  Guide'
 ---
 
 Anthropic crossed a projected $2 billion in annualized revenue in early 2026, making it one of the fastest-scaling AI companies in history — and with that scale comes serious enterprise scrutiny. Security and compliance teams that greenlit Claude pilots are now being asked to sign off on production deployments handling PHI, financial data, and regulated EU personal data. The questions are specific: Does Anthropic hold SOC 2 Type II? Is there a HIPAA BAA? What exactly happens to data after an API call? This guide answers all of those questions with verifiable specifics, covers the compliance architecture across data handling, identity, and audit, compares Anthropic's security posture against OpenAI, Microsoft, and Google, and provides a deployment framework security-conscious enterprises can adapt for their own Claude rollouts.

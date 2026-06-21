@@ -1,14 +1,18 @@
 ---
-title: "Free AI Coding Tools 2026: Best Options Under $5/Month"
-date: 2026-06-15T09:04:39+00:00
-tags: ["AI coding", "developer tools", "free tools"]
-description: "A practical 2026 guide to free AI coding tools and under-$5 workflows for developers."
-draft: false
 cover:
-  image: "/images/free-ai-coding-tools-under-5-dollars-2026.png"
-  alt: "Free AI Coding Tools 2026: Best Options Under $5/Month"
+  alt: 'Free AI Coding Tools 2026: Best Options Under $5/Month'
+  image: /images/free-ai-coding-tools-under-5-dollars-2026.png
   relative: false
-schema: "schema-free-ai-coding-tools-under-5-dollars-2026"
+date: 2026-06-15 09:04:39+00:00
+description: A practical 2026 guide to free AI coding tools and under-$5 workflows
+  for developers.
+draft: false
+schema: schema-free-ai-coding-tools-under-5-dollars-2026
+tags:
+- AI coding
+- developer tools
+- free tools
+title: 'Free AI Coding Tools 2026: Best Options Under $5/Month'
 ---
 
 The best free AI coding tools in 2026 are Gemini Code Assist, GitHub Copilot Free, Amazon Q Developer Free, Windsurf Free, OpenCode, Aider, and Continue.dev. Under $5 per month usually means free quotas, open-source agents, or bring-your-own-key setups, not full premium IDE subscriptions.

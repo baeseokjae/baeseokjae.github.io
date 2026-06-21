@@ -1,14 +1,20 @@
 ---
-title: "Claude Fable 5 Agentic Coding Pipeline: Build Long-Horizon Tasks (2026)"
-date: 2026-06-19T10:41:26+00:00
-tags: ["claude fable 5", "agentic coding", "coding pipeline", "long-horizon tasks", "AI coding tools"]
-description: "Build a production Claude Fable 5 agentic coding pipeline for long-horizon tasks with context engineering, planning contracts, and safety fallbacks."
-draft: false
 cover:
-  image: "/images/claude-fable-5-agentic-coding-pipeline-guide-2026.png"
-  alt: "Claude Fable 5 Agentic Coding Pipeline: Build Long-Horizon Tasks (2026)"
+  alt: 'Claude Fable 5 Agentic Coding Pipeline: Build Long-Horizon Tasks (2026)'
+  image: /images/claude-fable-5-agentic-coding-pipeline-guide-2026.png
   relative: false
-schema: "schema-claude-fable-5-agentic-coding-pipeline-guide-2026"
+date: 2026-06-19 10:41:26+00:00
+description: Build a production Claude Fable 5 agentic coding pipeline for long-horizon
+  tasks with context engineering, planning contracts, and safety fallbacks.
+draft: false
+schema: schema-claude-fable-5-agentic-coding-pipeline-guide-2026
+tags:
+- claude fable 5
+- agentic coding
+- coding pipeline
+- long-horizon tasks
+- AI coding tools
+title: 'Claude Fable 5 Agentic Coding Pipeline: Build Long-Horizon Tasks (2026)'
 ---
 
 A Claude Fable 5 agentic coding pipeline turns the model's 80.3% SWE-Bench Pro score and 1M-token context window into repeatable, production-grade engineering throughput — but only if you design for long-horizon failure modes. Fable 5 is Anthropic's most capable widely released model for demanding reasoning and long-running autonomous work, priced at $10/M input and $50/M output tokens. Unlike a chat interface where you steer every turn, a pipeline decomposes work into intake, context packing, planning, execution with checkpoints, quality gates, and rollback paths. Stripe reportedly used Fable 5 to migrate a 50-million-line Ruby codebase in one day — work that would have taken two months manually. This guide walks through each stage of that pipeline so you can build your own without learning the hard way.

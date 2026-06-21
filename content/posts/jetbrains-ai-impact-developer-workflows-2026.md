@@ -1,14 +1,19 @@
 ---
-title: "Understanding AI's Real Impact on Developer Workflows in 2026 (AI impact on developer workflows)"
-date: 2026-06-11T06:18:41+00:00
-tags: ["AI", "Developer Productivity", "Engineering Management"]
-description: "AI improves throughput in 2026 when teams pair it with strict review, platform engineering, and clear ownership, but it also shifts work into validation."
-draft: false
 cover:
-  image: "/images/jetbrains-ai-impact-developer-workflows-2026.png"
-  alt: "Understanding AI's Real Impact on Developer Workflows"
+  alt: Understanding AI's Real Impact on Developer Workflows
+  image: /images/jetbrains-ai-impact-developer-workflows-2026.png
   relative: false
-schema: "schema-jetbrains-ai-impact-developer-workflows-2026"
+date: 2026-06-11 06:18:41+00:00
+description: AI improves throughput in 2026 when teams pair it with strict review,
+  platform engineering, and clear ownership, but it also shifts work into validation.
+draft: false
+schema: schema-jetbrains-ai-impact-developer-workflows-2026
+tags:
+- AI
+- Developer Productivity
+- Engineering Management
+title: Understanding AI's Real Impact on Developer Workflows in 2026 (AI impact on
+  developer workflows)
 ---
 
 AI is now a standard part of 2026 developer workflows, not a fringe experiment. In teams I’ve worked with, it moves work faster for repetitive tasks when paired with solid review, but it does not replace engineering judgment. Without process, AI just shifts effort from typing to triage, which is why real impact is about workflow design, not hype.

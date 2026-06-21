@@ -1,14 +1,21 @@
 ---
-title: "React Testing Library AI Component Integration Developer Guide 2026"
-date: 2026-05-18T12:03:55+00:00
-tags: ["react", "testing", "ai", "vitest", "msw", "vercel-ai-sdk"]
-description: "Complete guide to testing AI-powered React components in 2026 using RTL, Vitest, MSW, and Vercel AI SDK mock helpers."
-draft: false
 cover:
-  image: "/images/react-testing-library-ai-component-integration-guide-2026.png"
-  alt: "React Testing Library AI Component Integration Developer Guide 2026"
+  alt: React Testing Library AI Component Integration Developer Guide 2026
+  image: /images/react-testing-library-ai-component-integration-guide-2026.png
   relative: false
-schema: "schema-react-testing-library-ai-component-integration-guide-2026"
+date: 2026-05-18 12:03:55+00:00
+description: Complete guide to testing AI-powered React components in 2026 using RTL,
+  Vitest, MSW, and Vercel AI SDK mock helpers.
+draft: false
+schema: schema-react-testing-library-ai-component-integration-guide-2026
+tags:
+- react
+- testing
+- ai
+- vitest
+- msw
+- vercel-ai-sdk
+title: React Testing Library AI Component Integration Developer Guide 2026
 ---
 
 React Testing Library (RTL) remains the default choice for component tests in 2026, but testing components that call AI APIs — streaming chat, autocomplete, content generation — requires async patterns, mock strategies, and setup choices that standard RTL tutorials skip entirely. This guide covers the complete modern stack: Vitest + RTL + MSW + Vercel AI SDK test helpers, with concrete code you can paste into a real project.

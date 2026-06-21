@@ -1,14 +1,20 @@
 ---
-title: "Continue.dev Review 2026: Open-Source GitHub Copilot Alternative"
-date: 2026-04-19T16:41:02+00:00
-tags: ["continue-dev", "ai-coding-tools", "open-source", "github-copilot-alternative", "developer-tools"]
-description: "Comprehensive Continue.dev review 2026 — CLI-first Continuous AI agents, local LLM support, and how it compares to Copilot and Cursor."
-draft: false
 cover:
-  image: "/images/continue-dev-review-2026.png"
-  alt: "Continue.dev Review 2026: Open-Source GitHub Copilot Alternative"
+  alt: 'Continue.dev Review 2026: Open-Source GitHub Copilot Alternative'
+  image: /images/continue-dev-review-2026.png
   relative: false
-schema: "schema-continue-dev-review-2026"
+date: 2026-04-19 16:41:02+00:00
+description: Comprehensive Continue.dev review 2026 — CLI-first Continuous AI agents,
+  local LLM support, and how it compares to Copilot and Cursor.
+draft: false
+schema: schema-continue-dev-review-2026
+tags:
+- continue-dev
+- ai-coding-tools
+- open-source
+- github-copilot-alternative
+- developer-tools
+title: 'Continue.dev Review 2026: Open-Source GitHub Copilot Alternative'
 ---
 
 Continue.dev transformed from a VS Code autocomplete extension into a CLI-first Continuous AI platform that runs async agents on every pull request — making it one of the most interesting open-source developer tools in 2026. If you're evaluating AI coding assistants beyond GitHub Copilot, here's what you actually need to know.

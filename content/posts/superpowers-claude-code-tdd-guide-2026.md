@@ -1,14 +1,21 @@
 ---
-title: "Superpowers + Claude Code: TDD Workflow Setup Guide 2026"
-date: 2026-05-23T04:16:02+00:00
-tags: ["Claude Code", "Superpowers", "TDD", "test-driven development", "AI coding", "developer tools"]
-description: "How to set up the Superpowers framework with Claude Code for enforced TDD workflows — with real configuration examples and what changes in practice."
-draft: false
 cover:
-  image: "/images/superpowers-claude-code-tdd-guide-2026.png"
-  alt: "Superpowers + Claude Code: TDD Workflow Setup Guide 2026"
+  alt: 'Superpowers + Claude Code: TDD Workflow Setup Guide 2026'
+  image: /images/superpowers-claude-code-tdd-guide-2026.png
   relative: false
-schema: "schema-superpowers-claude-code-tdd-guide-2026"
+date: 2026-05-23 04:16:02+00:00
+description: How to set up the Superpowers framework with Claude Code for enforced
+  TDD workflows — with real configuration examples and what changes in practice.
+draft: false
+schema: schema-superpowers-claude-code-tdd-guide-2026
+tags:
+- Claude Code
+- Superpowers
+- TDD
+- test-driven development
+- AI coding
+- developer tools
+title: 'Superpowers + Claude Code: TDD Workflow Setup Guide 2026'
 ---
 
 The biggest failure mode when using AI coding agents is letting them skip the test. Superpowers is an open-source framework — 99K+ GitHub stars, 2.5M+ VS Code extension downloads, official Claude Plugin Marketplace listing — that enforces test-driven development as a hard constraint on Claude Code rather than a suggestion. Here's how to set it up and what actually changes in practice.

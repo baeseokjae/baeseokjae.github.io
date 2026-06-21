@@ -1,14 +1,22 @@
 ---
-title: "Google ADK vs OpenAI Agents SDK vs Mastra: Agent Framework Showdown 2026"
-date: 2026-05-23T04:16:02+00:00
-tags: ["AI agents", "Google ADK", "OpenAI Agents SDK", "Mastra", "agent frameworks", "TypeScript", "Python"]
-description: "Hands-on comparison of Google ADK, OpenAI Agents SDK, and Mastra for building production AI agents in 2026 — with real benchmarks and decision criteria."
-draft: false
 cover:
-  image: "/images/google-adk-vs-openai-agents-sdk-vs-mastra-2026.png"
-  alt: "Google ADK vs OpenAI Agents SDK vs Mastra: Agent Framework Showdown 2026"
+  alt: 'Google ADK vs OpenAI Agents SDK vs Mastra: Agent Framework Showdown 2026'
+  image: /images/google-adk-vs-openai-agents-sdk-vs-mastra-2026.png
   relative: false
-schema: "schema-google-adk-vs-openai-agents-sdk-vs-mastra-2026"
+date: 2026-05-23 04:16:02+00:00
+description: Hands-on comparison of Google ADK, OpenAI Agents SDK, and Mastra for
+  building production AI agents in 2026 — with real benchmarks and decision criteria.
+draft: false
+schema: schema-google-adk-vs-openai-agents-sdk-vs-mastra-2026
+tags:
+- AI agents
+- Google ADK
+- OpenAI Agents SDK
+- Mastra
+- agent frameworks
+- TypeScript
+- Python
+title: 'Google ADK vs OpenAI Agents SDK vs Mastra: Agent Framework Showdown 2026'
 ---
 
 You're building an AI agent in 2026 and you've narrowed it down to three frameworks: Google ADK, OpenAI Agents SDK, and Mastra. They're all production-ready, all well-documented, and all opinionated in ways that will either save you weeks or cost you weeks. After shipping agents with all three, here's what actually separates them.

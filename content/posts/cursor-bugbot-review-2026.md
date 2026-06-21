@@ -1,14 +1,20 @@
 ---
-title: "Cursor BugBot Review 2026: AI Security Checks in Every PR"
-date: 2026-05-03T18:04:28+00:00
-tags: ["cursor", "code-review", "ai-security", "bugbot", "pull-requests"]
-description: "Honest Cursor BugBot review: benchmarks, pricing, Autofix, learned rules, and how it stacks up against CodeRabbit and GitHub Copilot."
-draft: false
 cover:
-  image: "/images/cursor-bugbot-review-2026.png"
-  alt: "Cursor BugBot Review 2026: AI Security Checks in Every PR"
+  alt: 'Cursor BugBot Review 2026: AI Security Checks in Every PR'
+  image: /images/cursor-bugbot-review-2026.png
   relative: false
-schema: "schema-cursor-bugbot-review-2026"
+date: 2026-05-03 18:04:28+00:00
+description: 'Honest Cursor BugBot review: benchmarks, pricing, Autofix, learned rules,
+  and how it stacks up against CodeRabbit and GitHub Copilot.'
+draft: false
+schema: schema-cursor-bugbot-review-2026
+tags:
+- cursor
+- code-review
+- ai-security
+- bugbot
+- pull-requests
+title: 'Cursor BugBot Review 2026: AI Security Checks in Every PR'
 ---
 
 Cursor BugBot is an AI-powered code reviewer that automatically checks every pull request for real bugs and security vulnerabilities — not style issues or formatting complaints. It catches logic flaws, null-pointer errors, and CVEs inside PRs before they merge, with an 80% resolution rate and 2 million+ PRs reviewed per month as of 2026.

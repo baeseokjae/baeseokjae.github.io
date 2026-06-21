@@ -1,14 +1,20 @@
 ---
-title: "Cursor 3 Guide 2026: Agents Window, Parallel Agents, and Design Mode"
-date: 2026-04-18T08:40:54+00:00
-tags: ["cursor", "ai-ide", "cursor-3", "parallel-agents", "ai-coding"]
-description: "Cursor 3 guide: Agents Window, parallel agents, Design Mode, Composer 2 model, and cloud agents for shipping code faster in 2026."
-draft: false
 cover:
-  image: "/images/cursor-3-guide-2026.png"
-  alt: "Cursor 3 Guide 2026: Agents Window, Parallel Agents, and Design Mode"
+  alt: 'Cursor 3 Guide 2026: Agents Window, Parallel Agents, and Design Mode'
+  image: /images/cursor-3-guide-2026.png
   relative: false
-schema: "schema-cursor-3-guide-2026"
+date: 2026-04-18 08:40:54+00:00
+description: 'Cursor 3 guide: Agents Window, parallel agents, Design Mode, Composer
+  2 model, and cloud agents for shipping code faster in 2026.'
+draft: false
+schema: schema-cursor-3-guide-2026
+tags:
+- cursor
+- ai-ide
+- cursor-3
+- parallel-agents
+- ai-coding
+title: 'Cursor 3 Guide 2026: Agents Window, Parallel Agents, and Design Mode'
 ---
 
 Cursor 3, released April 2, 2026, is the most significant update to the AI IDE since its founding — it ships an Agents Window for orchestrating multiple AI agents in parallel, a Design Mode for visual-to-code workflows, and the Composer 2 model that scores 73.7 on SWE-bench Multilingual. If you're using Cursor daily, these three features alone change how you structure your entire development workflow.

@@ -1,14 +1,18 @@
 ---
-title: "Apple Foundation Models Dynamic Profiles: Multi-Agent iOS Workflows in 2026"
-date: 2026-06-14T16:04:26+00:00
-tags: ["Apple Foundation Models", "iOS AI", "Swift"]
-description: "Build multi-agent iOS workflows with Apple Foundation Models Dynamic Profiles, model routing, tools, and evaluations."
-draft: false
 cover:
-  image: "/images/apple-foundation-models-dynamic-profiles-multi-agent-2026.png"
-  alt: "Apple Foundation Models Dynamic Profiles: Multi-Agent iOS Workflows in 2026"
+  alt: 'Apple Foundation Models Dynamic Profiles: Multi-Agent iOS Workflows in 2026'
+  image: /images/apple-foundation-models-dynamic-profiles-multi-agent-2026.png
   relative: false
-schema: "schema-apple-foundation-models-dynamic-profiles-multi-agent-2026"
+date: 2026-06-14 16:04:26+00:00
+description: Build multi-agent iOS workflows with Apple Foundation Models Dynamic
+  Profiles, model routing, tools, and evaluations.
+draft: false
+schema: schema-apple-foundation-models-dynamic-profiles-multi-agent-2026
+tags:
+- Apple Foundation Models
+- iOS AI
+- Swift
+title: 'Apple Foundation Models Dynamic Profiles: Multi-Agent iOS Workflows in 2026'
 ---
 
 Apple Foundation Models Dynamic Profiles let iOS developers switch instructions, tools, generation settings, and model backends inside one `LanguageModelSession`. The practical result is context-preserving model routing: one app workflow can move between private on-device reasoning, Private Cloud Compute, and specialized external models without rebuilding every conversation state by hand.

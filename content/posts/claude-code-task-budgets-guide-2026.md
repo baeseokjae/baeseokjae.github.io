@@ -1,14 +1,21 @@
 ---
-title: "Claude Code Task Budgets Guide 2026: Control Token Spend in Agentic Sessions"
-date: 2026-05-07T06:00:00+00:00
-tags: ["claude-code", "task-budgets", "claude-opus-4-7", "token-optimization", "agentic-sessions", "guide"]
-description: "Claude Code task budgets 2026: how to set token spend limits for agentic sessions via API and CLI, avoid cost explosions, and tune budgets for real workloads."
-draft: false
 cover:
-  image: "/images/claude-code-task-budgets-guide-2026.png"
-  alt: "Claude Code Task Budgets Guide 2026: Control Token Spend in Agentic Sessions"
+  alt: 'Claude Code Task Budgets Guide 2026: Control Token Spend in Agentic Sessions'
+  image: /images/claude-code-task-budgets-guide-2026.png
   relative: false
-schema: "schema-claude-code-task-budgets-guide-2026"
+date: 2026-05-07 06:00:00+00:00
+description: 'Claude Code task budgets 2026: how to set token spend limits for agentic
+  sessions via API and CLI, avoid cost explosions, and tune budgets for real work...'
+draft: false
+schema: schema-claude-code-task-budgets-guide-2026
+tags:
+- claude-code
+- task-budgets
+- claude-opus-4-7
+- token-optimization
+- agentic-sessions
+- guide
+title: 'Claude Code Task Budgets Guide 2026: Control Token Spend in Agentic Sessions'
 ---
 
 Average enterprise Claude Code cost is $13 per developer per active day — and a single agentic prompt can burn 50,000 to 300,000 tokens, with users reporting single prompts eating 30-90% of a 5-hour budget. Agent teams using plan mode consume 7x more tokens than standard sessions. Before task budgets existed, the only options for controlling this spend were max_tokens (which cuts off mid-task) or manual session management. Task budgets, introduced in public beta on Claude Opus 4.7 in 2026, give you a third option: a soft advisory limit that lets Claude finish gracefully when approaching the budget, reporting progress and pausing rather than cutting off silently. Here's how to use them.

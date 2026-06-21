@@ -1,14 +1,18 @@
 ---
-title: "Llama 4 Local Deployment: Run Scout and Maverick on Your Own Hardware"
-date: 2026-06-12T13:04:45+00:00
-tags: ["llama 4", "local ai", "vllm"]
-description: "A practical Llama 4 local deployment guide for Scout and Maverick hardware, quantization, serving, and troubleshooting."
-draft: false
 cover:
-  image: "/images/llama-4-local-deployment-guide-2026.png"
-  alt: "Llama 4 Local Deployment: Run Scout and Maverick on Your Own Hardware"
+  alt: 'Llama 4 Local Deployment: Run Scout and Maverick on Your Own Hardware'
+  image: /images/llama-4-local-deployment-guide-2026.png
   relative: false
-schema: "schema-llama-4-local-deployment-guide-2026"
+date: 2026-06-12 13:04:45+00:00
+description: A practical Llama 4 local deployment guide for Scout and Maverick hardware,
+  quantization, serving, and troubleshooting.
+draft: false
+schema: schema-llama-4-local-deployment-guide-2026
+tags:
+- llama 4
+- local ai
+- vllm
+title: 'Llama 4 Local Deployment: Run Scout and Maverick on Your Own Hardware'
 ---
 
 Llama 4 local deployment is practical if you match the model to the hardware: run Scout quantized for workstation experiments, use vLLM or SGLang on H100/H200 servers for API serving, and treat Maverick as a multi-GPU or heavily quantized model.

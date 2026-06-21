@@ -1,14 +1,21 @@
 ---
-title: "MCP Security Guide 2026: Risks, Prompt Injection and Safe Deployment"
-date: 2026-05-10T15:05:07+00:00
-tags: ["MCP", "security", "prompt injection", "AI agents", "OAuth", "DevSecOps"]
-description: "A developer's practical guide to MCP security risks in 2026: prompt injection, tool poisoning, rug pull attacks, and a 20-point production checklist."
-draft: false
 cover:
-  image: "/images/mcp-security-guide-2026.png"
-  alt: "MCP Security Guide 2026: Risks, Prompt Injection and Safe Deployment"
+  alt: 'MCP Security Guide 2026: Risks, Prompt Injection and Safe Deployment'
+  image: /images/mcp-security-guide-2026.png
   relative: false
-schema: "schema-mcp-security-guide-2026"
+date: 2026-05-10 15:05:07+00:00
+description: 'A developer''s practical guide to MCP security risks in 2026: prompt
+  injection, tool poisoning, rug pull attacks, and a 20-point production checklist.'
+draft: false
+schema: schema-mcp-security-guide-2026
+tags:
+- MCP
+- security
+- prompt injection
+- AI agents
+- OAuth
+- DevSecOps
+title: 'MCP Security Guide 2026: Risks, Prompt Injection and Safe Deployment'
 ---
 
 MCP (Model Context Protocol) is now the de facto standard for connecting AI agents to external tools — but 43% of analyzed MCP servers are vulnerable to command injection, and over 2,000 internet-exposed servers were found leaking API keys in early 2026. This guide covers every major attack vector, real CVEs, and the exact controls you need before shipping to production.

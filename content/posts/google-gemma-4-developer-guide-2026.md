@@ -1,14 +1,18 @@
 ---
-title: "Google Gemma 4 Developer Guide: Local Deployment, API, and Agentic Workflows"
-date: 2026-06-12T12:04:57+00:00
-tags: ["Gemma 4", "local AI", "agentic workflows"]
-description: "A practical Google Gemma 4 developer guide for local deployment, APIs, agents, QAT, and production choices."
-draft: false
 cover:
-  image: "/images/google-gemma-4-developer-guide-2026.png"
-  alt: "Google Gemma 4 Developer Guide: Local Deployment, API, and Agentic Workflows"
+  alt: 'Google Gemma 4 Developer Guide: Local Deployment, API, and Agentic Workflows'
+  image: /images/google-gemma-4-developer-guide-2026.png
   relative: false
-schema: "schema-google-gemma-4-developer-guide-2026"
+date: 2026-06-12 12:04:57+00:00
+description: A practical Google Gemma 4 developer guide for local deployment, APIs,
+  agents, QAT, and production choices.
+draft: false
+schema: schema-google-gemma-4-developer-guide-2026
+tags:
+- Gemma 4
+- local AI
+- agentic workflows
+title: 'Google Gemma 4 Developer Guide: Local Deployment, API, and Agentic Workflows'
 ---
 
 Google Gemma 4 is Google's 2026 open-weight model family for developers who want local inference, OpenAI-compatible APIs, multimodal inputs, and agentic workflows without defaulting every task to a frontier cloud model. Start with Gemma 4 12B for laptops, use E2B or E4B for edge devices, and move to vLLM, Vertex AI, or GKE when throughput and operations matter.

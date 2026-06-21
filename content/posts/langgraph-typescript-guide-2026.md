@@ -1,14 +1,20 @@
 ---
-title: "LangGraph TypeScript Guide: Build AI Agents in 2026"
-date: 2026-05-05T21:03:58+00:00
-tags: ["LangGraph", "TypeScript", "AI Agents", "LangChain", "JavaScript"]
-description: "Complete LangGraph TypeScript guide for 2026: StateGraph, streaming, checkpointing, HITL, and multi-agent systems with real code examples."
-draft: false
 cover:
-  image: "/images/langgraph-typescript-guide-2026.png"
-  alt: "LangGraph TypeScript Guide: Build AI Agents in 2026"
+  alt: 'LangGraph TypeScript Guide: Build AI Agents in 2026'
+  image: /images/langgraph-typescript-guide-2026.png
   relative: false
-schema: "schema-langgraph-typescript-guide-2026"
+date: 2026-05-05 21:03:58+00:00
+description: 'Complete LangGraph TypeScript guide for 2026: StateGraph, streaming,
+  checkpointing, HITL, and multi-agent systems with real code examples.'
+draft: false
+schema: schema-langgraph-typescript-guide-2026
+tags:
+- LangGraph
+- TypeScript
+- AI Agents
+- LangChain
+- JavaScript
+title: 'LangGraph TypeScript Guide: Build AI Agents in 2026'
 ---
 
 LangGraph TypeScript (`@langchain/langgraph`) lets you build stateful, graph-based AI agents in Node.js with full type safety. As of 2026, it handles StateGraph, conditional edges, checkpointing, streaming, and human-in-the-loop — feature-parity with the Python version — and sees over 42,000 weekly npm downloads.

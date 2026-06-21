@@ -1,14 +1,20 @@
 ---
-title: "Cursor + Claude Code Workflow 2026: Using Both Tools Together Effectively"
-date: 2026-04-24T13:04:50+00:00
-tags: ["ai-coding", "developer-tools", "cursor", "claude-code", "workflow"]
-description: "How to combine Cursor and Claude Code in a hybrid workflow — setup methods, work division strategy, and real cost savings for developers in 2026."
-draft: false
 cover:
-  image: "/images/cursor-claude-code-workflow-2026.png"
-  alt: "Cursor + Claude Code Workflow 2026: Using Both Tools Together Effectively"
+  alt: 'Cursor + Claude Code Workflow 2026: Using Both Tools Together Effectively'
+  image: /images/cursor-claude-code-workflow-2026.png
   relative: false
-schema: "schema-cursor-claude-code-workflow-2026"
+date: 2026-04-24 13:04:50+00:00
+description: How to combine Cursor and Claude Code in a hybrid workflow — setup methods,
+  work division strategy, and real cost savings for developers in 2026.
+draft: false
+schema: schema-cursor-claude-code-workflow-2026
+tags:
+- ai-coding
+- developer-tools
+- cursor
+- claude-code
+- workflow
+title: 'Cursor + Claude Code Workflow 2026: Using Both Tools Together Effectively'
 ---
 
 The best AI coding setup in 2026 is not Cursor *or* Claude Code — it's both. Use Cursor for interactive, real-time editing and Claude Code for autonomous heavy lifting. Most experienced developers running both tools spend $40–60/month total and report dramatically faster output than either tool alone.

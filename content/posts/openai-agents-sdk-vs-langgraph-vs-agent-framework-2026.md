@@ -1,14 +1,20 @@
 ---
-title: "OpenAI Agents SDK vs LangGraph 2026: OpenAI Agents SDK v2 vs Microsoft Agent Framework"
-date: 2026-06-15T13:04:37+00:00
-tags: ["ai agents", "langgraph", "openai"]
-description: "A practical 2026 comparison of OpenAI Agents SDK, LangGraph, and Microsoft Agent Framework for production agent systems."
-draft: false
 cover:
-  image: "/images/openai-agents-sdk-vs-langgraph-vs-agent-framework-2026.png"
-  alt: "OpenAI Agents SDK vs LangGraph 2026: OpenAI Agents SDK v2 vs Microsoft Agent Framework"
+  alt: 'OpenAI Agents SDK vs LangGraph 2026: OpenAI Agents SDK v2 vs Microsoft Agent
+    Framework'
+  image: /images/openai-agents-sdk-vs-langgraph-vs-agent-framework-2026.png
   relative: false
-schema: "schema-openai-agents-sdk-vs-langgraph-vs-agent-framework-2026"
+date: 2026-06-15 13:04:37+00:00
+description: A practical 2026 comparison of OpenAI Agents SDK, LangGraph, and Microsoft
+  Agent Framework for production agent systems.
+draft: false
+schema: schema-openai-agents-sdk-vs-langgraph-vs-agent-framework-2026
+tags:
+- ai agents
+- langgraph
+- openai
+title: 'OpenAI Agents SDK vs LangGraph 2026: OpenAI Agents SDK v2 vs Microsoft Agent
+  Framework'
 ---
 
 OpenAI Agents SDK vs LangGraph 2026 comes down to orchestration style: choose OpenAI Agents SDK for simple GPT-centric handoff chains, LangGraph for explicit stateful workflows, and Microsoft Agent Framework for Azure, .NET, and AutoGen or Semantic Kernel migrations.

@@ -1,14 +1,21 @@
 ---
-title: "ZenML Guide 2026: Production MLOps Pipelines Without the Lock-In"
-date: 2026-05-11T06:05:06+00:00
-tags: ["ZenML", "MLOps", "machine learning", "pipelines", "Python", "LLMOps"]
-description: "Complete ZenML guide 2026: build production MLOps pipelines with @step/@pipeline decorators, swap infra without rewrites, and avoid vendor lock-in."
-draft: false
 cover:
-  image: "/images/zenml-mlops-pipeline-guide-2026.png"
-  alt: "ZenML Guide 2026: Production MLOps Pipelines Without the Lock-In"
+  alt: 'ZenML Guide 2026: Production MLOps Pipelines Without the Lock-In'
+  image: /images/zenml-mlops-pipeline-guide-2026.png
   relative: false
-schema: "schema-zenml-mlops-pipeline-guide-2026"
+date: 2026-05-11 06:05:06+00:00
+description: 'Complete ZenML guide 2026: build production MLOps pipelines with @step/@pipeline
+  decorators, swap infra without rewrites, and avoid vendor lock-in.'
+draft: false
+schema: schema-zenml-mlops-pipeline-guide-2026
+tags:
+- ZenML
+- MLOps
+- machine learning
+- pipelines
+- Python
+- LLMOps
+title: 'ZenML Guide 2026: Production MLOps Pipelines Without the Lock-In'
 ---
 
 ZenML is an open-source MLOps framework that lets you define ML pipelines once in Python and run them on any infrastructure — local, AWS, GCP, or Azure — by swapping a stack configuration rather than rewriting code. In 2026, it's the most direct answer to the 85% of ML models that never reach production.

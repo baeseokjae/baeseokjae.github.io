@@ -1,14 +1,22 @@
 ---
-title: "Goose AI Agent Review 2026: Block's Open-Source Local Coding Agent"
-date: 2026-05-07T12:00:00+00:00
-tags: ["goose", "ai-agents", "open-source", "cli", "local-ai", "block"]
-description: "Goose AI agent review 2026: Apache 2.0 open-source coding agent, 15+ LLM providers, 70+ MCP extensions, local Ollama support, and comparison to Claude Code and Aider."
-draft: false
 cover:
-  image: "/images/goose-ai-agent-review-2026.png"
-  alt: "Goose AI Agent Review 2026: Block's Open-Source Local Coding Agent"
+  alt: 'Goose AI Agent Review 2026: Block''s Open-Source Local Coding Agent'
+  image: /images/goose-ai-agent-review-2026.png
   relative: false
-schema: "schema-goose-ai-agent-review-2026"
+date: 2026-05-07 12:00:00+00:00
+description: 'Goose AI agent review 2026: Apache 2.0 open-source coding agent, 15+
+  LLM providers, 70+ MCP extensions, local Ollama support, and comparison to Claude
+  C...'
+draft: false
+schema: schema-goose-ai-agent-review-2026
+tags:
+- goose
+- ai-agents
+- open-source
+- cli
+- local-ai
+- block
+title: 'Goose AI Agent Review 2026: Block''s Open-Source Local Coding Agent'
 ---
 
 Goose moved to the Linux Foundation's Agentic AI Foundation (AAIF) in 2026, transitioning from Block's internal open-source project to a foundation-governed community project. With 70+ MCP extensions, support for 15+ AI providers including local Ollama models, and an Apache 2.0 license that allows commercial use without restrictions, Goose occupies the same space as Claude Code and Aider — terminal-first AI coding agents — but with a distinct emphasis on extensibility and provider flexibility. Built in Rust for native performance and low resource usage, Goose runs on macOS, Linux, and Windows. Here is an honest technical assessment of what Goose delivers in 2026 and when to use it over its alternatives.

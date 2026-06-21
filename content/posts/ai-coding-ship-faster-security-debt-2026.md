@@ -1,14 +1,20 @@
 ---
-title: "AI Coding Ship Faster Without Security Debt: 2026 Developer Guide"
-date: 2026-06-10T02:51:27+00:00
-tags: ["AI coding", "security debt", "DevSecOps", "SAST", "shift-left security"]
-description: "Ship AI-generated code faster without accumulating security debt — the 2026 developer guide with real data, toolchains, and workflow patterns."
-draft: false
 cover:
-  image: "/images/ai-coding-ship-faster-security-debt-2026.png"
-  alt: "AI Coding Ship Faster Without Security Debt: 2026 Developer Guide"
+  alt: 'AI Coding Ship Faster Without Security Debt: 2026 Developer Guide'
+  image: /images/ai-coding-ship-faster-security-debt-2026.png
   relative: false
-schema: "schema-ai-coding-ship-faster-security-debt-2026"
+date: 2026-06-10 02:51:27+00:00
+description: Ship AI-generated code faster without accumulating security debt — the
+  2026 developer guide with real data, toolchains, and workflow patterns.
+draft: false
+schema: schema-ai-coding-ship-faster-security-debt-2026
+tags:
+- AI coding
+- security debt
+- DevSecOps
+- SAST
+- shift-left security
+title: 'AI Coding Ship Faster Without Security Debt: 2026 Developer Guide'
 ---
 
 AI coding tools can cut time-to-PR by up to 58% — but without security guardrails, the same tools create a backlog of vulnerabilities that costs more time to fix than you saved. The teams shipping fastest in 2026 are not avoiding AI; they are pairing it with automated security gates that catch issues in seconds, not days post-production.

@@ -1,14 +1,20 @@
 ---
-title: "Pieces for Developers Review 2026: LTM Memory + MCP Integration"
-date: 2026-05-10T00:04:40+00:00
-tags: ["pieces for developers", "AI developer tools", "LTM memory", "MCP integration", "developer productivity"]
-description: "An honest 2026 review of Pieces for Developers: LTM-2.7 memory engine, MCP server integration, pricing, real drawbacks, and who should actually use it."
-draft: false
 cover:
-  image: "/images/pieces-for-developers-review-2026.png"
-  alt: "Pieces for Developers Review 2026: LTM Memory + MCP Integration"
+  alt: 'Pieces for Developers Review 2026: LTM Memory + MCP Integration'
+  image: /images/pieces-for-developers-review-2026.png
   relative: false
-schema: "schema-pieces-for-developers-review-2026"
+date: 2026-05-10 00:04:40+00:00
+description: 'An honest 2026 review of Pieces for Developers: LTM-2.7 memory engine,
+  MCP server integration, pricing, real drawbacks, and who should actually use it.'
+draft: false
+schema: schema-pieces-for-developers-review-2026
+tags:
+- pieces for developers
+- AI developer tools
+- LTM memory
+- MCP integration
+- developer productivity
+title: 'Pieces for Developers Review 2026: LTM Memory + MCP Integration'
 ---
 
 Pieces for Developers is a local-first AI productivity tool that captures your entire development workflow — code copied, files opened, screens viewed — and stores that context in a long-term memory engine you can query like a personal assistant. Unlike Copilot or Cursor, which focus on inline code completion, Pieces bets on persistent memory as the core value proposition. For developers drowning in context-switching across tabs, tickets, and terminals, that's either exactly what they need or a tool they'll never remember to use.

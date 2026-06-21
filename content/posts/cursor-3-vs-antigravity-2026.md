@@ -1,14 +1,20 @@
 ---
-title: "Cursor 3 vs Google Antigravity 2026: Which AI IDE Wins?"
-date: 2026-05-08T00:00:00+00:00
-tags: ["cursor","antigravity","ai-ide","google","agentic-ide"]
-description: "A direct comparison of Cursor 3 and Google Antigravity in 2026 — covering SWE-bench scores, Agents Window vs Manager View, pricing, context windows, MCP support, and security compliance."
-draft: false
 cover:
-  image: "/images/cursor-3-vs-antigravity-2026.png"
-  alt: "Cursor 3 vs Google Antigravity 2026 - AI IDE Comparison"
+  alt: Cursor 3 vs Google Antigravity 2026 - AI IDE Comparison
+  image: /images/cursor-3-vs-antigravity-2026.png
   relative: false
-schema: "schema-cursor-3-vs-antigravity-2026"
+date: 2026-05-08 00:00:00+00:00
+description: A direct comparison of Cursor 3 and Google Antigravity in 2026 — covering
+  SWE-bench scores, Agents Window vs Manager View, pricing, context windows, MCP...
+draft: false
+schema: schema-cursor-3-vs-antigravity-2026
+tags:
+- cursor
+- antigravity
+- ai-ide
+- google
+- agentic-ide
+title: 'Cursor 3 vs Google Antigravity 2026: Which AI IDE Wins?'
 ---
 
 The AI IDE market in 2026 looks nothing like it did eighteen months ago. Cursor crossed $2 billion in annual recurring revenue in early 2026 — doubling that figure in just three months — and now commands 25% market share among generative AI software buyers. Then Google dropped Antigravity in November 2025: a free, agent-first IDE backed by Gemini 3.1 Pro and Claude Opus 4.6, with benchmark scores that rival or exceed anything Cursor puts on the board. If you are evaluating which tool to standardize on — or deciding whether to keep paying for Cursor Pro — this comparison covers every dimension that matters: architecture, benchmark performance, pricing, security posture, and ecosystem depth.

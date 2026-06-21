@@ -1,14 +1,21 @@
 ---
-title: "Agno Framework Guide 2026: The Fastest Python AI Agent Library (Formerly Phidata)"
-date: 2026-04-29T12:03:54+00:00
-tags: ["agno", "python", "ai-agents", "phidata", "multi-agent", "llm"]
-description: "Complete guide to Agno (formerly Phidata): 5,000x faster than LangGraph, 100+ tools, multimodal support, and production deployment with AgentOS in 2026."
-draft: false
 cover:
-  image: "/images/agno-phidata-framework-guide-2026.png"
-  alt: "Agno Framework Guide 2026: The Fastest Python AI Agent Library (Formerly Phidata)"
+  alt: 'Agno Framework Guide 2026: The Fastest Python AI Agent Library (Formerly Phidata)'
+  image: /images/agno-phidata-framework-guide-2026.png
   relative: false
-schema: "schema-agno-phidata-framework-guide-2026"
+date: 2026-04-29 12:03:54+00:00
+description: 'Complete guide to Agno (formerly Phidata): 5,000x faster than LangGraph,
+  100+ tools, multimodal support, and production deployment with AgentOS in 2026.'
+draft: false
+schema: schema-agno-phidata-framework-guide-2026
+tags:
+- agno
+- python
+- ai-agents
+- phidata
+- multi-agent
+- llm
+title: 'Agno Framework Guide 2026: The Fastest Python AI Agent Library (Formerly Phidata)'
 ---
 
 Agno is an open-source Python framework for building AI agents that instantiates agents in ~3 microseconds — 5,000x faster than LangGraph — while using ~5KB of memory per agent. Formerly known as Phidata, it was rebranded in January 2025 and now has 39,100+ GitHub stars. You can ship a production-ready agent with memory and tools in under 20 lines of Python.

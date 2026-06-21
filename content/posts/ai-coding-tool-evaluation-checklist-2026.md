@@ -1,14 +1,20 @@
 ---
-title: "AI Coding Tool Evaluation Checklist for Engineering Leaders 2026"
-date: 2026-06-09T22:05:33+00:00
-tags: ["ai-coding-tools", "engineering-leadership", "developer-tools", "enterprise-software", "governance"]
-description: "A practical AI coding tool evaluation checklist for engineering leaders: security, governance, ROI, vendor questions, and phased rollout in 2026."
-draft: false
 cover:
-  image: "/images/ai-coding-tool-evaluation-checklist-2026.png"
-  alt: "AI Coding Tool Evaluation Checklist for Engineering Leaders 2026"
+  alt: AI Coding Tool Evaluation Checklist for Engineering Leaders 2026
+  image: /images/ai-coding-tool-evaluation-checklist-2026.png
   relative: false
-schema: "schema-ai-coding-tool-evaluation-checklist-2026"
+date: 2026-06-09 22:05:33+00:00
+description: 'A practical AI coding tool evaluation checklist for engineering leaders:
+  security, governance, ROI, vendor questions, and phased rollout in 2026.'
+draft: false
+schema: schema-ai-coding-tool-evaluation-checklist-2026
+tags:
+- ai-coding-tools
+- engineering-leadership
+- developer-tools
+- enterprise-software
+- governance
+title: AI Coding Tool Evaluation Checklist for Engineering Leaders 2026
 ---
 
 Use this checklist to evaluate AI coding tools before your next procurement decision. The short answer: screen for security compliance first, then score governance controls, then run a context-depth pilot — in that order. Any tool that fails the security gate gets dropped before you spend time benchmarking features.

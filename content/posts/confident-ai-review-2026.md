@@ -1,14 +1,20 @@
 ---
-title: "Confident AI Review: LLM Evaluation Platform With 50+ Research-Backed Metrics"
-date: 2026-05-16T03:06:29+00:00
-tags: ["llm-evaluation", "ai-testing", "deepeval", "rag-evaluation", "llm-observability"]
-description: "Honest Confident AI review covering DeepEval integration, 50+ metrics, pricing, red teaming, and how it compares to Braintrust and LangSmith in 2026."
-draft: false
 cover:
-  image: "/images/confident-ai-review-2026.png"
-  alt: "Confident AI Review: LLM Evaluation Platform With 50+ Research-Backed Metrics"
+  alt: 'Confident AI Review: LLM Evaluation Platform With 50+ Research-Backed Metrics'
+  image: /images/confident-ai-review-2026.png
   relative: false
-schema: "schema-confident-ai-review-2026"
+date: 2026-05-16 03:06:29+00:00
+description: Honest Confident AI review covering DeepEval integration, 50+ metrics,
+  pricing, red teaming, and how it compares to Braintrust and LangSmith in 2026.
+draft: false
+schema: schema-confident-ai-review-2026
+tags:
+- llm-evaluation
+- ai-testing
+- deepeval
+- rag-evaluation
+- llm-observability
+title: 'Confident AI Review: LLM Evaluation Platform With 50+ Research-Backed Metrics'
 ---
 
 Confident AI is the cloud platform built on top of DeepEval — the open-source LLM evaluation framework with 15,291+ GitHub stars and 3 million+ monthly PyPI downloads. If you're evaluating LLMs in 2026, Confident AI offers the most comprehensive set of research-backed metrics available in any single platform: 50+ metrics covering RAG pipelines, multi-agent systems, hallucination detection, safety, bias, and toxicity — all backed by academic papers, not heuristics.

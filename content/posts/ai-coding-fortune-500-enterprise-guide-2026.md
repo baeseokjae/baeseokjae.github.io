@@ -1,14 +1,21 @@
 ---
-title: "78% of Fortune 500 Companies Use AI Coding: What Enterprise Devs Need to Know"
-date: 2026-06-04T01:06:40+00:00
-tags: ["enterprise", "ai-coding", "github-copilot", "cursor", "developer-productivity", "ai-governance"]
-description: "Over half the Fortune 500 runs Cursor. 90% of the Fortune 100 uses Copilot. Here's what the $6B enterprise AI coding market means for developers and engineering leaders."
-draft: false
 cover:
-  image: "/images/ai-coding-fortune-500-enterprise-guide-2026.png"
-  alt: "78% of Fortune 500 Companies Use AI Coding: What Enterprise Devs Need to Know"
+  alt: '78% of Fortune 500 Companies Use AI Coding: What Enterprise Devs Need to Know'
+  image: /images/ai-coding-fortune-500-enterprise-guide-2026.png
   relative: false
-schema: "schema-ai-coding-fortune-500-enterprise-guide-2026"
+date: 2026-06-04 01:06:40+00:00
+description: Over half the Fortune 500 runs Cursor. 90% of the Fortune 100 uses Copilot.
+  Here's what the $6B enterprise AI coding market means for developers and eng...
+draft: false
+schema: schema-ai-coding-fortune-500-enterprise-guide-2026
+tags:
+- enterprise
+- ai-coding
+- github-copilot
+- cursor
+- developer-productivity
+- ai-governance
+title: '78% of Fortune 500 Companies Use AI Coding: What Enterprise Devs Need to Know'
 ---
 
 Enterprise AI coding adoption is no longer a forward-looking trend — it's the new baseline. Over half of the Fortune 500 companies are paying for Cursor seats. GitHub Copilot has penetrated 90% of the Fortune 100. And yet the data reveals a paradox that every senior engineer and engineering leader needs to understand: 84% of developers use AI coding tools, but only 29% actually trust the output.

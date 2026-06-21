@@ -1,14 +1,20 @@
 ---
-title: "Claude 300K Output Tokens Guide: Batch API for Large Code Generation 2026"
-date: 2026-06-09T22:01:56+00:00
-tags: ["claude", "anthropic", "batch-api", "code-generation", "llm-api"]
-description: "How to use Claude's 300K output token extended mode via the Message Batches API — models, pricing, limits, and code generation workflows."
-draft: false
 cover:
-  image: "/images/claude-300k-output-tokens-guide-2026.png"
-  alt: "Claude 300K Output Tokens Guide: Batch API for Large Code Generation 2026"
+  alt: 'Claude 300K Output Tokens Guide: Batch API for Large Code Generation 2026'
+  image: /images/claude-300k-output-tokens-guide-2026.png
   relative: false
-schema: "schema-claude-300k-output-tokens-guide-2026"
+date: 2026-06-09 22:01:56+00:00
+description: How to use Claude's 300K output token extended mode via the Message Batches
+  API — models, pricing, limits, and code generation workflows.
+draft: false
+schema: schema-claude-300k-output-tokens-guide-2026
+tags:
+- claude
+- anthropic
+- batch-api
+- code-generation
+- llm-api
+title: 'Claude 300K Output Tokens Guide: Batch API for Large Code Generation 2026'
 ---
 
 Claude's Extended Output beta raises the `max_tokens` ceiling from 128K to **300,000 tokens** — but only for requests sent through the Message Batches API. If you're generating full codebases, book-length documentation, or exhaustive structured extractions in a single turn, this guide covers everything you need to get it working.

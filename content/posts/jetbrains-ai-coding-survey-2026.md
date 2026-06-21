@@ -1,14 +1,21 @@
 ---
-title: "JetBrains AI Coding Tools Survey 2026: What Developers Actually Use at Work"
-date: 2026-05-20T03:07:13+00:00
-tags: ["ai-coding-tools", "developer-survey", "github-copilot", "claude-code", "cursor"]
-description: "JetBrains AI Pulse January 2026 survey of 10,000+ developers: GitHub Copilot at 29%, Claude Code and Cursor tied at 18%, and Claude Code's 6x growth story explained."
-draft: false
 cover:
-  image: "/images/jetbrains-ai-coding-survey-2026.png"
-  alt: "JetBrains AI Coding Tools Survey 2026: What Developers Actually Use at Work"
+  alt: 'JetBrains AI Coding Tools Survey 2026: What Developers Actually Use at Work'
+  image: /images/jetbrains-ai-coding-survey-2026.png
   relative: false
-schema: "schema-jetbrains-ai-coding-survey-2026"
+date: 2026-05-20 03:07:13+00:00
+description: 'JetBrains AI Pulse January 2026 survey of 10,000+ developers: GitHub
+  Copilot at 29%, Claude Code and Cursor tied at 18%, and Claude Code''s 6x growth
+  sto...'
+draft: false
+schema: schema-jetbrains-ai-coding-survey-2026
+tags:
+- ai-coding-tools
+- developer-survey
+- github-copilot
+- claude-code
+- cursor
+title: 'JetBrains AI Coding Tools Survey 2026: What Developers Actually Use at Work'
 ---
 
 JetBrains published their AI Pulse survey in January 2026, covering 10,000+ developers worldwide on which AI coding tools they actually use at work — not just awareness, but regular daily usage. The headline finding: 90% of developers use AI tools broadly, but adoption of specialized coding assistants is more concentrated than awareness numbers suggest.

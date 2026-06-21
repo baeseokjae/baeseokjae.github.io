@@ -1,14 +1,21 @@
 ---
-title: "AI Workflow Automation Cost Comparison 2026: n8n vs Zapier vs Make at Scale"
-date: 2026-05-04T21:05:43+00:00
-tags: ["n8n", "Zapier", "Make.com", "workflow automation", "AI agents", "cost comparison"]
-description: "Real cost math comparing n8n, Zapier, and Make.com for AI workflows at scale — billing models, self-hosting, and where each platform wins."
-draft: false
 cover:
-  image: "/images/ai-workflow-automation-cost-comparison-2026.png"
-  alt: "AI Workflow Automation Cost Comparison 2026: n8n vs Zapier vs Make at Scale"
+  alt: 'AI Workflow Automation Cost Comparison 2026: n8n vs Zapier vs Make at Scale'
+  image: /images/ai-workflow-automation-cost-comparison-2026.png
   relative: false
-schema: "schema-ai-workflow-automation-cost-comparison-2026"
+date: 2026-05-04 21:05:43+00:00
+description: Real cost math comparing n8n, Zapier, and Make.com for AI workflows at
+  scale — billing models, self-hosting, and where each platform wins.
+draft: false
+schema: schema-ai-workflow-automation-cost-comparison-2026
+tags:
+- n8n
+- Zapier
+- Make.com
+- workflow automation
+- AI agents
+- cost comparison
+title: 'AI Workflow Automation Cost Comparison 2026: n8n vs Zapier vs Make at Scale'
 ---
 
 The right automation platform can cut your workflow spend by 80–90% — or quietly multiply it every time an AI agent reasons through a task. Zapier, Make.com, and n8n each charge differently, and that difference explodes at scale. This guide breaks down the real numbers so you can pick the platform that won't surprise you at invoice time.

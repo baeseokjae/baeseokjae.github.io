@@ -1,14 +1,20 @@
 ---
-title: "Tray.io Review 2026: Enterprise AI Workflow Automation Deep Dive"
-date: 2026-04-28T18:02:27+00:00
-tags: ["enterprise-automation", "ai-workflow", "ipaas", "workflow-automation", "tray-io"]
-description: "Tray.io (now Tray.ai) review 2026: pricing, Merlin AI, connectors, and how it compares to Workato and Zapier for enterprise teams."
-draft: false
 cover:
-  image: "/images/tray-io-review-2026.png"
-  alt: "Tray.io Review 2026: Enterprise AI Workflow Automation Deep Dive"
+  alt: 'Tray.io Review 2026: Enterprise AI Workflow Automation Deep Dive'
+  image: /images/tray-io-review-2026.png
   relative: false
-schema: "schema-tray-io-review-2026"
+date: 2026-04-28 18:02:27+00:00
+description: 'Tray.io (now Tray.ai) review 2026: pricing, Merlin AI, connectors, and
+  how it compares to Workato and Zapier for enterprise teams.'
+draft: false
+schema: schema-tray-io-review-2026
+tags:
+- enterprise-automation
+- ai-workflow
+- ipaas
+- workflow-automation
+- tray-io
+title: 'Tray.io Review 2026: Enterprise AI Workflow Automation Deep Dive'
 ---
 
 Tray.io earns a 7.6/10 overall in 2026 — a capable enterprise automation platform with a best-in-class visual builder and strong AI ambitions, but hampered by opaque pricing, a smaller connector library than rivals, and lingering questions about long-term stability. If your operations team values build experience over raw connector count and you have budget for $30K–$100K+ per year, Tray.io deserves serious evaluation. If you need 2,000+ connectors out of the box or transparent per-seat pricing, look elsewhere.

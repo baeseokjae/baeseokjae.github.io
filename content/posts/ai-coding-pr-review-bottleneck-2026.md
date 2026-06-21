@@ -1,14 +1,20 @@
 ---
-title: "AI Coding Creates a PR Review Bottleneck: How to Fix 91% Longer Review Times"
-date: 2026-05-25T18:05:09+00:00
-tags: ["AI Coding", "Code Review", "Pull Requests", "Engineering Productivity", "DORA Metrics"]
-description: "Teams using AI coding tools merged 98% more PRs but saw 91% longer review times. Here's the data and 5 proven fixes."
-draft: false
 cover:
-  image: "/images/ai-coding-pr-review-bottleneck-2026.png"
-  alt: "AI Coding Creates a PR Review Bottleneck: How to Fix 91% Longer Review Times"
+  alt: 'AI Coding Creates a PR Review Bottleneck: How to Fix 91% Longer Review Times'
+  image: /images/ai-coding-pr-review-bottleneck-2026.png
   relative: false
-schema: "schema-ai-coding-pr-review-bottleneck-2026"
+date: 2026-05-25 18:05:09+00:00
+description: Teams using AI coding tools merged 98% more PRs but saw 91% longer review
+  times. Here's the data and 5 proven fixes.
+draft: false
+schema: schema-ai-coding-pr-review-bottleneck-2026
+tags:
+- AI Coding
+- Code Review
+- Pull Requests
+- Engineering Productivity
+- DORA Metrics
+title: 'AI Coding Creates a PR Review Bottleneck: How to Fix 91% Longer Review Times'
 ---
 
 AI coding tools ship more code than your review process was ever designed to handle. Faros AI tracked 1,255 engineering teams and found that high AI-adoption teams merged 98% more pull requests — but their PR review times grew 91% longer. More output, yes. But the team is slower, not faster.

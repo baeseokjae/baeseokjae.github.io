@@ -1,14 +1,20 @@
 ---
-title: "Qwen 3 Full Model Lineup Guide 2026: 0.6B to 72B with Dual-Mode Thinking"
-date: 2026-05-01T00:05:54+00:00
-tags: ["qwen3", "open-source-llm", "ai-models", "local-ai", "mixture-of-experts"]
-description: "Complete guide to every Qwen 3 model from 0.6B to 235B — specs, VRAM requirements, dual-mode thinking, benchmarks vs. DeepSeek R1 and GPT-4o."
-draft: false
 cover:
-  image: "/images/qwen-3-full-lineup-guide-2026.png"
-  alt: "Qwen 3 Full Model Lineup Guide 2026: 0.6B to 72B with Dual-Mode Thinking"
+  alt: 'Qwen 3 Full Model Lineup Guide 2026: 0.6B to 72B with Dual-Mode Thinking'
+  image: /images/qwen-3-full-lineup-guide-2026.png
   relative: false
-schema: "schema-qwen-3-full-lineup-guide-2026"
+date: 2026-05-01 00:05:54+00:00
+description: Complete guide to every Qwen 3 model from 0.6B to 235B — specs, VRAM
+  requirements, dual-mode thinking, benchmarks vs. DeepSeek R1 and GPT-4o.
+draft: false
+schema: schema-qwen-3-full-lineup-guide-2026
+tags:
+- qwen3
+- open-source-llm
+- ai-models
+- local-ai
+- mixture-of-experts
+title: 'Qwen 3 Full Model Lineup Guide 2026: 0.6B to 72B with Dual-Mode Thinking'
 ---
 
 Qwen 3 is Alibaba's open-source LLM family released in 2026, spanning eight dense models (0.6B to 32B) and two MoE models (30B-A3B, 235B-A22B). All models run in both thinking and non-thinking modes, are licensed Apache 2.0, and were trained on 36 trillion tokens across 119 languages.

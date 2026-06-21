@@ -1,14 +1,20 @@
 ---
-title: "AI Agent Observability with OpenTelemetry: From Dev to Production in 2026"
-date: 2026-05-19T09:04:46+00:00
-tags: ["opentelemetry", "ai-agents", "observability", "llm-tracing", "production"]
-description: "Complete guide to instrumenting AI agents with OpenTelemetry GenAI semantic conventions — from local Jaeger to production Grafana Cloud in 2026."
-draft: false
 cover:
-  image: "/images/ai-agent-observability-opentelemetry-2026.png"
-  alt: "AI Agent Observability with OpenTelemetry: From Dev to Production in 2026"
+  alt: 'AI Agent Observability with OpenTelemetry: From Dev to Production in 2026'
+  image: /images/ai-agent-observability-opentelemetry-2026.png
   relative: false
-schema: "schema-ai-agent-observability-opentelemetry-2026"
+date: 2026-05-19 09:04:46+00:00
+description: Complete guide to instrumenting AI agents with OpenTelemetry GenAI semantic
+  conventions — from local Jaeger to production Grafana Cloud in 2026.
+draft: false
+schema: schema-ai-agent-observability-opentelemetry-2026
+tags:
+- opentelemetry
+- ai-agents
+- observability
+- llm-tracing
+- production
+title: 'AI Agent Observability with OpenTelemetry: From Dev to Production in 2026'
 ---
 
 OpenTelemetry is the standard way to add structured tracing, metrics, and logs to AI agents in 2026 — covering token usage, tool call latency, and multi-agent context propagation with a single SDK and vendor-neutral backends.

@@ -1,14 +1,18 @@
 ---
-title: "n8n AI Testing Automation Workflow Guide for 2026"
-date: 2026-06-15T21:04:00+00:00
-tags: ["n8n", "AI testing", "QA automation"]
-description: "Build an n8n AI testing automation workflow that orchestrates CI tests, AI triage, evaluations, and release decisions."
-draft: false
 cover:
-  image: "/images/n8n-ai-testing-automation-guide-2026.png"
-  alt: "n8n AI Testing Automation Workflow Guide for 2026"
+  alt: n8n AI Testing Automation Workflow Guide for 2026
+  image: /images/n8n-ai-testing-automation-guide-2026.png
   relative: false
-schema: "schema-n8n-ai-testing-automation-guide-2026"
+date: 2026-06-15 21:04:00+00:00
+description: Build an n8n AI testing automation workflow that orchestrates CI tests,
+  AI triage, evaluations, and release decisions.
+draft: false
+schema: schema-n8n-ai-testing-automation-guide-2026
+tags:
+- n8n
+- AI testing
+- QA automation
+title: n8n AI Testing Automation Workflow Guide for 2026
 ---
 
 An n8n AI testing automation workflow uses n8n as the orchestration layer for CI jobs, test reports, AI failure triage, LLM evaluations, and release notifications. The practical pattern is simple: keep Playwright, Cypress, Selenium, API, and unit tests in their native runners, then let n8n coordinate evidence, scoring, decisions, and human review.

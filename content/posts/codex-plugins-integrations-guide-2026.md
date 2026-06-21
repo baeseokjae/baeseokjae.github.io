@@ -1,14 +1,18 @@
 ---
-title: "Codex Plugins 2026: Guide to 90+ Integrations for Developer Teams"
-date: 2026-05-27T09:02:13+00:00
-tags: ["Codex plugins", "OpenAI Codex", "developer tools"]
-description: "A practical guide to Codex plugins 2026, MCP integrations, Atlassian Rovo, GitLab, CodeRabbit, CI/CD, and governance."
-draft: false
 cover:
-  image: "/images/codex-plugins-integrations-guide-2026.png"
-  alt: "Codex Plugins 2026: Guide to 90+ Integrations for Developer Teams"
+  alt: 'Codex Plugins 2026: Guide to 90+ Integrations for Developer Teams'
+  image: /images/codex-plugins-integrations-guide-2026.png
   relative: false
-schema: "schema-codex-plugins-integrations-guide-2026"
+date: 2026-05-27 09:02:13+00:00
+description: A practical guide to Codex plugins 2026, MCP integrations, Atlassian
+  Rovo, GitLab, CodeRabbit, CI/CD, and governance.
+draft: false
+schema: schema-codex-plugins-integrations-guide-2026
+tags:
+- Codex plugins
+- OpenAI Codex
+- developer tools
+title: 'Codex Plugins 2026: Guide to 90+ Integrations for Developer Teams'
 ---
 
 Codex plugins 2026 turn Codex from a coding assistant into a connected engineering workspace: it can read tickets, inspect repos, run CI/CD actions, request reviews, and use MCP tools from products like Atlassian, GitLab, CodeRabbit, CircleCI, and Render. The practical win is fewer context switches and more traceable automation.

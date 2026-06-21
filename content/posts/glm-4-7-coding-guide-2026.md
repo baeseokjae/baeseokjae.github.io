@@ -1,14 +1,22 @@
 ---
-title: "GLM-4.7 Coding Guide 2026: The Open-Source LLM Beating Claude Sonnet"
-date: 2026-05-07T06:35:22+00:00
-tags: ["glm-4-7", "open-source-llm", "coding", "zhipu-ai", "swe-bench", "ai-coding-tools", "llm-comparison"]
-description: "GLM-4.7 scores 73.8% on SWE-bench and 84.9% on LiveCodeBench V6 — matching Claude Sonnet 4.5 at zero API cost. Here's how to set it up and when to use it."
-draft: false
 cover:
-  image: "/images/glm-4-7-coding-guide-2026.png"
-  alt: "GLM-4.7 Coding Guide 2026: The Open-Source LLM Beating Claude Sonnet"
+  alt: 'GLM-4.7 Coding Guide 2026: The Open-Source LLM Beating Claude Sonnet'
+  image: /images/glm-4-7-coding-guide-2026.png
   relative: false
-schema: "schema-glm-4-7-coding-guide-2026"
+date: 2026-05-07 06:35:22+00:00
+description: GLM-4.7 scores 73.8% on SWE-bench and 84.9% on LiveCodeBench V6 — matching
+  Claude Sonnet 4.5 at zero API cost. Here's how to set it up and when to use it.
+draft: false
+schema: schema-glm-4-7-coding-guide-2026
+tags:
+- glm-4-7
+- open-source-llm
+- coding
+- zhipu-ai
+- swe-bench
+- ai-coding-tools
+- llm-comparison
+title: 'GLM-4.7 Coding Guide 2026: The Open-Source LLM Beating Claude Sonnet'
 ---
 
 GLM-4.7 from Zhipu AI scores 73.8% on SWE-bench and 84.9% on LiveCodeBench V6 — numbers that match or beat Claude Sonnet 4.5 on coding benchmarks. It's fully open-source (Apache 2.0), runs locally, and costs $0 per token. If you're paying $20+/month for a commercial coding assistant and your use case is standard development tasks, GLM-4.7 deserves a serious look.

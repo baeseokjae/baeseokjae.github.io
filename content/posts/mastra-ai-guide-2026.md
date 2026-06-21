@@ -1,14 +1,22 @@
 ---
-title: "Mastra AI Guide 2026: Build TypeScript AI Agents with the Framework That Hit 300K Weekly Downloads"
-date: 2026-04-21T23:21:28+00:00
-tags: ["mastra", "typescript", "ai-agents", "ai-framework", "llm"]
-description: "Complete guide to Mastra AI TypeScript framework: install, build agents, add memory, create workflows, and deploy to production."
-draft: false
 cover:
-  image: "/images/mastra-ai-guide-2026.png"
-  alt: "Mastra AI Guide 2026: Build TypeScript AI Agents with the Framework That Hit 300K Weekly Downloads"
+  alt: 'Mastra AI Guide 2026: Build TypeScript AI Agents with the Framework That Hit
+    300K Weekly Downloads'
+  image: /images/mastra-ai-guide-2026.png
   relative: false
-schema: "schema-mastra-ai-guide-2026"
+date: 2026-04-21 23:21:28+00:00
+description: 'Complete guide to Mastra AI TypeScript framework: install, build agents,
+  add memory, create workflows, and deploy to production.'
+draft: false
+schema: schema-mastra-ai-guide-2026
+tags:
+- mastra
+- typescript
+- ai-agents
+- ai-framework
+- llm
+title: 'Mastra AI Guide 2026: Build TypeScript AI Agents with the Framework That Hit
+  300K Weekly Downloads'
 ---
 
 Mastra is an open-source TypeScript framework for building production AI agents, giving you agents, tools, memory, workflows, RAG, evals, and observability in a single cohesive package. Install it with `npm create mastra@latest`, define an agent in under 20 lines of TypeScript, and have a working REST API in minutes — no Python environment, no multi-library stitching.

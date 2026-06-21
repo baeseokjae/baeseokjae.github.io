@@ -1,14 +1,22 @@
 ---
-title: "Local AI Coding Privacy Guide 2026: Keep Your Code Off the Cloud"
-date: 2026-05-30T09:13:59+00:00
-tags: ["local AI", "privacy", "coding", "Ollama", "self-hosted", "GDPR", "enterprise"]
-description: "Keep your source code private in 2026 with local AI coding tools. Full setup guide for Ollama, Continue.dev, Tabby, and enterprise compliance."
-draft: false
 cover:
-  image: "/images/local-ai-coding-privacy-guide-2026.png"
-  alt: "Local AI Coding Privacy Guide 2026: Keep Your Code Off the Cloud"
+  alt: 'Local AI Coding Privacy Guide 2026: Keep Your Code Off the Cloud'
+  image: /images/local-ai-coding-privacy-guide-2026.png
   relative: false
-schema: "schema-local-ai-coding-privacy-guide-2026"
+date: 2026-05-30 09:13:59+00:00
+description: Keep your source code private in 2026 with local AI coding tools. Full
+  setup guide for Ollama, Continue.dev, Tabby, and enterprise compliance.
+draft: false
+schema: schema-local-ai-coding-privacy-guide-2026
+tags:
+- local AI
+- privacy
+- coding
+- Ollama
+- self-hosted
+- GDPR
+- enterprise
+title: 'Local AI Coding Privacy Guide 2026: Keep Your Code Off the Cloud'
 ---
 
 Local AI coding privacy means running your AI coding assistant entirely on your own hardware — no source code, no prompts, and no context ever leaving your machine. In 2026, with GitHub Copilot changing its training data policy and the EU AI Act entering full enforcement in August, local inference has crossed from niche experiment to production necessity for many developers and teams.

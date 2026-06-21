@@ -1,14 +1,20 @@
 ---
-title: "How to Use Claude API in Python 2026: Complete Developer Guide"
-date: 2026-04-18T08:46:52+00:00
-tags: ["Claude API", "Python", "Anthropic SDK", "AI development", "LLM"]
-description: "Step-by-step Claude API Python tutorial: install the SDK, send messages, use streaming, tool use, and prompt caching with real code examples."
-draft: false
 cover:
-  image: "/images/claude-api-python-guide-2026.png"
-  alt: "How to Use Claude API in Python 2026: Complete Developer Guide"
+  alt: 'How to Use Claude API in Python 2026: Complete Developer Guide'
+  image: /images/claude-api-python-guide-2026.png
   relative: false
-schema: "schema-claude-api-python-guide-2026"
+date: 2026-04-18 08:46:52+00:00
+description: 'Step-by-step Claude API Python tutorial: install the SDK, send messages,
+  use streaming, tool use, and prompt caching with real code examples.'
+draft: false
+schema: schema-claude-api-python-guide-2026
+tags:
+- Claude API
+- Python
+- Anthropic SDK
+- AI development
+- LLM
+title: 'How to Use Claude API in Python 2026: Complete Developer Guide'
 ---
 
 The Claude API lets you integrate Anthropic's Claude models into any Python application in under 10 lines of code. Install the `anthropic` package, set your API key, and call `client.messages.create()` — that's the entire setup. This guide covers everything from basic text generation to advanced features like streaming, tool use, vision, and prompt caching that can cut your costs by up to 90%.

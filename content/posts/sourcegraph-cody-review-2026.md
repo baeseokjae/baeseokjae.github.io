@@ -1,14 +1,20 @@
 ---
-title: "Sourcegraph Cody Review 2026: AI Code Assistant for Large Codebases"
-date: 2026-04-27T14:02:09+00:00
-tags: ["ai-coding-tools", "code-review", "sourcegraph", "developer-tools", "enterprise"]
-description: "Sourcegraph Cody delivers full-repo context awareness, multi-LLM support, and enterprise-grade deployment at $9–19/user/month — best for large codebases."
-draft: false
 cover:
-  image: "/images/sourcegraph-cody-review-2026.png"
-  alt: "Sourcegraph Cody Review 2026: AI Code Assistant for Large Codebases"
+  alt: 'Sourcegraph Cody Review 2026: AI Code Assistant for Large Codebases'
+  image: /images/sourcegraph-cody-review-2026.png
   relative: false
-schema: "schema-sourcegraph-cody-review-2026"
+date: 2026-04-27 14:02:09+00:00
+description: Sourcegraph Cody delivers full-repo context awareness, multi-LLM support,
+  and enterprise-grade deployment at $9–19/user/month — best for large codebases.
+draft: false
+schema: schema-sourcegraph-cody-review-2026
+tags:
+- ai-coding-tools
+- code-review
+- sourcegraph
+- developer-tools
+- enterprise
+title: 'Sourcegraph Cody Review 2026: AI Code Assistant for Large Codebases'
 ---
 
 Sourcegraph Cody is a full-codebase AI code assistant built on Sourcegraph's enterprise-grade code intelligence platform — offering deep repository context, multi-LLM flexibility, and self-hosted deployment that most AI coding tools can't match. It's purpose-built for large, complex codebases where surface-level AI falls short.

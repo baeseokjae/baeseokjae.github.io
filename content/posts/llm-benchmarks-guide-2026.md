@@ -1,14 +1,21 @@
 ---
-title: "LLM Benchmarks Guide for Developers 2026: SWE-bench, GPQA, LiveCodeBench Explained"
-date: 2026-05-06T21:05:06+00:00
-tags: ["LLM benchmarks", "SWE-bench", "GPQA Diamond", "LiveCodeBench", "AI evaluation", "developer tools"]
-description: "A practical 2026 guide to LLM benchmarks for developers: which ones still signal real performance and which to stop trusting."
-draft: false
 cover:
-  image: "/images/llm-benchmarks-guide-2026.png"
-  alt: "LLM Benchmarks Guide for Developers 2026: SWE-bench, GPQA, LiveCodeBench Explained"
+  alt: 'LLM Benchmarks Guide for Developers 2026: SWE-bench, GPQA, LiveCodeBench Explained'
+  image: /images/llm-benchmarks-guide-2026.png
   relative: false
-schema: "schema-llm-benchmarks-guide-2026"
+date: 2026-05-06 21:05:06+00:00
+description: 'A practical 2026 guide to LLM benchmarks for developers: which ones
+  still signal real performance and which to stop trusting.'
+draft: false
+schema: schema-llm-benchmarks-guide-2026
+tags:
+- LLM benchmarks
+- SWE-bench
+- GPQA Diamond
+- LiveCodeBench
+- AI evaluation
+- developer tools
+title: 'LLM Benchmarks Guide for Developers 2026: SWE-bench, GPQA, LiveCodeBench Explained'
 ---
 
 LLM benchmark scores flood every model release announcement — but as of 2026, most of those scores tell you almost nothing useful. This guide explains which benchmarks still matter for developers, which are saturated or compromised, and how to pick the right signal for your actual workload.

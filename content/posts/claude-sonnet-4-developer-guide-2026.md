@@ -1,14 +1,18 @@
 ---
-title: "Claude Sonnet 4 Developer Guide: API, Features & Benchmarks (2026)"
-date: 2026-06-12T21:04:32+00:00
-tags: ["Claude", "AI API", "LLM"]
-description: "A practical Claude Sonnet 4 developer guide covering Sonnet 4.6 API usage, pricing, tools, caching, and benchmarks."
-draft: false
 cover:
-  image: "/images/claude-sonnet-4-developer-guide-2026.png"
-  alt: "Claude Sonnet 4 Developer Guide: API, Features & Benchmarks (2026)"
+  alt: 'Claude Sonnet 4 Developer Guide: API, Features & Benchmarks (2026)'
+  image: /images/claude-sonnet-4-developer-guide-2026.png
   relative: false
-schema: "schema-claude-sonnet-4-developer-guide-2026"
+date: 2026-06-12 21:04:32+00:00
+description: A practical Claude Sonnet 4 developer guide covering Sonnet 4.6 API usage,
+  pricing, tools, caching, and benchmarks.
+draft: false
+schema: schema-claude-sonnet-4-developer-guide-2026
+tags:
+- Claude
+- AI API
+- LLM
+title: 'Claude Sonnet 4 Developer Guide: API, Features & Benchmarks (2026)'
 ---
 
 Claude Sonnet 4.6 is the practical Sonnet 4 model for developers in 2026: use `claude-sonnet-4-6` for new API builds, budget at $3 per million input tokens and $15 per million output tokens, and evaluate it with your own tool, latency, and cost tests.

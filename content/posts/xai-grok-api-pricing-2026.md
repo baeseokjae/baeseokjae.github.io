@@ -1,14 +1,20 @@
 ---
-title: "xAI Grok API Pricing 2026: Every Model, Context Window, and Cost Compared"
-date: 2026-05-07T12:00:00+00:00
-tags: ["grok", "xai", "api-pricing", "llm-pricing", "cost-comparison"]
-description: "Full xAI Grok API pricing breakdown for 2026: Grok 4.1 Fast, Grok 4.20, Grok Code Fast 1 — with context windows, cost tables, and competitor comparisons."
-draft: false
 cover:
-  image: "/images/xai-grok-api-pricing-2026.png"
-  alt: "xAI Grok API Pricing 2026: Every Model, Context Window, and Cost Compared"
+  alt: 'xAI Grok API Pricing 2026: Every Model, Context Window, and Cost Compared'
+  image: /images/xai-grok-api-pricing-2026.png
   relative: false
-schema: "schema-xai-grok-api-pricing-2026"
+date: 2026-05-07 12:00:00+00:00
+description: 'Full xAI Grok API pricing breakdown for 2026: Grok 4.1 Fast, Grok 4.20,
+  Grok Code Fast 1 — with context windows, cost tables, and competitor comparisons.'
+draft: false
+schema: schema-xai-grok-api-pricing-2026
+tags:
+- grok
+- xai
+- api-pricing
+- llm-pricing
+- cost-comparison
+title: 'xAI Grok API Pricing 2026: Every Model, Context Window, and Cost Compared'
 ---
 
 xAI's Grok API in 2026 offers three distinct models priced from $0.20 to $6.00 per million tokens, with a 2M-token context window on the flagship tiers — undercutting Anthropic's Claude Opus 4.7 by 92% on input costs and GPT-5.5 by 60% on output costs at comparable capability levels. The API is fully OpenAI-compatible, ships with built-in real-time web search, and supports prompt caching to further reduce repeated-context costs. This guide covers every model, every price point, and how to calculate what you will actually spend in production.

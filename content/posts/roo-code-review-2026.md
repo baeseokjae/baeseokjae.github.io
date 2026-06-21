@@ -1,14 +1,20 @@
 ---
-title: "Roo Code Review 2026: Open-Source Cline Fork with Multi-Agent Mode"
-date: 2026-05-02T18:02:05+00:00
-tags: ["roo code", "ai coding", "open source", "vscode extension", "multi-agent"]
-description: "Complete Roo Code review covering its multi-agent orchestration, Boomerang Tasks, shutdown, and where to migrate in 2026."
-draft: false
 cover:
-  image: "/images/roo-code-review-2026.png"
-  alt: "Roo Code Review 2026: Open-Source Cline Fork with Multi-Agent Mode"
+  alt: 'Roo Code Review 2026: Open-Source Cline Fork with Multi-Agent Mode'
+  image: /images/roo-code-review-2026.png
   relative: false
-schema: "schema-roo-code-review-2026"
+date: 2026-05-02 18:02:05+00:00
+description: Complete Roo Code review covering its multi-agent orchestration, Boomerang
+  Tasks, shutdown, and where to migrate in 2026.
+draft: false
+schema: schema-roo-code-review-2026
+tags:
+- roo code
+- ai coding
+- open source
+- vscode extension
+- multi-agent
+title: 'Roo Code Review 2026: Open-Source Cline Fork with Multi-Agent Mode'
 ---
 
 Roo Code was an open-source VS Code extension that forked from Cline to build a multi-agent AI coding system inside your IDE. It reached 23,300+ GitHub stars and 1.52 million active installs before announcing its shutdown on April 20, 2026 — with all products ceasing on May 15, 2026. If you used it, here is the full story of what made it exceptional and what to do next.

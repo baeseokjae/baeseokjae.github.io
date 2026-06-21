@@ -1,14 +1,20 @@
 ---
-title: "Microsoft ASSERT Agent Evaluation Framework: Turn Agent Policies Into Executable Evals"
-date: 2026-06-13T12:04:09+00:00
-tags: ["AI agents", "AI evaluation", "Microsoft ASSERT"]
-description: "A practical guide to using Microsoft ASSERT to convert AI agent policies into executable evaluations and regression tests."
-draft: false
 cover:
-  image: "/images/microsoft-assert-agent-policy-evaluation-2026.png"
-  alt: "Microsoft ASSERT Agent Evaluation Framework: Turn Agent Policies Into Executable Evals"
+  alt: 'Microsoft ASSERT Agent Evaluation Framework: Turn Agent Policies Into Executable
+    Evals'
+  image: /images/microsoft-assert-agent-policy-evaluation-2026.png
   relative: false
-schema: "schema-microsoft-assert-agent-policy-evaluation-2026"
+date: 2026-06-13 12:04:09+00:00
+description: A practical guide to using Microsoft ASSERT to convert AI agent policies
+  into executable evaluations and regression tests.
+draft: false
+schema: schema-microsoft-assert-agent-policy-evaluation-2026
+tags:
+- AI agents
+- AI evaluation
+- Microsoft ASSERT
+title: 'Microsoft ASSERT Agent Evaluation Framework: Turn Agent Policies Into Executable
+  Evals'
 ---
 
 Microsoft ASSERT is an open-source agent evaluation framework that turns written AI policies, product requirements, and safety rules into executable tests. For developers, the value is practical: instead of debating whether an agent "mostly follows policy," ASSERT gives you repeatable scenarios, metrics, traces, and scorecards you can run before release.

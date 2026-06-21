@@ -1,14 +1,20 @@
 ---
-title: "Windsurf Pricing 2026: Plans, Credits and Real Costs Explained"
-date: 2026-05-09T03:06:32+00:00
-tags: ["windsurf", "ai-coding", "pricing", "developer-tools", "ide"]
-description: "Complete breakdown of Windsurf's 2026 pricing: Free, Pro ($20/mo), Max ($200/mo), Teams, Enterprise, and the quota system that replaced credits."
-draft: false
 cover:
-  image: "/images/windsurf-pricing-guide-2026.png"
-  alt: "Windsurf Pricing 2026: Plans, Credits and Real Costs Explained"
+  alt: 'Windsurf Pricing 2026: Plans, Credits and Real Costs Explained'
+  image: /images/windsurf-pricing-guide-2026.png
   relative: false
-schema: "schema-windsurf-pricing-guide-2026"
+date: 2026-05-09 03:06:32+00:00
+description: 'Complete breakdown of Windsurf''s 2026 pricing: Free, Pro ($20/mo),
+  Max ($200/mo), Teams, Enterprise, and the quota system that replaced credits.'
+draft: false
+schema: schema-windsurf-pricing-guide-2026
+tags:
+- windsurf
+- ai-coding
+- pricing
+- developer-tools
+- ide
+title: 'Windsurf Pricing 2026: Plans, Credits and Real Costs Explained'
 ---
 
 Windsurf offers five pricing tiers in 2026 — Free, Pro ($20/month), Max ($200/month), Teams ($40/user/month), and Enterprise (custom). On March 19, 2026, the credit-based system was replaced with daily and weekly quotas, changing how usage limits work across every paid plan.

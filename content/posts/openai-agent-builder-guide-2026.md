@@ -1,14 +1,20 @@
 ---
-title: "OpenAI Agent Builder No-Code Guide: Build AI Agents Without the SDK"
-date: 2026-05-10T21:04:53+00:00
-tags: ["OpenAI", "AI Agents", "No-Code", "AgentKit", "Agent Builder"]
-description: "Complete guide to building production AI agents with OpenAI Agent Builder — no SDK, no Python, no engineering team required."
-draft: false
 cover:
-  image: "/images/openai-agent-builder-guide-2026.png"
-  alt: "OpenAI Agent Builder No-Code Guide"
+  alt: OpenAI Agent Builder No-Code Guide
+  image: /images/openai-agent-builder-guide-2026.png
   relative: false
-schema: "schema-openai-agent-builder-guide-2026"
+date: 2026-05-10 21:04:53+00:00
+description: Complete guide to building production AI agents with OpenAI Agent Builder
+  — no SDK, no Python, no engineering team required.
+draft: false
+schema: schema-openai-agent-builder-guide-2026
+tags:
+- OpenAI
+- AI Agents
+- No-Code
+- AgentKit
+- Agent Builder
+title: 'OpenAI Agent Builder No-Code Guide: Build AI Agents Without the SDK'
 ---
 
 OpenAI Agent Builder is a visual, no-code platform that lets you design, test, and deploy AI agents using a drag-and-drop canvas — without writing a single line of Python or calling the Agents SDK directly. Ramp built a production procurement agent in two sprints instead of two quarters; Rippling's sales team automated five hours of weekly rep work with zero engineering involvement.

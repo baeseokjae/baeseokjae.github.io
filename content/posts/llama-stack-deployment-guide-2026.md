@@ -1,14 +1,20 @@
 ---
-title: "llama-stack: Meta's Unified Deployment Stack for Llama 4 Models"
-date: 2026-05-19T21:06:41+00:00
-tags: ["llama-stack", "meta", "llama4", "llm-deployment", "open-source-ai"]
-description: "Complete llama-stack tutorial for 2026: install, configure providers, build RAG pipelines, run agentic workflows, and add enterprise safety with PromptGuard."
-draft: false
 cover:
-  image: "/images/llama-stack-deployment-guide-2026.png"
-  alt: "llama-stack: Meta's Unified Deployment Stack for Llama 4 Models"
+  alt: 'llama-stack: Meta''s Unified Deployment Stack for Llama 4 Models'
+  image: /images/llama-stack-deployment-guide-2026.png
   relative: false
-schema: "schema-llama-stack-deployment-guide-2026"
+date: 2026-05-19 21:06:41+00:00
+description: 'Complete llama-stack tutorial for 2026: install, configure providers,
+  build RAG pipelines, run agentic workflows, and add enterprise safety with PromptG...'
+draft: false
+schema: schema-llama-stack-deployment-guide-2026
+tags:
+- llama-stack
+- meta
+- llama4
+- llm-deployment
+- open-source-ai
+title: 'llama-stack: Meta''s Unified Deployment Stack for Llama 4 Models'
 ---
 
 llama-stack is Meta's open-source framework that provides a standardized, provider-agnostic API layer for deploying Llama models across local machines, on-premises servers, and cloud environments. It abstracts inference, retrieval-augmented generation, agentic workflows, and safety into a single unified stack — so the same application code runs against Ollama on a laptop or vLLM on an H100 cluster by changing only the configuration file.

@@ -1,14 +1,20 @@
 ---
-title: "Windsurf Cascade Deep Dive 2026: How the AI Flow Engine Actually Works"
-date: 2026-05-07T00:00:00+00:00
-tags: ["windsurf", "cascade", "ai-ide", "context-engine", "code-editor"]
-description: "How Windsurf Cascade works: RAG-based context tracking, the Memories system, .windsurfrules setup, SWE-1.5, and where it beats Cursor and Copilot."
-draft: false
 cover:
-  image: "/images/windsurf-cascade-deep-dive-2026.png"
-  alt: "Windsurf Cascade Deep Dive 2026: How the AI Flow Engine Actually Works"
+  alt: 'Windsurf Cascade Deep Dive 2026: How the AI Flow Engine Actually Works'
+  image: /images/windsurf-cascade-deep-dive-2026.png
   relative: false
-schema: "schema-windsurf-cascade-deep-dive-2026"
+date: 2026-05-07 00:00:00+00:00
+description: 'How Windsurf Cascade works: RAG-based context tracking, the Memories
+  system, .windsurfrules setup, SWE-1.5, and where it beats Cursor and Copilot.'
+draft: false
+schema: schema-windsurf-cascade-deep-dive-2026
+tags:
+- windsurf
+- cascade
+- ai-ide
+- context-engine
+- code-editor
+title: 'Windsurf Cascade Deep Dive 2026: How the AI Flow Engine Actually Works'
 ---
 
 Windsurf Cascade is a RAG-based AI context engine that tracks your file edits, terminal commands, and cursor navigation simultaneously to maintain continuous awareness of your development session — a design Windsurf calls "flow state" that fundamentally differs from the snippet-level context management used by GitHub Copilot and most competing tools.

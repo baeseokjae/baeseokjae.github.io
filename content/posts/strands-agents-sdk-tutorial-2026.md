@@ -1,14 +1,18 @@
 ---
-title: "Strands Agents SDK Tutorial: Build AWS-Native AI Agents in Minutes"
-date: 2026-06-11T21:03:47+00:00
-tags: ["strands", "aws", "ai-agents"]
-description: "Build and deploy an AWS-native Strands agent in 20 minutes, including tool calling, session memory, and AgentCore hardening."
-draft: false
 cover:
-  image: "/images/strands-agents-sdk-tutorial-2026.png"
-  alt: "Strands Agents SDK Tutorial: Build AWS-Native AI Agents in Minutes"
+  alt: 'Strands Agents SDK Tutorial: Build AWS-Native AI Agents in Minutes'
+  image: /images/strands-agents-sdk-tutorial-2026.png
   relative: false
-schema: "schema-strands-agents-sdk-tutorial-2026"
+date: 2026-06-11 21:03:47+00:00
+description: Build and deploy an AWS-native Strands agent in 20 minutes, including
+  tool calling, session memory, and AgentCore hardening.
+draft: false
+schema: schema-strands-agents-sdk-tutorial-2026
+tags:
+- strands
+- aws
+- ai-agents
+title: 'Strands Agents SDK Tutorial: Build AWS-Native AI Agents in Minutes'
 ---
 
 If you want an AWS-native AI workflow fast, Strands is the practical middle ground: you get a lightweight agent framework, native MCP-style tool ergonomics, and an upgrade path to Bedrock AgentCore without rewriting core logic. In the first 20 minutes you can run a tool-calling agent that answers real customer questions, saves session context, and is deployable to Lambda.

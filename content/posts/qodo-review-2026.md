@@ -1,14 +1,20 @@
 ---
-title: "Qodo Review 2026: AI Code Quality Platform (Formerly CodiumAI)"
-date: 2026-04-26T04:02:30+00:00
-tags: ["ai-code-review", "qodo", "codiumai", "developer-tools", "code-quality"]
-description: "Qodo combines AI PR review with test generation. Full 2026 review with pricing and benchmarks."
-draft: false
 cover:
-  image: "/images/qodo-review-2026.png"
-  alt: "Qodo Review 2026: AI Code Quality Platform (Formerly CodiumAI)"
+  alt: 'Qodo Review 2026: AI Code Quality Platform (Formerly CodiumAI)'
+  image: /images/qodo-review-2026.png
   relative: false
-schema: "schema-qodo-review-2026"
+date: 2026-04-26 04:02:30+00:00
+description: Qodo combines AI PR review with test generation. Full 2026 review with
+  pricing and benchmarks.
+draft: false
+schema: schema-qodo-review-2026
+tags:
+- ai-code-review
+- qodo
+- codiumai
+- developer-tools
+- code-quality
+title: 'Qodo Review 2026: AI Code Quality Platform (Formerly CodiumAI)'
 ---
 
 Qodo is an AI code quality platform that combines automated pull request review with automatic unit test generation — making it the only tool in the market doing both under one roof. After a $40M Series A in 2024 and a rebrand from CodiumAI, the platform released Qodo 2.0 in February 2026 with a multi-agent architecture that achieved the highest F1 score (60.1%) in independent benchmarks across eight competing tools.

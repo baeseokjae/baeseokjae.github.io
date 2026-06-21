@@ -1,14 +1,21 @@
 ---
-title: "Cursor 2.0 Parallel Agents Guide: Run 8 Simultaneous AI Agents on Your Codebase"
-date: 2026-05-03T03:06:19+00:00
-tags: ["cursor", "parallel agents", "ai coding", "git worktrees", "developer tools"]
-description: "Run up to 8 AI agents simultaneously in Cursor 2.0 using git worktrees. Complete setup guide, /multitask command, background agents, and real-world use cases."
-draft: false
 cover:
-  image: "/images/cursor-2-parallel-agents-guide.png"
-  alt: "Cursor 2.0 Parallel Agents Guide: Run 8 Simultaneous AI Agents on Your Codebase"
+  alt: 'Cursor 2.0 Parallel Agents Guide: Run 8 Simultaneous AI Agents on Your Codebase'
+  image: /images/cursor-2-parallel-agents-guide.png
   relative: false
-schema: "schema-cursor-2-parallel-agents-guide"
+date: 2026-05-03 03:06:19+00:00
+description: Run up to 8 AI agents simultaneously in Cursor 2.0 using git worktrees.
+  Complete setup guide, /multitask command, background agents, and real-world use
+  ...
+draft: false
+schema: schema-cursor-2-parallel-agents-guide
+tags:
+- cursor
+- parallel agents
+- ai coding
+- git worktrees
+- developer tools
+title: 'Cursor 2.0 Parallel Agents Guide: Run 8 Simultaneous AI Agents on Your Codebase'
 ---
 
 Cursor 2.0 lets you run up to 8 AI agents simultaneously on your codebase using git worktrees — each agent works in isolation on a separate branch, eliminating file conflicts. Combined with Composer 2's 250 tokens/second throughput, you can parallelize a week of refactoring work into a single afternoon.

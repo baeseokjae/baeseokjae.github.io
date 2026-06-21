@@ -1,14 +1,21 @@
 ---
-title: "Claude Code + GitHub Actions 2026: Automate PR Reviews and CI Tasks with AI"
-date: 2026-04-24T21:25:06+00:00
-tags: ["claude code", "github actions", "AI code review", "CI/CD", "automation", "developer tools"]
-description: "Complete guide to integrating Claude Code with GitHub Actions in 2026: setup, auth options, workflow patterns, cost controls, and security guardrails."
-draft: false
 cover:
-  image: "/images/claude-code-github-actions-2026.png"
-  alt: "Claude Code + GitHub Actions 2026: Automate PR Reviews and CI Tasks with AI"
+  alt: 'Claude Code + GitHub Actions 2026: Automate PR Reviews and CI Tasks with AI'
+  image: /images/claude-code-github-actions-2026.png
   relative: false
-schema: "schema-claude-code-github-actions-2026"
+date: 2026-04-24 21:25:06+00:00
+description: 'Complete guide to integrating Claude Code with GitHub Actions in 2026:
+  setup, auth options, workflow patterns, cost controls, and security guardrails.'
+draft: false
+schema: schema-claude-code-github-actions-2026
+tags:
+- claude code
+- github actions
+- AI code review
+- CI/CD
+- automation
+- developer tools
+title: 'Claude Code + GitHub Actions 2026: Automate PR Reviews and CI Tasks with AI'
 ---
 
 Claude Code integrates with GitHub Actions to give your CI pipeline a live AI agent that can review pull requests, respond to `@claude` mentions, auto-fix failing tests, and produce structured JSON output for downstream pipeline decisions — all without requiring a human to open a browser. In 2026, 1.3 million repositories actively use AI code review integrations (a 4x jump from 300K in late 2024), and Claude Code's GitHub Actions integration is one of the fastest-growing entry points because it works inside the CI environment you already operate.

@@ -1,14 +1,21 @@
 ---
-title: "FLUX.1 Developer Guide: Best Open-Source Image Generation Model 2026"
-date: 2026-06-09T07:15:14+00:00
-tags: ["FLUX.1", "image generation", "AI", "Python", "open source", "developer guide"]
-description: "Complete FLUX.1 developer guide: model variants, Python API integration, LoRA fine-tuning, ComfyUI setup, and pricing benchmarks for 2026."
-draft: false
 cover:
-  image: "/images/flux-1-image-generation-developer-api-guide-2026.png"
-  alt: "FLUX.1 Developer Guide: Best Open-Source Image Generation Model 2026"
+  alt: 'FLUX.1 Developer Guide: Best Open-Source Image Generation Model 2026'
+  image: /images/flux-1-image-generation-developer-api-guide-2026.png
   relative: false
-schema: "schema-flux-1-image-generation-developer-api-guide-2026"
+date: 2026-06-09 07:15:14+00:00
+description: 'Complete FLUX.1 developer guide: model variants, Python API integration,
+  LoRA fine-tuning, ComfyUI setup, and pricing benchmarks for 2026.'
+draft: false
+schema: schema-flux-1-image-generation-developer-api-guide-2026
+tags:
+- FLUX.1
+- image generation
+- AI
+- Python
+- open source
+- developer guide
+title: 'FLUX.1 Developer Guide: Best Open-Source Image Generation Model 2026'
 ---
 
 FLUX.1 is a 12-billion parameter rectified flow transformer from Black Forest Labs that outperforms Stable Diffusion XL on photorealism, text rendering, and prompt adherence — available under Apache 2.0 for commercial use. This guide covers everything you need to integrate, fine-tune, and deploy FLUX.1 in production.

@@ -1,14 +1,21 @@
 ---
-title: "Agent Token Cost Attribution: A Practical Guide for 2026"
-date: 2026-06-19T12:00:00+00:00
-tags: ["agent token cost attribution", "token cost tracking", "llm cost attribution", "ai agent costs", "finops", "eu ai act"]
-description: "Learn how to attribute AI agent token costs per user, feature, and agent run in 2026 — tools, tagging strategies, and the EU AI Act compliance deadline."
-draft: false
 cover:
-  image: "/images/agent-token-cost-attribution-2026.png"
-  alt: "Agent Token Cost Attribution Guide 2026"
+  alt: Agent Token Cost Attribution Guide 2026
+  image: /images/agent-token-cost-attribution-2026.png
   relative: false
-schema: "schema-agent-token-cost-attribution-2026"
+date: 2026-06-19 12:00:00+00:00
+description: Learn how to attribute AI agent token costs per user, feature, and agent
+  run in 2026 — tools, tagging strategies, and the EU AI Act compliance deadline.
+draft: false
+schema: schema-agent-token-cost-attribution-2026
+tags:
+- agent token cost attribution
+- token cost tracking
+- llm cost attribution
+- ai agent costs
+- finops
+- eu ai act
+title: 'Agent Token Cost Attribution: A Practical Guide for 2026'
 ---
 
 Agentic coding tasks consume up to **1,000× more tokens** than equivalent chat sessions, input tokens (not output) dominate the bill even with prompt caching enabled, and the same task can vary by **30× in total token consumption** across runs with no correlation to output quality — yet most teams still have zero per-agent, per-feature cost attribution. Fixing that starts with tagging every LLM request at the SDK call site.

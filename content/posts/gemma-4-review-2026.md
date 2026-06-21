@@ -1,14 +1,20 @@
 ---
-title: "Gemma 4 Review 2026: Google's Best Open-Source Model Yet?"
-date: 2026-05-07T03:04:21+00:00
-tags: ["Gemma 4", "open-source AI", "Google DeepMind", "LLM benchmarks", "edge AI"]
-description: "Gemma 4 review: benchmarks, model variants, Apache 2.0 license, and how it stacks up against Llama 4, GPT-4, and Claude in 2026."
-draft: false
 cover:
-  image: "/images/gemma-4-review-2026.png"
-  alt: "Gemma 4 Review 2026: Google's Best Open-Source Model Yet?"
+  alt: 'Gemma 4 Review 2026: Google''s Best Open-Source Model Yet?'
+  image: /images/gemma-4-review-2026.png
   relative: false
-schema: "schema-gemma-4-review-2026"
+date: 2026-05-07 03:04:21+00:00
+description: 'Gemma 4 review: benchmarks, model variants, Apache 2.0 license, and
+  how it stacks up against Llama 4, GPT-4, and Claude in 2026.'
+draft: false
+schema: schema-gemma-4-review-2026
+tags:
+- Gemma 4
+- open-source AI
+- Google DeepMind
+- LLM benchmarks
+- edge AI
+title: 'Gemma 4 Review 2026: Google''s Best Open-Source Model Yet?'
 ---
 
 Gemma 4 is Google DeepMind's 2026 open-source model family — four model sizes from 2B (phone-optimized) to 31B dense, all under Apache 2.0, scoring 89.2% on AIME 2026 and ranking #3 on the Arena AI leaderboard. If you're evaluating open-weight models for production use today, Gemma 4 is the most commercially viable and technically competitive option available.

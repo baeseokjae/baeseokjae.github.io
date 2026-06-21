@@ -1,14 +1,18 @@
 ---
-title: "AI Productivity Paradox: Why Teams Feel Faster But Ship Less"
-date: 2026-06-13T13:07:34+00:00
-tags: ["AI productivity", "developer productivity", "engineering management"]
-description: "Why AI makes teams feel faster while delivery slows, and how to fix the bottlenecks that hide inside AI-assisted work."
-draft: false
 cover:
-  image: "/images/ai-productivity-paradox-2026-fix.png"
-  alt: "AI Productivity Paradox: Why Teams Feel Faster But Ship Less"
+  alt: 'AI Productivity Paradox: Why Teams Feel Faster But Ship Less'
+  image: /images/ai-productivity-paradox-2026-fix.png
   relative: false
-schema: "schema-ai-productivity-paradox-2026-fix"
+date: 2026-06-13 13:07:34+00:00
+description: Why AI makes teams feel faster while delivery slows, and how to fix the
+  bottlenecks that hide inside AI-assisted work.
+draft: false
+schema: schema-ai-productivity-paradox-2026-fix
+tags:
+- AI productivity
+- developer productivity
+- engineering management
+title: 'AI Productivity Paradox: Why Teams Feel Faster But Ship Less'
 ---
 
 The AI productivity paradox is the gap between faster individual work and slower team delivery. Developers draft code, tests, docs, and tickets faster with AI, but organizations often lose those gains to review overload, weak context, duplicated work, rework, and quality problems.

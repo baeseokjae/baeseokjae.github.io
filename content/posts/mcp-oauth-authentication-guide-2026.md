@@ -1,14 +1,22 @@
 ---
-title: "MCP OAuth 2.1 Authentication: Complete Developer Guide 2026"
-date: 2026-05-05T15:03:56+00:00
-tags: ["MCP", "OAuth 2.1", "authentication", "security", "AI agents", "FastMCP", "PKCE"]
-description: "Step-by-step guide to implementing OAuth 2.1 authentication for MCP servers in 2026, covering PKCE, Protected Resource Metadata, and enterprise gateway patterns."
-draft: false
 cover:
-  image: "/images/mcp-oauth-authentication-guide-2026.png"
-  alt: "MCP OAuth 2.1 Authentication: Complete Developer Guide 2026"
+  alt: 'MCP OAuth 2.1 Authentication: Complete Developer Guide 2026'
+  image: /images/mcp-oauth-authentication-guide-2026.png
   relative: false
-schema: "schema-mcp-oauth-authentication-guide-2026"
+date: 2026-05-05 15:03:56+00:00
+description: Step-by-step guide to implementing OAuth 2.1 authentication for MCP servers
+  in 2026, covering PKCE, Protected Resource Metadata, and enterprise gateway ...
+draft: false
+schema: schema-mcp-oauth-authentication-guide-2026
+tags:
+- MCP
+- OAuth 2.1
+- authentication
+- security
+- AI agents
+- FastMCP
+- PKCE
+title: 'MCP OAuth 2.1 Authentication: Complete Developer Guide 2026'
 ---
 
 Only 8.5% of MCP servers currently implement OAuth 2.1 authentication — despite it being the protocol's mandatory security standard for remote deployments. If your server handles sensitive data or enterprise workloads, that gap is your attack surface. This guide walks you through the complete implementation, from metadata discovery to token introspection, with working Python code.

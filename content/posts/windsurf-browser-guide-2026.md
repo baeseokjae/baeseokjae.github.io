@@ -1,14 +1,20 @@
 ---
-title: "Windsurf Browser Cascade Guide 2026: How Cascade Reads Your Browser Context"
-date: 2026-05-13T00:04:58+00:00
-tags: ["windsurf", "cascade", "ai-ide", "browser-integration", "developer-tools"]
-description: "How Windsurf's Cascade engine reads browser context—previews, @web, MCP tools, and the full context assembly pipeline explained."
-draft: false
 cover:
-  image: "/images/windsurf-browser-guide-2026.png"
-  alt: "Windsurf Browser Cascade Guide 2026: How Cascade Reads Your Browser Context"
+  alt: 'Windsurf Browser Cascade Guide 2026: How Cascade Reads Your Browser Context'
+  image: /images/windsurf-browser-guide-2026.png
   relative: false
-schema: "schema-windsurf-browser-guide-2026"
+date: 2026-05-13 00:04:58+00:00
+description: How Windsurf's Cascade engine reads browser context—previews, @web, MCP
+  tools, and the full context assembly pipeline explained.
+draft: false
+schema: schema-windsurf-browser-guide-2026
+tags:
+- windsurf
+- cascade
+- ai-ide
+- browser-integration
+- developer-tools
+title: 'Windsurf Browser Cascade Guide 2026: How Cascade Reads Your Browser Context'
 ---
 
 Windsurf's Cascade engine reads your browser context by capturing active tab state, console errors, selected DOM elements, and external web pages, then assembling them into a structured prompt layer before any LLM call. The result: your AI pair programmer sees exactly what you see, without manual copy-paste or alt-tabbing.

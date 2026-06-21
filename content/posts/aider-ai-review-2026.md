@@ -1,14 +1,20 @@
 ---
-title: "Aider AI Review 2026: The Terminal Coding Assistant That Actually Works"
-date: 2026-04-19T08:43:19+00:00
-tags: ["aider", "ai-coding-tools", "terminal", "open-source", "git"]
-description: "Aider AI review 2026: open-source terminal coding assistant with 40K+ GitHub stars, 75+ model providers, git-native commits, and voice coding mode."
-draft: false
 cover:
-  image: "/images/aider-ai-review-2026.png"
-  alt: "Aider AI Review 2026: The Terminal Coding Assistant That Actually Works"
+  alt: 'Aider AI Review 2026: The Terminal Coding Assistant That Actually Works'
+  image: /images/aider-ai-review-2026.png
   relative: false
-schema: "schema-aider-ai-review-2026"
+date: 2026-04-19 08:43:19+00:00
+description: 'Aider AI review 2026: open-source terminal coding assistant with 40K+
+  GitHub stars, 75+ model providers, git-native commits, and voice coding mode.'
+draft: false
+schema: schema-aider-ai-review-2026
+tags:
+- aider
+- ai-coding-tools
+- terminal
+- open-source
+- git
+title: 'Aider AI Review 2026: The Terminal Coding Assistant That Actually Works'
 ---
 
 Aider is a free, open-source AI coding assistant that runs in your terminal, automatically commits every AI-generated edit to git, and supports 75+ model providers — including local models via Ollama and LM Studio. For developers who live in the command line, it's the most practical AI pair programmer available in 2026.

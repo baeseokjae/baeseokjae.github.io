@@ -1,14 +1,21 @@
 ---
-title: "AI Coding Tools SOC 2 Compliance 2026: Enterprise Security Scorecard"
-date: 2026-05-07T12:00:00+00:00
-tags: ["soc2", "compliance", "enterprise", "ai-coding-tools", "security", "hipaa"]
-description: "SOC 2 Type II compliance scorecard for 7 AI coding tools in 2026 — data residency, HIPAA, FedRAMP, zero-retention options compared."
-draft: false
 cover:
-  image: "/images/ai-coding-tools-enterprise-soc2-compliance-2026.png"
-  alt: "AI Coding Tools SOC 2 Compliance 2026: Enterprise Security Scorecard"
+  alt: 'AI Coding Tools SOC 2 Compliance 2026: Enterprise Security Scorecard'
+  image: /images/ai-coding-tools-enterprise-soc2-compliance-2026.png
   relative: false
-schema: "schema-ai-coding-tools-enterprise-soc2-compliance-2026"
+date: 2026-05-07 12:00:00+00:00
+description: SOC 2 Type II compliance scorecard for 7 AI coding tools in 2026 — data
+  residency, HIPAA, FedRAMP, zero-retention options compared.
+draft: false
+schema: schema-ai-coding-tools-enterprise-soc2-compliance-2026
+tags:
+- soc2
+- compliance
+- enterprise
+- ai-coding-tools
+- security
+- hipaa
+title: 'AI Coding Tools SOC 2 Compliance 2026: Enterprise Security Scorecard'
 ---
 
 Ninety-two percent of US developers now use AI coding tools, yet 78% of enterprises cite security and compliance as their top adoption barrier. The gap between individual adoption and enterprise deployment is almost entirely a compliance story. Security teams responsible for protecting intellectual property, customer data, and regulated workloads cannot approve AI tools based on capability reviews alone — they need audited controls, verifiable data handling commitments, and certifications that satisfy their own compliance obligations. This guide scores seven leading AI coding tools across the dimensions that enterprise security teams actually require in 2026: SOC 2 Type II status, data residency controls, training opt-outs, HIPAA BAA availability, FedRAMP authorization, and zero-retention options. The scorecard cuts through marketing language to give procurement teams a defensible basis for vendor decisions.

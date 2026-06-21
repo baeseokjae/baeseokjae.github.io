@@ -1,14 +1,25 @@
 ---
-title: "Pi Agent Core Guide 2026: The Runtime-Agnostic TypeScript Agent Harness Behind Flue and Agno"
-date: 2026-06-20T12:00:00+00:00
-tags: ["pi agent core", "flue framework", "agno", "runtime-agnostic agent harness", "typescript agent framework", "pi-agent-core", "cloudflare agents"]
-description: "Pi Agent Core is a minimal TypeScript agent harness by Mario Zechner (2.8M weekly npm downloads). This guide covers its architecture, the Flue and Agno frameworks built on top, Cloudflare integration, and how it compares to Claude Code SDK and OpenAI Agents SDK."
-draft: false
 cover:
-  image: "/images/pi-agent-core-guide-2026.png"
-  alt: "Pi Agent Core Guide 2026: The Runtime-Agnostic TypeScript Agent Harness Behind Flue and Agno"
+  alt: 'Pi Agent Core Guide 2026: The Runtime-Agnostic TypeScript Agent Harness Behind
+    Flue and Agno'
+  image: /images/pi-agent-core-guide-2026.png
   relative: false
-schema: "schema-pi-agent-core-guide-2026"
+date: 2026-06-20 12:00:00+00:00
+description: Pi Agent Core is a minimal TypeScript agent harness by Mario Zechner
+  (2.8M weekly npm downloads). This guide covers its architecture, the Flue and Agno
+  ...
+draft: false
+schema: schema-pi-agent-core-guide-2026
+tags:
+- pi agent core
+- flue framework
+- agno
+- runtime-agnostic agent harness
+- typescript agent framework
+- pi-agent-core
+- cloudflare agents
+title: 'Pi Agent Core Guide 2026: The Runtime-Agnostic TypeScript Agent Harness Behind
+  Flue and Agno'
 ---
 
 Pi Agent Core (`pi-agent-core`) is a minimal, runtime-agnostic TypeScript agent harness by Mario Zechner with 2.8 million weekly npm downloads. It provides the foundational agent loop — tool execution, state management, and event streaming — without coupling you to any LLM provider, runtime environment, or framework. Two major ecosystems build on it: Flue (from the Astro team) as a full-stack agent framework, and Agno as a production agent platform SDK. Cloudflare adopted Pi as the harness in their three-layer agent architecture announced June 17, 2026. If you're building agents in TypeScript and want to understand the layer between your LLM API calls and your framework, this is where you start.

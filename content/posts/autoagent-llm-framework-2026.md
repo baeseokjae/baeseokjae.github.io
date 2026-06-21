@@ -1,14 +1,22 @@
 ---
-title: "AutoAgent Framework 2026: Build LLM Agents with Zero Code"
-date: 2026-05-06T15:13:40+00:00
-tags: ["autoagent", "llm-agents", "no-code", "ai-framework", "self-play", "gaia-benchmark"]
-description: "AutoAgent 2026 review: zero-code LLM agent framework, #1 open-source GAIA benchmark, self-play optimization, and how it compares to LangChain, CrewAI, and AutoGen."
-draft: false
 cover:
-  image: "/images/autoagent-llm-framework-2026.png"
-  alt: "AutoAgent Framework 2026: Build LLM Agents with Zero Code"
+  alt: 'AutoAgent Framework 2026: Build LLM Agents with Zero Code'
+  image: /images/autoagent-llm-framework-2026.png
   relative: false
-schema: "schema-autoagent-llm-framework-2026"
+date: 2026-05-06 15:13:40+00:00
+description: 'AutoAgent 2026 review: zero-code LLM agent framework, #1 open-source
+  GAIA benchmark, self-play optimization, and how it compares to LangChain, CrewAI,
+  a...'
+draft: false
+schema: schema-autoagent-llm-framework-2026
+tags:
+- autoagent
+- llm-agents
+- no-code
+- ai-framework
+- self-play
+- gaia-benchmark
+title: 'AutoAgent Framework 2026: Build LLM Agents with Zero Code'
 ---
 
 AutoAgent achieved 55.15% accuracy on the GAIA benchmark in 2026 — ranking #1 among open-source frameworks, comparable to OpenAI's own Deep Research system. The number that explains why this matters: only 0.03% of the global population has the programming skills to use traditional LLM frameworks like LangChain or CrewAI. AutoAgent targets the other 99.97%. Released as v0.2.0 in February 2025 (formerly known as MetaChain from Hong Kong University of Science and Technology), it builds production-grade AI agents from natural language alone — no Python, no YAML configuration, no understanding of async execution models. Here's what works, what doesn't, and when to use it over the alternatives.

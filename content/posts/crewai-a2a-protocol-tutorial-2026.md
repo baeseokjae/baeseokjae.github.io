@@ -1,14 +1,22 @@
 ---
-title: "CrewAI A2A Protocol Tutorial: Build Interoperable Agents with Agent2Agent Support"
-date: 2026-04-23T01:23:58+00:00
-tags: ["crewai", "a2a-protocol", "multi-agent", "agent-interoperability", "langraph"]
-description: "Step-by-step tutorial on using the A2A protocol with CrewAI to build cross-framework multi-agent systems in 2026."
-draft: false
 cover:
-  image: "/images/crewai-a2a-protocol-tutorial-2026.png"
-  alt: "CrewAI A2A Protocol Tutorial: Build Interoperable Agents with Agent2Agent Support"
+  alt: 'CrewAI A2A Protocol Tutorial: Build Interoperable Agents with Agent2Agent
+    Support'
+  image: /images/crewai-a2a-protocol-tutorial-2026.png
   relative: false
-schema: "schema-crewai-a2a-protocol-tutorial-2026"
+date: 2026-04-23 01:23:58+00:00
+description: Step-by-step tutorial on using the A2A protocol with CrewAI to build
+  cross-framework multi-agent systems in 2026.
+draft: false
+schema: schema-crewai-a2a-protocol-tutorial-2026
+tags:
+- crewai
+- a2a-protocol
+- multi-agent
+- agent-interoperability
+- langraph
+title: 'CrewAI A2A Protocol Tutorial: Build Interoperable Agents with Agent2Agent
+  Support'
 ---
 
 The A2A (Agent2Agent) protocol lets you connect a CrewAI agent to a LangGraph agent — or any other compliant framework — over a standard HTTP interface, with no custom glue code. Setup takes about 15 minutes once your CrewAI environment is running.

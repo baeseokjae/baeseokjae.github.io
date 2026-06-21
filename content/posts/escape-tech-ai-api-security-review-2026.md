@@ -1,14 +1,20 @@
 ---
-title: "Escape.tech AI API Security Review 2026: Business Logic and Complex Auth Testing"
-date: 2026-04-25T13:09:20+00:00
-tags: ["api-security", "dast", "business-logic", "security-testing", "escape-tech"]
-description: "In-depth review of Escape.tech's AI-driven DAST for API security in 2026: business logic testing, OAuth/JWT auth, BOLA/IDOR detection, and CI/CD integration."
-draft: false
 cover:
-  image: "/images/escape-tech-ai-api-security-review-2026.png"
-  alt: "Escape.tech AI API Security Review 2026: Business Logic and Complex Auth Testing"
+  alt: 'Escape.tech AI API Security Review 2026: Business Logic and Complex Auth Testing'
+  image: /images/escape-tech-ai-api-security-review-2026.png
   relative: false
-schema: "schema-escape-tech-ai-api-security-review-2026"
+date: 2026-04-25 13:09:20+00:00
+description: 'In-depth review of Escape.tech''s AI-driven DAST for API security in
+  2026: business logic testing, OAuth/JWT auth, BOLA/IDOR detection, and CI/CD integra...'
+draft: false
+schema: schema-escape-tech-ai-api-security-review-2026
+tags:
+- api-security
+- dast
+- business-logic
+- security-testing
+- escape-tech
+title: 'Escape.tech AI API Security Review 2026: Business Logic and Complex Auth Testing'
 ---
 
 Escape.tech is an AI-native API DAST (Dynamic Application Security Testing) platform that finds business logic vulnerabilities, authentication flaws, and access control issues in REST, GraphQL, and gRPC APIs — before they reach production. It's built specifically for the class of bugs that legacy scanners miss.

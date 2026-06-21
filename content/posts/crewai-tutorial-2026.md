@@ -1,14 +1,20 @@
 ---
-title: "CrewAI Tutorial 2026: Build Multi-Agent Systems in Python Step by Step"
-date: 2026-04-19T11:46:58+00:00
-tags: ["crewai", "multi-agent", "python", "ai-agents", "llm"]
-description: "Complete CrewAI tutorial for 2026: install, configure agents, add tools, implement memory, and deploy multi-agent Python systems to production."
-draft: false
 cover:
-  image: "/images/crewai-tutorial-2026.png"
-  alt: "CrewAI Tutorial 2026: Build Multi-Agent Systems in Python Step by Step"
+  alt: 'CrewAI Tutorial 2026: Build Multi-Agent Systems in Python Step by Step'
+  image: /images/crewai-tutorial-2026.png
   relative: false
-schema: "schema-crewai-tutorial-2026"
+date: 2026-04-19 11:46:58+00:00
+description: 'Complete CrewAI tutorial for 2026: install, configure agents, add tools,
+  implement memory, and deploy multi-agent Python systems to production.'
+draft: false
+schema: schema-crewai-tutorial-2026
+tags:
+- crewai
+- multi-agent
+- python
+- ai-agents
+- llm
+title: 'CrewAI Tutorial 2026: Build Multi-Agent Systems in Python Step by Step'
 ---
 
 CrewAI is a Python framework for building multi-agent AI systems where each agent has a defined role, goal, and backstory — and agents collaborate to complete complex tasks. Install it with `pip install crewai`, define agents and tasks in YAML files, then wire them together with a Python class. As of April 2026, CrewAI has 49k GitHub stars and over 14,800 monthly searches, making it the fastest-growing multi-agent framework available.

@@ -1,14 +1,18 @@
 ---
-title: "Google ADK Multi-Agent Guide: Build Agent Teams with A2A Protocol"
-date: "2026-06-12T04:26:36+00:00"
-tags: ["google adk", "a2a", "multi-agent systems"]
-description: "Build Google ADK agent teams in 2026 using A2A for portability, clear ownership, and production-safe orchestration."
-draft: false
 cover:
-  image: "/images/google-adk-multi-agent-guide-2026.png"
-  alt: "Google ADK Multi-Agent Guide: Build Agent Teams with A2A Protocol"
+  alt: 'Google ADK Multi-Agent Guide: Build Agent Teams with A2A Protocol'
+  image: /images/google-adk-multi-agent-guide-2026.png
   relative: false
-schema: "schema-google-adk-multi-agent-guide-2026"
+date: '2026-06-12T04:26:36+00:00'
+description: Build Google ADK agent teams in 2026 using A2A for portability, clear
+  ownership, and production-safe orchestration.
+draft: false
+schema: schema-google-adk-multi-agent-guide-2026
+tags:
+- google adk
+- a2a
+- multi-agent systems
+title: 'Google ADK Multi-Agent Guide: Build Agent Teams with A2A Protocol'
 ---
 
 If you are building agent software in 2026, Google ADK is the fastest way to ship coordinated AI workflows inside your existing stack, and A2A is the safest way to keep those agents portable across frameworks. This guide gives a practical path from one-off agents to team architectures, with concrete routing, handoff, observability, and production controls you can implement in 90 minutes.

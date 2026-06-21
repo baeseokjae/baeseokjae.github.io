@@ -1,14 +1,22 @@
 ---
-title: "LLM Function Calling and Tool Use Guide 2026: OpenAI, Anthropic, Google"
-date: 2026-04-27T14:36:31+00:00
-tags: ["llm function calling", "tool use", "OpenAI", "Anthropic", "Google Gemini", "AI agents", "production"]
-description: "Complete 2026 guide to LLM function calling across OpenAI, Anthropic, and Google Gemini—with code, security, and production patterns."
-draft: false
 cover:
-  image: "/images/llm-function-calling-tool-use-guide-2026.png"
-  alt: "LLM Function Calling and Tool Use Guide 2026"
+  alt: LLM Function Calling and Tool Use Guide 2026
+  image: /images/llm-function-calling-tool-use-guide-2026.png
   relative: false
-schema: "schema-llm-function-calling-tool-use-guide-2026"
+date: 2026-04-27 14:36:31+00:00
+description: Complete 2026 guide to LLM function calling across OpenAI, Anthropic,
+  and Google Gemini—with code, security, and production patterns.
+draft: false
+schema: schema-llm-function-calling-tool-use-guide-2026
+tags:
+- llm function calling
+- tool use
+- OpenAI
+- Anthropic
+- Google Gemini
+- AI agents
+- production
+title: 'LLM Function Calling and Tool Use Guide 2026: OpenAI, Anthropic, Google'
 ---
 
 Function calling is the bridge between a language model's text output and the real world. Instead of asking a model to guess what the weather is, you hand it a `get_weather` tool definition, and it decides when to call it, what arguments to pass, and how to incorporate the result. As of 2026, every major provider—OpenAI, Anthropic, and Google—supports this pattern, but the APIs look meaningfully different. This guide walks through each one with working Python code and covers parallel calls, agent loops, security, and how to pick the right approach.

@@ -1,14 +1,22 @@
 ---
-title: "Claude Opus 4.7 Developer Guide: xhigh Effort, Task Budgets, and Migration"
-date: 2026-05-07T09:04:49+00:00
-tags: ["Claude Opus 4.7", "Anthropic", "AI API", "developer guide", "task budgets", "xhigh effort", "migration"]
-description: "Complete Claude Opus 4.7 developer guide: xhigh effort levels, task budgets, adaptive thinking, breaking API changes, and migration from Opus 4.6."
-draft: false
 cover:
-  image: "/images/claude-opus-4-7-developer-guide-2026.png"
-  alt: "Claude Opus 4.7 Developer Guide: xhigh Effort, Task Budgets, and Migration"
+  alt: 'Claude Opus 4.7 Developer Guide: xhigh Effort, Task Budgets, and Migration'
+  image: /images/claude-opus-4-7-developer-guide-2026.png
   relative: false
-schema: "schema-claude-opus-4-7-developer-guide-2026"
+date: 2026-05-07 09:04:49+00:00
+description: 'Complete Claude Opus 4.7 developer guide: xhigh effort levels, task
+  budgets, adaptive thinking, breaking API changes, and migration from Opus 4.6.'
+draft: false
+schema: schema-claude-opus-4-7-developer-guide-2026
+tags:
+- Claude Opus 4.7
+- Anthropic
+- AI API
+- developer guide
+- task budgets
+- xhigh effort
+- migration
+title: 'Claude Opus 4.7 Developer Guide: xhigh Effort, Task Budgets, and Migration'
 ---
 
 Claude Opus 4.7 is Anthropic's most capable model as of April 2026, scoring 87.6% on SWE-bench Verified and introducing a redesigned thinking system that replaces manual `budget_tokens` with effort-based adaptive thinking. If you're upgrading from Opus 4.6, four breaking API changes require code updates before your apps will run.

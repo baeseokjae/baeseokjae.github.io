@@ -1,14 +1,21 @@
 ---
-title: "Cisco AI Defense Review 2026: Security for AI Agents and LLM Applications"
-date: 2026-05-15T12:12:06+00:00
-tags: ["ai-security", "cisco", "llm-security", "ai-agents", "enterprise-security"]
-description: "Hands-on review of Cisco AI Defense 2026: Zero Trust for AI agents, MCP protocol security, free Explorer Edition, and how it stacks up against Lakera and Palo Alto."
-draft: false
 cover:
-  image: "/images/cisco-ai-defense-review-2026.png"
-  alt: "Cisco AI Defense Review 2026: Security for AI Agents and LLM Applications"
+  alt: 'Cisco AI Defense Review 2026: Security for AI Agents and LLM Applications'
+  image: /images/cisco-ai-defense-review-2026.png
   relative: false
-schema: "schema-cisco-ai-defense-review-2026"
+date: 2026-05-15 12:12:06+00:00
+description: 'Hands-on review of Cisco AI Defense 2026: Zero Trust for AI agents,
+  MCP protocol security, free Explorer Edition, and how it stacks up against Lakera
+  an...'
+draft: false
+schema: schema-cisco-ai-defense-review-2026
+tags:
+- ai-security
+- cisco
+- llm-security
+- ai-agents
+- enterprise-security
+title: 'Cisco AI Defense Review 2026: Security for AI Agents and LLM Applications'
 ---
 
 Cisco AI Defense is the enterprise platform that secures AI agents and LLM applications by enforcing security at the network level — without requiring code changes from developers. If you're an engineering or security team deploying agentic AI in 2026, this is the most comprehensive platform on the market for addressing the full attack surface: model vulnerabilities, prompt injection, MCP protocol abuse, agent-to-agent trust chains, and AI supply chain transparency.

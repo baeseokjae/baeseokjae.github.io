@@ -1,14 +1,20 @@
 ---
-title: "Base44 Review 2026: The AI App Builder for Non-Developers"
-date: 2026-05-09T15:04:32+00:00
-tags: ["base44", "ai-app-builder", "no-code", "vibe-coding", "review"]
-description: "Hands-on Base44 review 2026: pricing, features, Wix acquisition impact, and how it compares to Bolt.new and Lovable for non-developers."
-draft: false
 cover:
-  image: "/images/base44-review-2026.png"
-  alt: "Base44 Review 2026: The AI App Builder for Non-Developers"
+  alt: 'Base44 Review 2026: The AI App Builder for Non-Developers'
+  image: /images/base44-review-2026.png
   relative: false
-schema: "schema-base44-review-2026"
+date: 2026-05-09 15:04:32+00:00
+description: 'Hands-on Base44 review 2026: pricing, features, Wix acquisition impact,
+  and how it compares to Bolt.new and Lovable for non-developers.'
+draft: false
+schema: schema-base44-review-2026
+tags:
+- base44
+- ai-app-builder
+- no-code
+- vibe-coding
+- review
+title: 'Base44 Review 2026: The AI App Builder for Non-Developers'
 ---
 
 Base44 is an AI-powered app builder that converts a plain-English prompt into a fully deployed web application — with a built-in database, authentication, and hosting — in minutes, no code required. It's the fastest on-ramp from idea to live app for non-technical founders, product managers, and operators in 2026.

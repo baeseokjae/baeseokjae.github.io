@@ -1,14 +1,18 @@
 ---
-title: "Llama 4 Scout vs Maverick: Complete Llama 4 API Guide"
-date: 2026-06-12T00:07:04+00:00
-tags: ["llama4", "api", "llama"]
-description: "A practical developer guide to choosing and integrating Llama 4 Scout and Maverick across managed APIs and deployment paths."
-draft: false
 cover:
-  image: "/images/llama-4-scout-maverick-api-guide-2026.png"
-  alt: "Llama 4 Scout vs Maverick: Complete Llama 4 API Developer Guide"
+  alt: 'Llama 4 Scout vs Maverick: Complete Llama 4 API Developer Guide'
+  image: /images/llama-4-scout-maverick-api-guide-2026.png
   relative: false
-schema: "schema-llama-4-scout-maverick-api-guide-2026"
+date: 2026-06-12 00:07:04+00:00
+description: A practical developer guide to choosing and integrating Llama 4 Scout
+  and Maverick across managed APIs and deployment paths.
+draft: false
+schema: schema-llama-4-scout-maverick-api-guide-2026
+tags:
+- llama4
+- api
+- llama
+title: 'Llama 4 Scout vs Maverick: Complete Llama 4 API Guide'
 ---
 
 If you are deciding between Llama 4 Scout and Maverick for production APIs, start with one rule: Scout for ultra-long context and summarization pipelines, Maverick for higher expert routing on mixed multimodal tasks, then validate on your exact endpoint with real traffic. On real systems, throughput and contract behavior vary more by provider implementation than by paper spec alone.

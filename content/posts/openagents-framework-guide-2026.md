@@ -1,14 +1,23 @@
 ---
-title: "OpenAgents Framework Guide: Build Persistent AI Agent Networks with MCP and A2A Support"
-date: 2026-04-23T01:25:01+00:00
-tags: ["openagents", "ai-agents", "mcp", "a2a", "multi-agent", "python"]
-description: "Complete guide to OpenAgents framework — build persistent AI agent networks with native MCP and A2A protocol support in 2026."
-draft: false
 cover:
-  image: "/images/openagents-framework-guide-2026.png"
-  alt: "OpenAgents Framework Guide: Build Persistent AI Agent Networks with MCP and A2A Support"
+  alt: 'OpenAgents Framework Guide: Build Persistent AI Agent Networks with MCP and
+    A2A Support'
+  image: /images/openagents-framework-guide-2026.png
   relative: false
-schema: "schema-openagents-framework-guide-2026"
+date: 2026-04-23 01:25:01+00:00
+description: Complete guide to OpenAgents framework — build persistent AI agent networks
+  with native MCP and A2A protocol support in 2026.
+draft: false
+schema: schema-openagents-framework-guide-2026
+tags:
+- openagents
+- ai-agents
+- mcp
+- a2a
+- multi-agent
+- python
+title: 'OpenAgents Framework Guide: Build Persistent AI Agent Networks with MCP and
+  A2A Support'
 ---
 
 OpenAgents is an open-source framework for building persistent AI agent networks — systems where agents continue to exist, learn, and collaborate long after an initial task completes. Unlike LangGraph or CrewAI, which treat agents as stateless task runners, OpenAgents gives every agent a durable identity, a shared workspace with a persistent URL, and native support for both MCP (Model Context Protocol) and A2A (Agent-to-Agent) protocols from day one.

@@ -1,14 +1,20 @@
 ---
-title: "AI Terminal Coding Tools 2026: Claude Code vs Codex CLI vs Gemini CLI vs OpenCode"
-date: 2026-05-08T00:00:00+00:00
-tags: ["claude-code","codex-cli","gemini-cli","opencode","terminal-ai"]
-description: "A direct comparison of the four leading AI terminal coding agents in 2026: Claude Code, Codex CLI, Gemini CLI, and OpenCode — covering features, benchmarks, pricing, and which tool fits which team."
-draft: false
 cover:
-  image: "/images/ai-terminal-coding-tools-comparison-2026.png"
-  alt: "AI Terminal Coding Tools 2026: Claude Code vs Codex CLI vs Gemini CLI vs OpenCode"
+  alt: 'AI Terminal Coding Tools 2026: Claude Code vs Codex CLI vs Gemini CLI vs OpenCode'
+  image: /images/ai-terminal-coding-tools-comparison-2026.png
   relative: false
-schema: "schema-ai-terminal-coding-tools-comparison-2026"
+date: 2026-05-08 00:00:00+00:00
+description: 'A direct comparison of the four leading AI terminal coding agents in
+  2026: Claude Code, Codex CLI, Gemini CLI, and OpenCode — covering features, benchma...'
+draft: false
+schema: schema-ai-terminal-coding-tools-comparison-2026
+tags:
+- claude-code
+- codex-cli
+- gemini-cli
+- opencode
+- terminal-ai
+title: 'AI Terminal Coding Tools 2026: Claude Code vs Codex CLI vs Gemini CLI vs OpenCode'
 ---
 
 The four major AI terminal coding agents — Claude Code, Codex CLI, Gemini CLI, and OpenCode — have each staked out meaningfully different ground in 2026. Picking the wrong one costs time and money. This guide breaks down what each tool actually does, where it wins, and which developer profile it fits best.

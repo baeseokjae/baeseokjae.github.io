@@ -1,14 +1,18 @@
 ---
-title: "LLM API Pricing Comparison 2026: GPT-5 vs Claude vs Gemini vs DeepSeek Costs"
-date: 2026-04-24T16:05:11+00:00
-tags: ["ai-coding", "developer-tools", "ai-agents"]
-description: "Up-to-date LLM API pricing for GPT-5, Claude, Gemini, and DeepSeek in 2026 — with hidden costs, batch discounts, and a use-case decision guide."
-draft: false
 cover:
-  image: "/images/llm-api-pricing-comparison-2026.png"
-  alt: "LLM API Pricing Comparison 2026: GPT-5 vs Claude vs Gemini vs DeepSeek Costs"
+  alt: 'LLM API Pricing Comparison 2026: GPT-5 vs Claude vs Gemini vs DeepSeek Costs'
+  image: /images/llm-api-pricing-comparison-2026.png
   relative: false
-schema: "schema-llm-api-pricing-comparison-2026"
+date: 2026-04-24 16:05:11+00:00
+description: Up-to-date LLM API pricing for GPT-5, Claude, Gemini, and DeepSeek in
+  2026 — with hidden costs, batch discounts, and a use-case decision guide.
+draft: false
+schema: schema-llm-api-pricing-comparison-2026
+tags:
+- ai-coding
+- developer-tools
+- ai-agents
+title: 'LLM API Pricing Comparison 2026: GPT-5 vs Claude vs Gemini vs DeepSeek Costs'
 ---
 
 LLM API prices dropped roughly 80% between 2024 and 2026. The same production workload that cost $3,000/month in 2024 now runs for approximately $150/month. This guide covers every major provider's current rates, the hidden costs that inflate real bills, and which model wins for each use case.

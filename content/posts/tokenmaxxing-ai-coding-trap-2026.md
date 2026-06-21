@@ -1,14 +1,20 @@
 ---
-title: "Tokenmaxxing: The Hidden AI Coding Productivity Trap Costing Millions"
-date: 2026-06-01T12:03:33+00:00
-tags: ["AI Coding", "Developer Productivity", "Token Optimization", "Engineering Metrics", "Context Engineering"]
-description: "Tokenmaxxing — treating AI token consumption as a productivity proxy — is destroying code quality and wasting billions. Here's how to escape the trap."
-draft: false
 cover:
-  image: "/images/tokenmaxxing-ai-coding-trap-2026.png"
-  alt: "Tokenmaxxing: The Hidden AI Coding Productivity Trap"
+  alt: 'Tokenmaxxing: The Hidden AI Coding Productivity Trap'
+  image: /images/tokenmaxxing-ai-coding-trap-2026.png
   relative: false
-schema: "schema-tokenmaxxing-ai-coding-trap-2026"
+date: 2026-06-01 12:03:33+00:00
+description: Tokenmaxxing — treating AI token consumption as a productivity proxy
+  — is destroying code quality and wasting billions. Here's how to escape the trap.
+draft: false
+schema: schema-tokenmaxxing-ai-coding-trap-2026
+tags:
+- AI Coding
+- Developer Productivity
+- Token Optimization
+- Engineering Metrics
+- Context Engineering
+title: 'Tokenmaxxing: The Hidden AI Coding Productivity Trap Costing Millions'
 ---
 
 Tokenmaxxing is the practice of maximizing AI token consumption as a proxy for engineering productivity — and it's quietly destroying code quality, blowing AI budgets, and making developers measurably less effective. If your team celebrates high token usage without tracking what that code actually does downstream, you're already in the trap.

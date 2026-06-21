@@ -1,14 +1,21 @@
 ---
-title: "Local AI Agents Guide 2026: Build Offline AI Agents with Ollama and Cline"
-date: 2026-05-03T21:05:18+00:00
-tags: ["local AI agents", "Ollama", "Cline", "offline AI", "privacy", "LLM"]
-description: "Complete guide to building offline AI agents with Ollama and Cline in 2026 — privacy-first, zero API costs, works air-gapped."
-draft: false
 cover:
-  image: "/images/local-ai-agents-guide-2026.png"
-  alt: "Local AI Agents Guide 2026: Build Offline AI Agents with Ollama and Cline"
+  alt: 'Local AI Agents Guide 2026: Build Offline AI Agents with Ollama and Cline'
+  image: /images/local-ai-agents-guide-2026.png
   relative: false
-schema: "schema-local-ai-agents-guide-2026"
+date: 2026-05-03 21:05:18+00:00
+description: Complete guide to building offline AI agents with Ollama and Cline in
+  2026 — privacy-first, zero API costs, works air-gapped.
+draft: false
+schema: schema-local-ai-agents-guide-2026
+tags:
+- local AI agents
+- Ollama
+- Cline
+- offline AI
+- privacy
+- LLM
+title: 'Local AI Agents Guide 2026: Build Offline AI Agents with Ollama and Cline'
 ---
 
 Local AI agents run entirely on your own hardware using open-weight models — no cloud API calls, no data leaving your machine, no per-token costs. With Ollama handling local inference and Cline providing the VS Code agent layer, you can build production-capable offline coding agents in under an hour using models like Devstral 24B or Gemma 4 27B.

@@ -1,14 +1,19 @@
 ---
-title: "Google ADK vs LangGraph vs CrewAI in 2026: Which AI Agent Framework Wins?"
-date: 2026-06-11T19:03:28+00:00
-tags: ["google-adk", "langgraph", "crewai", "agent-frameworks"]
-description: "LangGraph, CrewAI, and Google ADK 2.0 each win in different 2026 scenarios—this guide maps the hard trade-offs."
-draft: false
 cover:
-  image: "/images/google-adk-vs-langgraph-vs-crewai-2026.png"
-  alt: "Google ADK vs LangGraph vs CrewAI in 2026: Which AI Agent Framework Wins?"
+  alt: 'Google ADK vs LangGraph vs CrewAI in 2026: Which AI Agent Framework Wins?'
+  image: /images/google-adk-vs-langgraph-vs-crewai-2026.png
   relative: false
-schema: "schema-google-adk-vs-langgraph-vs-crewai-2026"
+date: 2026-06-11 19:03:28+00:00
+description: LangGraph, CrewAI, and Google ADK 2.0 each win in different 2026 scenarios—this
+  guide maps the hard trade-offs.
+draft: false
+schema: schema-google-adk-vs-langgraph-vs-crewai-2026
+tags:
+- google-adk
+- langgraph
+- crewai
+- agent-frameworks
+title: 'Google ADK vs LangGraph vs CrewAI in 2026: Which AI Agent Framework Wins?'
 ---
 
 If you are shipping AI agents today, LangGraph is still the strongest production-grade orchestration choice, CrewAI is the quickest route to a prototype, and Google ADK 2.0 is the best fit for teams already committed to Google ecosystem tooling. In 2026, each framework wins under different constraints: latency and control in production, team speed, and cloud portability. I treat this as an operations problem first, not a language-model problem, because orchestration controls usually determine whether your first MVP becomes a reliable service.

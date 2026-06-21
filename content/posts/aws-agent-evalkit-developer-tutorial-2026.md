@@ -1,14 +1,24 @@
 ---
-title: "AWS Agent-EvalKit: Open-Source AI Agent Evaluation for Developers — Tutorial & Deep Dive"
-date: 2026-06-20T12:00:00+00:00
-tags: ["agent-evaluation", "aws", "evalkit", "claude-code", "bedrock", "llm-testing", "agent-testing"]
-description: "A hands-on tutorial for AWS Agent-EvalKit (released June 11, 2026): install, run the 6-phase eval workflow, combine code-based and LLM-judge scoring, and integrate into CI/CD. Includes the travel agent case study where faithfulness scored 32.3% despite response quality at 83.9%."
-draft: false
 cover:
-  image: "/images/aws-agent-evalkit-developer-tutorial-2026.png"
-  alt: "AWS Agent-EvalKit Developer Tutorial 2026"
+  alt: AWS Agent-EvalKit Developer Tutorial 2026
+  image: /images/aws-agent-evalkit-developer-tutorial-2026.png
   relative: false
-schema: "schema-aws-agent-evalkit-developer-tutorial-2026"
+date: 2026-06-20 12:00:00+00:00
+description: 'A hands-on tutorial for AWS Agent-EvalKit (released June 11, 2026):
+  install, run the 6-phase eval workflow, combine code-based and LLM-judge scoring,
+  an...'
+draft: false
+schema: schema-aws-agent-evalkit-developer-tutorial-2026
+tags:
+- agent-evaluation
+- aws
+- evalkit
+- claude-code
+- bedrock
+- llm-testing
+- agent-testing
+title: 'AWS Agent-EvalKit: Open-Source AI Agent Evaluation for Developers — Tutorial
+  & Deep Dive'
 ---
 
 AWS Agent-EvalKit is an open-source toolkit (Apache 2.0, released June 11, 2026) that runs AI agent evaluation directly inside your coding assistant via slash commands. Instead of treating agent evaluation as a post-deployment activity, it brings a six-phase workflow — Plan, Data, Trace, Run Agent, Eval, Report — into Claude Code, Kiro CLI, or Kilo Code, combining code-based evaluators with LLM-as-judge scoring through Amazon Bedrock. I've been running evaluations against AI agents for the last two years, and the pattern I kept seeing was: teams either buy a managed eval platform or cobble together Python scripts and a prompt template. Agent-EvalKit splits the difference — it's a CLI that reads your agent source code, generates test cases, instruments tracing, runs the trials, and recommends fixes with file-level accuracy. In this tutorial, I'll walk through installing it, running your first evaluation, and the real-world case study where it caught a hallucination problem that output-level testing missed entirely.

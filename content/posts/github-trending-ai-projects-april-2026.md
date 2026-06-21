@@ -1,14 +1,22 @@
 ---
-title: "GitHub Trending AI Projects April 2026: What's Worth Watching"
-date: 2026-05-21T04:29:32+00:00
-tags: ["github-trending", "ai-tools", "open-source", "llama-stack", "google-adk", "ai-memory", "developer-tools"]
-description: "Five GitHub trending AI projects from April 2026 that are actually worth your time — Superpowers, llama-stack, Google ADK, MemPalace, and Archon."
-draft: false
 cover:
-  image: "/images/github-trending-ai-projects-april-2026.png"
-  alt: "GitHub Trending AI Projects April 2026: What's Worth Watching"
+  alt: 'GitHub Trending AI Projects April 2026: What''s Worth Watching'
+  image: /images/github-trending-ai-projects-april-2026.png
   relative: false
-schema: "schema-github-trending-ai-projects-april-2026"
+date: 2026-05-21 04:29:32+00:00
+description: Five GitHub trending AI projects from April 2026 that are actually worth
+  your time — Superpowers, llama-stack, Google ADK, MemPalace, and Archon.
+draft: false
+schema: schema-github-trending-ai-projects-april-2026
+tags:
+- github-trending
+- ai-tools
+- open-source
+- llama-stack
+- google-adk
+- ai-memory
+- developer-tools
+title: 'GitHub Trending AI Projects April 2026: What''s Worth Watching'
 ---
 
 April 2026 was a breakout month for AI developer tooling on GitHub. Five repositories hit the trending page simultaneously: a TDD framework for AI agents, Meta's unified Llama 4 deployment stack, Google's agent SDK, an open-source memory system that beat every paid alternative, and a reproducibility harness for AI coding benchmarks. Collectively, they crossed 200,000 new stars in under a month.

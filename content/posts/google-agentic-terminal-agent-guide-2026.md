@@ -1,14 +1,20 @@
 ---
-title: "Google Agentic Terminal Agent 2026: ReAct Loop + MCP + 1M Context Setup Guide"
-date: 2026-05-23T04:15:40+00:00
-tags: ["gemini-cli", "mcp", "agentic-ai", "google-adk", "terminal-agent"]
-description: "Complete setup guide for Gemini CLI as an agentic terminal agent — ReAct loop internals, MCP server config, and 1M token context window best practices."
-draft: false
 cover:
-  image: "/images/google-agentic-terminal-agent-guide-2026.png"
-  alt: "Google Agentic Terminal Agent 2026: ReAct Loop + MCP + 1M Context Setup Guide"
+  alt: 'Google Agentic Terminal Agent 2026: ReAct Loop + MCP + 1M Context Setup Guide'
+  image: /images/google-agentic-terminal-agent-guide-2026.png
   relative: false
-schema: "schema-google-agentic-terminal-agent-guide-2026"
+date: 2026-05-23 04:15:40+00:00
+description: Complete setup guide for Gemini CLI as an agentic terminal agent — ReAct
+  loop internals, MCP server config, and 1M token context window best practices.
+draft: false
+schema: schema-google-agentic-terminal-agent-guide-2026
+tags:
+- gemini-cli
+- mcp
+- agentic-ai
+- google-adk
+- terminal-agent
+title: 'Google Agentic Terminal Agent 2026: ReAct Loop + MCP + 1M Context Setup Guide'
 ---
 
 Gemini CLI is Google's open-source agentic terminal agent built on Gemini 2.5 Pro, offering a 1M token context window, a native ReAct reasoning loop, and MCP server integration — free at 1,000 requests/day with a personal Google account. Here's the complete setup and configuration guide for 2026.

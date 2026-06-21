@@ -1,14 +1,19 @@
 ---
-title: "Salesforce Agentic Work Units (AWU) Explained for Developers"
-date: 2026-06-02T00:04:47+00:00
-tags: ["Salesforce", "Agentforce", "AI Agents", "AWU", "Developer Guide"]
-description: "Salesforce AWU가 무엇인지, 어떻게 청구되며, 비용을 최적화하는 방법을 개발자 관점에서 완전히 설명합니다."
-draft: false
 cover:
-  image: "/images/salesforce-agentic-work-units-guide-2026.png"
-  alt: "Salesforce Agentic Work Units (AWU) Explained for Developers"
+  alt: Salesforce Agentic Work Units (AWU) Explained for Developers
+  image: /images/salesforce-agentic-work-units-guide-2026.png
   relative: false
-schema: "schema-salesforce-agentic-work-units-guide-2026"
+date: 2026-06-02 00:04:47+00:00
+description: Salesforce AWU가 무엇인지, 어떻게 청구되며, 비용을 최적화하는 방법을 개발자 관점에서 완전히 설명합니다.
+draft: false
+schema: schema-salesforce-agentic-work-units-guide-2026
+tags:
+- Salesforce
+- Agentforce
+- AI Agents
+- AWU
+- Developer Guide
+title: Salesforce Agentic Work Units (AWU) Explained for Developers
 ---
 
 Salesforce의 AWU(Agentic Work Unit)는 AI 에이전트가 완료한 **하나의 개별 작업**을 의미합니다. 토큰이 AI가 얼마나 많이 "말했는지"를 측정한다면, AWU는 AI가 실제로 얼마나 많은 **작업을 완료했는지**를 측정합니다. 개발자에게 AWU는 Agentforce 비용을 이해하고 예측하며 최적화하는 핵심 단위입니다.

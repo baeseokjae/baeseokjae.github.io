@@ -1,14 +1,24 @@
 ---
-title: "AI Agent Testing Guide 2026: Practical Evaluation Framework for Multi-Step Agents"
-date: 2026-05-12T12:04:46+00:00
-tags: ["AI agent testing", "agent evaluation", "LLM testing", "multi-step agents", "CI/CD", "DeepEval", "Braintrust"]
-description: "A practical 2026 guide to evaluating multi-step AI agents — from golden datasets and trajectory metrics to CI/CD gates and production monitoring."
-draft: false
 cover:
-  image: "/images/ai-agent-testing-guide-2026.png"
-  alt: "AI Agent Testing Guide 2026: Practical Evaluation Framework for Multi-Step Agents"
+  alt: 'AI Agent Testing Guide 2026: Practical Evaluation Framework for Multi-Step
+    Agents'
+  image: /images/ai-agent-testing-guide-2026.png
   relative: false
-schema: "schema-ai-agent-testing-guide-2026"
+date: 2026-05-12 12:04:46+00:00
+description: A practical 2026 guide to evaluating multi-step AI agents — from golden
+  datasets and trajectory metrics to CI/CD gates and production monitoring.
+draft: false
+schema: schema-ai-agent-testing-guide-2026
+tags:
+- AI agent testing
+- agent evaluation
+- LLM testing
+- multi-step agents
+- CI/CD
+- DeepEval
+- Braintrust
+title: 'AI Agent Testing Guide 2026: Practical Evaluation Framework for Multi-Step
+  Agents'
 ---
 
 AI agent testing in 2026 requires a fundamentally different approach than traditional software QA: because agents plan, call tools, and adapt across multiple steps, you must evaluate the entire decision trajectory — not just the final output. This guide walks through the complete evaluation stack, from golden dataset construction to CI/CD deployment gates.

@@ -1,14 +1,20 @@
 ---
-title: "AI Coding Accepted Code Quality Review 2026: Why 80% Acceptance Rate is Misleading"
-date: 2026-06-08T05:19:58+00:00
-tags: ["ai-coding", "code-quality", "developer-productivity", "metrics", "security"]
-description: "Real enterprise data shows AI code acceptance rates of 27-35%, not 80%. Here's why acceptance rate is a dangerously misleading quality metric."
-draft: false
 cover:
-  image: "/images/ai-coding-accepted-code-quality-2026.png"
-  alt: "AI Coding Accepted Code Quality Review 2026: Why 80% Acceptance Rate is Misleading"
+  alt: 'AI Coding Accepted Code Quality Review 2026: Why 80% Acceptance Rate is Misleading'
+  image: /images/ai-coding-accepted-code-quality-2026.png
   relative: false
-schema: "schema-ai-coding-accepted-code-quality-2026"
+date: 2026-06-08 05:19:58+00:00
+description: Real enterprise data shows AI code acceptance rates of 27-35%, not 80%.
+  Here's why acceptance rate is a dangerously misleading quality metric.
+draft: false
+schema: schema-ai-coding-accepted-code-quality-2026
+tags:
+- ai-coding
+- code-quality
+- developer-productivity
+- metrics
+- security
+title: 'AI Coding Accepted Code Quality Review 2026: Why 80% Acceptance Rate is Misleading'
 ---
 
 The 80% acceptance rate figure vendors quote is a marketing metric, not a quality signal. Real enterprise data from 400+ developer studies shows actual acceptance rates of 27–35%. Worse, high acceptance rates correlate with *lower* code quality — the best developers accept the least, and the teams with the highest rates suffer 91% longer review times and 9% higher bug rates.

@@ -1,14 +1,20 @@
 ---
-title: "AI Coding ROI Enterprise 2026: Metrics, Case Studies and Benchmarks"
-date: 2026-04-27T00:09:29+00:00
-tags: ["AI coding", "enterprise", "ROI", "developer productivity", "GitHub Copilot"]
-description: "Enterprise AI coding ROI benchmarks, case studies, and frameworks for 2026 — including DORA metrics and what separates top performers."
-draft: false
 cover:
-  image: "/images/ai-coding-enterprise-roi-guide-2026.png"
-  alt: "AI Coding ROI Enterprise 2026: Metrics, Case Studies and Benchmarks"
+  alt: 'AI Coding ROI Enterprise 2026: Metrics, Case Studies and Benchmarks'
+  image: /images/ai-coding-enterprise-roi-guide-2026.png
   relative: false
-schema: "schema-ai-coding-enterprise-roi-guide-2026"
+date: 2026-04-27 00:09:29+00:00
+description: Enterprise AI coding ROI benchmarks, case studies, and frameworks for
+  2026 — including DORA metrics and what separates top performers.
+draft: false
+schema: schema-ai-coding-enterprise-roi-guide-2026
+tags:
+- AI coding
+- enterprise
+- ROI
+- developer productivity
+- GitHub Copilot
+title: 'AI Coding ROI Enterprise 2026: Metrics, Case Studies and Benchmarks'
 ---
 
 Enterprise AI coding tools delivered 376% ROI over three years in Forrester's GitHub Copilot analysis — yet only 5% of enterprises achieve measurable financial returns in practice. The gap between what's possible and what most organizations actually get isn't a tool problem. It's a measurement, governance, and transformation problem. This guide breaks down the real numbers, who's winning, and exactly how they're doing it.

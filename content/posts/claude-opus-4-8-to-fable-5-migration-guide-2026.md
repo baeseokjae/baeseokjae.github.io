@@ -1,14 +1,18 @@
 ---
-title: "Claude Opus 4.8 to Fable 5 Migration Guide: What Changes in 2026"
-date: 2026-06-15T03:11:29+00:00
-tags: ["Claude", "AI Engineering", "Migration"]
-description: "Practical Claude Opus 4.8 to Fable 5 migration guide covering API changes, routing, cost, refusals, and compliance."
-draft: false
 cover:
-  image: "/images/claude-opus-4-8-to-fable-5-migration-guide-2026.png"
-  alt: "Claude Opus 4.8 to Fable 5 Migration Guide: What Changes in 2026"
+  alt: 'Claude Opus 4.8 to Fable 5 Migration Guide: What Changes in 2026'
+  image: /images/claude-opus-4-8-to-fable-5-migration-guide-2026.png
   relative: false
-schema: "schema-claude-opus-4-8-to-fable-5-migration-guide-2026"
+date: 2026-06-15 03:11:29+00:00
+description: Practical Claude Opus 4.8 to Fable 5 migration guide covering API changes,
+  routing, cost, refusals, and compliance.
+draft: false
+schema: schema-claude-opus-4-8-to-fable-5-migration-guide-2026
+tags:
+- Claude
+- AI Engineering
+- Migration
+title: 'Claude Opus 4.8 to Fable 5 Migration Guide: What Changes in 2026'
 ---
 
 Claude Opus 4.8 to Fable 5 migration is not just a model ID swap. Update `claude-opus-4-8` to `claude-fable-5`, then retest thinking budgets, refusal handling, fallback paths, data retention, and cost per completed task before sending production traffic.

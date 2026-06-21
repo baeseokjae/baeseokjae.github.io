@@ -1,14 +1,20 @@
 ---
-title: "Make vs n8n 2026: Which Open-Source Automation Tool Wins?"
-date: 2026-05-07T00:00:00+00:00
-tags: ["make", "n8n", "workflow-automation", "comparison", "no-code"]
-description: "Make vs n8n 2026: operations vs executions billing, 1,500+ connectors vs 400+ nodes, self-hosting, AI features, and which platform fits your team."
-draft: false
 cover:
-  image: "/images/make-vs-n8n-comparison-2026.png"
-  alt: "Make vs n8n 2026: Which Open-Source Automation Tool Wins?"
+  alt: 'Make vs n8n 2026: Which Open-Source Automation Tool Wins?'
+  image: /images/make-vs-n8n-comparison-2026.png
   relative: false
-schema: "schema-make-vs-n8n-comparison-2026"
+date: 2026-05-07 00:00:00+00:00
+description: 'Make vs n8n 2026: operations vs executions billing, 1,500+ connectors
+  vs 400+ nodes, self-hosting, AI features, and which platform fits your team.'
+draft: false
+schema: schema-make-vs-n8n-comparison-2026
+tags:
+- make
+- n8n
+- workflow-automation
+- comparison
+- no-code
+title: 'Make vs n8n 2026: Which Open-Source Automation Tool Wins?'
 ---
 
 Make and n8n are the two most serious contenders in the automation platform market below Zapier's price point — but they are built on fundamentally different assumptions about who their user is and how workflows should be billed. Make (formerly Integromat) targets non-technical operations teams with a visual canvas and 1,500+ pre-built connectors, charging per operation. n8n targets developers, offers self-hosting under AGPLv3, charges per execution regardless of step count, and ships native LangChain integration across 70+ AI nodes. Choosing between them comes down to three variables: technical sophistication of your team, volume of multi-step workflows, and whether data sovereignty or cost at scale matters enough to justify self-hosting infrastructure.

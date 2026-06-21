@@ -1,14 +1,20 @@
 ---
-title: "SonarSource State of Code 2026: Developer Survey on AI Quality and Security"
-date: 2026-05-26T02:05:16+00:00
-tags: ["AI code quality", "developer survey", "SonarSource", "code security", "AI coding tools"]
-description: "SonarSource's 2026 survey of 1,100+ developers reveals AI writes 42% of all code—yet 96% of devs don't fully trust it and only 48% always verify it."
-draft: false
 cover:
-  image: "/images/state-of-code-developer-survey-2026.png"
-  alt: "SonarSource State of Code 2026: Developer Survey on AI Quality and Security"
+  alt: 'SonarSource State of Code 2026: Developer Survey on AI Quality and Security'
+  image: /images/state-of-code-developer-survey-2026.png
   relative: false
-schema: "schema-state-of-code-developer-survey-2026"
+date: 2026-05-26 02:05:16+00:00
+description: SonarSource's 2026 survey of 1,100+ developers reveals AI writes 42%
+  of all code—yet 96% of devs don't fully trust it and only 48% always verify it.
+draft: false
+schema: schema-state-of-code-developer-survey-2026
+tags:
+- AI code quality
+- developer survey
+- SonarSource
+- code security
+- AI coding tools
+title: 'SonarSource State of Code 2026: Developer Survey on AI Quality and Security'
 ---
 
 The SonarSource State of Code 2026 survey found that AI now accounts for 42% of all committed code—while 96% of developers don't fully trust it and only 48% consistently verify it before committing. That gap between adoption and verification is the central crisis the report documents.

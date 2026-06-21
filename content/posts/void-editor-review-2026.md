@@ -1,14 +1,20 @@
 ---
-title: "Void Editor Review 2026: Open-Source Cursor Alternative with Local Models"
-date: 2026-05-29T08:09:00+00:00
-tags: ["void-editor", "open-source", "ai-code-editor", "local-models", "cursor-alternative"]
-description: "Honest Void editor review 2026: features, local model support, dev pause explained, and whether it beats Cursor for privacy-first developers."
-draft: false
 cover:
-  image: "/images/void-editor-review-2026.png"
-  alt: "Void Editor Review 2026: Open-Source Cursor Alternative with Local Models"
+  alt: 'Void Editor Review 2026: Open-Source Cursor Alternative with Local Models'
+  image: /images/void-editor-review-2026.png
   relative: false
-schema: "schema-void-editor-review-2026"
+date: 2026-05-29 08:09:00+00:00
+description: 'Honest Void editor review 2026: features, local model support, dev pause
+  explained, and whether it beats Cursor for privacy-first developers.'
+draft: false
+schema: schema-void-editor-review-2026
+tags:
+- void-editor
+- open-source
+- ai-code-editor
+- local-models
+- cursor-alternative
+title: 'Void Editor Review 2026: Open-Source Cursor Alternative with Local Models'
 ---
 
 Void Editor is a free, open-source VS Code fork that brings Cursor-like AI coding features — inline edits, agent mode, autocomplete — while routing every API call directly from your editor to the AI provider, with no third-party backend in between. For developers who need to answer "where does our code go?" in a security review, Void gives the shortest possible answer.

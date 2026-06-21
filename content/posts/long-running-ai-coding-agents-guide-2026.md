@@ -1,14 +1,22 @@
 ---
-title: "Long-Running AI Coding Agents: Execution Loops vs Single-Prompt Workflows"
-date: 2026-06-04T01:14:19+00:00
-tags: ["AI coding agents", "execution loops", "agentic workflows", "Claude Code", "Cursor", "AI productivity"]
-description: "When to use long-running execution loops vs single-prompt workflows in AI coding — with failure modes, context management strategies, and tool-by-tool comparisons."
-draft: false
 cover:
-  image: "/images/long-running-ai-coding-agents-guide-2026.png"
-  alt: "Long-Running AI Coding Agents: Execution Loops vs Single-Prompt Workflows"
+  alt: 'Long-Running AI Coding Agents: Execution Loops vs Single-Prompt Workflows'
+  image: /images/long-running-ai-coding-agents-guide-2026.png
   relative: false
-schema: "schema-long-running-ai-coding-agents-guide-2026"
+date: 2026-06-04 01:14:19+00:00
+description: When to use long-running execution loops vs single-prompt workflows in
+  AI coding — with failure modes, context management strategies, and tool-by-tool
+  c...
+draft: false
+schema: schema-long-running-ai-coding-agents-guide-2026
+tags:
+- AI coding agents
+- execution loops
+- agentic workflows
+- Claude Code
+- Cursor
+- AI productivity
+title: 'Long-Running AI Coding Agents: Execution Loops vs Single-Prompt Workflows'
 ---
 
 Long-running AI coding agents use iterative execution loops where the model plans, acts, evaluates, and loops again — while single-prompt workflows send one request and stop. Choosing the wrong architecture for a task costs you hours of debugging or wasted tokens. This guide explains when each approach wins, how the top tools implement them, and what failure modes to watch for.

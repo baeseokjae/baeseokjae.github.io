@@ -1,14 +1,21 @@
 ---
-title: "Junie CLI Review 2026: JetBrains Terminal AI Agent with BYOK Support"
-date: 2026-05-07T12:00:00+00:00
-tags: ["junie", "jetbrains", "ai-coding", "cli", "byok", "review"]
-description: "Junie CLI reviewed: JetBrains' terminal AI agent with BYOK for Anthropic/OpenAI keys, autonomous tasks, Git awareness, and IDE integration."
-draft: false
 cover:
-  image: "/images/junie-cli-review-2026.png"
-  alt: "Junie CLI Review 2026: JetBrains Terminal AI Agent with BYOK Support"
+  alt: 'Junie CLI Review 2026: JetBrains Terminal AI Agent with BYOK Support'
+  image: /images/junie-cli-review-2026.png
   relative: false
-schema: "schema-junie-cli-review-2026"
+date: 2026-05-07 12:00:00+00:00
+description: 'Junie CLI reviewed: JetBrains'' terminal AI agent with BYOK for Anthropic/OpenAI
+  keys, autonomous tasks, Git awareness, and IDE integration.'
+draft: false
+schema: schema-junie-cli-review-2026
+tags:
+- junie
+- jetbrains
+- ai-coding
+- cli
+- byok
+- review
+title: 'Junie CLI Review 2026: JetBrains Terminal AI Agent with BYOK Support'
 ---
 
 Junie is JetBrains' terminal AI coding agent — part of the JetBrains AI service — that executes multi-step development tasks autonomously while integrating natively with IntelliJ IDEA, PyCharm, WebStorm, and the rest of the JetBrains IDE ecosystem. Unlike general-purpose chat assistants bolted onto editors, Junie runs a plan-implement-test loop with full Git awareness, multi-file context across an entire project, and a BYOK (Bring Your Own Key) option that keeps your code off JetBrains servers entirely. For JetBrains' 10M+ professional developer user base, Junie is the most direct path to agentic coding without abandoning the toolchain they already run.

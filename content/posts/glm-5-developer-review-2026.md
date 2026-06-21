@@ -1,14 +1,22 @@
 ---
-title: "GLM-5 and GLM-5.1 Review: Zhipu AI's Frontier Models for Developers"
-date: 2026-05-10T03:04:34+00:00
-tags: ["GLM-5", "Zhipu AI", "open-source AI", "agentic coding", "LLM benchmarks", "self-hosting", "AI API"]
-description: "A developer-focused review of GLM-5 and GLM-5.1: benchmarks, pricing, self-hosting options, and when to choose them over GPT-5 or Claude."
-draft: false
 cover:
-  image: "/images/glm-5-developer-review-2026.png"
-  alt: "GLM-5 and GLM-5.1 Review: Zhipu AI's Frontier Models for Developers"
+  alt: 'GLM-5 and GLM-5.1 Review: Zhipu AI''s Frontier Models for Developers'
+  image: /images/glm-5-developer-review-2026.png
   relative: false
-schema: "schema-glm-5-developer-review-2026"
+date: 2026-05-10 03:04:34+00:00
+description: 'A developer-focused review of GLM-5 and GLM-5.1: benchmarks, pricing,
+  self-hosting options, and when to choose them over GPT-5 or Claude.'
+draft: false
+schema: schema-glm-5-developer-review-2026
+tags:
+- GLM-5
+- Zhipu AI
+- open-source AI
+- agentic coding
+- LLM benchmarks
+- self-hosting
+- AI API
+title: 'GLM-5 and GLM-5.1 Review: Zhipu AI''s Frontier Models for Developers'
 ---
 
 GLM-5 and GLM-5.1 are Zhipu AI's frontier open-weight models — 744B-754B parameter MoE architectures trained entirely on Huawei Ascend chips, priced at 5–10x less than GPT-5.5, and licensed under MIT for commercial self-hosting. GLM-5.1 briefly topped SWE-Bench Pro in April 2026 with a 58.4 score, making it the first open-weight model to claim that position.

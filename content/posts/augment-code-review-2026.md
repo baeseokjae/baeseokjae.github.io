@@ -1,14 +1,20 @@
 ---
-title: "Augment Code Review 2026: Enterprise AI Coding Agent with 500K-File Context"
-date: 2026-04-27T12:08:28+00:00
-tags: ["augment-code", "ai-coding-tools", "enterprise", "context-engine", "code-review"]
-description: "Augment Code 2026 review: SWE-bench Pro #1 at 51.8%, 400K+ file Context Engine, ISO 42001 certified. Is it worth $60–$200/mo for enterprise teams?"
-draft: false
 cover:
-  image: "/images/augment-code-review-2026.png"
-  alt: "Augment Code Review 2026: Enterprise AI Coding Agent with 500K-File Context"
+  alt: 'Augment Code Review 2026: Enterprise AI Coding Agent with 500K-File Context'
+  image: /images/augment-code-review-2026.png
   relative: false
-schema: "schema-augment-code-review-2026"
+date: 2026-04-27 12:08:28+00:00
+description: 'Augment Code 2026 review: SWE-bench Pro #1 at 51.8%, 400K+ file Context
+  Engine, ISO 42001 certified. Is it worth $60–$200/mo for enterprise teams?'
+draft: false
+schema: schema-augment-code-review-2026
+tags:
+- augment-code
+- ai-coding-tools
+- enterprise
+- context-engine
+- code-review
+title: 'Augment Code Review 2026: Enterprise AI Coding Agent with 500K-File Context'
 ---
 
 Augment Code is an enterprise-grade AI coding agent that indexes 400,000+ files simultaneously through its Context Engine, scoring #1 on SWE-bench Pro at 51.8% — beating Claude Code (34.8%) on the same underlying model. For large engineering teams, this is the most capable context-aware AI coding tool available in 2026.

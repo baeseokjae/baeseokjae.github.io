@@ -3,8 +3,9 @@ cover:
   alt: 'Vellum AI Platform Review 2026: Best LLM Evaluation and Testing Tool?'
   image: /images/vellum-ai-llm-evaluation-2026.png
   relative: false
-date: 2026-05-07T12:00:00+00:00
-description: 'Vellum AI 2026 review: prompt management, evaluation pipelines, A/B testing, and production monitoring for LLM teams. Pricing, comparisons, and verdict.'
+date: 2026-05-07 12:00:00+00:00
+description: 'Vellum AI 2026 review: prompt management, evaluation pipelines, A/B
+  testing, and production monitoring for LLM teams. Pricing, comparisons, and verdict.'
 draft: false
 schema: schema-vellum-ai-llm-evaluation-2026
 tags:

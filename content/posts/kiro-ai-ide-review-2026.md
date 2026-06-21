@@ -1,14 +1,20 @@
 ---
-title: "Kiro AI IDE Review 2026: AWS's New Coding Agent Tested in Real Projects"
-date: 2026-04-21T16:04:48+00:00
-tags: ["kiro", "ai-ide", "aws", "spec-driven", "coding-tools"]
-description: "Deep review of Kiro, AWS's spec-driven AI IDE. Specs, Hooks, Steering Files vs Cursor and Claude Code. Pricing, safety, enterprise use cases."
-draft: false
 cover:
-  image: "/images/kiro-ai-ide-review-2026.png"
-  alt: "Kiro AI IDE Review 2026: AWS's New Coding Agent Tested in Real Projects"
+  alt: 'Kiro AI IDE Review 2026: AWS''s New Coding Agent Tested in Real Projects'
+  image: /images/kiro-ai-ide-review-2026.png
   relative: false
-schema: "schema-kiro-ai-ide-review-2026"
+date: 2026-04-21 16:04:48+00:00
+description: Deep review of Kiro, AWS's spec-driven AI IDE. Specs, Hooks, Steering
+  Files vs Cursor and Claude Code. Pricing, safety, enterprise use cases.
+draft: false
+schema: schema-kiro-ai-ide-review-2026
+tags:
+- kiro
+- ai-ide
+- aws
+- spec-driven
+- coding-tools
+title: 'Kiro AI IDE Review 2026: AWS''s New Coding Agent Tested in Real Projects'
 ---
 
 Kiro is AWS's spec-driven AI IDE built on VS Code that turns your feature description into structured Requirements, Design, and Task artifacts before writing a single line of code — a deliberate rejection of "vibe coding" that trades instant gratification for production-grade repeatability.

@@ -1,14 +1,20 @@
 ---
-title: "Claude Sonnet 5 Review: 82.1% SWE-bench, Dev Team Mode & Pricing Guide"
-date: 2026-05-17T09:04:37+00:00
-tags: ["claude sonnet 5", "ai coding", "anthropic", "benchmark", "dev tools"]
-description: "Claude Sonnet 5 hits 82.1% SWE-bench Verified, introduces Dev Team multi-agent mode, and costs $3/MTok. Full developer review with pricing and migration guide."
-draft: false
 cover:
-  image: "/images/claude-sonnet-5-review-2026.png"
-  alt: "Claude Sonnet 5 Review: 82.1% SWE-bench, Dev Team Mode & Pricing Guide"
+  alt: 'Claude Sonnet 5 Review: 82.1% SWE-bench, Dev Team Mode & Pricing Guide'
+  image: /images/claude-sonnet-5-review-2026.png
   relative: false
-schema: "schema-claude-sonnet-5-review-2026"
+date: 2026-05-17 09:04:37+00:00
+description: Claude Sonnet 5 hits 82.1% SWE-bench Verified, introduces Dev Team multi-agent
+  mode, and costs $3/MTok. Full developer review with pricing and migration...
+draft: false
+schema: schema-claude-sonnet-5-review-2026
+tags:
+- claude sonnet 5
+- ai coding
+- anthropic
+- benchmark
+- dev tools
+title: 'Claude Sonnet 5 Review: 82.1% SWE-bench, Dev Team Mode & Pricing Guide'
 ---
 
 Claude Sonnet 5 is Anthropic's mid-tier frontier model released February 3, 2026, scoring 82.1% on SWE-bench Verified — the highest coding benchmark score ever recorded at launch. It introduces Dev Team multi-agent mode, a 1 million token context window, and holds the same $3 per million input token price as its predecessor. For most development teams, it's the most capable coding model available at a non-flagship price.

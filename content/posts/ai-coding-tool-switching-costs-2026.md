@@ -1,14 +1,22 @@
 ---
-title: "AI Coding Tool Switching Costs: The BYOK Portability Guide 2026"
-date: 2026-06-04T06:41:41+00:00
-tags: ["AI coding tools", "BYOK", "developer tools", "Cursor", "Claude Code", "Cline", "vendor lock-in"]
-description: "The real switching costs of AI coding tools in 2026 — BYOK vs subscription math, config portability, and a step-by-step migration playbook."
-draft: false
 cover:
-  image: "/images/ai-coding-tool-switching-costs-2026.png"
-  alt: "AI Coding Tool Switching Costs: The BYOK Portability Guide 2026"
+  alt: 'AI Coding Tool Switching Costs: The BYOK Portability Guide 2026'
+  image: /images/ai-coding-tool-switching-costs-2026.png
   relative: false
-schema: "schema-ai-coding-tool-switching-costs-2026"
+date: 2026-06-04 06:41:41+00:00
+description: The real switching costs of AI coding tools in 2026 — BYOK vs subscription
+  math, config portability, and a step-by-step migration playbook.
+draft: false
+schema: schema-ai-coding-tool-switching-costs-2026
+tags:
+- AI coding tools
+- BYOK
+- developer tools
+- Cursor
+- Claude Code
+- Cline
+- vendor lock-in
+title: 'AI Coding Tool Switching Costs: The BYOK Portability Guide 2026'
 ---
 
 AI coding tool switching costs are higher than the monthly subscription fee suggests. The real cost includes proprietary config formats that don't travel across tools, workflow muscle memory that takes two to four weeks to rebuild, and BYOK restrictions that may lock your agent-mode usage to a vendor's own models. This guide breaks down every layer of cost and gives you a concrete playbook to build a portable stack.

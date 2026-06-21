@@ -1,14 +1,22 @@
 ---
-title: "LLM Gateway Comparison 2026: Portkey vs Helicone vs LiteLLM After the Shakeup"
-date: 2026-05-21T09:34:26+00:00
-tags: ["llm gateway", "portkey", "helicone", "litellm", "ai infrastructure", "llm routing"]
-description: "Helicone was acquired and LiteLLM was compromised in 2026. Here's how Portkey, LiteLLM, Helicone, and emerging alternatives compare for routing, cost, and reliability."
-draft: false
 cover:
-  image: "/images/llm-gateway-comparison-2026.png"
-  alt: "LLM Gateway Comparison 2026: Portkey vs Helicone vs LiteLLM"
+  alt: 'LLM Gateway Comparison 2026: Portkey vs Helicone vs LiteLLM'
+  image: /images/llm-gateway-comparison-2026.png
   relative: false
-schema: "schema-llm-gateway-comparison-2026"
+date: 2026-05-21 09:34:26+00:00
+description: Helicone was acquired and LiteLLM was compromised in 2026. Here's how
+  Portkey, LiteLLM, Helicone, and emerging alternatives compare for routing, cost,
+  a...
+draft: false
+schema: schema-llm-gateway-comparison-2026
+tags:
+- llm gateway
+- portkey
+- helicone
+- litellm
+- ai infrastructure
+- llm routing
+title: 'LLM Gateway Comparison 2026: Portkey vs Helicone vs LiteLLM After the Shakeup'
 ---
 
 The short answer: **Portkey** is the best drop-in replacement if you're running Helicone or evaluating alternatives after the LiteLLM security scare. It covers 200+ providers, adds under 1ms of latency, and gives you routing, caching, and observability in a single package. LiteLLM is still viable for self-hosted open-source use if you pin a pre-compromise version and monitor CVEs actively.
