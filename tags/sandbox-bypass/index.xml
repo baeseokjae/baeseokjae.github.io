@@ -1,0 +1,568 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Sandbox-Bypass on RockB</title><link>https://baeseokjae.github.io/tags/sandbox-bypass/</link><description>Recent content in Sandbox-Bypass on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Mon, 22 Jun 2026 00:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/sandbox-bypass/index.xml" rel="self" type="application/rss+xml"/><item><title>Claude Code Network Sandbox SOCKS5 Null-Byte Bypass: The 5.5-Month Hole in Anthropic's Agent Egress Control</title><link>https://baeseokjae.github.io/posts/claude-code-network-sandbox-socks5-null-byte-bypass-guide-2026/</link><pubDate>Mon, 22 Jun 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/claude-code-network-sandbox-socks5-null-byte-bypass-guide-2026/</guid><description>Complete guide to the Claude Code SOCKS5 null-byte sandbox bypass (v2.0.24–v2.1.89), how the parser differential worked, disclosure timeline, and mitigation steps.</description><content:encoded><![CDATA[<p>Every Claude Code release from v2.0.24 (October 20, 2025) through v2.1.89 (March 31, 2026) shipped a network sandbox that was trivially bypassable with a single null byte. If you ran Claude Code with a wildcard allowlist like <code>*.google.com</code>, any code executing inside the sandbox — whether through prompt injection, a malicious dependency, or a compromised repo — could reach any host on the internet by sending a SOCKS5 hostname like <code>attacker-host.com\x00.google.com</code>. The JavaScript allowlist filter saw the trailing <code>.google.com</code> and approved the connection; the OS resolver truncated at the null byte and dialed <code>attacker-host.com</code>. This is a parser-differential vulnerability in its purest form, and as of June 2026, it still has no CVE assigned to Claude Code itself.</p>
+<h2 id="how-the-claude-code-network-sandbox-works">How the Claude Code Network Sandbox Works</h2>
+<p>Claude Code&rsquo;s sandbox relies on two OS-level primitives — <code>bubblewrap</code> on Linux and <code>seatbelt</code> (sandbox-exec) on macOS — to isolate the Bash tool subprocess. These primitives strip the network namespace and pin all traffic to localhost ports where two proxy servers run on the host:</p>
+<ul>
+<li>An <strong>HTTP proxy</strong> handling HTTPS traffic against an allowlist</li>
+<li>A <strong>SOCKS5 proxy</strong> handling all other TCP traffic (SSH, database connections, raw TCP) against the same allowlist</li>
+</ul>
+<p>The configuration lives in <code>~/.claude/settings.json</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;sandbox&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;enabled&#34;</span>: <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>  },
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;allowedDomains&#34;</span>: [<span style="color:#e6db74">&#34;*.google.com&#34;</span>]
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>The sandbox injects <code>ALL_PROXY=socks5h://127.0.0.1:&lt;port&gt;</code> into the subprocess environment. Every TCP connection the subprocess makes goes through that SOCKS5 proxy, which checks the destination hostname against the configured allowlist before forwarding.</p>
+<h2 id="the-socks5-null-byte-bypass-root-cause-analysis">The SOCKS5 Null-Byte Bypass: Root Cause Analysis</h2>
+<p>The vulnerability lives in the <code>@anthropic-ai/sandbox-runtime</code> library, versions 0.0.1 through 0.0.42. The SOCKS5 proxy implementation received a CONNECT request containing a DOMAINNAME field — raw bytes from the wire — and passed them directly into a JavaScript <code>endsWith()</code> check against the allowlist:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-javascript" data-lang="javascript"><span style="display:flex;"><span><span style="color:#75715e">// Vulnerable logic (sandbox-runtime &lt;= 0.0.42)
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">function</span> <span style="color:#a6e22e">isAllowed</span>(<span style="color:#a6e22e">hostname</span>) {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">allowedDomains</span>.<span style="color:#a6e22e">some</span>(<span style="color:#a6e22e">pattern</span> =&gt;
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">hostname</span>.<span style="color:#a6e22e">endsWith</span>(<span style="color:#a6e22e">pattern</span>.<span style="color:#a6e22e">replace</span>(<span style="color:#e6db74">&#39;*.&#39;</span>, <span style="color:#e6db74">&#39;.&#39;</span>))
+</span></span><span style="display:flex;"><span>  );
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>The same raw bytes were then handed to libc&rsquo;s <code>getaddrinfo()</code> for DNS resolution. Here is where the disagreement happens:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Layer</th>
+          <th>Sees</th>
+          <th>Interprets</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>JS <code>endsWith()</code></td>
+          <td><code>attacker.com\x00.google.com</code></td>
+          <td>Ends with <code>.google.com</code> → <strong>ALLOW</strong></td>
+      </tr>
+      <tr>
+          <td>libc <code>getaddrinfo()</code></td>
+          <td><code>attacker.com\0...</code></td>
+          <td>C string terminates at <code>\x00</code> → resolves <code>attacker.com</code></td>
+      </tr>
+      <tr>
+          <td>Network socket</td>
+          <td><code>attacker.com</code> IP</td>
+          <td>Connects to the attacker&rsquo;s host</td>
+      </tr>
+  </tbody>
+</table>
+<p>JavaScript treats <code>\x00</code> (U+0000) as a valid UTF-16 code unit — the string is 30 characters long. C treats it as a null terminator — the string is 13 characters long. The same bytes, two interpretations. The attacker controls the bytes, and the filter and the resolver agree on different hostnames.</p>
+<h2 id="disclosure-timeline">Disclosure Timeline</h2>
+<p>The sandbox was bypassable from the moment it shipped GA. The timeline of what happened spans two distinct vulnerabilities:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Date</th>
+          <th>Event</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>2025-10-20</strong></td>
+          <td>Claude Code v2.0.24 ships network sandbox GA. Vulnerable to two bypasses from day one.</td>
+      </tr>
+      <tr>
+          <td><strong>2025-11-26</strong></td>
+          <td>Finding 1 (CVE-2025-66479) silently patched in v2.0.55: empty <code>allowedDomains: []</code> meant &ldquo;block nothing&rdquo; instead of &ldquo;block everything.&rdquo; Same release still carries the SOCKS5 null-byte bypass.</td>
+      </tr>
+      <tr>
+          <td><strong>2025-12-02</strong></td>
+          <td>CVE-2025-66479 published against sandbox-runtime library only. Not against Claude Code. No user-facing advisory.</td>
+      </tr>
+      <tr>
+          <td><strong>2026-03-27</strong></td>
+          <td>sandbox-runtime commit <code>fd74a3f</code> adds <code>isValidHost()</code> rejecting <code>\x00</code>, <code>%</code>, CRLF, and non-DNS characters.</td>
+      </tr>
+      <tr>
+          <td><strong>2026-03-31</strong></td>
+          <td>Fix ships in Claude Code v2.1.88 per Anthropic (v2.1.90 per Guan). Changelog says nothing about a security fix.</td>
+      </tr>
+      <tr>
+          <td><strong>2026-04-01</strong></td>
+          <td>v2.1.90 broadly available. Still no security note.</td>
+      </tr>
+      <tr>
+          <td><strong>2026-04-03</strong></td>
+          <td>Aonan Guan reports to Anthropic via HackerOne. Closed as duplicate.</td>
+      </tr>
+      <tr>
+          <td><strong>2026-05-20</strong></td>
+          <td>Public disclosure by Guan. No CVE for Claude Code. No advisory published.</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="two-bugs-zero-advisories">Two Bugs, Zero Advisories</h2>
+<p>This was the second complete sandbox bypass in five months. The two vulnerabilities cover different configurations:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Dimension</th>
+          <th>CVE-2025-66479</th>
+          <th>SOCKS5 Null-Byte (no CVE)</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Trigger</strong></td>
+          <td><code>allowedDomains: []</code></td>
+          <td>Wildcard allowlist (<code>*.google.com</code>)</td>
+      </tr>
+      <tr>
+          <td><strong>Filter sees</strong></td>
+          <td>Empty list → proxy not attached</td>
+          <td>endsWith match → allow</td>
+      </tr>
+      <tr>
+          <td><strong>OS sees</strong></td>
+          <td>No proxy → unrestricted egress</td>
+          <td>getaddrinfo truncates at \x00 → blocked host resolved</td>
+      </tr>
+      <tr>
+          <td><strong>Class</strong></td>
+          <td>Configuration semantics bug</td>
+          <td>Parser differential</td>
+      </tr>
+      <tr>
+          <td><strong>Affected</strong></td>
+          <td>v2.0.24–v2.0.54 (32 days)</td>
+          <td>v2.0.24–v2.1.89 (165 days)</td>
+      </tr>
+      <tr>
+          <td><strong>CVE for Claude Code</strong></td>
+          <td>None</td>
+          <td>None</td>
+      </tr>
+      <tr>
+          <td><strong>Advisory</strong></td>
+          <td>None (CVEs for library only)</td>
+          <td>None</td>
+      </tr>
+  </tbody>
+</table>
+<p>CVE-2025-66479 carries a CVSS score of 1.8 — which is almost absurd for a complete egress bypass. The SOCKS5 bypass has no CVE at all, even though it exposed roughly 130 releases over 5.5 months.</p>
+<h2 id="the-attack-chain-in-practice">The Attack Chain in Practice</h2>
+<p>The bypass alone is useless without code execution inside the sandbox. But prompt injection research — particularly the &ldquo;Comment and Control&rdquo; technique — shows that an attacker can place malicious instructions in a GitHub issue comment, a PR description, or a README file that Claude Code ingests during a session. The attack chain looks like this:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 584 105"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='0' y='20' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='0' y='36' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='0' y='52' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='0' y='68' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='0' y='84' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='8' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='8' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='8' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='8' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='8' y='84' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='16' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='16' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='16' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='16' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='16' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='24' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='24' y='36' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='24' y='52' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='24' y='68' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='24' y='84' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='40' y='20' fill='currentColor' style='font-size:1em'>2</text>
+<text text-anchor='middle' x='40' y='36' fill='currentColor' style='font-size:1em'>3</text>
+<text text-anchor='middle' x='40' y='52' fill='currentColor' style='font-size:1em'>4</text>
+<text text-anchor='middle' x='40' y='68' fill='currentColor' style='font-size:1em'>5</text>
+<text text-anchor='middle' x='40' y='84' fill='currentColor' style='font-size:1em'>6</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='48' y='20' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='48' y='36' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='48' y='52' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='48' y='68' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='48' y='84' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='64' y='20' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='64' y='36' fill='currentColor' style='font-size:1em'>I</text>
+<text text-anchor='middle' x='64' y='52' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='64' y='68' fill='currentColor' style='font-size:1em'>E</text>
+<text text-anchor='middle' x='64' y='84' fill='currentColor' style='font-size:1em'>D</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='72' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='72' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='72' y='52' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='72' y='68' fill='currentColor' style='font-size:1em'>x</text>
+<text text-anchor='middle' x='72' y='84' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='80' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='80' y='36' fill='currentColor' style='font-size:1em'>j</text>
+<text text-anchor='middle' x='80' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='80' y='68' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='80' y='84' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='88' y='20' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='88' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='88' y='68' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='88' y='84' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='96' y='20' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='96' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='96' y='52' fill='currentColor' style='font-size:1em'>B</text>
+<text text-anchor='middle' x='96' y='68' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='104' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='104' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='104' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='104' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='104' y='84' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='112' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='112' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='112' y='68' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='112' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='120' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='120' y='20' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='120' y='36' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='120' y='52' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='120' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='120' y='84' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='128' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='128' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='128' y='84' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='136' y='20' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='136' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='136' y='52' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='136' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='136' y='84' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='144' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='144' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='144' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='144' y='52' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='144' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='144' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='152' y='4' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='152' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='152' y='52' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='152' y='84' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='160' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='160' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='160' y='52' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='160' y='68' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='168' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='168' y='36' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='168' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='168' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='168' y='84' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='176' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='176' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='176' y='36' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='176' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='176' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='176' y='84' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='184' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='184' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='184' y='52' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='184' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='184' y='84' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='192' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='192' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='192' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='192' y='84' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='200' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='200' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='200' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='200' y='52' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='200' y='68' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='200' y='84' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='208' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='208' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='208' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='208' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='208' y='68' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='208' y='84' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='216' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='216' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='216' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='216' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='216' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='216' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='224' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='224' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='224' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='224' y='52' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='224' y='84' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='232' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='232' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='232' y='68' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='240' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='240' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='240' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='240' y='68' fill='currentColor' style='font-size:1em'>O</text>
+<text text-anchor='middle' x='240' y='84' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='248' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='248' y='20' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='248' y='36' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='248' y='52' fill='currentColor' style='font-size:1em'>~</text>
+<text text-anchor='middle' x='248' y='68' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='248' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='256' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='256' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='256' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='256' y='52' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='256' y='68' fill='currentColor' style='font-size:1em'>K</text>
+<text text-anchor='middle' x='256' y='84' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='264' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='264' y='36' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='264' y='52' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='264' y='68' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='264' y='84' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='272' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='272' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='272' y='36' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='272' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='272' y='68' fill='currentColor' style='font-size:1em'>5</text>
+<text text-anchor='middle' x='272' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='280' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='280' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='280' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='280' y='52' fill='currentColor' style='font-size:1em'>w</text>
+<text text-anchor='middle' x='280' y='84' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='288' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='288' y='36' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='288' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='288' y='68' fill='currentColor' style='font-size:1em'>w</text>
+<text text-anchor='middle' x='288' y='84' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='296' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='296' y='20' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='296' y='52' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='296' y='68' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='304' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='304' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='304' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='304' y='52' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='304' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='304' y='84' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='312' y='52' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='312' y='68' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='312' y='84' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='320' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='320' y='20' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='320' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='320' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='320' y='84' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='328' y='20' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='328' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='328' y='52' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='328' y='68' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='328' y='84' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='336' y='4' fill='currentColor' style='font-size:1em'>G</text>
+<text text-anchor='middle' x='336' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='336' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='336' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='336' y='68' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='336' y='84' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='344' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='344' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='344' y='36' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='344' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='344' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='344' y='84' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='352' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='352' y='20' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='352' y='36' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='352' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='352' y='68' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='352' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='360' y='4' fill='currentColor' style='font-size:1em'>H</text>
+<text text-anchor='middle' x='360' y='20' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='360' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='360' y='52' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='360' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='360' y='84' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='368' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='368' y='36' fill='currentColor' style='font-size:1em'>x</text>
+<text text-anchor='middle' x='368' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='368' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='376' y='4' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='376' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='376' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='376' y='52' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='376' y='68' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='376' y='84' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='384' y='36' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='384' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='384' y='84' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='392' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='392' y='20' fill='currentColor' style='font-size:1em'>P</text>
+<text text-anchor='middle' x='392' y='52' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='392' y='68' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='392' y='84' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='400' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='400' y='20' fill='currentColor' style='font-size:1em'>R</text>
+<text text-anchor='middle' x='400' y='36' fill='currentColor' style='font-size:1em'>B</text>
+<text text-anchor='middle' x='400' y='68' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='400' y='84' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='408' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='408' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='408' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='408' y='68' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='408' y='84' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='416' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='416' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='416' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='416' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='416' y='68' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='416' y='84' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='424' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='424' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='424' y='36' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='424' y='52' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='424' y='68' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='424' y='84' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='432' y='20' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='432' y='52' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='432' y='68' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='432' y='84' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='440' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='440' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='440' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='440' y='52' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='440' y='68' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='448' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='448' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='448' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='448' y='52' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='448' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='448' y='84' fill='currentColor' style='font-size:1em'>H</text>
+<text text-anchor='middle' x='456' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='456' y='20' fill='currentColor' style='font-size:1em'>w</text>
+<text text-anchor='middle' x='456' y='36' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='456' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='456' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='456' y='84' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='464' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='464' y='36' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='464' y='52' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='464' y='84' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='472' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='472' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='472' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='472' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='472' y='68' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='472' y='84' fill='currentColor' style='font-size:1em'>P</text>
+<text text-anchor='middle' x='480' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='480' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='480' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='480' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='480' y='68' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='488' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='488' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='488' y='36' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='488' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='488' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='488' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='496' y='20' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='496' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='496' y='84' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='504' y='52' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='504' y='68' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='504' y='84' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='512' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='512' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='512' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='520' y='52' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='520' y='68' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='520' y='84' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='528' y='52' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='528' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='528' y='84' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='536' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='544' y='52' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='544' y='84' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='552' y='52' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='552' y='84' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='560' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='560' y='84' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='568' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='568' y='84' fill='currentColor' style='font-size:1em'>s</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>The data an attacker can extract includes:</p>
+<ul>
+<li>AWS credentials from <code>~/.aws/credentials</code> and <code>~/.aws/config</code></li>
+<li>GitHub tokens from <code>~/.config/gh/hosts.yml</code></li>
+<li>Cloud instance metadata via <code>169.254.169.254</code> (IMDS)</li>
+<li>Environment variables containing API keys and database URLs</li>
+<li>SSH private keys and corporate intranet resources</li>
+<li>Full source code accessible to the sandboxed process</li>
+</ul>
+<h2 id="the-fix-isvalidhost">The Fix: isValidHost()</h2>
+<p>Anthropic&rsquo;s fix in sandbox-runtime 0.0.43 introduces an <code>isValidHost()</code> function that validates hostname characters before the allowlist matcher runs:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-javascript" data-lang="javascript"><span style="display:flex;"><span><span style="color:#75715e">// Fixed logic (sandbox-runtime &gt;= 0.0.43)
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">function</span> <span style="color:#a6e22e">isValidHost</span>(<span style="color:#a6e22e">hostname</span>) {
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e">// Reject null bytes, percent-encoding, CRLF, and non-DNS characters
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#66d9ef">if</span> (<span style="color:#e6db74">/[\x00%]/</span>.<span style="color:#a6e22e">test</span>(<span style="color:#a6e22e">hostname</span>)) <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">false</span>;
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> (<span style="color:#a6e22e">hostname</span>.<span style="color:#a6e22e">includes</span>(<span style="color:#e6db74">&#39;\r&#39;</span>) <span style="color:#f92672">||</span> <span style="color:#a6e22e">hostname</span>.<span style="color:#a6e22e">includes</span>(<span style="color:#e6db74">&#39;\n&#39;</span>)) <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">false</span>;
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e">// Additional DNS character validation
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#66d9ef">return</span> <span style="color:#e6db74">/^[a-zA-Z0-9._-]+$/</span>.<span style="color:#a6e22e">test</span>(<span style="color:#a6e22e">hostname</span>);
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>This prevents the parser differential by ensuring only valid DNS characters reach both the JavaScript filter and libc. But it raises a question: are there Unicode normalization or IDN homograph variants that could still slip through? The <code>isValidHost()</code> regex is strict, which is good, but security researchers will likely test the boundary.</p>
+<h2 id="why-this-matters-beyond-anthropic">Why This Matters Beyond Anthropic</h2>
+<p>The SOCKS5 null-byte bypass is a textbook example of a <strong>parser differential</strong> — a class of vulnerability where two system components interpret the same input differently. These bugs are notoriously hard to catch in testing because both layers behave correctly in isolation. The JS function returns the right answer for its string model. libc returns the right answer for its string model. The bug only exists at the seam between them.</p>
+<p>I&rsquo;ve found that parser differentials are especially common in agent security boundaries because agents sit at the intersection of multiple language runtimes. The Node.js process running the proxy passes data to a C library for DNS resolution. A Python agent might pass shell commands through <code>subprocess.Popen</code> with <code>shell=True</code>. Every language boundary is a potential differential. Every implicit type conversion between layers is an opportunity for bypass.</p>
+<p>The architectural lesson is clear: <strong>validate at the trust boundary in the format the downstream consumer uses</strong>. The SOCKS5 proxy should have validated the hostname against DNS character rules <em>before</em> checking the allowlist, then passed only validated bytes to <code>getaddrinfo()</code>. Better yet, it should have resolved the hostname to an IP, then checked the IP against the allowlist — eliminating the JS/C string disagreement entirely.</p>
+<h2 id="mitigation-and-hardening-steps">Mitigation and Hardening Steps</h2>
+<p>If you have ever run Claude Code in production, here is what you need to do:</p>
+<p><strong>Immediate actions:</strong></p>
+<ol>
+<li>Confirm your Claude Code version: <code>claude --version</code>. Anything below v2.1.90 is vulnerable.</li>
+<li>Upgrade: <code>npm install -g @anthropic-ai/claude-code@latest</code></li>
+<li>Pin the version in your Dockerfiles, Brewfiles, and CI configuration.</li>
+<li>Audit outbound egress logs for SOCKS5 traffic (TCP port 1080) originating from machines that ran vulnerable versions.</li>
+<li>Rotate AWS credentials, GitHub tokens, and other secrets the sandboxed process could access.</li>
+</ol>
+<p><strong>Configuration hardening:</strong></p>
+<ul>
+<li>Avoid wildcard allowlists. Use explicit hostnames where possible.</li>
+<li>Add <code>denyRead</code> entries for <code>~/.aws/</code>, <code>~/.ssh/</code>, <code>~/.config/gh/</code>, and <code>~/.kube/</code>.</li>
+<li>Strip sensitive environment variables from the sandboxed process.</li>
+<li>Set <code>sandbox.failIfUnavailable: true</code> and <code>sandbox.allowUnsandboxedCommands: false</code>.</li>
+<li>Block cloud metadata endpoints (<code>169.254.169.254</code>) at the network layer.</li>
+</ul>
+<p><strong>Architectural recommendations:</strong></p>
+<ul>
+<li>Use disposable VMs or containers for untrusted repositories. Do not give long-lived credentials to an agent session.</li>
+<li>Separate human credentials from agent credentials. Use short-lived, scoped tokens via OAuth device flow or STS.</li>
+<li>Implement external egress controls beyond the agent&rsquo;s built-in sandbox — a corporate proxy or firewall that enforces the egress policy independently.</li>
+<li>Treat project-level agent configuration (<code>.claude/settings.json</code>, <code>.mcp.json</code>, <code>CLAUDE.md</code>) as executable code. Review it the same way you review a Dockerfile.</li>
+</ul>
+<p>For deeper context on agent security tooling, see the <a href="/posts/ai-agent-security-tools-2026/">AI Agent Security Tools 2026 guide</a> and the <a href="/posts/claude-code-vulnerability-detection-guide-2026/">Claude Code Vulnerability Detection Guide</a>.</p>
+<h2 id="frequently-asked-questions">Frequently Asked Questions</h2>
+<h3 id="which-claude-code-versions-were-affected">Which Claude Code versions were affected?</h3>
+<p>All releases from v2.0.24 (October 20, 2025) through v2.1.89 (March 31, 2026) — approximately 130 versions over 5.5 months. If you used Claude Code during that window with the network sandbox enabled and a wildcard allowlist, you were vulnerable.</p>
+<h3 id="how-do-i-check-my-current-claude-code-version">How do I check my current Claude Code version?</h3>
+<p>Run <code>claude --version</code> in your terminal. If the output is lower than 2.1.90, upgrade immediately with <code>npm install -g @anthropic-ai/claude-code@latest</code>.</p>
+<h3 id="does-this-bypass-work-without-a-wildcard-allowlist">Does this bypass work without a wildcard allowlist?</h3>
+<p>No. The bypass requires a wildcard pattern like <code>*.google.com</code> in the <code>allowedDomains</code> setting. If you list exact hostnames only — <code>[&quot;api.anthropic.com&quot;, &quot;github.com&quot;]</code> — the null-byte technique will not match those suffixes after the truncation. However, note that the earlier CVE-2025-66479 meant that an empty <code>allowedDomains: []</code> disabled the proxy entirely for the first 32 days of the sandbox&rsquo;s life.</p>
+<h3 id="did-anthropic-notify-users-about-this-vulnerability">Did Anthropic notify users about this vulnerability?</h3>
+<p>No. Anthropic did not publish a security advisory, flag the fix in the v2.1.90 changelog, assign a CVE for Claude Code, or contact users directly. The only CVE issued, CVE-2025-66479, was assigned to the upstream sandbox-runtime library, not to Claude Code itself. Most users learned about the bypass through third-party security journalism or Aonan Guan&rsquo;s disclosure post.</p>
+<h3 id="what-other-data-could-an-attacker-exfiltrate-using-this-bypass">What other data could an attacker exfiltrate using this bypass?</h3>
+<p>In combination with prompt injection, an attacker could extract AWS credentials, GitHub personal access tokens, environment variables containing API keys, cloud instance metadata, SSH private keys, corporate intranet resources, and any source code the sandboxed process could read. Since SOCKS5 does not generate standard HTTP access logs, this traffic is harder to detect in conventional logging pipelines.</p>
+]]></content:encoded></item></channel></rss>
