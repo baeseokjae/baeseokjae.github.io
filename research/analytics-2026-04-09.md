@@ -1,27 +1,21 @@
-# Daily Google Search Console Report
+# Weekly Google Search Console Report
 
-Period: 2026-06-01 ~ 2026-06-08
+Period: 2026-06-19 ~ 2026-06-26
 
-- Clicks: 0
-- Impressions: 6
-- CTR: 0.00%
+- Clicks: 1
+- Impressions: 14
+- CTR: 7.14%
 
-Top queries:
-- blakemartin-subhub trojan-horse github cursor-for-bim
-  - Position: 9.0
-  - Clicks: 0
-  - Impressions: 3
-- continue.dev github stars 2026
-  - Position: 10.0
-  - Clicks: 0
-  - Impressions: 1
-- cursorbench 3.1
-  - Position: 28.0
-  - Clicks: 0
-  - Impressions: 1
-- gptaku
-  - Position: 25.0
-  - Clicks: 0
-  - Impressions: 1
+Top Queries:
+- sonnet 5 benchmark — clicks: 1 impressions: 6 position: 2.7
+- anthropic claude 3.5 sonnet swe-bench verified 49% official — clicks: 0 impressions: 1 position: 12.0
+- claude sonnet 5 benchmark — clicks: 0 impressions: 2 position: 3.0
+- claude sonnet 5 benchmarks — clicks: 0 impressions: 3 position: 3.0
+- sonnet 5 benchmarks — clicks: 0 impressions: 2 position: 2.5
 
-No keywords found in striking distance (positions 11-20) in this report.
+Strike Distance (pos 11-20, impressions >=5):
+- None found yet.
+
+Top Pages:
+- /posts/claude-sonnet-5-review-2026/ — clicks: 4, impressions: 91
+- / — clicks: 0, impressions: 130

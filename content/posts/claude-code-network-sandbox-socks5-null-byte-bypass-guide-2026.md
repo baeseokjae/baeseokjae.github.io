@@ -1,10 +1,11 @@
 ---
 cover:
-  alt: "Claude Code Network Sandbox SOCKS5 Null-Byte Bypass Guide 2026"
+  alt: Claude Code Network Sandbox SOCKS5 Null-Byte Bypass Guide 2026
   image: /images/claude-code-network-sandbox-socks5-null-byte-bypass-guide-2026.png
   relative: false
 date: 2026-06-22 00:00:00+00:00
-description: "Complete guide to the Claude Code SOCKS5 null-byte sandbox bypass (v2.0.24–v2.1.89), how the parser differential worked, disclosure timeline, and mitigation steps."
+description: Complete guide to the Claude Code SOCKS5 null-byte sandbox bypass (v2.0.24–v2.1.89),
+  how the parser differential worked, disclosure timeline, and mitiga...
 draft: false
 schema: schema-claude-code-network-sandbox-socks5-null-byte-bypass-guide-2026
 tags:
@@ -15,7 +16,8 @@ tags:
 - null-byte-injection
 - parser-differential
 - agent-security
-title: "Claude Code Network Sandbox SOCKS5 Null-Byte Bypass: The 5.5-Month Hole in Anthropic's Agent Egress Control"
+title: 'Claude Code Network Sandbox SOCKS5 Null-Byte Bypass: The 5.5-Month Hole in
+  Anthropic''s Agent Egress Control'
 ---
 
 Every Claude Code release from v2.0.24 (October 20, 2025) through v2.1.89 (March 31, 2026) shipped a network sandbox that was trivially bypassable with a single null byte. If you ran Claude Code with a wildcard allowlist like `*.google.com`, any code executing inside the sandbox — whether through prompt injection, a malicious dependency, or a compromised repo — could reach any host on the internet by sending a SOCKS5 hostname like `attacker-host.com\x00.google.com`. The JavaScript allowlist filter saw the trailing `.google.com` and approved the connection; the OS resolver truncated at the null byte and dialed `attacker-host.com`. This is a parser-differential vulnerability in its purest form, and as of June 2026, it still has no CVE assigned to Claude Code itself.

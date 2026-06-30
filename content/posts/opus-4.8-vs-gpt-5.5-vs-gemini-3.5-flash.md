@@ -4,7 +4,8 @@ cover:
   image: /images/opus-4.8-vs-gpt-5.5-vs-gemini-3.5-flash.png
   relative: false
 date: 2026-06-21 12:00:00+00:00
-description: A practical developer comparison of Claude Opus 4.8, GPT-5.5, and Gemini 3.5 Flash with real benchmarks, pricing, and use cases.
+description: A practical developer comparison of Claude Opus 4.8, GPT-5.5, and Gemini
+  3.5 Flash with real benchmarks, pricing, and use cases.
 draft: false
 schema: schema-opus-4.8-vs-gpt-5.5-vs-gemini-3.5-flash
 tags:
