@@ -133,4 +133,274 @@ For most teams: start with LiteLLM for multi-provider routing with minimal setup
 Well-implemented routing does not meaningfully hurt quality. The key is calibrating your routing threshold conservatively at first — route only queries you&rsquo;re confident are easy, and monitor quality signals before expanding scope. RouteLLM&rsquo;s Berkeley research shows 95% quality retention at 85% cost reduction. In practice, a well-calibrated system achieves 97–99% quality parity for routed queries because the classifier learns to be cautious at borderline cases.</p>
 <p><strong>How do I handle routing failures or model outages?</strong>
 Build provider redundancy into your routing layer from day one. Use a fallback chain: if the primary model returns an error or rate-limit response, automatically retry with an equivalent model from a different provider. LiteLLM and Portkey both support configurable fallback chains. For mission-critical applications, maintain at least one provider from three separate ecosystems (OpenAI, Anthropic, Google) in your model pool so any single provider outage doesn&rsquo;t take down your routing strategy.</p>
+]]></content:encoded></item><item><title>AI Agent Deployment Infrastructure 2026: Ampere.sh, E2B, Northflank, and Modal Compared</title><link>https://baeseokjae.github.io/posts/ai-agent-deployment-infrastructure-guide-2026/</link><pubDate>Mon, 13 Apr 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/ai-agent-deployment-infrastructure-guide-2026/</guid><description>A practical 2026 comparison of Ampere.sh, E2B, Northflank, and Modal for deploying AI agents.</description><content:encoded><![CDATA[<p>AI agent deployment infrastructure in 2026 is not one category. Ampere.sh, E2B, Northflank, and Modal solve different problems: managed agent hosting, secure code execution, full-stack production infrastructure, and Python/GPU serverless compute. The right shortlist depends on what your agent actually does after the model call returns.</p>
+<p>I&rsquo;ve found that teams get into trouble when they compare these platforms as if they were four interchangeable &ldquo;agent sandbox&rdquo; vendors. They are not. A personal OpenClaw agent that needs to stay online in a managed product has little in common with a coding agent that needs Firecracker isolation for 20 concurrent Python sessions. A regulated enterprise deploying agents near private data has different constraints again. And if your agent is mostly a Python inference pipeline wrapped in tool calls, Modal may be closer to the center of gravity than a dedicated sandbox API.</p>
+<p>This guide treats <strong>AI agent deployment infrastructure 2026</strong> as an architecture decision. I will compare Ampere.sh, E2B, Northflank, and Modal across runtime model, isolation, persistence, BYOC, GPU fit, developer experience, and pricing behavior. For adjacent production concerns, I would pair this with my notes on <a href="/posts/multi-model-fallback-architecture-guide/">multi-model fallback architecture</a> and <a href="/posts/ai-agent-identity-framework-guide/">AI agent identity frameworks</a>, because deployment is only one part of making agents survive production traffic.</p>
+<h2 id="which-platform-should-you-shortlist-first">Which platform should you shortlist first?</h2>
+<p>Use this quick version before reading the deeper comparison:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Your primary problem</th>
+          <th>Best first shortlist</th>
+          <th>Why</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>You want hosted OpenClaw without running servers</td>
+          <td>Ampere.sh</td>
+          <td>It is a managed OpenClaw hosting product, not a generic sandbox API</td>
+      </tr>
+      <tr>
+          <td>You need isolated code execution for agent-generated Python or JavaScript</td>
+          <td>E2B</td>
+          <td>It is purpose-built for agent code execution and uses Firecracker microVMs</td>
+      </tr>
+      <tr>
+          <td>You need persistent services, jobs, databases, BYOC, and governance</td>
+          <td>Northflank</td>
+          <td>It is closer to a full application platform with sandbox support</td>
+      </tr>
+      <tr>
+          <td>You need Python-native serverless compute, GPUs, inference jobs, and sandboxes</td>
+          <td>Modal</td>
+          <td>It combines serverless Python/GPU workflows with secure Sandboxes</td>
+      </tr>
+  </tbody>
+</table>
+<p>In practice, I would start with E2B for a coding-agent prototype, Northflank for an agent that is part of a larger production system, Modal for ML-heavy workloads, and Ampere.sh when the requirement is &ldquo;run my OpenClaw agent continuously without making me operate infrastructure.&rdquo;</p>
+<h2 id="what-should-you-evaluate-before-choosing-agent-infrastructure">What should you evaluate before choosing agent infrastructure?</h2>
+<p>The evaluation criteria that matter most for agents are not the same as a normal web app checklist. Agents create long-running, stateful, and sometimes untrusted execution paths. They also blur the line between application hosting, job orchestration, sandboxing, model routing, and data access.</p>
+<p>I would evaluate these seven dimensions:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Dimension</th>
+          <th>Why it matters for agents</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Runtime model</td>
+          <td>Determines whether you are hosting an agent, executing generated code, running services, or invoking serverless functions</td>
+      </tr>
+      <tr>
+          <td>Isolation</td>
+          <td>Controls blast radius when an agent executes code or touches user-provided files</td>
+      </tr>
+      <tr>
+          <td>Session duration</td>
+          <td>Affects overnight tasks, async workers, human-in-the-loop delays, and background research agents</td>
+      </tr>
+      <tr>
+          <td>Persistence</td>
+          <td>Determines whether state lives in a filesystem, snapshot, database, volume, or managed product layer</td>
+      </tr>
+      <tr>
+          <td>BYOC/private networking</td>
+          <td>Matters when agents need private data, VPC access, compliance controls, or regional deployment</td>
+      </tr>
+      <tr>
+          <td>GPU support</td>
+          <td>Becomes central when the agent owns inference, embeddings, video, image, or batch ML work</td>
+      </tr>
+      <tr>
+          <td>Pricing model</td>
+          <td>Short bursty sessions, always-on agents, and GPU jobs produce very different bills</td>
+      </tr>
+  </tbody>
+</table>
+<p>When building agent systems, I ran into a simple pattern: the platform that feels cheapest in a local prototype is not always cheapest after you add concurrency, idle time, secrets, retries, logs, and data egress. The spreadsheet needs to model behavior, not just list monthly plan prices.</p>
+<h2 id="is-amperesh-a-sandbox-provider-or-managed-agent-hosting">Is Ampere.sh a sandbox provider or managed agent hosting?</h2>
+<p>Ampere.sh should be evaluated as <strong>managed OpenClaw hosting</strong>. Its public positioning is about one-click OpenClaw deployment, managed hosting, messaging channels, credits, and avoiding server setup. That is useful, but it is a different purchase than a low-level sandbox API.</p>
+<p>If a user asks, &ldquo;How do I keep my OpenClaw agent online without maintaining a VPS?&rdquo;, Ampere.sh belongs in the conversation. Its marketing says deployment can happen in about 60 seconds, users can bring their own API keys with zero markup, use Ampere credits, and export data. Ampere comparison content has also listed a free OpenClaw path with 5,000 credits, 2 vCPU, and 2GB RAM, plus paid tiers such as Pro at $39/month, Ultra at $79/month, and Unlimited at $299/month. Pricing pages can change, so I would re-check before buying.</p>
+<p>Where I would be careful is treating Ampere.sh as a general-purpose secure code execution platform. The research brief shows much thinner low-level infrastructure documentation than E2B, Northflank, or Modal. I would not pick it because I need arbitrary multi-tenant sandboxes, BYOC deployment, GPU scheduling, or a deep platform control plane.</p>
+<p>Ampere.sh is strongest when the desired abstraction is the agent product itself:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>User wants OpenClaw online
+</span></span><span style="display:flex;"><span>        -&gt; Ampere.sh manages hosting and product setup
+</span></span><span style="display:flex;"><span>        -&gt; user configures model keys, credits, and channels
+</span></span><span style="display:flex;"><span>        -&gt; operational surface stays intentionally small
+</span></span></code></pre></div><p>That trade-off is honest. You get less infrastructure flexibility because the point is to avoid infrastructure.</p>
+<h2 id="when-should-you-choose-e2b">When should you choose E2B?</h2>
+<p>E2B is the cleanest fit when the core problem is <strong>secure code execution for AI agents</strong>. Its homepage and pricing material position each sandbox as Firecracker-powered, and the practical developer path is SDK-first: create a sandbox, run code, move files in and out, terminate the session.</p>
+<p>For a coding agent, data-analysis agent, spreadsheet agent, or notebook-like assistant, this is often exactly what you want. The agent writes Python or JavaScript. The platform runs it in an isolated environment. Your app receives stdout, files, and results. You do not have to build a per-user container scheduler before you know whether the product works.</p>
+<p>The limits matter. E2B pricing lists the Hobby tier as free plus usage, with a one-time $100 usage credit, 1-hour sandbox session length, and 20 concurrent sandboxes. The Pro tier is listed at $150/month plus usage, with 24-hour session length, 100 concurrent sandboxes, and purchasable extra concurrency up to 1,100. Those are clear, useful constraints. They also shape architecture.</p>
+<p>For example, a 20-minute data-analysis run fits naturally:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-ts" data-lang="ts"><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">Sandbox</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;e2b&#34;</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">sandbox</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">Sandbox</span>.<span style="color:#a6e22e">create</span>();
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">await</span> <span style="color:#a6e22e">sandbox</span>.<span style="color:#a6e22e">files</span>.<span style="color:#a6e22e">write</span>(<span style="color:#e6db74">&#34;analysis.py&#34;</span>, <span style="color:#a6e22e">userGeneratedPython</span>);
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">result</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">sandbox</span>.<span style="color:#a6e22e">commands</span>.<span style="color:#a6e22e">run</span>(<span style="color:#e6db74">&#34;python analysis.py&#34;</span>);
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">await</span> <span style="color:#a6e22e">sandbox</span>.<span style="color:#a6e22e">kill</span>();
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#a6e22e">result</span>.<span style="color:#a6e22e">stdout</span>);
+</span></span></code></pre></div><p>But an autonomous agent that waits six hours for a user approval, sleeps overnight, resumes work, and expects local filesystem state to still be there needs more planning. You can externalize state to your database and rehydrate a fresh sandbox. You can design every execution as a bounded job. Or you can choose infrastructure that is built around persistent services.</p>
+<p>I like E2B when the sandbox is the product boundary. I would be more cautious when the agent becomes a long-lived distributed system.</p>
+<h2 id="when-does-northflank-justify-the-extra-platform-surface">When does Northflank justify the extra platform surface?</h2>
+<p>Northflank is the most complete option in this comparison when the agent is part of a broader production system. It brings services, jobs, databases, CI/CD, observability, BYOC clusters, and sandboxed workloads into one control plane.</p>
+<p>The official Northflank docs describe sandboxes as microVM-backed containers with VM-level isolation and container-like performance, with boot times under 1 second. Its BYOC docs describe sandbox deployment into your cloud with microVM isolation enabled by default for workloads on microVM-enabled node pools. That matters for teams with private data, VPC requirements, procurement constraints, or data residency rules.</p>
+<p>This is the platform I would consider when the architecture looks like this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>Agent API service
+</span></span><span style="display:flex;"><span>  -&gt; task queue
+</span></span><span style="display:flex;"><span>  -&gt; sandbox workers
+</span></span><span style="display:flex;"><span>  -&gt; Postgres / Redis / object storage
+</span></span><span style="display:flex;"><span>  -&gt; private APIs in a customer VPC
+</span></span><span style="display:flex;"><span>  -&gt; CI/CD, logs, metrics, secrets, and rollout controls
+</span></span></code></pre></div><p>That is not a toy sandbox problem anymore. It is production application infrastructure with an agent-specific execution risk inside it.</p>
+<p>Northflank&rsquo;s Developer Sandbox free plan allows 2 services, 2 jobs, 1 addon, and up to 1 BYOC cluster, but the docs warn that it should not be used for production applications. That warning is useful. A free plan can validate shape and workflow; it should not be mistaken for a production operating model.</p>
+<p>The trade-off is setup cost. If all you need is &ldquo;run this snippet in a temporary sandbox,&rdquo; Northflank may feel heavier than E2B. If your agent needs persistent workloads, private networking, databases, and deployment governance, that extra surface stops being overhead and starts being the point.</p>
+<h2 id="when-is-modal-better-than-a-dedicated-sandbox-provider">When is Modal better than a dedicated sandbox provider?</h2>
+<p>Modal is strongest when agent infrastructure and ML compute infrastructure are the same problem. It is a serverless Python/GPU cloud first, with Sandboxes for secure execution of untrusted user or agent code. Its docs describe Sandboxes as secure containers, and Modal also documents gVisor-based sandboxing with optional VM runtime material in its broader sandbox documentation.</p>
+<p>For Python-heavy teams, this can be a better fit than a dedicated sandbox-only provider. You can run inference, batch jobs, scheduled functions, web endpoints, notebooks, custom containers, and sandboxed code in the same ecosystem. Modal&rsquo;s Sandboxes support long-running processes, detach/terminate workflows, snapshots, and warm sandbox pools. Snapshots are especially useful when startup latency is dominated by package installation or environment setup.</p>
+<p>The cost model deserves attention. Modal Sandbox resources are billed by the second based on whichever is higher: requested resources or actual usage. That is a good match for bursty compute and GPU-heavy jobs when you size resources carefully. It can be surprising if you over-request CPU, memory, or GPU for sandboxes that spend a lot of time idle.</p>
+<p>A Modal-shaped agent workload often looks like this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> modal
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>app <span style="color:#f92672">=</span> modal<span style="color:#f92672">.</span>App(<span style="color:#e6db74">&#34;agent-worker&#34;</span>)
+</span></span><span style="display:flex;"><span>image <span style="color:#f92672">=</span> modal<span style="color:#f92672">.</span>Image<span style="color:#f92672">.</span>debian_slim()<span style="color:#f92672">.</span>pip_install(<span style="color:#e6db74">&#34;transformers&#34;</span>, <span style="color:#e6db74">&#34;torch&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">@app.function</span>(gpu<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;A10G&#34;</span>, image<span style="color:#f92672">=</span>image, timeout<span style="color:#f92672">=</span><span style="color:#ae81ff">900</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">run_inference_job</span>(payload: dict) <span style="color:#f92672">-&gt;</span> dict:
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># Agent orchestration can call this for expensive model-side work.</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> {<span style="color:#e6db74">&#34;status&#34;</span>: <span style="color:#e6db74">&#34;processed&#34;</span>, <span style="color:#e6db74">&#34;items&#34;</span>: len(payload[<span style="color:#e6db74">&#34;items&#34;</span>])}
+</span></span></code></pre></div><p>I would pick Modal when the agent is mostly a Python production workload that occasionally needs sandboxing, not when I want the simplest vendor-neutral sandbox API. Modal gives you a lot of power, but it also assumes your team is comfortable living in its Python-first deployment model.</p>
+<h2 id="how-do-amperesh-e2b-northflank-and-modal-compare-side-by-side">How do Ampere.sh, E2B, Northflank, and Modal compare side by side?</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Dimension</th>
+          <th>Ampere.sh</th>
+          <th>E2B</th>
+          <th>Northflank</th>
+          <th>Modal</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Primary abstraction</td>
+          <td>Hosted OpenClaw agent instance</td>
+          <td>Sandbox for executing agent-generated code</td>
+          <td>Projects, services, jobs, databases, BYOC clusters, sandboxes</td>
+          <td>Python functions, apps, containers, GPUs, sandboxes</td>
+      </tr>
+      <tr>
+          <td>Best fit</td>
+          <td>Managed always-on OpenClaw</td>
+          <td>Short-to-medium secure code execution</td>
+          <td>Production platform for agent workloads</td>
+          <td>Python/GPU-heavy agent systems</td>
+      </tr>
+      <tr>
+          <td>Isolation model</td>
+          <td>Product-level hosted isolation; comparison content mentions per-user containers</td>
+          <td>Firecracker microVMs</td>
+          <td>MicroVM-backed containers</td>
+          <td>Secure containers, gVisor-based sandboxing, optional VM runtime docs</td>
+      </tr>
+      <tr>
+          <td>Session model</td>
+          <td>Always-on managed hosting</td>
+          <td>Hobby up to 1 hour; Pro up to 24 hours</td>
+          <td>Persistent services and sandbox workloads</td>
+          <td>Long-running sandbox processes, detach/terminate, snapshots</td>
+      </tr>
+      <tr>
+          <td>BYOC/private infra</td>
+          <td>Self-host OpenClaw separately; Ampere.sh is managed hosting</td>
+          <td>Enterprise/self-host/BYOC positioning, not core Hobby/Pro path</td>
+          <td>First-class BYOC cluster deployment</td>
+          <td>Managed Modal cloud, not positioned as BYOC</td>
+      </tr>
+      <tr>
+          <td>GPU fit</td>
+          <td>Not the core value proposition</td>
+          <td>Not the strongest GPU deployment story</td>
+          <td>Supports broader GPU workload positioning</td>
+          <td>Core strength for serverless GPU and ML workloads</td>
+      </tr>
+      <tr>
+          <td>Pricing signal</td>
+          <td>Free and paid OpenClaw plans in marketing content</td>
+          <td>Free Hobby plus usage; Pro $150/month plus usage</td>
+          <td>Free Developer Sandbox, production paid/cloud costs</td>
+          <td>Per-second billing by requested or actual resources</td>
+      </tr>
+  </tbody>
+</table>
+<p>The main takeaway is that the names occupy different layers. Ampere.sh is closest to productized agent hosting. E2B is closest to a sandbox API. Northflank is closest to a production platform. Modal is closest to serverless Python and GPU infrastructure with sandboxing included.</p>
+<h2 id="how-should-session-duration-change-your-architecture">How should session duration change your architecture?</h2>
+<p>Session duration is not a pricing footnote. It changes how you design state.</p>
+<p>With a 1-hour sandbox, you should assume the sandbox is disposable. Persist task state outside the sandbox. Store artifacts in object storage. Keep conversation and tool state in your database. Make retries idempotent.</p>
+<p>With a 24-hour sandbox, you can support longer coding runs, extended data processing, or human review windows, but I would still design the state model as recoverable. A long session is not a backup strategy.</p>
+<p>With persistent services, you can keep workers, queues, volumes, and databases alive as first-class infrastructure. That makes sense for background agents that run continuously or coordinate many subtasks.</p>
+<p>With snapshots and warm pools, you optimize startup latency rather than pretending a sandbox should live forever. Modal&rsquo;s snapshot model is a good example: if environment creation is expensive, snapshot the initialized state and branch from it.</p>
+<p>For more on testing whether these systems behave reliably after failures, see my <a href="/posts/open-source-agent-eval-harness-comparison-2026/">open source agent eval harness comparison</a>. A deployment platform does not remove the need to test recovery paths.</p>
+<h2 id="how-should-teams-model-cost">How should teams model cost?</h2>
+<p>I would model four scenarios instead of asking for a single cheapest platform:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Scenario</th>
+          <th>Cost driver</th>
+          <th>Likely fit</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Solo OpenClaw agent</td>
+          <td>Monthly hosting plan, credits, API keys</td>
+          <td>Ampere.sh</td>
+      </tr>
+      <tr>
+          <td>100 concurrent short coding sessions</td>
+          <td>Sandbox concurrency, CPU/memory seconds, session length</td>
+          <td>E2B</td>
+      </tr>
+      <tr>
+          <td>Overnight autonomous workers</td>
+          <td>Idle time, persistence, external state, background services</td>
+          <td>Northflank or carefully designed E2B/Modal jobs</td>
+      </tr>
+      <tr>
+          <td>GPU inference and batch ML</td>
+          <td>GPU seconds, cold starts, snapshots, utilization</td>
+          <td>Modal</td>
+      </tr>
+  </tbody>
+</table>
+<p>The hidden cost is usually not the published monthly plan. It is engineer time spent building missing operational pieces. E2B can save time when all you need is isolated code execution. Northflank can save time when you would otherwise stitch together services, jobs, databases, networking, and observability yourself. Modal can save time when your team would otherwise build a GPU job platform around Python. Ampere.sh can save time when the whole point is to avoid owning OpenClaw hosting.</p>
+<h2 id="what-security-guarantees-matter-for-agent-code-execution">What security guarantees matter for agent code execution?</h2>
+<p>For agents, I care about five controls:</p>
+<ol>
+<li>Strong isolation between tenants, users, and executions.</li>
+<li>Resource limits for CPU, memory, disk, process count, runtime, and network.</li>
+<li>Secrets handling that prevents prompt-injected code from reading unrelated credentials.</li>
+<li>Egress controls and audit logs for calls to external systems.</li>
+<li>A recovery model for failed, compromised, or runaway executions.</li>
+</ol>
+<p>Firecracker microVMs, microVM-backed containers, gVisor, and VM runtimes all exist because plain shared-process execution is not enough for untrusted code. The exact implementation matters less than whether the platform gives you the control surface your risk model needs.</p>
+<p>For example, an internal analytics assistant executing trusted SQL templates has a different threat model from a public coding agent that runs arbitrary npm packages uploaded by users. The second system needs stricter sandboxing, tighter egress policy, and more aggressive artifact scanning.</p>
+<h2 id="what-migration-paths-are-realistic">What migration paths are realistic?</h2>
+<p>From local OpenClaw, Ampere.sh is the most direct managed-hosting move. You trade control for speed and less maintenance.</p>
+<p>From a raw VPS running agent code in Docker, E2B is a good step if the pain is secure per-request execution. Northflank is a better step if the pain is the whole production platform: deployments, services, databases, secrets, jobs, and private networking.</p>
+<p>From notebook-driven ML scripts, Modal is often the cleanest migration because the unit of work already looks like Python functions, images, jobs, and GPU-backed execution.</p>
+<p>From an E2B prototype to production, I would first ask whether the sandbox remains the central abstraction. If yes, stay and harden around it. If no, and the agent now needs persistent services, private networks, and platform governance, evaluate Northflank or a similar application platform.</p>
+<h2 id="which-platform-should-each-team-profile-choose">Which platform should each team profile choose?</h2>
+<p>Solo builders should start with the smallest abstraction that proves the product. For hosted OpenClaw, that is Ampere.sh. For code execution, that is E2B. Avoid building a platform before you know whether users care.</p>
+<p>Startups building coding agents should usually prototype on E2B, then revisit session duration, concurrency, and state persistence once real usage appears. Do not optimize for enterprise BYOC before the product has stable execution patterns.</p>
+<p>Regulated teams should look hard at Northflank because BYOC, private infrastructure, and operational control become requirements early. The extra platform surface is easier to justify when procurement and security review are unavoidable.</p>
+<p>ML-heavy AI teams should evaluate Modal first when GPUs, Python jobs, model serving, and batch processing dominate the workload. If the sandbox is only one tool inside a broader ML compute system, Modal&rsquo;s integrated model can be cleaner.</p>
+<p>Teams that just want an always-on managed OpenClaw agent should not overcomplicate the decision. Ampere.sh exists for that use case.</p>
+<h2 id="faq">FAQ</h2>
+<h3 id="is-amperesh-a-sandbox-provider">Is Ampere.sh a sandbox provider?</h3>
+<p>Not in the same sense as E2B or Modal Sandboxes. Ampere.sh is better understood as managed OpenClaw hosting. Use it when you want an OpenClaw agent running without server setup. Do not evaluate it as a general-purpose sandbox API unless its current docs explicitly cover your sandbox requirements.</p>
+<h3 id="when-should-i-choose-e2b-over-northflank">When should I choose E2B over Northflank?</h3>
+<p>Choose E2B when secure code execution is the central problem and your sessions fit its runtime and concurrency model. Choose Northflank when the agent is part of a larger production system that needs persistent services, jobs, databases, BYOC, observability, and deployment governance.</p>
+<h3 id="when-is-modal-better-than-e2b">When is Modal better than E2B?</h3>
+<p>Modal is better when your agent workload is tightly coupled to Python, GPU inference, batch jobs, or ML infrastructure. E2B is usually simpler when you just need agent-generated code execution through a focused sandbox API.</p>
+<h3 id="do-long-running-agents-need-persistent-sandboxes">Do long-running agents need persistent sandboxes?</h3>
+<p>Not always. Long-running agents need persistent state, but that state can live in a database, queue, object store, snapshot, volume, or managed platform. A persistent sandbox is useful, but relying on a single live sandbox as the only state store is fragile.</p>
+<h3 id="what-is-the-safest-default-for-untrusted-agent-code">What is the safest default for untrusted agent code?</h3>
+<p>Use a platform with strong isolation, explicit resource limits, careful secrets handling, and auditable network behavior. Firecracker microVMs, microVM-backed containers, gVisor-based sandboxes, and VM runtimes are all attempts to reduce blast radius. Match the platform to the risk of the code you execute.</p>
 ]]></content:encoded></item></channel></rss>
