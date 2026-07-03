@@ -29647,6 +29647,455 @@ The free tier (10,000 memories) works for development and small-scale testing. T
 <p>Not always. Long-running agents need persistent state, but that state can live in a database, queue, object store, snapshot, volume, or managed platform. A persistent sandbox is useful, but relying on a single live sandbox as the only state store is fragile.</p>
 <h3 id="what-is-the-safest-default-for-untrusted-agent-code">What is the safest default for untrusted agent code?</h3>
 <p>Use a platform with strong isolation, explicit resource limits, careful secrets handling, and auditable network behavior. Firecracker microVMs, microVM-backed containers, gVisor-based sandboxes, and VM runtimes are all attempts to reduce blast radius. Match the platform to the risk of the code you execute.</p>
+]]></content:encoded></item><item><title>Google Agent Quality Flywheel Skill Guide 2026: Testing and Grading Agents</title><link>https://baeseokjae.github.io/posts/google-agent-quality-flywheel-skill-guide-2026/</link><pubDate>Mon, 13 Apr 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/google-agent-quality-flywheel-skill-guide-2026/</guid><description>Build a Google agent quality flywheel skill with ADK evalsets, trace review, CI gates, and Vertex AI evaluation.</description><content:encoded><![CDATA[<p>A Google agent quality flywheel skill is a reusable workflow that turns agent traces into graded eval cases, runs them locally and in CI, then feeds production failures back into the test suite. For coding agents, the goal is simple: stop trusting &ldquo;done&rdquo; and start checking behavior, tool use, and real state changes.</p>
+<h2 id="what-is-a-google-agent-quality-flywheel-skill">What is a Google agent quality flywheel skill?</h2>
+<p>The phrase &ldquo;Google agent quality flywheel skill&rdquo; is not an official Google product name. I use it as a practical pattern for teams building agents with Google Agent Development Kit (ADK), Vertex AI Gen AI Evaluation, and a coding agent that can maintain its own eval suite.</p>
+<p>The skill has four parts:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Part</th>
+          <th>What it does</th>
+          <th>Where it runs</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Trace capture</td>
+          <td>Records prompts, tool calls, arguments, outputs, retries, and state changes</td>
+          <td>Local, CI, production</td>
+      </tr>
+      <tr>
+          <td>Grading</td>
+          <td>Scores final answers, trajectories, tool arguments, safety, and task completion</td>
+          <td>ADK evalsets, pytest, Vertex AI</td>
+      </tr>
+      <tr>
+          <td>Regression loop</td>
+          <td>Converts failures into reusable eval cases</td>
+          <td>Local repo and CI</td>
+      </tr>
+      <tr>
+          <td>Release gate</td>
+          <td>Blocks risky agent changes before deployment</td>
+          <td>CI/CD and experiment review</td>
+      </tr>
+  </tbody>
+</table>
+<p>I&rsquo;ve found that the important shift is ownership. The coding agent should not only change code. It should notice when a task exposes a new failure mode, add that case to the evalset, and make the next run harder to break.</p>
+<p>That is the flywheel: trace, grade, fix, gate, monitor, repeat.</p>
+<h2 id="why-do-coding-agents-need-evals-instead-of-only-unit-tests">Why do coding agents need evals instead of only unit tests?</h2>
+<p>Unit tests are still necessary, but they do not answer the agent-quality question. A coding agent can pass the repository test suite and still behave badly.</p>
+<p>Common examples:</p>
+<ul>
+<li>It edits the right file but ignores the user&rsquo;s constraint.</li>
+<li>It runs the wrong command and reports success anyway.</li>
+<li>It calls the right tool with a subtly wrong argument.</li>
+<li>It fixes one case by adding brittle special handling.</li>
+<li>It says the issue is done without creating the expected PR, comment, file, or API update.</li>
+</ul>
+<p>Google ADK&rsquo;s evaluation docs make this distinction clear: agent evaluation needs both final-response quality and trajectory quality. That matters because agents are nondeterministic. Two runs with the same prompt may take different paths, call different tools, or stop at different points.</p>
+<p>In practice, I split tests into two layers. Repository tests prove the product still works. Agent evals prove the agent did the right work in the right way.</p>
+<p>For a coding agent, &ldquo;right way&rdquo; does not mean an exact sequence for every task. It means the trace contains enough evidence: relevant files read, correct tools used, command output interpreted correctly, expected state changed, and no unsupported claim in the final response.</p>
+<p>I use the same distinction when designing <a href="/posts/ai-agent-ci-cd-evaluation/">AI agent CI/CD evaluation</a>: product correctness and agent behavior need separate gates because they fail in different ways.</p>
+<h2 id="how-does-the-quality-flywheel-work">How does the quality flywheel work?</h2>
+<p>The loop is small enough to run every day:</p>
+<ol>
+<li>Capture the trace from a real coding-agent task.</li>
+<li>Review failures manually until the pattern is clear.</li>
+<li>Convert the failure into an ADK evalset case.</li>
+<li>Add objective checks where possible.</li>
+<li>Use rubric or LLM-as-judge scoring only where judgment is required.</li>
+<li>Run evals locally before changing prompts, tools, or skills.</li>
+<li>Run evals in CI before shipping.</li>
+<li>Monitor production traces and feed misses back into the suite.</li>
+</ol>
+<p>LangChain&rsquo;s agent evaluation checklist recommends manually reviewing 20 to 50 real traces before building heavy eval infrastructure. That matches my experience. If you automate before you understand the traces, you usually automate the wrong question.</p>
+<p>Start with a spreadsheet or a small JSONL file. Label failures by hand. Ask what actually went wrong:</p>
+<ul>
+<li>Did the agent misunderstand the task?</li>
+<li>Did it skip context gathering?</li>
+<li>Did it use the wrong tool?</li>
+<li>Did it pass the wrong arguments?</li>
+<li>Did it fail to verify the state change?</li>
+<li>Did the final answer overclaim?</li>
+</ul>
+<p>Once the categories repeat, automate them.</p>
+<h2 id="how-do-you-build-the-inner-loop-with-google-adk-evalsets">How do you build the inner loop with Google ADK evalsets?</h2>
+<p>Google ADK gives you the inner loop: local, fast, developer-owned evaluation. ADK supports test files for unit-test-like checks, evalsets for longer scenarios, Web UI evaluation, pytest, CLI evaluation, and conformance testing.</p>
+<p>The most useful default ADK idea is that final answer matching is not enough. ADK includes built-in criteria for tool trajectory score, response match, semantic final response match, rubric-based response quality, rubric-based tool-use quality, hallucination, safety, multi-turn task success, and multi-turn trajectory quality.</p>
+<p>The default criteria are intentionally strict when no custom criteria are supplied: <code>tool_trajectory_avg_score</code> at <code>1.0</code> and <code>response_match_score</code> at <code>0.8</code>. I like that for workflows with one correct path, such as &ldquo;read this issue, update this file, then patch this exact status.&rdquo; I relax it for coding tasks where multiple valid implementation paths exist.</p>
+<p>A starter local command usually looks like this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>adk eval <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --agent ./agents/coding_agent <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --eval_set ./evals/coding_agent_regressions.json
+</span></span></code></pre></div><p>If your repo uses pytest as the quality gate, wrap the ADK evals so they run beside normal tests:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># tests/test_agent_regressions.py</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> subprocess
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">test_coding_agent_evalset_passes</span>():
+</span></span><span style="display:flex;"><span>    result <span style="color:#f92672">=</span> subprocess<span style="color:#f92672">.</span>run(
+</span></span><span style="display:flex;"><span>        [
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;adk&#34;</span>,
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;eval&#34;</span>,
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;--agent&#34;</span>,
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;./agents/coding_agent&#34;</span>,
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;--eval_set&#34;</span>,
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;./evals/coding_agent_regressions.json&#34;</span>,
+</span></span><span style="display:flex;"><span>        ],
+</span></span><span style="display:flex;"><span>        text<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>,
+</span></span><span style="display:flex;"><span>        capture_output<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>,
+</span></span><span style="display:flex;"><span>        check<span style="color:#f92672">=</span><span style="color:#66d9ef">False</span>,
+</span></span><span style="display:flex;"><span>    )
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">assert</span> result<span style="color:#f92672">.</span>returncode <span style="color:#f92672">==</span> <span style="color:#ae81ff">0</span>, result<span style="color:#f92672">.</span>stdout <span style="color:#f92672">+</span> result<span style="color:#f92672">.</span>stderr
+</span></span></code></pre></div><p>That is deliberately boring. I want the first version to be easy for any developer to run before touching prompts, tool policies, or skills.</p>
+<h2 id="what-should-you-grade-in-a-coding-agent-trace">What should you grade in a coding-agent trace?</h2>
+<p>I grade seven things. Not every eval case needs all seven, but the panel keeps the team honest.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Metric</th>
+          <th>What it catches</th>
+          <th>Best grader</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Final answer quality</td>
+          <td>Did the agent answer the user accurately?</td>
+          <td>Rubric or semantic match</td>
+      </tr>
+      <tr>
+          <td>Tool trajectory</td>
+          <td>Did it use the right class of tools in a valid order?</td>
+          <td>ADK trajectory score</td>
+      </tr>
+      <tr>
+          <td>Argument correctness</td>
+          <td>Were file paths, issue IDs, commands, and API payloads correct?</td>
+          <td>Code-based checks</td>
+      </tr>
+      <tr>
+          <td>State change verification</td>
+          <td>Did the expected file, test result, PR, or issue status change?</td>
+          <td>Code-based checks</td>
+      </tr>
+      <tr>
+          <td>Cost and latency</td>
+          <td>Did it solve the task with reasonable work?</td>
+          <td>Trace metadata</td>
+      </tr>
+      <tr>
+          <td>Safety and hallucination</td>
+          <td>Did it invent facts or make unsafe changes?</td>
+          <td>Rubric plus human review</td>
+      </tr>
+      <tr>
+          <td>Multi-turn memory</td>
+          <td>Did it preserve constraints across turns?</td>
+          <td>Multi-turn eval</td>
+      </tr>
+  </tbody>
+</table>
+<p>DeepEval frames agent metrics across reasoning, action, and execution. That taxonomy is useful, but for coding agents I avoid grading hidden reasoning directly. I care about observable planning signals, tool choices, arguments, outputs, and final state.</p>
+<p>Argument correctness deserves special attention. When building agent workflows, I ran into many cases where the agent chose the right tool and still failed:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;tool&#34;</span>: <span style="color:#e6db74">&#34;patch_issue&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;arguments&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;issueId&#34;</span>: <span style="color:#e6db74">&#34;BLO-738&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;status&#34;</span>: <span style="color:#e6db74">&#34;done&#34;</span>
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>That looks plausible until the assigned task is the write subtask <code>BLO-740</code>, not the parent article issue <code>BLO-738</code>. A final-response grader may miss it. A code-based argument check will not.</p>
+<h2 id="how-should-you-use-adk-web-and-trace-view">How should you use ADK Web and trace view?</h2>
+<p>Use trace view as the debugging interface, not as a dashboard you glance at after everything fails.</p>
+<p>ADK trace inspection is valuable because it lets you inspect events, model requests, model responses, tool calls, graph flow, and intermediate outputs. When an eval fails, the question is rarely &ldquo;was the final answer bad?&rdquo; The better question is &ldquo;where did the run become unrecoverable?&rdquo;</p>
+<p>I usually annotate the failed trace like this:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Trace moment</th>
+          <th>Question</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Initial plan</td>
+          <td>Did the agent understand the real task?</td>
+      </tr>
+      <tr>
+          <td>First context read</td>
+          <td>Did it inspect the right source of truth?</td>
+      </tr>
+      <tr>
+          <td>Tool selection</td>
+          <td>Did it choose the cheapest reliable tool?</td>
+      </tr>
+      <tr>
+          <td>Tool arguments</td>
+          <td>Were paths, IDs, and payloads correct?</td>
+      </tr>
+      <tr>
+          <td>Error handling</td>
+          <td>Did it adjust after a failed command or API response?</td>
+      </tr>
+      <tr>
+          <td>Verification</td>
+          <td>Did it prove the state changed?</td>
+      </tr>
+      <tr>
+          <td>Final message</td>
+          <td>Did it report only what it verified?</td>
+      </tr>
+  </tbody>
+</table>
+<p>This is also where I decide whether the regression case should be exact or flexible. Exact trajectory grading is appropriate for compliance-like flows. For software tasks, I usually prefer looser trajectory checks plus strict state checks.</p>
+<p>For example, I do not care whether the agent reads a TypeScript component with <code>sed</code>, <code>rg</code>, or an IDE API. I care that it reads the relevant component before editing, applies a minimal patch, and runs a verification command that can catch the bug.</p>
+<h2 id="how-do-conformance-tests-and-ci-gates-protect-the-flywheel">How do conformance tests and CI gates protect the flywheel?</h2>
+<p>Conformance tests are the contract tests for the agent itself. They answer: &ldquo;Does this agent still follow the operating rules we rely on?&rdquo;</p>
+<p>For a coding agent, I like conformance tests for rules such as:</p>
+<ul>
+<li>Do not mark an issue done before saving the required work product.</li>
+<li>Do not report tests as passing unless the command actually ran.</li>
+<li>Do not edit files outside the assigned scope.</li>
+<li>Do not use destructive git commands without explicit approval.</li>
+<li>Do not treat a final answer as proof of a side effect.</li>
+</ul>
+<p>Then CI should run three levels of checks:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">name</span>: <span style="color:#ae81ff">agent-quality</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">on</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">pull_request</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">paths</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;agents/**&#34;</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;skills/**&#34;</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;evals/**&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">jobs</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">evals</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">runs-on</span>: <span style="color:#ae81ff">ubuntu-latest</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">steps</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">uses</span>: <span style="color:#ae81ff">actions/checkout@v4</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">uses</span>: <span style="color:#ae81ff">actions/setup-python@v5</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">with</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">python-version</span>: <span style="color:#e6db74">&#34;3.12&#34;</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">run</span>: <span style="color:#ae81ff">pip install -r requirements-dev.txt</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">run</span>: <span style="color:#ae81ff">pytest tests/test_agent_regressions.py</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">run</span>: <span style="color:#ae81ff">adk eval --agent ./agents/coding_agent --eval_set ./evals/conformance.json</span>
+</span></span></code></pre></div><p>The gate should be strict for regressions that previously hit production. For exploratory capability evals, I prefer reporting trends without blocking every PR. Capability evals answer &ldquo;what can the agent do?&rdquo; Regression evals answer &ldquo;did we break something we already promised?&rdquo;</p>
+<p>That distinction keeps the team from turning every experiment into a release blocker.</p>
+<h2 id="how-does-vertex-ai-gen-ai-evaluation-fit-into-the-outer-loop">How does Vertex AI Gen AI Evaluation fit into the outer loop?</h2>
+<p>ADK is the local loop. Vertex AI Gen AI Evaluation is the outer loop when you need scale, autorater configuration, rubrics, batch evaluation, and experiment comparison.</p>
+<p>Google Cloud&rsquo;s June 13, 2025 evaluation update emphasized evaluation across the gen AI lifecycle: model selection, prompt iteration, batch evaluation, autorater customization, rubric-driven grading, and production-oriented agent evaluation. For agents, Google calls out the same core issue: final-answer grading is insufficient. You also need to evaluate tool choice, action sequence, memory use, and trajectory.</p>
+<p>In practice, I use Vertex AI when:</p>
+<ul>
+<li>The eval dataset is large enough that local runs are slow.</li>
+<li>Multiple prompt or model versions need side-by-side comparison.</li>
+<li>Product managers or reviewers need experiment history.</li>
+<li>Rubrics need centralized calibration.</li>
+<li>Production traces need batch scoring.</li>
+</ul>
+<p>Vertex AI Experiments is useful here because it gives the team a history of agent versions, prompt changes, model choices, and scores. That prevents a common failure mode: somebody improves one demo path while quietly degrading five support paths.</p>
+<p>I usually keep the inner-loop ADK suite small and sharp, then mirror the important cases into Vertex AI for broader comparison.</p>
+<h2 id="how-do-you-calibrate-llm-judges-before-trusting-scores">How do you calibrate LLM judges before trusting scores?</h2>
+<p>LLM-as-judge is useful, but it is not a replacement for human judgment. I use it for subjective output quality, rubric adherence, and semantic matching. I do not use it for file existence, command exit codes, issue status updates, or exact API payloads.</p>
+<p>LangChain recommends starting judge calibration with at least 20 labeled examples and growing toward roughly 100 examples for production confidence. That is a good rule of thumb. The smaller the dataset, the more I treat the judge as a reviewer suggestion rather than a release gate.</p>
+<p>My calibration process is:</p>
+<ol>
+<li>Label 20 to 50 traces manually.</li>
+<li>Write a rubric with failure examples, not just success criteria.</li>
+<li>Run the judge against the labeled set.</li>
+<li>Compare disagreements.</li>
+<li>Tighten the rubric or split ambiguous criteria.</li>
+<li>Re-run until judge errors are understood.</li>
+<li>Keep a human-review lane for borderline failures.</li>
+</ol>
+<p>For coding agents, the best judge prompt includes the task, relevant trace excerpts, expected side effects, and the final response. Without the expected side effects, the judge tends to over-reward confident summaries.</p>
+<p>This is the same failure pattern I covered in <a href="/posts/llm-as-judge-agent-evaluation/">LLM as judge agent evaluation</a>: a judge can grade writing quality while missing whether the system actually changed.</p>
+<h2 id="what-failure-taxonomy-should-the-skill-include">What failure taxonomy should the skill include?</h2>
+<p>A reusable skill should include a small failure taxonomy. Without one, every failure becomes a vague &ldquo;agent quality&rdquo; complaint.</p>
+<p>Here is the taxonomy I use for coding agents:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Category</th>
+          <th>Example</th>
+          <th>Preferred fix</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Context miss</td>
+          <td>Agent edits before reading the relevant file</td>
+          <td>Add context-read conformance check</td>
+      </tr>
+      <tr>
+          <td>Tool misuse</td>
+          <td>Correct tool, wrong issue ID</td>
+          <td>Add argument validator</td>
+      </tr>
+      <tr>
+          <td>Verification gap</td>
+          <td>Agent says tests pass without running tests</td>
+          <td>Require command evidence</td>
+      </tr>
+      <tr>
+          <td>State mismatch</td>
+          <td>File saved but schema not saved</td>
+          <td>Add state-change check</td>
+      </tr>
+      <tr>
+          <td>Overclaiming</td>
+          <td>Final answer says &ldquo;deployed&rdquo; when only committed</td>
+          <td>Add final-answer rubric</td>
+      </tr>
+      <tr>
+          <td>Brittle path</td>
+          <td>Exact tool sequence required for flexible task</td>
+          <td>Relax trajectory, tighten outcome</td>
+      </tr>
+      <tr>
+          <td>Memory loss</td>
+          <td>Multi-turn constraint forgotten</td>
+          <td>Add multi-turn eval</td>
+      </tr>
+      <tr>
+          <td>Cost drift</td>
+          <td>Agent uses expensive model or redundant calls</td>
+          <td>Add budget metric</td>
+      </tr>
+  </tbody>
+</table>
+<p>The taxonomy matters because fixes live in different places. A context miss may need a skill update. A tool misuse may need schema validation. A verification gap may need a final-response policy. A brittle-path failure may mean the eval itself is wrong.</p>
+<h2 id="what-does-a-starter-adk-evalset-look-like">What does a starter ADK evalset look like?</h2>
+<p>The exact ADK evalset format may vary by project setup, but the structure below shows the pieces I want in every coding-agent regression case: task, expected tool behavior, expected state change, and grading criteria.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;eval_set_id&#34;</span>: <span style="color:#e6db74">&#34;coding-agent-regressions&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;cases&#34;</span>: [
+</span></span><span style="display:flex;"><span>    {
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;id&#34;</span>: <span style="color:#e6db74">&#34;issue-write-handoff-001&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;description&#34;</span>: <span style="color:#e6db74">&#34;Writer agent must save post and schema before marking issue done.&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;input&#34;</span>: {
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">&#34;user&#34;</span>: <span style="color:#e6db74">&#34;Write the assigned article from the research brief and hand off to publisher.&#34;</span>
+</span></span><span style="display:flex;"><span>      },
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;expected&#34;</span>: {
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">&#34;tool_trajectory&#34;</span>: [
+</span></span><span style="display:flex;"><span>          <span style="color:#e6db74">&#34;read_research_brief&#34;</span>,
+</span></span><span style="display:flex;"><span>          <span style="color:#e6db74">&#34;write_post_file&#34;</span>,
+</span></span><span style="display:flex;"><span>          <span style="color:#e6db74">&#34;write_schema_partial&#34;</span>,
+</span></span><span style="display:flex;"><span>          <span style="color:#e6db74">&#34;patch_issue_done&#34;</span>,
+</span></span><span style="display:flex;"><span>          <span style="color:#e6db74">&#34;assign_publish_subtask&#34;</span>
+</span></span><span style="display:flex;"><span>        ],
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">&#34;state_changes&#34;</span>: [
+</span></span><span style="display:flex;"><span>          <span style="color:#e6db74">&#34;content/posts/google-agent-quality-flywheel-skill-guide-2026.md exists&#34;</span>,
+</span></span><span style="display:flex;"><span>          <span style="color:#e6db74">&#34;layouts/partials/schema-google-agent-quality-flywheel-skill-guide-2026.html exists&#34;</span>,
+</span></span><span style="display:flex;"><span>          <span style="color:#e6db74">&#34;BLO-740 status is done&#34;</span>
+</span></span><span style="display:flex;"><span>        ]
+</span></span><span style="display:flex;"><span>      },
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;criteria&#34;</span>: {
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">&#34;tool_trajectory_avg_score&#34;</span>: <span style="color:#ae81ff">0.8</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">&#34;response_match_score&#34;</span>: <span style="color:#ae81ff">0.8</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">&#34;rubric&#34;</span>: [
+</span></span><span style="display:flex;"><span>          <span style="color:#e6db74">&#34;Does not mark done before both files are written.&#34;</span>,
+</span></span><span style="display:flex;"><span>          <span style="color:#e6db74">&#34;Reports only verified work.&#34;</span>,
+</span></span><span style="display:flex;"><span>          <span style="color:#e6db74">&#34;Uses the assigned write issue, not the parent issue, for completion.&#34;</span>
+</span></span><span style="display:flex;"><span>        ]
+</span></span><span style="display:flex;"><span>      }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  ]
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>Notice the trajectory threshold is <code>0.8</code>, not <code>1.0</code>. That is intentional. I do not want to fail the run because the agent used an equivalent file-writing tool. I do want to fail the run if it patches the issue before saving the schema.</p>
+<p>For stricter operational flows, I would raise trajectory matching to <code>1.0</code>. For implementation tasks, I usually keep path grading flexible and state grading strict.</p>
+<h2 id="what-mistakes-make-agent-evals-brittle">What mistakes make agent evals brittle?</h2>
+<p>The first mistake is exact-path grading for tasks with multiple valid solutions. If the eval says the agent must use one specific file-reading command, you will spend more time fighting the eval than improving the agent.</p>
+<p>The second mistake is synthetic data overload. Synthetic cases are useful for coverage, but they are weak as the foundation. Real traces contain boring details that synthetic prompts miss: flaky commands, ambiguous issue descriptions, missing files, stale assumptions, and partial failures.</p>
+<p>The third mistake is treating evals as a QA artifact instead of an engineering artifact. If the coding-agent team changes prompts, tools, or skills, that same team should own the regression suite.</p>
+<p>The fourth mistake is using an LLM judge for objective checks. A judge should not decide whether a file exists. The filesystem can decide that. A judge should not infer whether an API call succeeded. The API response can decide that.</p>
+<p>The fifth mistake is ignoring latency and cost. A coding agent that solves a task in 40 tool calls may pass correctness checks while still being unsuitable for production automation.</p>
+<p>I saw this with <a href="/posts/google-adk-agent-evaluation/">Google ADK agent evaluation</a>: once teams add trace scoring, they often discover the agent was technically correct but operationally wasteful.</p>
+<h2 id="what-metric-panel-should-production-teams-watch">What metric panel should production teams watch?</h2>
+<p>For production coding agents, I would start with this panel:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Metric</th>
+          <th>Target</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Regression eval pass rate</td>
+          <td>100% on critical cases</td>
+      </tr>
+      <tr>
+          <td>Capability eval trend</td>
+          <td>Improving or stable by task family</td>
+      </tr>
+      <tr>
+          <td>Tool argument error rate</td>
+          <td>Near zero for IDs, paths, and API payloads</td>
+      </tr>
+      <tr>
+          <td>Verified completion rate</td>
+          <td>High and audited against real state changes</td>
+      </tr>
+      <tr>
+          <td>Overclaim rate</td>
+          <td>Zero tolerance on deployment, security, and data changes</td>
+      </tr>
+      <tr>
+          <td>Median tool calls per task</td>
+          <td>Stable or decreasing</td>
+      </tr>
+      <tr>
+          <td>P95 task latency</td>
+          <td>Within workflow budget</td>
+      </tr>
+      <tr>
+          <td>Human escalation rate</td>
+          <td>Tracked by task family</td>
+      </tr>
+      <tr>
+          <td>Production failure-to-eval conversion</td>
+          <td>Every confirmed failure becomes a case</td>
+      </tr>
+  </tbody>
+</table>
+<p>That last metric is the flywheel metric. If production failures do not become eval cases, the quality system is leaking.</p>
+<p>Braintrust&rsquo;s 2026 observability guide makes a related point: production-ready traces need tool calls, reasoning steps or planning signals, state transitions, memory operations, timing, errors, retries, and identifiers. Without that trace substrate, you cannot reliably turn production behavior into offline evals.</p>
+<p>For multi-agent systems, preserve parent-child span identifiers across handoffs. Otherwise, the downstream agent looks guilty when the upstream agent passed the wrong context.</p>
+<h2 id="how-do-you-put-the-skill-into-practice-this-week">How do you put the skill into practice this week?</h2>
+<p>Start smaller than you think.</p>
+<p>Day one: collect 20 real traces from coding-agent work. Do not build a dashboard. Read the traces.</p>
+<p>Day two: label the top five failure categories. Separate objective failures from subjective failures.</p>
+<p>Day three: create a small ADK evalset with five to ten high-signal cases. Include expected state changes, not just expected final text.</p>
+<p>Day four: add a CI command that runs the regression evalset when <code>agents/</code>, <code>skills/</code>, or <code>evals/</code> changes.</p>
+<p>Day five: calibrate one LLM judge rubric against human labels. Keep it advisory until the disagreements are boring and understood.</p>
+<p>After that, add Vertex AI Gen AI Evaluation for larger batch runs, experiment comparison, and production trace scoring. Do not move everything to the outer loop too early. The inner loop needs to stay fast enough that developers use it before they push.</p>
+<p>The skill itself should live beside the agent, not in a separate process document nobody opens. I would include:</p>
+<ul>
+<li>Evalset templates.</li>
+<li>Trace-review checklist.</li>
+<li>Failure taxonomy.</li>
+<li>Judge rubrics.</li>
+<li>CI commands.</li>
+<li>Rules for promoting production failures into regressions.</li>
+<li>Examples of good and bad final responses.</li>
+</ul>
+<p>The payoff is not that the agent becomes perfect. It is that each real failure has somewhere to go. A month later, the same class of bug should be harder to ship.</p>
+<h2 id="faq">FAQ</h2>
+<h3 id="is-google-agent-quality-flywheel-skill-an-official-google-term">Is Google agent quality flywheel skill an official Google term?</h3>
+<p>No. It is an editorial pattern for combining Google ADK evalsets, Vertex AI Gen AI Evaluation, trace review, CI gates, and production monitoring into a repeatable agent-quality workflow.</p>
+<h3 id="should-i-use-adk-or-vertex-ai-gen-ai-evaluation-first">Should I use ADK or Vertex AI Gen AI Evaluation first?</h3>
+<p>Start with ADK for the local developer loop. Add Vertex AI Gen AI Evaluation when you need batch scoring, experiment tracking, centralized rubrics, autorater calibration, or production trace evaluation at larger scale.</p>
+<h3 id="when-should-tool-trajectory-matching-be-strict">When should tool trajectory matching be strict?</h3>
+<p>Use strict trajectory matching when the workflow has one valid path, such as regulated handoffs, required approval steps, or exact API sequences. Use flexible trajectory scoring for coding tasks where several tool paths can produce the same verified outcome.</p>
+<h3 id="can-llm-as-judge-grade-coding-agents-reliably">Can LLM-as-judge grade coding agents reliably?</h3>
+<p>It can grade subjective qualities like helpfulness, rubric adherence, and semantic answer quality. It should not replace code-based checks for files, tests, command exit codes, issue status, API payloads, or other objective state changes.</p>
+<h3 id="what-is-the-smallest-useful-eval-suite">What is the smallest useful eval suite?</h3>
+<p>Five to ten real regression cases are enough to start if they come from actual traces and cover important failures. A small hand-reviewed suite is usually more useful than hundreds of unverified synthetic cases.</p>
 ]]></content:encoded></item><item><title>AI vs Traditional Automation: Which Is Better for Business Workflows in 2026?</title><link>https://baeseokjae.github.io/posts/ai-vs-traditional-automation-business-workflows-2026/</link><pubDate>Fri, 10 Apr 2026 05:47:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/ai-vs-traditional-automation-business-workflows-2026/</guid><description>AI automation adapts and learns; traditional automation is fast and cheap for fixed tasks. In 2026, the best enterprises use both strategically.</description><content:encoded><![CDATA[<p>In 2026, choosing between AI and traditional automation isn&rsquo;t a binary decision — it&rsquo;s a strategic one. Traditional automation excels at high-volume, rule-based tasks with near-zero per-transaction cost, while AI automation handles exceptions, unstructured data, and judgment-heavy workflows. Most enterprises now deploy both in a hybrid model to maximize ROI and operational coverage.</p>
 <h2 id="the-great-automation-divide-whats-actually-changing-in-2026">The Great Automation Divide: What&rsquo;s Actually Changing in 2026?</h2>
 <p>The automation landscape looks radically different in 2026 than it did just three years ago. In 2023, only 55% of organizations used AI automation in any business function. Today, <strong>88% of organizations use AI automation in at least one business function</strong> (Thunderbit via Ringly.io) — a 60% jump in adoption.</p>
