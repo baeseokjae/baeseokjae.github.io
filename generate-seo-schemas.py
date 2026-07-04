@@ -4,7 +4,8 @@ import re
 import json
 from datetime import datetime
 from pathlib import Path
-import frontmatter
+import yaml
+
 
 blog_dir = Path("/home/ubuntu/blog")
 posts_dir = blog_dir / "content" / "posts"
@@ -89,16 +90,22 @@ def main():
 
         # Read post
         with open(post_file) as f:
-            post = frontmatter.load(f)
+            content = f.read()
+            # Split content and metadata
+            metadata_start = content.find('---')
+            metadata_end = content.find('---', metadata_start + 3)
+            
+            metadata = yaml.safe_load(content[metadata_start + 3:metadata_end])
+            post_content = content[metadata_end + 3:].strip()
 
-        title = post.metadata.get("title", "")
-        description = post.metadata.get("description", "")
-        date = post.metadata.get("date", "")
-        cover = post.metadata.get("cover", {})
+        title = metadata.get("title", "")
+        description = metadata.get("description", "")
+        date = metadata.get("date", "")
+        cover = metadata.get("cover", {})
         image = cover.get("image", f"/images/{slug}.png") if isinstance(cover, dict) else f"/images/{slug}.png"
 
         # Extract FAQ items
-        faq_items = extract_faq_items(post.content)
+        faq_items = extract_faq_items(post_content)
 
         # Generate Article schema
         article_schema = {

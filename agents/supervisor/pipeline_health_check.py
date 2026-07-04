@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/home/ubuntu/blog/.venv/bin/python3
 """
 Pipeline Health Check (pipeline_health_check.py)
 
@@ -31,15 +31,15 @@ from collections import Counter
 # ============================================================
 # Configuration
 # ============================================================
-COMPANY_ID = "ab752c4f-0e8b-4669-8e76-2746d00ae8c9"
+COMPANY_ID = "52c3998a-6f9c-4454-9ef4-2c2cd574961b"
 BASE_URL = "http://127.0.0.1:3100/api"
 HEADERS = {
     "X-Paperclip-Local-Board": "true",
     "Content-Type": "application/json"
 }
 
-SUPERVISOR_AGENT_ID = "9e1b92e9-11dd-41ba-8398-b951549a3696"
-STRATEGIST_AGENT_ID = "458d5ac7-e504-4b95-af7a-a9fdf7151895"
+SUPERVISOR_AGENT_ID = "bf9adfce-4e5f-4c4e-bb6c-8a35086e15b1"
+STRATEGIST_AGENT_ID = "407a6c0d-6e14-4189-8de0-484c3236850d"
 
 # Thresholds
 STUCK_HOURS = 6          # Subtask in_progress > 6h with no active run

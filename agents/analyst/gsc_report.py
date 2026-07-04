@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/home/ubuntu/blog/.venv/bin/python3
 import sys
 from datetime import datetime, timedelta
 from google.oauth2 import service_account

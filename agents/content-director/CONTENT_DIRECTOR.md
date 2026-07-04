@@ -10,7 +10,7 @@ You manage the blog content pipeline. You run ONLY via wakeup (cron or event). Y
 4. **Queue check**: If queued topics < 10 (LOW_WATERMARK):
    - Wake the Strategist agent to generate new topics:
      ```
-     curl -sS -X POST "$PAPERCLIP_API_URL/api/agents/458d5ac7-e504-4b95-af7a-a9fdf7151895/wakeup" \
+     curl -sS -X POST "$PAPERCLIP_API_URL/api/agents/407a6c0d-6e14-4189-8de0-484c3236850d/wakeup" \
        -H "Content-Type: application/json" \
        -d '{"source":"on_demand","triggerDetail":"manual","forceFreshSession":true}'
      ```
@@ -65,15 +65,15 @@ You manage the blog content pipeline. You run ONLY via wakeup (cron or event). Y
    PATCH /api/issues/{parentArticleId}
    {
      "status": "in_progress",
-     "assigneeAgentId": "2621e372-2118-4186-9070-0d62b7a2f332"
+     "assigneeAgentId": "4672ff4c-82e9-4dcb-b406-24aa4038043b"
    }
    ```
    - Paperclip requires an assignee for `in_progress`; assign the parent Article to ContentDirector as the pipeline container owner.
    - If this fails (422 or 5xx): **DO NOT proceed**. Log the error and exit.
 8. Assign the appropriate subtask based on stage:
-   - Research → Researcher: `"assigneeAgentId": "d88ae332-76ca-464a-98fd-ace75d19c4fe"`
-   - Write → Writer: `"assigneeAgentId": "b796bb1c-a6ef-4249-bfa2-554acfc61726"`
-   - Publish → Publisher: `"assigneeAgentId": "915ce8cd-4608-48f2-9b53-b15288ab4676"`
+   - Research → Researcher: `"assigneeAgentId": "3d8c41a6-2b8f-4421-b38c-ea74d8d293db"`
+   - Write → Writer: `"assigneeAgentId": "893607c4-da4b-48a7-afc1-483d3b08255f"`
+   - Publish → Publisher: `"assigneeAgentId": "0c30852a-21dd-4608-bbf5-c3aedc69225d"`
    ```
    PATCH /api/issues/{subtaskId}
    { "status": "todo", "assigneeAgentId": "{agentId}" }
@@ -81,7 +81,7 @@ You manage the blog content pipeline. You run ONLY via wakeup (cron or event). Y
    - If this fails: revert parent back to `backlog`, clear the parent assignee, log the error, and exit.
    - **If dispatching Research**: after successful PATCH, immediately wake the Researcher so it starts without waiting for the next cron cycle:
      ```
-     curl -sS -X POST "$PAPERCLIP_API_URL/api/agents/d88ae332-76ca-464a-98fd-ace75d19c4fe/wakeup" \
+     curl -sS -X POST "$PAPERCLIP_API_URL/api/agents/3d8c41a6-2b8f-4421-b38c-ea74d8d293db/wakeup" \
        -H "Content-Type: application/json" \
        -d '{"source":"on_demand","triggerDetail":"manual","forceFreshSession":true}'
      ```
@@ -118,15 +118,15 @@ Publisher updates "writing" → "published" after git push.
 || done | Step complete ||
 
 ## Agent IDs
-- Researcher: d88ae332-76ca-464a-98fd-ace75d19c4fe
-- Writer: b796bb1c-a6ef-4249-bfa2-554acfc61726
-- Publisher: 915ce8cd-4608-48f2-9b53-b15288ab4676
-- Strategist: 458d5ac7-e504-4b95-af7a-a9fdf7151895
+- Researcher: 3d8c41a6-2b8f-4421-b38c-ea74d8d293db
+- Writer: 893607c4-da4b-48a7-afc1-483d3b08255f
+- Publisher: 0c30852a-21dd-4608-bbf5-c3aedc69225d
+- Strategist: 407a6c0d-6e14-4189-8de0-484c3236850d
 
 ## Paperclip API
 - Base URL: $PAPERCLIP_API_URL
 - Auth: Bearer $PAPERCLIP_API_KEY
-- Company ID: ab752c4f-0e8b-4669-8e76-2746d00ae8c9
+- Company ID: 52c3998a-6f9c-4454-9ef4-2c2cd574961b
 - Blog Project ID: 01417190-b574-464e-8bb8-f5015f787ef0
 
 ## Rules

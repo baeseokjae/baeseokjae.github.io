@@ -16,8 +16,8 @@ import os, urllib.request, json, sys
 
 task_id = os.environ.get("PAPERCLIP_TASK_ID", "")
 api_url = os.environ.get("PAPERCLIP_API_URL", "http://127.0.0.1:3100")
-agent_id = os.environ.get("PAPERCLIP_AGENT_ID", "915ce8cd-4608-48f2-9b53-b15288ab4676")
-company_id = "ab752c4f-0e8b-4669-8e76-2746d00ae8c9"
+agent_id = os.environ.get("PAPERCLIP_AGENT_ID", "0c30852a-21dd-4608-bbf5-c3aedc69225d")
+company_id = "52c3998a-6f9c-4454-9ef4-2c2cd574961b"
 
 if not task_id:
     # Check inbox for todo/in_progress Publish issues
@@ -51,7 +51,9 @@ Check both of the following exist:
 1. `~/blog/static/images/{slug}.png`
 2. `~/blog/layouts/partials/schema-{slug}.html`
 
-If either file is missing: comment listing exactly which files are missing, mark this issue as `cancelled`, and stop. Do NOT run hugo or push.
+If schema file is missing: comment listing which files are missing, mark this issue as `cancelled`, and stop. Do NOT run hugo or push.
+
+If image file is missing: comment a warning that the image is missing, but **continue** with publishing. The image is optional.
 
 ## Step 2: Publish
 

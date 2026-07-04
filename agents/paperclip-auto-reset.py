@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/home/ubuntu/blog/.venv/bin/python3
 """
 Paperclip Auto-Reset Script (paperclip-auto-reset.py)
 
@@ -28,7 +28,7 @@ from datetime import datetime, timezone, timedelta
 # ============================================================
 # Configuration
 # ============================================================
-COMPANY_ID = "ab752c4f-0e8b-4669-8e76-2746d00ae8c9"
+COMPANY_ID = "52c3998a-6f9c-4454-9ef4-2c2cd574961b"
 BASE_URL = "http://127.0.0.1:3100/api"
 HEADERS = {
     "X-Paperclip-Local-Board": "true",
@@ -43,11 +43,8 @@ MAX_RESETS_PER_AGENT = 3
 RESET_COOLDOWN_HOURS = 1  # Don't reset the same agent more than once per hour
 
 # Disabled agents (decommissioned in Apr 2026 pipeline redesign) — skip reset, cancel their issues
-DISABLED_AGENT_IDS = {
-    "9e1b92e9-11dd-41ba-8398-b951549a3696",  # Supervisor (replaced by pipeline_health_check.py)
-    "6dab6808-c362-4e11-819b-1f1647e84d40",  # SEO (Writer generates schema)
-    "16f0b09a-d3f8-4885-aa2a-52e7d67d2267",  # Thumbnail (Writer runs gen_cover.py)
-}
+# Blog company has no disabled agents (SEO/Thumbnail don't exist in Blog)
+DISABLED_AGENT_IDS = set()
 
 # Platform-wide rate limit detection — Claude has session + weekly limits
 PLATFORM_LIMIT_ENABLED = True
@@ -235,17 +232,15 @@ CODEX_MODEL = os.environ.get("CODEX_MODEL", "gpt-5.5")
 
 def reset_agent(agent_id, agent_name):
     """Reset an agent from error to idle using Board API.
-    Uses codex_local adapter with deepseek model."""
+    Uses codex_local adapter with gpt-5.5 model (ChatGPT subscription)."""
     payload = {
         "status": "idle",
         "adapterType": "codex_local",
         "adapterConfig": {
-            "model": CODEX_MODEL,
-            "search": True,
-            "fastMode": False,
-            "graceSec": 5,
-            "maxTurns": 30,
+            "model": "gpt-5.5",
             "timeoutSec": 600,
+            "bypassSandbox": True,
+            "sessionBehavior": "new",
             "dangerouslyBypassApprovalsAndSandbox": True
         }
     }
