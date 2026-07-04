@@ -1184,6 +1184,248 @@ A: The reference implementation uses serverless services (API Gateway, Lambda, D
 <p>Evo ADS is the first security product I&rsquo;ve seen that treats AI coding agents as what they actually are — autonomous systems that need runtime governance, not just code generators that need output scanning. The three-layer model is well-thought-out, the async validation design avoids the latency trap, and the research data makes a compelling case that the problem is real and urgent.</p>
 <p>The biggest open question is how well the runtime governance layer works in practice across different agent runtimes. The PreToolUse/PostToolUse API pattern is standardizing, but every agent implements it slightly differently. I&rsquo;ll be watching how the GA release handles edge cases — particularly with agents that have custom tool implementations or non-standard execution flows.</p>
 <p>For now, if you&rsquo;re responsible for security in an organization that&rsquo;s scaling agent adoption, Evo ADS is worth a POC. The supply chain visibility alone will probably find something you didn&rsquo;t know was there.</p>
+]]></content:encoded></item><item><title>SonarQube MCP Server for GitHub Copilot 2026: Code Quality Inside Agent Workflows</title><link>https://baeseokjae.github.io/posts/sonarqube-mcp-server-copilot-2026/</link><pubDate>Sat, 04 Jul 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/sonarqube-mcp-server-copilot-2026/</guid><description>Complete guide to SonarQube MCP Server v1.19: setup, 20+ MCP tools, GitHub Copilot integration, and how to run code quality analysis inside AI agent workflows.</description><content:encoded><![CDATA[<p>SonarQube MCP Server is SonarSource&rsquo;s official open-source bridge between AI coding agents and SonarQube&rsquo;s code quality engine. Instead of context-switching to a browser dashboard or running CLI scans manually, your AI agent can query issues, check quality gates, analyze code snippets, review security hotspots, and even change issue status — all through MCP tool calls. Version 1.19.0 ships with 20+ tools, supports every major AI client from GitHub Copilot to Claude Code, and works with both SonarQube Cloud and self-hosted Server instances.</p>
+<p>I&rsquo;ve been running this setup for the past few weeks across Copilot Coding Agent and Claude Code, and it changes the feedback loop. Here&rsquo;s what it actually takes to get it working, what the tools can do, and where the rough edges still are.</p>
+<h2 id="what-is-sonarqube-mcp-server">What Is SonarQube MCP Server?</h2>
+<p>The SonarQube MCP Server is a Java application (JDK 21+) that implements the Model Context Protocol, exposing SonarQube&rsquo;s analysis data as callable tools that AI agents can invoke. It&rsquo;s open-source under MIT license on <a href="https://github.com/SonarSource/sonarqube-mcp-server">GitHub</a>, distributed as a Docker image (<code>sonarsource/sonarqube-mcp</code>, current version 1.19.0.2785), and supports three transport modes:</p>
+<ul>
+<li><strong>stdio</strong> — default for local development. The AI client spawns the server as a subprocess.</li>
+<li><strong>HTTPS</strong> — for production and team deployments. Encrypted, suitable for remote access.</li>
+<li><strong>HTTP</strong> — trusted internal networks only. No encryption, but lower overhead.</li>
+</ul>
+<p>The server doesn&rsquo;t run analysis itself — it queries an existing SonarQube instance (Cloud or self-hosted Server) via the SonarQube API. You need a SonarQube token and either an organization (Cloud) or a server URL (self-hosted) before anything works.</p>
+<h2 id="why-this-matters-in-2026">Why This Matters in 2026</h2>
+<p>AI coding agents now generate a significant share of production code. The 2026 GitHub Octoverse report shows 41% of new commits originate from AI-assisted generation. The problem is that AI-generated code introduces roughly 4x more bugs than human-written code, according to studies cited in the same report. You&rsquo;re writing faster, but the quality tax compounds.</p>
+<p>Before MCP, the typical workflow was: write code with Copilot → switch to SonarQube dashboard → find issues → switch back to IDE → fix → repeat. That&rsquo;s three context switches per cycle. With the MCP server, the agent checks quality gates, retrieves issues, and even applies fixes in a single loop. The agent sees the quality data at the same time it sees the code.</p>
+<p>I covered the broader MCP landscape in <a href="/posts/best-mcp-servers-developers-2026/">Best MCP Servers for Developers 2026</a>, but SonarQube is one of the few that combines breadth (20+ tools) with depth (real static analysis, not just linting).</p>
+<h2 id="setup-getting-the-server-running">Setup: Getting the Server Running</h2>
+<h3 id="prerequisites">Prerequisites</h3>
+<ul>
+<li>Docker (or Java 21+ JDK if running the JAR directly)</li>
+<li>A SonarQube Cloud organization with a token, or a self-hosted SonarQube Server (9.9+ LTA or 10.x+) with a token</li>
+<li>An MCP-capable AI client (GitHub Copilot, Claude Code, Cursor, Codex CLI, etc.)</li>
+</ul>
+<h3 id="docker-deployment">Docker Deployment</h3>
+<p>The cleanest path is Docker. One command gets you a running server:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>docker run -d --name sonarqube-mcp <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -e SONARQUBE_TOKEN<span style="color:#f92672">=</span>your_token_here <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -e SONARQUBE_ORG<span style="color:#f92672">=</span>your_org_name <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -p 3000:3000 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  sonarsource/sonarqube-mcp:latest
+</span></span></code></pre></div><p>For self-hosted Server instances, add <code>SONARQUBE_URL</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>docker run -d --name sonarqube-mcp <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -e SONARQUBE_TOKEN<span style="color:#f92672">=</span>your_token_here <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -e SONARQUBE_URL<span style="color:#f92672">=</span>https://sonarqube.yourcompany.com <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -p 3000:3000 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  sonarsource/sonarqube-mcp:latest
+</span></span></code></pre></div><p>If you&rsquo;re on SonarQube Cloud&rsquo;s US region, you also need <code>SONARQUBE_URL=https://sonarqube.us</code> — the default points to the EU region.</p>
+<h3 id="configuring-ai-clients">Configuring AI Clients</h3>
+<p>Each client has its own config file. Here are the ones I&rsquo;ve tested:</p>
+<p><strong>GitHub Copilot (VS Code)</strong> — <code>.vscode/mcp.json</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;servers&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;sonarqube&#34;</span>: {
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;url&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;url&#34;</span>: <span style="color:#e6db74">&#34;http://localhost:3000&#34;</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p><strong>GitHub Copilot CLI</strong> — <code>~/.copilot/mcp-config.json</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;sonarqube&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;url&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;url&#34;</span>: <span style="color:#e6db74">&#34;http://localhost:3000&#34;</span>
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p><strong>Claude Code</strong> — <code>~/.claude/settings.json</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;mcpServers&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;sonarqube&#34;</span>: {
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;command&#34;</span>: <span style="color:#e6db74">&#34;docker&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;args&#34;</span>: [<span style="color:#e6db74">&#34;run&#34;</span>, <span style="color:#e6db74">&#34;-i&#34;</span>, <span style="color:#e6db74">&#34;--rm&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;-e&#34;</span>, <span style="color:#e6db74">&#34;SONARQUBE_TOKEN&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;-e&#34;</span>, <span style="color:#e6db74">&#34;SONARQUBE_ORG&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;sonarsource/sonarqube-mcp:latest&#34;</span>]
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p><strong>Cursor</strong> — <code>.cursor/mcp.json</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;mcpServers&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;sonarqube&#34;</span>: {
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;url&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;url&#34;</span>: <span style="color:#e6db74">&#34;http://localhost:3000&#34;</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p><strong>Codex CLI</strong> — <code>~/.codex/config.toml</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-toml" data-lang="toml"><span style="display:flex;"><span>[<span style="color:#a6e22e">mcp</span>.<span style="color:#a6e22e">sonarqube</span>]
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">type</span> = <span style="color:#e6db74">&#34;url&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">url</span> = <span style="color:#e6db74">&#34;http://localhost:3000&#34;</span>
+</span></span></code></pre></div><p>The stdio mode (used by Claude Code above) passes environment variables from your shell, so the token never lives in a config file. The URL mode (used by Copilot and Cursor) connects to a running Docker container. I prefer the URL mode for team setups — one Docker instance serves multiple developers.</p>
+<h2 id="the-20-mcp-tools-what-you-actually-get">The 20+ MCP Tools: What You Actually Get</h2>
+<p>The server exposes tools organized into functional groups. Here are the ones I use most:</p>
+<h3 id="analysis-tools">Analysis Tools</h3>
+<ul>
+<li><strong><code>analyze_code_snippet</code></strong> — Analyze a code snippet directly in the agent&rsquo;s context. Pass <code>filePath</code> if the workspace is mounted, or <code>fileContent</code> if it isn&rsquo;t. The <code>codeSnippet</code> parameter lets you target specific lines or functions.</li>
+<li><strong><code>run_advanced_code_analysis</code></strong> — Trigger a full SonarQube analysis on a project branch. Useful in CI/CD agent workflows.</li>
+</ul>
+<h3 id="issue-management">Issue Management</h3>
+<ul>
+<li><strong><code>search_issues</code></strong> — Query issues by project, severity, type (BUG, VULNERABILITY, CODE_SMELL), status, or assignee. Returns structured results the agent can act on.</li>
+<li><strong><code>get_issue_details</code></strong> — Full details for a specific issue including the exact line, message, and rule description.</li>
+<li><strong><code>change_issue_status</code></strong> — Mark issues as resolved, false positive, or won&rsquo;t fix. The agent can close issues it&rsquo;s verified as fixed.</li>
+</ul>
+<h3 id="quality-gates">Quality Gates</h3>
+<ul>
+<li><strong><code>get_quality_gate_status</code></strong> — Check whether a project passes its quality gate. This is the single most useful tool for PR workflows — the agent can block a merge if the gate is red.</li>
+</ul>
+<h3 id="security-hotspots">Security Hotspots</h3>
+<ul>
+<li><strong><code>search_hotspots</code></strong> — Find security hotspots by project, status, or severity.</li>
+<li><strong><code>review_hotspot</code></strong> — Mark a hotspot as reviewed, safe, or requiring fix.</li>
+</ul>
+<h3 id="coverage">Coverage</h3>
+<ul>
+<li><strong><code>search_files_by_coverage</code></strong> — Find files below a coverage threshold. I use this to have the agent identify untested code and generate tests.</li>
+<li><strong><code>get_file_coverage_details</code></strong> — Line-by-line coverage for a specific file.</li>
+</ul>
+<h3 id="code-quality">Code Quality</h3>
+<ul>
+<li><strong><code>search_duplications</code></strong> — Find duplicated code blocks across a project.</li>
+<li><strong><code>get_dependency_risk</code></strong> — Analyze dependency risks (Enterprise+ edition required).</li>
+</ul>
+<h3 id="project-info">Project Info</h3>
+<ul>
+<li><strong><code>list_projects</code></strong>, <strong><code>list_branches</code></strong>, <strong><code>list_pull_requests</code></strong> — Navigate the project tree.</li>
+</ul>
+<p>That&rsquo;s a lot of surface area. In practice, I spend 80% of my time on <code>search_issues</code>, <code>get_quality_gate_status</code>, and <code>analyze_code_snippet</code>. The coverage and duplication tools are useful for dedicated cleanup sessions.</p>
+<h2 id="github-copilot-integration-the-deepest-path">GitHub Copilot Integration: The Deepest Path</h2>
+<p>SonarQube MCP Server integrates with every GitHub Copilot variant — VS Code Copilot, Copilot CLI, and the Copilot Coding Agent — but the Coding Agent integration is where it gets interesting.</p>
+<h3 id="copilot-coding-agent-setup">Copilot Coding Agent Setup</h3>
+<p>In your GitHub repository, go to <strong>Settings &gt; Copilot &gt; Coding agent</strong> and add the MCP server configuration. The server URL points to your running instance. For CI/CD pipelines, set environment variables with the <code>COPILOT_MCP_</code> prefix — for example, <code>COPILOT_MCP_SONARQUBE_TOKEN</code> — and the agent picks them up automatically.</p>
+<p>Once configured, you can ask the agent things like:</p>
+<blockquote>
+<p>&ldquo;Check the quality gate on the main branch and list any blocker issues.&rdquo;</p></blockquote>
+<p>The agent calls <code>get_quality_gate_status</code>, then <code>search_issues</code> with severity=BLOCKER, and presents the results inline. No dashboard visit required.</p>
+<blockquote>
+<p>&ldquo;Find files with less than 60% test coverage and suggest tests.&rdquo;</p></blockquote>
+<p>The agent calls <code>search_files_by_coverage</code> with a threshold of 60, retrieves the file contents, and generates test cases. I&rsquo;ve had it produce working Jest tests for uncovered utility functions in about 90 seconds.</p>
+<h3 id="what-changes-in-the-workflow">What Changes in the Workflow</h3>
+<p>Before MCP, a typical PR review loop looked like:</p>
+<ol>
+<li>Developer pushes code</li>
+<li>CI runs SonarQube analysis</li>
+<li>Developer checks SonarQube dashboard</li>
+<li>Developer fixes issues in IDE</li>
+<li>Repeat</li>
+</ol>
+<p>With the MCP server inside the agent workflow:</p>
+<ol>
+<li>Developer asks agent to &ldquo;fix the quality gate issues in this PR&rdquo;</li>
+<li>Agent calls <code>search_issues</code> for the PR branch</li>
+<li>Agent reads each issue&rsquo;s details</li>
+<li>Agent applies fixes inline</li>
+<li>Agent calls <code>change_issue_status</code> to mark resolved</li>
+<li>Agent calls <code>get_quality_gate_status</code> to verify</li>
+</ol>
+<p>The entire loop stays inside the editor. The agent sees the quality data and the code in the same context window.</p>
+<h2 id="beyond-copilot-other-ai-clients">Beyond Copilot: Other AI Clients</h2>
+<p>The server works with essentially every MCP-capable client in 2026. I&rsquo;ve tested it with:</p>
+<ul>
+<li><strong>Claude Code</strong> — stdio mode via Docker. The <code>analyze_code_snippet</code> tool is particularly useful here since Claude Code often works with code in context rather than a mounted workspace. See my <a href="/posts/claude-code-tutorial-2026/">Claude Code Tutorial 2026</a> for the full setup guide.</li>
+<li><strong>Cursor</strong> — URL mode. Cursor&rsquo;s MCP support in 3.9 unified plugin, skill, and MCP management into a single Customize page, which I covered in <a href="/posts/cursor-3-9-customize-page-guide-2026/">Cursor 3.9 Customize Page Guide</a>.</li>
+<li><strong>Codex CLI</strong> — URL mode via <code>config.toml</code>. OpenAI&rsquo;s Codex Skills system also supports MCP tool integration — see <a href="/posts/openai-codex-skills-guide-2026/">OpenAI Codex Skills Guide</a>.</li>
+<li><strong>Gemini CLI</strong>, <strong>Kiro</strong>, <strong>Windsurf</strong>, <strong>Antigravity</strong> — all supported with client-specific config documented in the README.</li>
+</ul>
+<p>The write-once, use-everywhere promise of MCP holds here. Configure the server once, and every client can use it.</p>
+<h2 id="sonarqube-cloud-vs-self-hosted-which-to-use">SonarQube Cloud vs Self-Hosted: Which to Use</h2>
+<p>The MCP server supports both deployment models, but the experience differs:</p>
+<p><strong>SonarQube Cloud</strong> — No infrastructure to maintain. Set your token and org, and you&rsquo;re done. The hosted MCP server option (announced in 2026) exposes a fixed subset of tools without running any Docker container. If you&rsquo;re already on SonarQube Cloud, this is the path of least resistance.</p>
+<p><strong>Self-hosted Server</strong> — You control the data, the retention, and the network. Required for air-gapped environments or compliance regimes that forbid sending code to external services. You need SonarQube Server 9.9+ LTA or 10.x+. The MCP server extension is built into Server 2026.3+, so you can enable it without a separate Docker container.</p>
+<p>I run self-hosted for client projects and Cloud for personal repos. The MCP server itself is identical — the only difference is which <code>SONARQUBE_URL</code> you point it at.</p>
+<h2 id="sonar-vortex-agentic-analysis">Sonar Vortex: Agentic Analysis</h2>
+<p>Sonar Vortex is the newer capability that augments AI agent context with SonarQube analysis data. When an agent is about to generate code, Vortex provides relevant quality rules and patterns from the project&rsquo;s analysis history. The agent doesn&rsquo;t just react to issues after they&rsquo;re created — it avoids them during generation.</p>
+<p>This is configured through the SonarQube plugin or CLI. In practice, I&rsquo;ve found it most useful for teams with established rule sets. If your SonarQube instance has custom rules for your codebase&rsquo;s conventions, Vortex surfaces those to the agent before it writes code, reducing the fix loop from three iterations to zero.</p>
+<h2 id="competitor-comparison">Competitor Comparison</h2>
+<p>The MCP code quality space has several players. Here&rsquo;s how they stack up:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Tool</th>
+          <th>Strengths</th>
+          <th>Weaknesses</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>SonarQube MCP Server</strong></td>
+          <td>20+ tools, 20+ languages, quality gates, coverage, security hotspots, open-source</td>
+          <td>Requires Java 21+, Docker, existing SonarQube instance</td>
+      </tr>
+      <tr>
+          <td><strong>CodeRabbit MCP</strong></td>
+          <td>PR review specialist, simple setup, cloud-native</td>
+          <td>Less depth than SonarQube, limited language support</td>
+      </tr>
+      <tr>
+          <td><strong>Snyk MCP</strong></td>
+          <td>Security vulnerability focus, dependency scanning</td>
+          <td>No code smell analysis, no test coverage, no quality gates</td>
+      </tr>
+      <tr>
+          <td><strong>ESLint/Prettier MCP</strong></td>
+          <td>Lightweight, JS/TS optimized</td>
+          <td>Single language, no security analysis, no quality gate concept</td>
+      </tr>
+  </tbody>
+</table>
+<p>I reviewed CodeRabbit in depth in <a href="/posts/coderabbit-review-2026/">CodeRabbit Review 2026</a>. It&rsquo;s excellent for PR-level review, but it doesn&rsquo;t replace SonarQube&rsquo;s breadth. The two are complementary — CodeRabbit for the review workflow, SonarQube for the full quality management lifecycle.</p>
+<h2 id="real-workflow-a-complete-example">Real Workflow: A Complete Example</h2>
+<p>Here&rsquo;s a concrete session I ran last week. I had Copilot Coding Agent configured with the SonarQube MCP server on a TypeScript project:</p>
+<p><strong>Prompt:</strong> &ldquo;Check the quality gate on the sprint-7 branch and fix any blocker issues.&rdquo;</p>
+<p>The agent executed:</p>
+<ol>
+<li><code>list_branches</code> → found <code>sprint-7</code></li>
+<li><code>get_quality_gate_status</code> → returned <strong>FAILED</strong> — 3 blocker bugs, 1 security hotspot</li>
+<li><code>search_issues</code> with severity=BLOCKER → returned 3 issues</li>
+<li>For each issue, <code>get_issue_details</code> → got the exact file, line, and rule description</li>
+<li>Read the affected source files</li>
+<li>Applied fixes (a null check, a resource leak, and an unused variable removal)</li>
+<li><code>change_issue_status</code> on each → marked as resolved</li>
+<li><code>get_quality_gate_status</code> → returned <strong>PASSED</strong></li>
+</ol>
+<p>Total time: about 4 minutes. The same loop manually would have taken 15-20 minutes including context switches.</p>
+<h2 id="trade-offs-and-rough-edges">Trade-Offs and Rough Edges</h2>
+<p>I&rsquo;ve been honest about what works, so here&rsquo;s what doesn&rsquo;t:</p>
+<p><strong>Java 21+ requirement.</strong> The server is a Java application. If your team doesn&rsquo;t have a JDK 21 runtime, the Docker image is the only practical path. The image is about 300MB, which is heavy for a CLI tool.</p>
+<p><strong>Docker dependency for stdio mode.</strong> Claude Code&rsquo;s stdio integration spawns a Docker container on every invocation. That means a 1-2 second startup penalty before the first tool call. The URL mode avoids this by keeping the container running, but then you need to manage the container lifecycle.</p>
+<p><strong>SonarQube instance required.</strong> The MCP server is a proxy, not an analyzer. If you don&rsquo;t already have SonarQube Cloud or Server running, this tool does nothing. The setup cost is non-trivial for teams new to SonarQube.</p>
+<p><strong>Token management.</strong> The token is passed as an environment variable, which is the right pattern, but it means every developer needs their own token. For team deployments, you&rsquo;ll want a secrets manager or the Docker MCP Gateway approach.</p>
+<p><strong>Rate limits.</strong> SonarQube Cloud has API rate limits. If your agent makes 20 tool calls in rapid succession (which happens during a <code>search_issues</code> + <code>get_issue_details</code> loop), you can hit the limit. The server doesn&rsquo;t handle retry logic — that&rsquo;s on the client.</p>
+<h2 id="when-to-use-it">When to Use It</h2>
+<p>The SonarQube MCP Server is worth the setup effort if:</p>
+<ul>
+<li>You already use SonarQube and want AI agents to interact with it</li>
+<li>You&rsquo;re running AI coding agents in production and need quality gates in the loop</li>
+<li>You want to automate coverage improvement, security hotspot review, or issue triage</li>
+<li>Your team uses multiple AI clients and wants a single quality integration point</li>
+</ul>
+<p>Skip it if:</p>
+<ul>
+<li>You don&rsquo;t have SonarQube and don&rsquo;t plan to set it up</li>
+<li>You only need PR-level review (CodeRabbit is simpler)</li>
+<li>Your stack is pure JavaScript/TypeScript and ESLint coverage is sufficient</li>
+</ul>
+<h2 id="getting-started">Getting Started</h2>
+<ol>
+<li>Pull the Docker image: <code>docker pull sonarsource/sonarqube-mcp:latest</code></li>
+<li>Get a SonarQube token from your Cloud organization or Server instance</li>
+<li>Start the container with your token and org/URL</li>
+<li>Add the MCP config to your AI client</li>
+<li>Try: &ldquo;List my projects and check the quality gate&rdquo;</li>
+</ol>
+<p>The <a href="https://docs.sonarsource.com/sonarqube-mcp-server/">official docs</a> are well-maintained and include quickstart guides for VS Code, Copilot CLI, and Claude Code. The <a href="https://github.com/SonarSource/sonarqube-mcp-server">GitHub repo</a> has the full tool reference and client configuration examples for all supported clients.</p>
 ]]></content:encoded></item><item><title>Coding Agent Debug Logs Guide 2026: Claude Code, Codex, GitHub MCP, and Playwright MCP</title><link>https://baeseokjae.github.io/posts/coding-agent-debug-logs-guide-2026/</link><pubDate>Sat, 04 Jul 2026 04:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/coding-agent-debug-logs-guide-2026/</guid><description>Complete guide to debugging AI coding agents in 2026: Claude Code /doctor and heapdump, Codex CLI log_dir and TOML config, GitHub MCP error types, and Playwright MCP tracing tools.</description><content:encoded><![CDATA[<p>AI coding agents ship code faster than ever, but when they break, the debugging experience is nothing like a traditional stack trace. You don&rsquo;t get a line number and a segfault — you get a silent hang, a garbled terminal, a 529 from the API, or an MCP server that just won&rsquo;t connect. After spending the last year running Claude Code, Codex CLI, GitHub MCP Server, and Playwright MCP in production pipelines, I&rsquo;ve collected the debug patterns that actually work. Here&rsquo;s the field guide I wish I&rsquo;d had.</p>
 <h2 id="claude-code-the-most-debuggable-agent-if-you-know-where-to-look">Claude Code: The Most Debuggable Agent, If You Know Where to Look</h2>
 <p>Claude Code has the richest debug tooling of any coding agent in 2026 — I covered its overall capabilities in the <a href="/posts/ai-coding-agent-capability-matrix-2026/">AI Coding Agent Capability Matrix 2026</a> — but most of it is hidden behind slash commands you&rsquo;d never discover unless someone told you.</p>
