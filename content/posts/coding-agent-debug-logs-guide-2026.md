@@ -1,249 +1,201 @@
 ---
-title: "Coding Agent Debug Logs Guide 2026: Claude Code, Codex, GitHub MCP, and Playwright MCP"
-date: 2026-07-04T12:00:00+00:00
-tags: ["Claude Code", "Codex CLI", "MCP", "Debugging", "Developer Tools"]
-description: "A practical 2026 guide to debugging AI coding agents — Claude Code, Codex CLI, GitHub MCP Server, and Playwright MCP Server — with real commands, log locations, and troubleshooting patterns."
-draft: false
 cover:
-  image: "/images/coding-agent-debug-logs-guide-2026.png"
-  alt: "Coding Agent Debug Logs Guide 2026"
+  alt: 'Coding Agent Debug Logs Guide 2026: Claude Code, Codex, GitHub MCP, and Playwright MCP'
+  image: /images/coding-agent-debug-logs-guide-2026.png
   relative: false
+date: 2026-07-04 04:00:00+00:00
+description: 'Complete guide to debugging AI coding agents in 2026: Claude Code /doctor and heapdump, Codex CLI log_dir and TOML config, GitHub MCP error types, and Playwright MCP tracing tools.'
+draft: false
 schema: schema-coding-agent-debug-logs-guide-2026
+tags:
+- ai-coding
+- developer-tools
+- debugging
+- claude-code
+- openai-codex
+- mcp
+- playwright
+title: 'Coding Agent Debug Logs Guide 2026: Claude Code, Codex, GitHub MCP, and Playwright MCP'
 ---
 
-If you've been using AI coding agents daily in 2026, you've hit the wall where Claude Code freezes mid-task, Codex CLI silently drops an MCP connection, or Playwright MCP opens a headed browser that nobody asked for. The tools are powerful, but when they break, the debugging experience varies wildly between them.
+AI coding agents ship code faster than ever, but when they break, the debugging experience is nothing like a traditional stack trace. You don't get a line number and a segfault — you get a silent hang, a garbled terminal, a 529 from the API, or an MCP server that just won't connect. After spending the last year running Claude Code, Codex CLI, GitHub MCP Server, and Playwright MCP in production pipelines, I've collected the debug patterns that actually work. Here's the field guide I wish I'd had.
 
-I've spent the last six months running all four of these tools in production workflows — Claude Code for complex refactoring, Codex CLI for quick prototyping, GitHub MCP for PR automation, and Playwright MCP for browser testing. Here's what I've learned about getting useful debug output out of each one.
+## Claude Code: The Most Debuggable Agent, If You Know Where to Look
 
-## Claude Code: The Most Debugging Tooling
+Claude Code has the richest debug tooling of any coding agent in 2026 — I covered its overall capabilities in the [AI Coding Agent Capability Matrix 2026](/posts/ai-coding-agent-capability-matrix-2026/) — but most of it is hidden behind slash commands you'd never discover unless someone told you.
 
-Claude Code has the richest debugging toolkit of any coding agent I've used. It's not just about log files — there are built-in commands for almost every failure mode.
+### The /doctor Command — Your First Stop
 
-### The `/doctor` Command
+Before you dig into logs, run `/doctor` inside Claude Code or `claude doctor` from the shell. It runs an automated health check covering installation integrity, settings validity, MCP server connectivity, and context usage statistics. I've seen it catch a stale Node.js version that was silently breaking MCP tool calls — something that would have taken me an hour to trace manually.
 
-When something feels off — slow responses, MCP servers not loading, hooks not firing — start here. Run `/doctor` inside Claude Code or `claude doctor` from the shell. It runs an automated health check covering installation integrity, settings validity, MCP configuration, and context usage. I run this as my first step whenever I suspect a configuration issue rather than a transient API error.
+When Claude Code feels sluggish or behaves oddly, `/doctor` is the fastest triage tool. It reports back in under five seconds and flags issues with severity levels.
 
-### Heap Dump Analysis for Memory Issues
+### /heapdump for Memory Mysteries
 
-Claude Code can consume surprising amounts of memory on large codebases. When you notice sluggishness or auto-compaction thrashing, run `/heapdump`. This writes a JavaScript heap snapshot to `~/Desktop/Claude\ Code.heapsnapshot` (or your home directory on Linux). Open it in Chrome DevTools → Memory → Load to see exactly what's eating memory. I've caught runaway context buffers and bloated MCP response caches this way.
+If Claude Code is eating RAM and you don't know why, run `/heapdump`. It writes a JavaScript heap snapshot to `~/Desktop/` (or your home directory on Linux) as a `.heapsnapshot` file. Open that in Chrome DevTools → Memory → Load, and you can inspect object allocations, retained sizes, and closure chains. I used this to discover a plugin that was holding a reference to the entire file tree in memory — 1.2 GB of retained objects from a 50 MB project.
 
 ### Safe Mode and Compaction
 
-Two commands I use constantly:
+When performance degrades mid-session, two commands save the day:
 
-- **`claude --safe-mode`** — Starts Claude Code with all customizations disabled (plugins, MCP servers, hooks). If the problem disappears, you know one of your extensions is the culprit. I use this to bisect which MCP server is causing startup delays.
-- **`/compact`** — Reduces context size. The real power is `/compact keep only the plan and the diff`, which strips everything except what you're actively working on. I run this before every major task switch.
+- **`claude --safe-mode`** — launches Claude Code with zero customizations: no plugins, no MCP servers, no hooks. If the problem disappears, one of your customizations is the culprit. Binary search your MCP servers from there.
+- **`/compact`** — reduces context size by summarizing older conversation turns. I run `/compact keep only the plan and the diff` every 30-40 turns in a long session. Without it, auto-compaction kicks in and starts thrashing, which actually makes things worse.
 
 ### Session Recovery
 
-Crashes happen. `claude --resume` in the same directory picks up your previous session after a restart. Combined with `/clear` to drop irrelevant conversation history, this makes long-running sessions manageable. For persistent issues, `/feedback` sends diagnostics directly to Anthropic.
+Crashes happen. `claude --resume` in the same directory picks up your previous session. If the session file is corrupted, `/clear` starts fresh without losing your CLAUDE.md project config. And `/feedback` sends debug logs directly to Anthropic — use it when you hit something that feels like a real bug. For sharing session outputs, check out the [Claude Code Artifacts guide](/posts/claude-code-artifacts-guide-2026-live-shareable-previews-from-ai-coding-sessions/) for live previews.
 
-### Common Failure Patterns
+### Common Claude Code Issues I've Hit
 
-| Symptom | First Thing to Try |
-|---|---|
-| High CPU / memory | `/heapdump` then `/compact` |
-| MCP servers not loading | `claude --safe-mode` |
-| Garbled terminal text | `/terminal-setup` or disable GPU acceleration |
-| Slow search on WSL | Install ripgrep, set `USE_BUILTIN_RIPGREP=0` |
-| 529 / 429 errors | Wait, then use `/compact` to reduce context |
-| Auto-compaction thrashing | Read large files in chunks, use sub-agents |
+| Symptom | Likely Cause | Fix |
+|---|---|---|
+| High CPU, fan spinning | Context too large | `/compact` or `/clear`, restart |
+| Garbled terminal text | GPU acceleration in editor | `terminal.integrated.gpuAcceleration: off` |
+| Slow search on WSL | Missing ripgrep | Install ripgrep, set `USE_BUILTIN_RIPGREP=0` |
+| 529 Overloaded | API capacity | Wait 30s, retry. Use off-peak hours |
+| MCP servers not loading | Config syntax error | `claude --safe-mode` to isolate |
 
-For more on Claude Code's broader capabilities, check out the [Claude Code Artifacts guide](/posts/claude-code-artifacts-guide-2026-live-shareable-previews-from-ai-coding-sessions/).
+## Codex CLI: TOML Config and the Hidden TUI Log
 
-## Codex CLI: TOML Config and Plaintext Logs
+Codex CLI takes a different approach. Where Claude Code has slash commands, Codex has a configuration file and a log directory.
 
-Codex CLI takes a different approach. Its debugging story centers on configuration files and log directories rather than interactive commands.
+### Finding the Logs
 
-### Log Directory Setup
+Codex writes logs to `$CODEX_HOME/log` by default. Setting `CODEX_HOME` explicitly also enables the opt-in plaintext TUI log (`codex-tui.log`), which is invaluable for debugging startup issues. If Codex CLI fails to launch or crashes immediately, check that file first — it captures what happened before the TUI even started.
 
-Codex writes logs to `$CODEX_HOME/log` by default. Setting this explicitly also enables the opt-in plaintext TUI log (`codex-tui.log`), which is invaluable for seeing what Codex is doing in real time. I set `CODEX_HOME` in my shell profile and tail the log during long operations:
-
-```bash
-export CODEX_HOME="$HOME/.codex"
-tail -f "$CODEX_HOME/log/codex-tui.log"
-```
-
-### Configuration Debugging
-
-Codex uses `~/.codex/config.toml` (TOML format, not JSON or YAML). The key sections for debugging are:
+The config lives at `~/.codex/config.toml` in TOML format. Here's a debug-oriented config I use:
 
 ```toml
-[mcp_servers.my-server]
-command = "npx"
-args = ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"]
-bearer_token_env_var = "MY_SERVER_TOKEN"
+[logging]
+log_dir = "/home/me/.codex/logs"
+level = "debug"
 
-# Force a specific auth method
-forced_login_method = "chatgpt"  # or "api_key"
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@github/github-mcp-server"]
+env = { GITHUB_PERSONAL_ACCESS_TOKEN = "${GITHUB_TOKEN}" }
 ```
 
-If MCP servers aren't loading, check the `[mcp_servers]` section first. The `bearer_token_env_var` field is particularly useful for HTTP-transport MCP servers — it sources the token from an environment variable rather than hardcoding it.
+### Authentication Debugging
 
-### Auth Troubleshooting
+Codex CLI caches login details in a plaintext file at `~/.codex/auth.json`. Tokens refresh automatically during use, but if you're getting auth errors, check:
 
-Codex supports ChatGPT login (recommended) and API key auth. If you're getting auth failures:
+1. **MFA requirements** — Email/password login requires MFA. Social login (Google, Microsoft, Apple) doesn't.
+2. **Forced login method** — Set `forced_login_method = "chatgpt"` or `"api_key"` in config.toml to enforce one auth path.
+3. **Bearer token env var** — For MCP HTTP servers, use `bearer_token_env_var` in the MCP server config to source tokens from environment variables rather than hardcoding.
 
-- **MFA required** for email/password login. Social login (Google, Microsoft, Apple) doesn't need MFA.
-- **Login caching** stores credentials in a plaintext file. Tokens refresh automatically during use.
-- **Forced login method** — set `forced_login_method` in config to lock to one auth path.
+### MCP OAuth Gotcha
 
-### Snapshot Shell and Login Shell
-
-Two config options that affect debugging:
-
-- **`snapshot_shell`** (on by default) — Snapshots the shell environment to speed up repeated commands. Turn it off if you're changing environment variables between commands and they're not being picked up.
-- **`allow_login_shell`** — Uses login-shell semantics for shell-based tools. Enable this if your tools depend on profile files.
+Codex CLI supports MCP OAuth with an optional fixed port for the callback server. If you're running in a devbox or behind ingress, set the base callback URL override. Without it, the OAuth redirect URL defaults to localhost and breaks in proxied environments.
 
 ## GitHub MCP Server: Structured Error Types
 
-The GitHub MCP Server is unique among these four because it's a server, not a CLI agent. Its debugging story is about structured error handling rather than log files.
+The GitHub MCP Server handles errors differently from the coding agents — it uses typed error objects that bubble through the MCP framework.
 
-### Error Types
+### Error Types You'll Encounter
 
-The server defines two custom error types that bubble up through the MCP framework:
+The server defines two custom error types:
 
-- **`GitHubAPIError`** — For REST API errors. Contains `Message`, `Response` (the full `*github.Response` object), and `Err` fields.
-- **`GitHubGraphQLError`** — For GraphQL API errors. Contains `Message` and `Err` fields.
+- **`GitHubAPIError`** — for REST API errors. Contains `Message`, `Response` (the full `*github.Response` object), and `Err` fields. When a tool call fails with a 404 or 403, this is what you get.
+- **`GitHubGraphQLError`** — for GraphQL API errors. Contains `Message` and `Err` fields. GraphQL errors are trickier because the HTTP status is 200 even when the query fails — you have to inspect the error body.
 
-These errors are stored in context for middleware inspection. You can retrieve them with:
+Both types are stored in Go context via `errors.ContextWithGitHubErrors(ctx)` and retrieved with `errors.GetGitHubAPIErrors(ctx)` / `errors.GetGitHubGraphQLErrors(ctx)`. If you're building a custom MCP host, this middleware pattern lets you inspect all errors from a session in one place.
 
-```go
-errors.GetGitHubAPIErrors(ctx)
-errors.GetGitHubGraphQLErrors(ctx)
-```
+### Authentication Options
 
-### Design Philosophy
+The GitHub MCP Server supports three auth methods:
 
-The error handling follows a clear split:
+1. **OAuth (browser-based)** — Token lives in memory only. Best for local development.
+2. **Personal Access Token** — Set `GITHUB_PERSONAL_ACCESS_TOKEN` env var. Minimum scopes: `repo`, `read:packages`, `read:org`. Store in `.env`, never commit.
+3. **GitHub App** — For GitHub Enterprise Server (GHES/ghe.com). Use `--gh-host https://your-subdomain.ghe.com`.
 
-- **User-actionable errors** (auth failures, rate limits, 404s) → Failed tool calls that the agent can handle
-- **Developer errors** (JSON marshaling, internal logic) → Go errors that bubble up through the MCP framework
+For enterprise setups, the `--gh-host` flag is required with the `https://` prefix. I've seen teams waste hours debugging "not found" errors only to realize the host flag was missing.
 
-This means if you're building an agent that uses GitHub MCP, you should handle the first category in your agent's error recovery logic and let the second category crash to a log.
+### Insiders Mode
 
-### Authentication Methods
+Add `/insiders` to the URL path or set the `X-MCP-Insiders` header for early access to new features. Useful for testing, but don't rely on it in production — insiders features can change without notice.
 
-The server supports three auth methods, and getting them wrong is the most common source of errors:
+## Playwright MCP: Browser-Level Debugging
 
-1. **OAuth** (browser-based, token stays in memory) — Best for interactive use
-2. **Personal Access Token** (via `GITHUB_PERSONAL_ACCESS_TOKEN` env var) — Best for CI/CD
-3. **GitHub App** — Required for GitHub Enterprise Server
-
-Minimum PAT scopes: `repo`, `read:packages`, `read:org`. Store in `.env` files, never commit.
-
-### Remote vs Local
-
-The server can run remotely at `https://api.githubcopilot.com/mcp/` or locally via Docker (`ghcr.io/github/github-mcp-server`). For debugging, I prefer the local server with `--gh-host` pointing to my GHES instance — it gives me direct log output and I can restart it independently of the agent.
-
-For a broader comparison of MCP capabilities across agents, see the [AI Coding Agent Capability Matrix](/posts/ai-coding-agent-capability-matrix-2026/).
-
-## Playwright MCP: Console Levels and Browser Tracing
-
-Playwright MCP is the most configurable of the four when it comes to debug output. It's also the one most likely to need debugging, because browser automation is inherently flaky.
+Playwright MCP is unique among these tools because it controls a real browser — similar to how [GitHub Copilot's browser tools](/posts/github-copilot-browser-tools-guide-2026/) work in VS Code, but with more granular control. Its debug features are built around browser instrumentation rather than log files.
 
 ### Console Level Filtering
 
-The most important debug setting is the console level:
-
-```bash
-npx @playwright/mcp --console-level debug
-# or
-export PLAYWRIGHT_MCP_CONSOLE_LEVEL=debug
-```
-
-Levels cascade: `error` < `warning` < `info` < `debug`. I run at `debug` during development and `warning` in production. The debug level shows every browser console message, network request, and page event — noisy but essential when a test is failing silently.
+Set the console output level with `--console-level <level>` or `PLAYWRIGHT_MCP_CONSOLE_LEVEL` env var. Values: `error`, `warning`, `info`, `debug`. Each level includes all more severe levels. I keep mine at `info` during development and bump to `debug` when a page interaction silently fails.
 
 ### Output Modes
 
-Playwright MCP supports two output modes:
+`--output-mode <mode>` controls where Playwright MCP writes its output. Two options:
 
-- **`stdout`** (default) — Output goes to stdout. Good for local development.
-- **`file`** — Output goes to `--output-dir`. Essential for CI/CD where you need to collect artifacts.
+- **`stdout`** (default) — Output goes to standard out. Good for local development.
+- **`file`** — Writes to `--output-dir <path>`. Essential for CI/CD pipelines where stdout is ephemeral.
 
-Set `--output-max-size` to control when old output files get evicted. I use 50MB for CI runs.
+Set `--output-max-size <bytes>` to control when old output files get evicted. I use 50 MB for long-running test suites.
 
 ### Browser Tracing and Step Debugging
 
-Two features that save me hours:
+This is where Playwright MCP shines:
 
-- **`browser_start_tracing` / `browser_stop_tracing`** — Records a Playwright trace that you can open in the Playwright Trace Viewer. This shows every network request, DOM mutation, and screenshot. I start tracing before any flaky test and stop it after.
-- **`browser_pause` / `browser_resume`** — Pauses the browser at the current state. `browser_resume` with `step=true` pauses before the next action, letting you step through interactions one at a time.
+- **`browser_start_tracing` / `browser_stop_tracing`** — Records a full browser trace (network requests, console logs, DOM mutations). Open the trace file in `https://trace.playwright.dev` for a frame-by-frame replay of what the browser did.
+- **`browser_pause` / `browser_resume`** — Pauses and resumes execution. `browser_resume` with `step=true` pauses before the next action, giving you frame-by-frame control.
 - **`browser_set_debugger`** — Pauses at a specific `<file>:<line>` location. Think of it as a breakpoint for browser automation.
 
-### Headless vs Headed
+I use tracing when a Playwright MCP test passes locally but fails in CI. The trace replay shows exactly where the page state diverged — usually a timing issue or a missing network response.
 
-By default, Playwright MCP runs **headed** (you see the browser window). This is great for debugging but annoying in CI. Use `--headless` or `PLAYWRIGHT_MCP_HEADLESS=true` for automated runs.
+### Headless vs. Headed
 
-For containerized environments, you'll likely need `--no-sandbox`. And if you're testing against a local dev server with self-signed certs, `--ignore-https-errors` is your friend.
+Playwright MCP runs **headed by default** (you see the browser window). For CI or headless servers, pass `--headless`. In containerized environments, you may also need `--no-sandbox` and `--ignore-https-errors` depending on your setup.
 
-### Session Persistence
+### Persistent Profiles
 
-Playwright MCP stores session data (cookies, localStorage) at a platform-specific location. Use `--user-data-dir` to override this, or `--isolated` to keep everything in memory (no disk writes). The `--save-session` flag saves the session into the output directory for later replay.
+Session data (cookies, localStorage, IndexedDB) is stored at a platform-specific location by default. Override with `--user-data-dir` to share sessions across runs. For security-sensitive tasks, use `--isolated` to keep the profile in memory only — nothing touches disk.
 
-For more on browser-based agent workflows, see the [GitHub Copilot Browser Tools guide](/posts/github-copilot-browser-tools-guide-2026/).
+## Cross-Tool Debug Patterns
 
-## Cross-Tool Debugging Patterns
+After debugging all four tools in anger, here are the patterns that apply across the board:
 
-After using all four tools, here are the patterns that apply across the board:
+### 1. Environment Variables Are Your First Log
 
-### 1. Environment Variables Are Your First Debug Tool
+Every tool in this guide respects environment variables for debug configuration. Before you open a log file, check that your env vars are set correctly. A typo in `PLAYWRIGHT_MCP_CONSOLE_LEVEL` or a missing `GITHUB_PERSONAL_ACCESS_TOKEN` will fail silently.
 
-Every one of these tools respects environment variables for debug configuration. Before diving into config files or interactive commands, check what env vars are available:
+### 2. MCP Server Health Check
 
-- Claude Code: `CLAUDE_CODE_*` vars
-- Codex CLI: `CODEX_HOME`, `OPENAI_API_KEY`
-- GitHub MCP: `GITHUB_PERSONAL_ACCESS_TOKEN`, `GITHUB_TOKEN`
-- Playwright MCP: `PLAYWRIGHT_MCP_*` vars
+When an MCP server won't connect, the problem is almost always one of three things:
+- **Port conflict** — Another process is using the port. `lsof -i :<port>` to check.
+- **Auth mismatch** — The token or OAuth session expired. Re-authenticate.
+- **Path issue** — The `command` in your MCP config isn't on the agent's PATH. Use absolute paths in MCP server configs.
 
-### 2. MCP Connection Issues Are the Most Common Failure
+### 3. Session Persistence Is Fragile
 
-All four tools support MCP, and MCP connection issues are the single most common source of debugging pain. The fix is almost always:
+Both Claude Code (`--resume`) and Codex CLI (auth cache) support session persistence, but neither is bulletproof. If you're running long-lived agent sessions, build checkpointing into your workflow — commit frequently, save intermediate results, and don't trust session files as your only state.
 
-- Check that the MCP server process is actually running
-- Verify the transport (stdio vs HTTP) matches what the agent expects
-- Check environment variables are being forwarded to the MCP server process
-- For HTTP transport, verify the port and URL
+## Which Debug Approach Fits Your Workflow?
 
-### 3. Session Persistence Is Not a Given
+- **Claude Code** — Best debug tooling overall. Use `/doctor` for triage, `/heapdump` for memory issues, and `/compact` for context management. If you're running Claude Code daily, learn these commands.
+- **Codex CLI** — Best for config-driven debugging. The TOML config and log directory give you fine-grained control. Use when you need to debug MCP server connections or auth flows.
+- **GitHub MCP Server** — Best for API-level debugging. The typed error objects and context middleware make it the most engineer-friendly MCP server to troubleshoot. Use when you're building custom MCP hosts.
+- **Playwright MCP** — Best for browser-level debugging. Tracing and step debugging are unmatched for diagnosing flaky browser automation. Use when your tests pass locally but fail in CI.
 
-Claude Code and Codex CLI both support session resume after crashes. GitHub MCP and Playwright MCP don't — they're stateless by design. If you're doing long-running work, prefer Claude Code or Codex CLI, or build your own session management around the stateless tools.
-
-### 4. Log Levels Matter
-
-Claude Code has `/doctor`, Codex CLI has `codex-tui.log`, Playwright MCP has `--console-level`, and GitHub MCP has structured error types. Learn the debug entry point for each tool before you need it — reading docs during an outage is never fun.
-
-## Quick Reference: Where to Look First
-
-| Tool | First Debug Step | Log Location |
-|---|---|---|
-| Claude Code | `/doctor` or `claude doctor` | Heap dump via `/heapdump` |
-| Codex CLI | `tail -f $CODEX_HOME/log/codex-tui.log` | `$CODEX_HOME/log/` |
-| GitHub MCP | Check `GITHUB_PERSONAL_ACCESS_TOKEN` | Structured errors in context |
-| Playwright MCP | `--console-level debug` | `--output-dir` or stdout |
-
-The reality is that AI coding agents in 2026 are still maturing. Each tool has its own debugging philosophy — Claude Code gives you interactive commands, Codex CLI gives you config files, GitHub MCP gives you structured errors, and Playwright MCP gives you browser-level tracing. None of them have a unified debug dashboard or a single log file that tells you everything.
-
-But if you learn the debug entry point for each tool and keep a terminal tailing the relevant log, you'll cut your troubleshooting time by at least half. That's been my experience, and I've been doing this full-time since early 2026.
+The reality is that most teams will use all four. Claude Code or Codex CLI as the primary coding agent, GitHub MCP for repository operations, and Playwright MCP for browser testing. Knowing the debug patterns for each one — before they break — is what separates a smooth workflow from a frustrating afternoon of staring at a silent terminal.
 
 ## FAQ
 
-### Why does Claude Code freeze or slow down on large codebases?
+### How do I enable verbose logging in Claude Code?
 
-Claude Code's context window fills up as your conversation grows. Run `/compact` to reduce context size, or `/compact keep only the plan and the diff` to strip everything except your active work. If memory usage is high, run `/heapdump` and inspect the heap snapshot in Chrome DevTools. For very large codebases, consider using sub-agents to parallelize work across smaller context windows.
+Claude Code doesn't have a traditional verbose log flag. Instead, use `/doctor` for a health check, `/compact` to inspect context usage, and `claude --safe-mode` to isolate whether a plugin or MCP server is causing issues. For memory profiling, `/heapdump` writes a Chrome-compatible heap snapshot. If you need raw output, run `claude --verbose` from the shell — it prints more detail about tool calls and API requests.
 
-### Codex CLI keeps failing to connect to my MCP server. What should I check first?
+### Codex CLI logs are empty — what's wrong?
 
-Three things in order: (1) Verify the MCP server process is running — `ps aux | grep <server-name>`. (2) Check your `~/.codex/config.toml` `[mcp_servers]` section for typos in the command, args, or `bearer_token_env_var`. (3) If using HTTP transport, confirm the port matches and the URL is reachable. Codex's `codex-tui.log` (enabled by setting `CODEX_HOME` explicitly) will show connection errors in plain text.
+If `$CODEX_HOME/log` is empty, you probably haven't set `CODEX_HOME` explicitly. Codex only writes the plaintext TUI log (`codex-tui.log`) when `CODEX_HOME` is set as an environment variable. Without it, logs go to a default location that may not be obvious. Set `CODEX_HOME=/home/you/.codex` in your shell profile, then restart Codex. Also check that your `config.toml` has a `[logging]` section with `level = "debug"`.
 
-### Can I use GitHub MCP Server with GitHub Enterprise Server?
+### Why does my GitHub MCP server return 404 for repos I can access?
 
-Yes. Start the local Docker server with `--gh-host https://your-ghes-instance.com`. You'll need a GitHub App for authentication — PAT and OAuth won't work with GHES. The server also supports `ghe.com` subdomains with the same `--gh-host` flag. For the remote server at `api.githubcopilot.com/mcp/`, GHES is not supported.
+This is almost always an authentication issue, not a missing repo. If you're using a Personal Access Token, verify it has the `repo` scope. If you're using OAuth, the token may have expired — re-authenticate. For GitHub Enterprise Server, the `--gh-host` flag must include the `https://` prefix (e.g., `--gh-host https://git.yourcompany.com`). Without it, the server defaults to github.com and can't find your enterprise repos.
 
-### Playwright MCP opens a browser window in CI. How do I make it headless?
+### Playwright MCP tests pass locally but fail in CI — how do I debug this?
 
-Set `--headless` on the command line or `PLAYWRIGHT_MCP_HEADLESS=true` in your environment. By default Playwright MCP runs headed, which is useful for local debugging but breaks headless CI runners. You'll also want `--no-sandbox` in containerized environments and `--output-mode file` with `--output-dir` to collect artifacts.
+Use browser tracing. Add `browser_start_tracing` before the failing interaction and `browser_stop_tracing` after it. Open the trace file in [trace.playwright.dev](https://trace.playwright.dev) for a frame-by-frame replay. The most common CI-specific issues are: headed mode not available (pass `--headless`), sandbox restrictions (pass `--no-sandbox` in containers), and missing environment variables like `PLAYWRIGHT_MCP_CONSOLE_LEVEL`. Also check that `--output-mode file` is set so logs persist after the CI job ends.
 
-### Which tool has the best session recovery after a crash?
+### Can I use Claude Code and Codex CLI together in the same project?
 
-Claude Code and Codex CLI both support session resume — `claude --resume` and Codex's automatic token refresh, respectively. GitHub MCP and Playwright MCP are stateless by design and don't persist sessions. For long-running work where crashes are costly, Claude Code's `/compact` + `--resume` workflow is the most robust. For stateless tools, build your own checkpointing by saving state to disk at each step.
+Yes, but with caveats. Both tools respect `CLAUDE.md` / project config files, but they use different formats — Claude Code uses Markdown-based CLAUDE.md, while Codex uses TOML-based `config.toml` and `requirements.toml`. They won't interfere with each other, but you'll need to maintain two config files. I run Claude Code for architecture and planning work, then switch to Codex CLI for tasks where I want the ChatGPT subscription's model access. The MCP server configs are shared — both tools read the same MCP server binaries, so you only configure GitHub MCP or Playwright MCP once.
