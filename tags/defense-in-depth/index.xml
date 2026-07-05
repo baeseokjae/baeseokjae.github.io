@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Defense-in-Depth on RockB</title><link>https://baeseokjae.github.io/tags/defense-in-depth/</link><description>Recent content in Defense-in-Depth on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sat, 04 Jul 2026 12:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/defense-in-depth/index.xml" rel="self" type="application/rss+xml"/><item><title>Clean Repo Prompt Injection Defense Guide 2026: Protect AI Coding Agents Before Setup Scripts Run</title><link>https://baeseokjae.github.io/posts/clean-repo-prompt-injection-defense-guide-2026/</link><pubDate>Sat, 04 Jul 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/clean-repo-prompt-injection-defense-guide-2026/</guid><description>A practical 2026 guide to defending against Clean Repo prompt injection attacks on AI coding agents — before setup scripts, package installs, or agent instructions execute.</description><content:encoded><![CDATA[<p>On June 25, 2026, the Mozilla 0DIN team demonstrated an attack that should change how every team deploys AI coding agents. They published a normal-looking Python repository on GitHub. A developer cloned it and pointed Claude Code at it. The agent read the README, installed the requirements, hit a routine initialization error, and — trying to be helpful — ran the suggested fix. That fix queried a DNS TXT record, decoded the value, and executed it as a shell command, opening a reverse shell on the developer&rsquo;s machine.</p>
+<p>The repository had no malicious code. No obfuscated payloads. No suspicious imports. The final payload was fetched at runtime from a DNS record, invisible to every static scanner, code reviewer, and dependency auditor in the pipeline. This is the Clean Repo attack, and it exploits a fundamental architectural trust gap that no single vendor has fully solved.</p>
+<p>I&rsquo;ve spent the last few weeks digging into this attack surface, the defenses that actually work, and the ones that don&rsquo;t. Here&rsquo;s what I found and exactly how to protect your agents before setup scripts run.</p>
+<h2 id="how-the-clean-repo-attack-works">How the Clean Repo Attack Works</h2>
+<p>The attack chain has five stages, and the critical insight is that none of them look malicious in isolation.</p>
+<p><strong>Stage 1: Trust Assumption.</strong> The developer clones a repository and points their AI coding agent at it. The agent reads project files — README.md, AGENTS.md, CLAUDE.md, .cursorrules, setup.py, requirements.txt — as trusted instructions. These files originate from an untrusted external source, but the agent has no built-in mechanism to distinguish &ldquo;instructions from the project&rdquo; from &ldquo;instructions from the developer.&rdquo;</p>
+<p><strong>Stage 2: Setup Execution.</strong> The agent follows the documented setup flow. It runs <code>pip install -r requirements.txt</code>, which installs legitimate packages. It runs the initialization script. Everything looks normal.</p>
+<p><strong>Stage 3: Error Fabrication.</strong> The setup script produces an error message that looks like a routine configuration issue. The error message is designed to trigger the agent&rsquo;s helpfulness reflex — the agent sees a problem and wants to fix it.</p>
+<p><strong>Stage 4: Payload Delivery.</strong> The agent runs the &ldquo;suggested fix&rdquo; from the error output. The fix makes a DNS TXT record query. The response contains a base64-encoded payload that the agent decodes and executes. Because the payload is fetched at runtime, no static analysis tool ever sees it.</p>
+<p><strong>Stage 5: Compromise.</strong> The payload opens a reverse shell. The attacker now has access under the developer&rsquo;s own user account — source code, browser sessions, API keys, GitHub tokens, AWS credentials, SSH material, everything.</p>
+<p>The Mozilla 0DIN PoC targeted Claude Code, but the technique generalizes. A January 2026 systematic review on arXiv analyzed 314 prompt-injection payloads across 70 MITRE ATT&amp;CK techniques and found success rates as high as 84% for malicious command execution against GitHub Copilot and Cursor. The attack is not vendor-specific — it exploits how every AI coding agent processes project files.</p>
+<h2 id="why-traditional-defenses-fail-here">Why Traditional Defenses Fail Here</h2>
+<p>Most teams&rsquo; first instinct is to add a warning banner: &ldquo;This repository contains files that will influence your AI agent.&rdquo; That&rsquo;s what Anthropic added to Claude Code after the 0DIN disclosure. It&rsquo;s not enough.</p>
+<p>The arXiv review found that most published defenses achieve less than 50% mitigation against sophisticated adaptive attacks. Attackers tune payloads to evade detection. A warning banner that a developer clicks through becomes a ritual, not a safeguard. Filtering rules get bypassed by encoding tricks. Static scanners miss runtime-fetched payloads by definition.</p>
+<p>The problem is architectural. AI coding agents are designed to be helpful — to read project context, follow instructions, and execute setup steps autonomously. That helpfulness is the attack surface. You can&rsquo;t fix it with a single banner or a regex filter.</p>
+<h2 id="the-10-layer-defense-in-depth-framework">The 10-Layer Defense-in-Depth Framework</h2>
+<p>After reviewing the Mozilla 0DIN research, the Lushbinary production playbook, the arXiv systematic review, and the OWASP Top 10 for LLMs, I&rsquo;ve settled on a 10-layer defense framework. No single layer is sufficient, but together they provide meaningful protection.</p>
+<h3 id="layer-1-pre-scan-repositories-before-agent-execution">Layer 1: Pre-Scan Repositories Before Agent Execution</h3>
+<p>This is the most critical pre-setup defense. Before any AI coding agent reads or executes commands from a repository, scan it for prompt injection indicators.</p>
+<p>I run a pre-flight scanner that checks four things:</p>
+<ul>
+<li><strong>AGENTS.md / CLAUDE.md / .cursorrules</strong> for instruction override patterns — embedded shell commands, DNS query patterns, base64-encoded payloads</li>
+<li><strong>setup.py / package.json</strong> for unexpected network calls or suspicious post-install hooks</li>
+<li><strong>README.md</strong> for embedded shell commands disguised as documentation</li>
+<li><strong>Dependency URLs</strong> for typosquatting or domain lookalikes</li>
+</ul>
+<p>If any trigger fires, block execution and flag the repository for manual review. This catches the obvious attacks and forces attackers to work harder.</p>
+<h3 id="layer-2-sandboxed-execution-with-network-isolation">Layer 2: Sandboxed Execution with Network Isolation</h3>
+<p>Even if an injection succeeds, the sandbox limits the blast radius. I run all agent actions in Docker containers with these flags:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>docker run --rm <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --network<span style="color:#f92672">=</span>none <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --read-only <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --tmpfs /tmp:size<span style="color:#f92672">=</span>100m,noexec,nosuid <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --memory<span style="color:#f92672">=</span>512m <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --cpus<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --security-opt<span style="color:#f92672">=</span>no-new-privileges <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --cap-drop<span style="color:#f92672">=</span>ALL <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -v /workspace:/workspace:ro <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  my-agent-image
+</span></span></code></pre></div><p>The key flags are <code>--network=none</code> (the Mozilla 0DIN attack required a DNS query — no network, no payload delivery) and <code>--read-only</code> (the agent can&rsquo;t write malicious files to the host). For stronger isolation, gVisor or Firecracker microVMs add a kernel-level security boundary.</p>
+<h3 id="layer-3-instruction-hierarchy-with-content-boundary-markers">Layer 3: Instruction Hierarchy with Content Boundary Markers</h3>
+<p>Establish a clear precedence order: system prompt &gt; application logic &gt; user input &gt; external data. Modern models like GPT-5.5 and Claude Opus 4.7 support explicit instruction hierarchy through API parameters.</p>
+<p>I wrap all external content in delimiters:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 216 57"
+      >
+      <g transform='translate(8,16)'>
+<path d='M 0,0 L 8,0' fill='none' stroke='currentColor'></path>
+<path d='M 0,32 L 8,32' fill='none' stroke='currentColor'></path>
+<text text-anchor='middle' x='0' y='20' fill='currentColor' style='font-size:1em'>$</text>
+<text text-anchor='middle' x='8' y='20' fill='currentColor' style='font-size:1em'>{</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='16' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='16' y='36' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>B</text>
+<text text-anchor='middle' x='24' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='24' y='36' fill='currentColor' style='font-size:1em'>E</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>E</text>
+<text text-anchor='middle' x='32' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='32' y='36' fill='currentColor' style='font-size:1em'>N</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>G</text>
+<text text-anchor='middle' x='40' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='40' y='36' fill='currentColor' style='font-size:1em'>D</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>I</text>
+<text text-anchor='middle' x='48' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>N</text>
+<text text-anchor='middle' x='56' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='56' y='36' fill='currentColor' style='font-size:1em'>U</text>
+<text text-anchor='middle' x='64' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='64' y='36' fill='currentColor' style='font-size:1em'>N</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>U</text>
+<text text-anchor='middle' x='72' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='72' y='36' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>N</text>
+<text text-anchor='middle' x='80' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='80' y='36' fill='currentColor' style='font-size:1em'>R</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='88' y='20' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='88' y='36' fill='currentColor' style='font-size:1em'>U</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>R</text>
+<text text-anchor='middle' x='96' y='20' fill='currentColor' style='font-size:1em'>F</text>
+<text text-anchor='middle' x='96' y='36' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>U</text>
+<text text-anchor='middle' x='104' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='104' y='36' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='112' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='112' y='36' fill='currentColor' style='font-size:1em'>E</text>
+<text text-anchor='middle' x='120' y='4' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='120' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='120' y='36' fill='currentColor' style='font-size:1em'>D</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>E</text>
+<text text-anchor='middle' x='128' y='20' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>D</text>
+<text text-anchor='middle' x='136' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='136' y='36' fill='currentColor' style='font-size:1em'>D</text>
+<text text-anchor='middle' x='144' y='20' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='144' y='36' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='152' y='4' fill='currentColor' style='font-size:1em'>D</text>
+<text text-anchor='middle' x='152' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='152' y='36' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='160' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='160' y='36' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='168' y='20' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='168' y='36' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='176' y='4' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='176' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='176' y='36' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='184' y='4' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='184' y='20' fill='currentColor' style='font-size:1em'>}</text>
+<text text-anchor='middle' x='184' y='36' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='192' y='4' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='200' y='4' fill='currentColor' style='font-size:1em'>-</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>The model should never override system-level constraints based on content from lower-priority sources. This is the most effective model-level defense, but it requires the model to respect the hierarchy — not all models do consistently.</p>
+<h3 id="layer-4-least-privilege-agent-configuration">Layer 4: Least-Privilege Agent Configuration</h3>
+<p>Agents should not inherit full developer credentials. I run agents under constrained service accounts with scoped permissions:</p>
+<ul>
+<li><strong>Read-only access</strong> to specific repositories, not the entire filesystem</li>
+<li><strong>No write access</strong> to production systems</li>
+<li><strong>No access</strong> to credential stores or secret managers</li>
+<li><strong>Tool allowlist</strong> — only permit known-safe tools (file read, code search, linting)</li>
+<li><strong>Shell command allowlist</strong> — block dangerous operations: <code>curl</code> to external hosts, <code>eval</code>, <code>exec</code>, base64 decode</li>
+</ul>
+<p>The principle is simple: the agent should have exactly the permissions it needs for its task and nothing more. If an injection succeeds, the attacker inherits only those limited permissions.</p>
+<h3 id="layer-5-approval-gates-for-high-risk-actions">Layer 5: Approval Gates for High-Risk Actions</h3>
+<p>Require explicit human approval before:</p>
+<ul>
+<li>File writes to new locations</li>
+<li>Shell commands with network destinations</li>
+<li>Package installs from untrusted sources</li>
+<li>Credential access</li>
+</ul>
+<p>This is the ultimate backstop. Even if all automated defenses fail, a human reviewer can catch malicious actions before they execute. The trick is calibrating which actions require approval — too many gates and developers develop approval fatigue and click through everything. I gate only the high-risk actions and use rate limiting to prevent fatigue.</p>
+<h3 id="layer-6-canary-tokens-in-repositories">Layer 6: Canary Tokens in Repositories</h3>
+<p>Embed fake credentials and API keys in repositories as canary tokens. If an agent accesses or exfiltrates these tokens, the security team is immediately alerted.</p>
+<p>I deploy Thinkst Canarytokens in README files, configuration files, and environment variable templates. When a canary fires, I investigate the agent&rsquo;s activity, review execution logs, and rotate any real credentials that might have been exposed. This provides early warning of successful prompt injection before the attacker achieves their objective.</p>
+<h3 id="layer-7-runtime-defenses--struq-and-secalign">Layer 7: Runtime Defenses — StruQ and SecAlign</h3>
+<p>Academic research has produced two promising runtime defenses. StruQ separates instruction channels from data channels architecturally, achieving less than 2% attack success in controlled studies. SecAlign uses preference optimization to fine-tune models to reject injection attempts, reducing attack success from 96% to 2%.</p>
+<p>These are emerging techniques — not yet production-ready in most toolchains — but they&rsquo;re worth evaluating if you&rsquo;re building custom agent infrastructure. The ETDI (Enhanced Tool Definition Interface) proposal adds cryptographic identity for tools with immutable versioning and OAuth 2.0 scopes, which would make tool-poisoning attacks significantly harder.</p>
+<h3 id="layer-8-audit-logging-and-anomaly-detection">Layer 8: Audit Logging and Anomaly Detection</h3>
+<p>Log every agent-executed action: file reads and writes, shell commands, network requests, API calls. Establish a baseline per agent — normal tool call frequency, typical file access patterns, expected network destinations.</p>
+<p>When an injection succeeds, it often produces anomalous patterns: a sudden spike in tool calls, access to files the agent never normally reads, network requests to unknown destinations. ML-based anomaly detection can flag these deviations in real time. I use this as a safety net — it catches what the other layers miss.</p>
+<h3 id="layer-9-rate-limiting">Layer 9: Rate Limiting</h3>
+<p>Per-session and per-minute tool call caps prevent an attacker from exfiltrating large amounts of data even if they compromise the agent. If the agent normally makes 50 tool calls per session and suddenly makes 500, something is wrong. Rate limiting buys time for the anomaly detection layer to trigger.</p>
+<h3 id="layer-10-human-in-the-loop-governance">Layer 10: Human-in-the-Loop Governance</h3>
+<p>The final layer is organizational. Shadow AI — unsanctioned agent tooling that teams adopt without IT or security oversight — dramatically increases risk because it bypasses every governance control. The CyberUnit analysis of the Mozilla 0DIN attack makes this point clearly: the defense is not to ban tools but to bring them into the light. Known, scoped, monitored, governed.</p>
+<p>I maintain an inventory of every AI coding agent in use, its permissions, its integrations, and its escalation path. When a new tool appears, it goes through a security review before anyone points it at production code.</p>
+<h2 id="putting-it-all-together">Putting It All Together</h2>
+<p>The Clean Repo attack is not a theoretical vulnerability. It&rsquo;s a demonstrated exploit with a published proof of concept, and the underlying technique generalizes across every major AI coding agent. The arXiv review found 84% success rates against Copilot and Cursor. The OWASP Top 10 ranks prompt injection as the number one LLM vulnerability, affecting 73% of production deployments.</p>
+<p>The defense is not a single product or a configuration flag. It&rsquo;s a layered approach that starts before the agent ever reads a file and continues through execution, monitoring, and governance. Pre-scan repositories. Sandbox execution. Enforce instruction hierarchy. Limit permissions. Gate high-risk actions. Deploy canaries. Log everything. Rate limit. And govern the whole thing.</p>
+<p>I&rsquo;ve been running this framework for the last month across my agent deployments. It&rsquo;s not perfect — no defense against adaptive prompt injection ever will be — but it&rsquo;s raised the bar significantly. The Mozilla 0DIN attack would be stopped at Layer 1 (pre-scan detects the DNS query pattern in the setup script) and Layer 2 (network isolation prevents the DNS TXT query). That&rsquo;s the standard I&rsquo;d hold any production agent deployment to.</p>
+<p>For more on related attack surfaces, see my guides on <a href="/posts/agentjacking-mitigation-guide-2026/">Agentjacking Mitigation</a> (securing Sentry, Datadog, and Jira integrations) and <a href="/posts/agent-skills-supply-chain-security-guide-2026/">Agent Skills Supply Chain Security</a> (securing SKILL.md files and marketplace updates). The Clean Repo attack, agentjacking, and supply chain poisoning are all variations on the same theme: agents trust the data they receive, and that trust is the vulnerability.</p>
+]]></content:encoded></item></channel></rss>
