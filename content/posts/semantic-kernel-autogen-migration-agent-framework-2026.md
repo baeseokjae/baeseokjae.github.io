@@ -1,0 +1,210 @@
+---
+cover:
+  alt: Semantic Kernel AutoGen migration to Microsoft Agent Framework 1.0
+  image: /images/semantic-kernel-autogen-migration-agent-framework-2026.png
+  relative: false
+date: 2026-06-14 08:31:57+00:00
+description: A practical Semantic Kernel AutoGen migration guide for moving agents,
+  tools, workflows, and evals to Agent Framework 1.0.
+draft: false
+schema: schema-semantic-kernel-autogen-migration-agent-framework-2026
+tags:
+- Microsoft Agent Framework
+- Semantic Kernel
+- AutoGen
+title: Semantic Kernel AutoGen migration to Microsoft Agent Framework 1.0
+---
+
+Semantic Kernel AutoGen migration should start with inventory, not package replacement. Move simple single-agent paths to Microsoft Agent Framework 1.0 first, preserve working tool contracts, then migrate state, memory, multi-agent workflows, checkpointing, observability, and deployment in controlled phases with rollback coverage.
+
+## Quick Migration Verdict: Who Should Move Now and Who Should Wait
+
+Semantic Kernel AutoGen migration is the process of moving existing Microsoft agent applications from Semantic Kernel or AutoGen into Microsoft Agent Framework 1.0, the production-ready .NET and Python foundation Microsoft announced in April 2026 with stable APIs and long-term-support positioning. Teams should move now when their agents are still close to prototype shape, when they already need MCP, DevUI, Azure AI Foundry hosting, checkpointing, or cross-language consistency, or when new work would otherwise deepen dependency on older abstractions. Teams should wait when the current system is business-critical, has weak regression tests, depends on custom AutoGen group chat behavior, or embeds Semantic Kernel plugins in ways that are not yet documented. The practical answer is not "rewrite everything"; it is "start with low-risk workloads, pin versions, and build migration evidence." The clear takeaway: migrate deliberately, not reactively.
+
+Microsoft has made the direction clear, but production teams still have to protect uptime. A customer-support triage agent with three tools and no persistent memory is a good first mover. A regulated approval agent that stores threaded state, calls internal APIs, and depends on exact streaming behavior needs a slower path. I would treat Agent Framework 1.0 as the default target for new Microsoft agent work and as a staged migration target for existing Semantic Kernel and AutoGen systems.
+
+| Current state | Recommended move | Reason |
+|---|---:|---|
+| New agent project | Start on Agent Framework | Avoid building on an abstraction you already plan to leave |
+| Small Semantic Kernel chatbot | Migrate in phase 1 | Agent and tool mapping is usually straightforward |
+| AutoGen prototype with AssistantAgent | Migrate in phase 1 or 2 | Model client and tool patterns are documented |
+| Complex GroupChat system | Inventory first | Workflow semantics matter more than imports |
+| Production regulated workflow | Wait for test harness | Rollback and auditability are mandatory |
+
+## What Microsoft Agent Framework 1.0 Changes for Semantic Kernel and AutoGen Teams
+
+Microsoft Agent Framework 1.0 is a unified SDK for building production-grade agents and multi-agent workflows in .NET and Python, created by the same Microsoft teams behind Semantic Kernel and AutoGen. In April 2026, Microsoft positioned it as production-ready with stable APIs, long-term-support commitment, MCP support, migration assistants, DevUI, Foundry integration, observability, evaluations, frontend streaming adapters, skills, and agent harness support. For Semantic Kernel teams, the main change is moving away from Kernel-centered construction toward agent and chat-client APIs built on Microsoft.Extensions.AI or the Python `agent_framework` package. For AutoGen teams, the main change is replacing AssistantAgent, model clients, group chat, and runtime patterns with Agent Framework equivalents. The key takeaway: Agent Framework consolidates the useful ideas from both projects behind a production-oriented surface.
+
+The uncomfortable part is that "successor" does not mean "drop-in replacement." Semantic Kernel encouraged a kernel-plus-plugin mental model. AutoGen encouraged conversational agents and group chat patterns. Agent Framework is trying to normalize agents, workflows, tools, state, durability, and hosting behind one model. That is better for long-lived systems, but it forces you to name behavior that may have been implicit.
+
+| Area | Semantic Kernel habit | AutoGen habit | Agent Framework target |
+|---|---|---|---|
+| Core object | Kernel, agent, plugin | AssistantAgent, model client | Agent plus chat client |
+| Tools | KernelFunction, plugins | Python functions, hosted tools | Agent tools and middleware |
+| State | Threads, history, custom stores | Conversation state, runtime state | Sessions, checkpoints, workflows |
+| Multi-agent | Orchestration patterns | GroupChat patterns | Agent Framework workflows |
+| Operations | App-specific tracing | App-specific logging | Observability, evals, DevUI |
+
+## Pre-Migration Inventory: Agents, Tools, State, Memory, Workflows, and Evals
+
+Pre-migration inventory is the technical audit that records every agent, model, prompt, tool, state store, memory dependency, workflow, evaluation, and deployment boundary before code is moved. A real system can hide 30 or more tool contracts behind a single Semantic Kernel plugin folder or AutoGen agent registry, and one undocumented schema change can break production callers. Inventory should capture package versions, model providers, token settings, retry rules, streaming behavior, tool JSON schemas, vector indexes, human approval steps, logging fields, and rollback owners. It should also classify workloads by risk: stateless single-agent calls, stateful conversations, tool-heavy workflows, and multi-agent orchestration. The clear takeaway: a migration plan that lacks an inventory is just a rewrite with better branding.
+
+I use a simple spreadsheet or YAML manifest for the first pass. Do not over-engineer it. The point is to expose coupling before it surprises you. For each agent, record the call path, owner, expected latency, failure mode, and tests. For each tool, capture inputs, outputs, side effects, auth scope, and idempotency. For each memory dependency, note whether data can be replayed, rebuilt, or must be preserved exactly.
+
+### What should the minimum migration inventory include?
+
+A minimum migration inventory is a one-page-per-workload record that tells an engineer how the current agent behaves and how to prove the migrated version is equivalent. Include current framework, language, package version, model provider, prompt source, tools, state storage, streaming behavior, eval baseline, and rollback switch. If that document cannot explain what happens after a tool failure, the migration is not ready.
+
+## Semantic Kernel to Agent Framework Mapping: Packages, Agents, Sessions, Tools, and Invocation
+
+Semantic Kernel to Agent Framework mapping is the translation from Kernel-centered objects, plugins, functions, threads, and invocation calls into Agent Framework packages, agents, sessions, tools, and chat clients. Microsoft documents Python installation as `agent-framework` with imports from `agent_framework`, while .NET projects can add packages such as `Microsoft.Agents.AI`; the June 2026 NuGet and PyPI listings show active post-1.0 iteration, so version pinning matters. Existing `KernelFunction` and vector-store investments do not have to be discarded because compatibility helpers and adapter patterns can expose them as Agent Framework tools. The migration is usually least risky when agents are recreated first, sessions are mapped second, and tool invocation is validated last. The clear takeaway: preserve proven Semantic Kernel assets, but stop making Kernel the center of new agent construction.
+
+For .NET teams, the first mechanical step is usually package cleanup. Remove only what the migrated slice no longer needs, add the Agent Framework package, and keep old Semantic Kernel code behind an adapter until tests pass. For Python teams, separate provider-specific packages from broad framework dependencies once the migration stabilizes. Do not combine dependency cleanup with behavior changes unless you enjoy debugging three failures at once.
+
+| Semantic Kernel concept | Agent Framework migration target | Risk |
+|---|---|---|
+| Kernel construction | Agent and chat client construction | Medium |
+| Kernel plugin | Tool collection or adapter | Medium |
+| KernelFunction | Agent Framework tool | Low to medium |
+| ChatCompletionAgent | Agent equivalent | Medium |
+| Thread/session history | Session or conversation state | High |
+| VectorStore search | Tool or memory adapter | Medium |
+
+### How should Semantic Kernel plugins move?
+
+Semantic Kernel plugins should move as stable tool boundaries, not as copied implementation folders. Keep the plugin's public function names, argument schema, validation, side effects, and error semantics stable while changing only the registration layer. When callers depend on exact names, preserve aliases during rollout. The migration is done when contract tests pass against both old and new registrations.
+
+## AutoGen to Agent Framework Mapping: Model Clients, AssistantAgent, Tools, GroupChat, and Runtime Patterns
+
+AutoGen to Agent Framework mapping is the conversion of AutoGen model clients, AssistantAgent instances, tool functions, hosted tools, MCP integrations, group chats, middleware, custom agents, checkpointing, and human-in-the-loop behavior into Agent Framework equivalents. Microsoft's official AutoGen guide describes Agent Framework as the new multi-language foundation built by core AutoGen and Semantic Kernel teams, which matters because AutoGen users are not being asked to abandon the agent design model entirely. The highest-risk mappings are group chat, custom runtime hooks, and conversation state; the lower-risk mappings are simple AssistantAgent workloads with plain tools and provider-backed model clients. Start by migrating one AssistantAgent that has deterministic tools and a known eval set. The clear takeaway: AutoGen migration is mostly about replacing runtime orchestration while preserving agent responsibilities.
+
+AutoGen users should pay special attention to emergent behavior. If a GroupChat manager depended on conversational side effects, the new workflow must encode those rules explicitly. This is a good thing, but it changes the work. A reviewer-agent pattern, for example, should become a workflow step with clear inputs, outputs, retry rules, and approval criteria rather than a loose participant in a chat room.
+
+| AutoGen concept | Agent Framework migration target | Validation method |
+|---|---|---|
+| AssistantAgent | Agent | Golden conversations |
+| Model client | Chat client/provider client | Token and response diff checks |
+| Function tool | Tool | Schema and side-effect tests |
+| GroupChat | Workflow | Scenario replay |
+| Custom agent runtime | Middleware or workflow node | Failure injection |
+| Human input mode | Human-in-the-loop step | Approval audit test |
+
+### What should happen to AutoGen GroupChat code?
+
+AutoGen GroupChat code should usually become an explicit workflow, not a one-for-one chat clone. Identify each participant's job, the turn-taking rule, the stopping condition, and the artifacts passed between agents. Then model those as workflow nodes and transitions. This reduces hidden behavior and makes replay, checkpointing, and observability easier to operate in production.
+
+## Migration Phase 1: Move Single-Agent Workloads First
+
+Migration phase 1 is the controlled move of stateless or lightly stateful single-agent workloads from Semantic Kernel or AutoGen to Microsoft Agent Framework before touching orchestration, memory, or hosted runtime concerns. A good phase-1 candidate has one model provider, fewer than five tools, no business-critical writes, and a golden conversation set of at least 20 representative prompts. Microsoft says new Python projects can install Agent Framework with `pip install agent-framework`, and .NET projects can add `Microsoft.Agents.AI`, but dependency installation is the smallest part of the job. The real work is recreating the agent, preserving prompt behavior, mapping tool registration, and comparing outputs under fixed model settings. The clear takeaway: single-agent migration gives your team framework fluency before stateful systems are at risk.
+
+The phase-1 rollout should run old and new paths side by side where possible. For user-facing workloads, route a small internal cohort to the new path first. For batch or backend agents, run shadow comparisons and log diffs. Expect some response variation even with the same model. Focus on task success, tool correctness, safety constraints, latency, and cost rather than exact prose.
+
+### What is a good first migration candidate?
+
+A good first migration candidate is boring: one agent, one prompt family, a few read-only tools, clear success criteria, and an owner who can review output quality. Internal summarization, ticket classification, FAQ drafting, and research enrichment agents are usually better first candidates than payment, provisioning, or compliance agents. The goal is to learn the framework without risking expensive side effects.
+
+## Migration Phase 2: Port Tools, Function Schemas, Memory, and Vector Search
+
+Migration phase 2 is the port of reusable tools, function schemas, memory access, and vector search from Semantic Kernel or AutoGen into Agent Framework-compatible boundaries. Tool migration deserves its own phase because Microsoft Agent Framework supports MCP and tool patterns, while existing systems may contain years of hidden assumptions about parameter names, auth scopes, null handling, and error strings. A single renamed argument can break an agent that learned to call `customer_id`, while a changed exception can bypass retry logic. Keep schema compatibility where possible, add adapter layers where needed, and test tools independently from agent prompts. Vector search should move through a stable retrieval tool or memory adapter before storage is replaced. The clear takeaway: tools are production contracts, not helper functions.
+
+For each tool, write contract tests before changing registration. Test valid input, missing input, invalid enum values, auth failure, timeout, empty result, and side effects. If the tool writes data, make idempotency explicit. If the tool calls an internal API, decide whether the Agent Framework migration is allowed to change retry policy. Most incidents I have seen in agent migrations came from tool behavior drift, not model behavior.
+
+| Risk | Example | Mitigation |
+|---|---|---|
+| Schema drift | `accountId` becomes `account_id` | Compatibility alias and contract test |
+| Error drift | Timeout becomes generic failure | Preserve typed errors |
+| Auth drift | Tool runs with broader token | Scope review |
+| Retrieval drift | Vector index returns different top-k | Golden retrieval tests |
+| Side-effect drift | Duplicate writes after retry | Idempotency key |
+
+## Migration Phase 3: Replace Multi-Agent Chats with Agent Framework Workflows
+
+Migration phase 3 is the redesign of AutoGen group chats, Semantic Kernel orchestration, and informal multi-agent loops as Agent Framework workflows with explicit nodes, transitions, stopping rules, and persisted artifacts. This phase is where many teams find that their old "multi-agent system" was actually a loosely controlled conversation with fragile success criteria. Agent Framework's production-grade positioning includes graph-based patterns, durability, restartability, observability, governance, and human-in-the-loop control, which are hard to apply when orchestration is buried in chat transcripts. Start by naming each agent's responsibility, input artifact, output artifact, retry policy, and escalation path. Then encode the collaboration as a workflow rather than preserving every conversational turn. The clear takeaway: workflow migration should make coordination auditable, not merely compatible.
+
+A common pattern is planner, researcher, writer, reviewer. In AutoGen, those may have been participants in a GroupChat. In Agent Framework, the planner can emit a plan artifact, the researcher can enrich it, the writer can produce a draft, and the reviewer can approve or request a bounded revision. That structure is easier to checkpoint and much easier to explain during an incident review.
+
+### How do you preserve useful multi-agent behavior?
+
+Useful multi-agent behavior is preserved by capturing decisions, not chat choreography. Keep role prompts, task boundaries, handoff artifacts, and quality gates. Drop accidental turn order, vague "continue" loops, and hidden dependence on one agent's wording. If a debate improved quality, model it as two review passes with measurable acceptance criteria. Production workflows need replayable behavior more than theatrical conversation.
+
+## Migration Phase 4: Add Checkpointing, Human-in-the-Loop, Observability, and DevUI
+
+Migration phase 4 is the production hardening stage where migrated agents gain checkpointing, human approval gates, observability, evaluations, and developer inspection tools such as DevUI. Microsoft lists these capabilities in the Agent Framework 1.0 feature set alongside Foundry integration, MCP, frontend streaming adapters, and migration assistants, which signals that the framework is aimed at operated systems rather than demos. Checkpointing lets long workflows resume after failure; human-in-the-loop protects high-impact actions; observability makes tool calls and model decisions inspectable; evaluations give release managers a baseline. This phase should define trace fields, approval events, eval suites, redaction rules, and dashboard ownership. The clear takeaway: the migration only becomes valuable when the new system is easier to operate than the old one.
+
+Do not bolt on observability after launch. Add it while old and new systems still run side by side, because that is when you need comparisons most. Capture prompt version, model version, tool name, tool latency, retry count, workflow step, approval result, and final outcome. Redact payloads before they reach logs. Treat traces as production data with retention and access rules, not as a debugging convenience.
+
+### Where should human approval be required?
+
+Human approval should be required wherever an agent can spend money, change customer data, send external messages, grant access, delete records, or make regulated decisions. Approval should pause a workflow with enough context for a reviewer to decide quickly: proposed action, evidence, confidence, alternatives, and risk. The approval event should be logged as a first-class workflow artifact.
+
+## Deployment Choices: Local Runtime, Azure AI Foundry, Durable Functions, and Cloud Hosting
+
+Deployment choice is the decision about where migrated Agent Framework workloads run: local services, containerized application runtimes, Azure AI Foundry hosted agents, Durable Functions, or another cloud host. Microsoft Agent Framework 1.0 highlights Foundry hosting and production-oriented runtime capabilities, while the broader Microsoft agent adoption model asks teams to assess strategy, governance, architecture, operations, responsible AI, and value realization rather than only SDK fit. Local runtime is fastest for early migration and shadow tests. Foundry hosting can simplify managed agent deployment. Durable or workflow-oriented hosting is better for long-running, restartable processes. Existing cloud services remain valid when they already satisfy security and operational requirements. The clear takeaway: choose hosting based on workflow durability, governance, and ownership, not framework novelty.
+
+For most teams, the first deployment should mirror the old runtime. If the Semantic Kernel service ran as a container behind an API, run the migrated Agent Framework slice the same way until behavior is proven. Move to hosted agents or durable workflow services when you need their operational features, not because migration created an excuse to change every layer.
+
+| Hosting option | Best for | Watch out for |
+|---|---|---|
+| Local service/container | Low-risk migration parity | You own scaling and durability |
+| Azure AI Foundry hosted agents | Managed agent deployment | Provider-specific configuration |
+| Durable Functions/workflows | Long-running restartable work | Workflow design discipline |
+| Existing cloud app | Stable production integration | May need custom observability |
+
+## Testing and Rollback Plan: Golden Conversations, Tool Contract Tests, Evals, and Version Pinning
+
+A testing and rollback plan is the safety system that proves the Agent Framework migration preserves business behavior and can be disabled quickly if production metrics degrade. At minimum, use golden conversations, tool contract tests, retrieval tests, workflow scenario replays, eval suites, latency budgets, cost tracking, and version pinning. PyPI listed `agent-framework` 1.8.1 on June 9, 2026, and NuGet listed `Microsoft.Agents.AI` 1.10.0 updated on June 12, 2026, so teams should assume active iteration after 1.0 and lock dependencies for each release. Rollback should be a routing or feature-flag decision, not a frantic redeploy. The clear takeaway: migration confidence comes from repeatable evidence, not from a successful demo.
+
+Golden conversations should cover happy paths, refusal paths, ambiguous input, tool failure, long context, and handoff cases. Tool contract tests should run without the model. Evals should measure task success and safety criteria. For rollback, keep the old path callable until the new path has passed at least one full release cycle and real production monitoring confirms parity.
+
+### What should a release gate include?
+
+A release gate should include passing unit tests, tool contract tests, golden conversation review, eval threshold comparison, trace inspection, security review for changed permissions, load test for latency, and a documented rollback owner. For high-risk agents, require approval from the service owner and the business owner. The gate should be boring, repeatable, and visible in the release record.
+
+## Common Migration Traps and How to Avoid Them
+
+Common migration traps are predictable failure modes that make Semantic Kernel AutoGen migration look complete while behavior quietly changes. The most frequent traps are treating migration as an import rename, changing prompts while changing frameworks, ignoring conversation state, assuming tool schemas are internal details, losing streaming semantics, overusing provider-specific features, skipping eval baselines, and migrating group chat without explicit workflow rules. Microsoft says Agent Framework simplifies the API surface and improves developer experience, but simplification can hide behavior you still need to preserve. Avoid these traps by freezing prompts during the first pass, pinning dependencies, writing contract tests, shadowing output, logging trace diffs, and migrating stateful flows after stateless flows. The clear takeaway: most migration failures are sequencing failures.
+
+One subtle trap is "improving" the system while migrating it. That creates unreviewable diffs. If the old agent had a weak prompt, migrate the weak prompt first, prove equivalent behavior, then improve it in a separate release. Another trap is deleting Semantic Kernel or AutoGen compatibility code too early. Keep adapters until production evidence says they are no longer needed.
+
+| Trap | Symptom | Fix |
+|---|---|---|
+| Import-only migration | Tests pass but behavior differs | Add golden output review |
+| Prompt rewrite during migration | Cannot isolate regressions | Freeze prompts first |
+| Hidden state mismatch | Follow-up turns fail | Map sessions explicitly |
+| Tool schema drift | Agent calls tool incorrectly | Contract tests and aliases |
+| Streaming drift | UI breaks mid-response | Test frontend streaming |
+| No rollback path | Incident requires redeploy | Feature flag old and new paths |
+
+## Final Checklist: A Practical 30-Day Migration Plan
+
+A practical 30-day migration plan is a time-boxed sequence that moves one representative Semantic Kernel or AutoGen workload to Agent Framework 1.0 while building reusable patterns for the next migration. In the first week, inventory agents, tools, state, evals, owners, and rollback paths. In the second week, migrate one single-agent workload and run it against at least 20 golden conversations. In the third week, port shared tools with contract tests and add trace comparison. In the fourth week, shadow traffic, review evals, document rollback, and decide whether to migrate a stateful or multi-agent workload next. This plan fits teams that already have CI and production ownership; slower organizations should extend the timeline rather than skip controls. The clear takeaway: 30 days should produce one proven migration pattern, not a rushed portfolio rewrite.
+
+Use the first migrated workload as a template. Capture the package versions, adapter patterns, test fixtures, trace fields, deployment steps, and release checklist. Make the second migration faster because the first one created evidence, not because the team lowered standards. If leadership wants every agent moved immediately, show the risk matrix and ask which rollback guarantees they are willing to remove. That usually clarifies the real priority.
+
+### What does "done" mean for the first migration?
+
+The first migration is done when the Agent Framework path passes tests, matches eval thresholds, runs in the target environment, emits useful traces, has a rollback switch, and has an owner for post-release monitoring. It is not done when the code compiles. The real finish line is operational confidence under production-like conditions.
+
+## FAQ: Semantic Kernel, AutoGen, Microsoft Agent Framework, MCP, A2A, and Foundry
+
+FAQ for Semantic Kernel AutoGen migration refers to the short answers teams need before committing roadmap time, especially around whether Agent Framework replaces older Microsoft agent SDKs, how quickly production systems should move, and what happens to MCP, A2A, Azure AI Foundry, and existing Semantic Kernel or AutoGen code. Microsoft Agent Framework 1.0 was announced for .NET and Python in April 2026 with migration assistants for both Semantic Kernel and AutoGen, but the practical migration path still depends on your current architecture. The safest default is to start new Microsoft agent work on Agent Framework, migrate simple existing agents first, and postpone complex stateful or multi-agent systems until tests, tracing, checkpointing, and rollback are ready. The clear takeaway: Agent Framework is the forward path, but your migration schedule should be governed by risk.
+
+### Is Microsoft Agent Framework a replacement for Semantic Kernel and AutoGen?
+
+Microsoft Agent Framework is Microsoft's forward production foundation for agent applications, and it incorporates lessons from both Semantic Kernel and AutoGen. For new work, it should usually be the default. For existing work, replacement should be staged. Semantic Kernel plugins, AutoGen tools, and proven orchestration ideas can often be adapted rather than discarded.
+
+### Do I need to migrate all Semantic Kernel code immediately?
+
+You do not need to migrate all Semantic Kernel code immediately. Start with new projects and low-risk agents, then move production systems after inventory, tests, and rollback controls exist. Existing KernelFunction and vector-search investments can often be exposed through adapters, which lets you reduce risk while changing the agent runtime.
+
+### What is the hardest part of AutoGen migration?
+
+The hardest part of AutoGen migration is usually group chat behavior, not AssistantAgent construction. Simple AssistantAgent workloads map cleanly compared with multi-agent conversations that depend on turn order, implicit stopping rules, or custom runtime hooks. Convert those systems into explicit workflows with named artifacts, transitions, and evaluation criteria.
+
+### Should MCP be part of the first migration?
+
+MCP should be part of the first migration only when the current workload already needs external tool interoperability or when tool boundaries are the main reason for moving. If the first goal is framework parity, keep MCP out until the migrated agent behaves correctly. Add MCP after tool contracts and auth scopes are stable.
+
+### How does Azure AI Foundry fit into the migration?
+
+Azure AI Foundry fits as a hosting and management option for Agent Framework workloads, especially when teams want managed agent deployment and Microsoft cloud integration. It is not required for every migration. Keep the first deployment close to the old runtime unless Foundry solves a specific operational problem such as hosting, governance, or integration.

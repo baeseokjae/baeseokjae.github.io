@@ -1,0 +1,237 @@
+{
+  "slug": "sentry-mcp-safe-monitoring-setup-2026",
+  "title": "Sentry MCP Safe Error Monitoring Setup 2026: Secure Configuration Guide for AI Coding Agents",
+  "topic": "Safe configuration and security hardening of Sentry MCP for AI coding agents — OAuth setup, token management, SSRF protection, prompt injection defenses, and monitoring best practices",
+  "keyword": "sentry mcp safe setup configuration",
+  "targetAudience": "DevOps engineers, security teams, and developers configuring Sentry MCP with Claude Code, Cursor, Codex CLI, and other AI coding agents",
+  "researchDate": "2026-07-04",
+  "parentIssue": "BLO-820",
+  "repoStatus": {
+    "repo": "getsentry/sentry-mcp",
+    "stars": 751,
+    "language": "TypeScript",
+    "lastPush": "2026-07-03",
+    "openIssues": 104,
+    "status": "Actively maintained — Sentry team is actively adding security features (OAuth, SSRF protection, tool hint annotations, structured results)"
+  },
+  "securityArchitecture": {
+    "authModel": {
+      "remote": "Two-layer OAuth: MCP OAuth (Cloudflare) wrapping upstream Sentry OAuth. Client never sees raw Sentry token.",
+      "directToken": "Sentry-Bearer header for trusted clients — token passed through without storage/validation by worker",
+      "stdio": "Sentry User Auth Token via SENTRY_ACCESS_TOKEN env var or --access-token CLI flag",
+      "scopes": "org:read, project:read, project:write, team:read, team:write, event:write"
+    },
+    "trustBoundaries": [
+      "Client-to-MCP: client only receives MCP token, not raw Sentry credentials",
+      "MCP-to-Sentry: only server uses upstream Sentry bearer token",
+      "Session narrowing: broad upstream scopes narrowed by MCP-side skills and URL constraints",
+      "Revocation on upstream failure: stale upstream tokens force re-authorization"
+    ],
+    "permissionModel": {
+      "primaryAuth": "grantedSkills — which tools the session can access",
+      "pathConstraints": "org/project scoping via /mcp/:org or /mcp/:org/:project URLs",
+      "upstreamChecks": "Sentry's own bearer-token checks for underlying API operations",
+      "deprecated": "grantedScopes — transitional, will be removed"
+    }
+  },
+  "defensiveFeatures": {
+    "ssrfProtection": {
+      "status": "Implemented",
+      "mechanism": "validateRegionUrl() — restricts region URLs to base host + allowlist (sentry.io, us.sentry.io, de.sentry.io)",
+      "rules": [
+        "Default: only base host allowed as regionUrl",
+        "Additional domains must be in SENTRY_ALLOWED_REGION_DOMAINS allowlist",
+        "Must use HTTPS protocol",
+        "Empty/undefined regionUrl = use base host"
+      ]
+    },
+    "promptInjectionProtection": {
+      "status": "Partial — in progress",
+      "currentMeasures": [
+        "All tool inputs validated with Zod schemas",
+        "URLs parsed and validated before use",
+        "Region URLs restricted to known Sentry domains",
+        "No direct command execution in tools"
+      ],
+      "openPRs": [
+        {
+          "number": 1056,
+          "title": "Untrusted data boundary for get_issue_details",
+          "approach": "XML boundary tags + HTML entity escaping + LLM eval canary",
+          "status": "Open — known bypasses exist"
+        },
+        {
+          "number": 1045,
+          "title": "Structured Sentry tool results",
+          "approach": "StructuredContent payloads with broad security notes",
+          "status": "Open"
+        }
+      ],
+      "knownGaps": [
+        "Unsupported event types skip untrusted data boundary",
+        "Response Notes enclosed inside untrusted boundary (tells LLM to ignore its own instructions)",
+        "Boundary only covers Description field; exception values, stack frame variables, tags raw",
+        "No field-level provenance tracking (issue #1093 debated but not implemented)"
+      ]
+    },
+    "toolHintAnnotations": {
+      "status": "In progress",
+      "pr": 1144,
+      "description": "Enforcing readOnlyHint and destructiveHint annotations on all tools — part of broader MCP security hardening"
+    },
+    "oauthSecurity": {
+      "stateProtection": "HMAC-signed OAuth state payload with 10-minute expiry",
+      "cookieSecurity": "HttpOnly; Secure; SameSite=Lax; Max-Age=2592000 (30 days)",
+      "errorHandling": "No token/secret exposure in errors; generic messages for auth failures"
+    }
+  },
+  "monitoringSetup": {
+    "sdkConfiguration": {
+      "cloudflare": "@sentry/cloudflare with DSN, environment, beforeSend redaction of auth headers",
+      "nodeStdio": "@sentry/node with nodeProfilingIntegration, tracesSampleRate: 0.1, profilesSampleRate: 0.1",
+      "core": "@sentry/core (platform-agnostic)",
+      "react": "@sentry/react for client UI"
+    },
+    "tracing": {
+      "pattern": "createTracedToolHandler wraps every tool with OpenTelemetry spans",
+      "attributes": [
+        "gen_ai.tool.name — tool name",
+        "mcp.session.id — session identifier",
+        "gen_ai.provider.name — AI provider",
+        "gen_ai.request.model — model name",
+        "network.transport — pipe (stdio) or tcp (SSE)",
+        "app.transport — stdio, sse, or http"
+      ],
+      "sampleRate": "10% in production"
+    },
+    "errorClassification": {
+      "skipLogging": ["UserInputError", "4xx API responses (except 429)", "Validation errors"],
+      "alwaysLog": ["5xx errors", "Network failures", "Unexpected exceptions", "Rate limit errors (429)"]
+    },
+    "metrics": {
+      "counters": ["app.server.response — HTTP response counts"],
+      "dimensions": ["http.route", "http.response.status_code", "app.client.family", "app.server.mode.agent"]
+    }
+  },
+  "embeddedAgentConfig": {
+    "purpose": "AI-powered search tools (search_events, search_issues, search_issue_events, use_sentry)",
+    "supportedProviders": ["openai", "azure-openai", "anthropic", "openrouter"],
+    "configMethod": "EMBEDDED_AGENT_PROVIDER env var (recommended) or --agent-provider CLI flag",
+    "securityConsiderations": [
+      "Always set EMBEDDED_AGENT_PROVIDER explicitly when multiple API keys present",
+      "Auto-detection deprecated — prevents silent provider switching when external tools inject API keys",
+      "Claude Agent SDK injects ANTHROPIC_API_KEY — explicit provider selection required to override",
+      "Custom base URLs supported for OpenAI-compatible endpoints or Anthropic proxies"
+    ],
+    "modelDefaults": {
+      "openai": "gpt-5",
+      "anthropic": "claude-opus-4-5-20251101",
+      "openrouter": "openai/gpt-5"
+    }
+  },
+  "claudeCodePluginSecurity": {
+    "architecture": "Subagent auto-delegation — Claude Code delegates to sentry-mcp subagent when user asks about errors",
+    "pluginVariants": [
+      "sentry-mcp — default catalog gateway surface",
+      "sentry-mcp-experimental — forward-looking feature flags (?experimental=1)"
+    ],
+    "allowedTools": "Auto-generated from toolDefinitions.json — restricts which MCP tools the subagent can call",
+    "securityImplications": [
+      "Auto-delegation means no human review before Sentry MCP tools are invoked",
+      "Subagent has full access to configured MCP tools — no per-call approval",
+      "allowedTools list is the primary restriction mechanism",
+      "Experimental variant exposes additional tools without additional consent"
+    ]
+  },
+  "safeSetupChecklist": [
+    {
+      "category": "Authentication",
+      "items": [
+        "Use OAuth remote mode for production (client never sees raw Sentry token)",
+        "For stdio: use SENTRY_ACCESS_TOKEN env var, not hardcoded in config files",
+        "Scope tokens to minimum required orgs/projects",
+        "Use /mcp/:org or /mcp/:org/:project URL constraints to narrow token scope"
+      ]
+    },
+    {
+      "category": "Tool Exposure",
+      "items": [
+        "Disable unnecessary skills with --disable-skills=seer or ?disable-skills=seer",
+        "Narrow direct tool exposure with ?skills=inspect,triage query parameters",
+        "Review allowedTools in Claude Code plugin — ensure only needed tools are exposed",
+        "Avoid experimental mode in production (?experimental=1)"
+      ]
+    },
+    {
+      "category": "Prompt Injection Defense",
+      "items": [
+        "Monitor PR #1056 (untrusted data boundary) and PR #1045 (structured results) for merge",
+        "Implement server-side relay that strips markdown/commands from error descriptions",
+        "Configure agent to require human approval for commands sourced from MCP data",
+        "Use MCP-Scan to audit connected MCP servers for tool poisoning"
+      ]
+    },
+    {
+      "category": "Monitoring & Observability",
+      "items": [
+        "Configure Sentry SDK with beforeSend to redact sensitive data (auth headers, tokens)",
+        "Set appropriate tracesSampleRate (0.1 recommended for production)",
+        "Monitor for unexpected tool calls or data access patterns",
+        "Watch for 5xx errors, network failures, and rate limit errors (429)",
+        "Use app.server.response metrics grouped by route and status code"
+      ]
+    },
+    {
+      "category": "Embedded Agent Security",
+      "items": [
+        "Always set EMBEDDED_AGENT_PROVIDER explicitly when multiple API keys present",
+        "Use dedicated API keys for Sentry MCP — don't share with other tools",
+        "Consider disabling AI-powered search tools if not needed (reduces attack surface)",
+        "For self-hosted: verify Seer availability before enabling AI search tools"
+      ]
+    },
+    {
+      "category": "Network Security",
+      "items": [
+        "Use HTTPS for all connections (enforced by SSRF protection)",
+        "Configure SENTRY_ALLOWED_REGION_DOMAINS if using custom Sentry regions",
+        "For self-hosted: use --insecure-http only in isolated internal deployments",
+        "Validate region URLs are restricted to known Sentry domains"
+      ]
+    },
+    {
+      "category": "OAuth Configuration",
+      "items": [
+        "Set SENTRY_CLIENT_ID and SENTRY_CLIENT_SECRET for OAuth flow",
+        "Use strong COOKIE_SECRET (32+ random characters) for state signing",
+        "Configure CORS origins to restrict to known Sentry domains",
+        "Monitor OAuth error metrics for invalid_token patterns"
+      ]
+    }
+  ],
+  "keyTakeaways": [
+    "Sentry MCP (751 stars, actively maintained) has a robust multi-layer security architecture: OAuth wrapping, session narrowing, SSRF protection, and tool hint annotations",
+    "The two-tier auth model (MCP OAuth wrapping Sentry OAuth) means clients never see raw Sentry credentials — a strong security property",
+    "Prompt injection protection is still in progress: PR #1056 (untrusted data boundary) and PR #1045 (structured results) are open with known bypasses",
+    "The Claude Code plugin's auto-delegation model creates an automated attack surface — no human review before Sentry MCP tools are invoked",
+    "Safe setup requires defense-in-depth: OAuth configuration + tool exposure narrowing + monitoring + embedded agent provider isolation",
+    "SSRF protection via validateRegionUrl() is well-implemented with allowlist-based domain restriction",
+    "The embedded agent provider configuration is a critical security control — always set EMBEDDED_AGENT_PROVIDER explicitly to prevent silent provider switching",
+    "Tool hint annotations (PR #1144) are being enforced — part of broader MCP security hardening that will improve safety over time",
+    "Monitoring setup follows OpenTelemetry semantic conventions with proper error classification (skip expected errors, always log 5xx/network failures)"
+  ],
+  "relatedResearch": [
+    "agentjacking-sentry-mcp-attack-guide-2026.json — Agentjacking attack vectors via Sentry MCP",
+    "getsentry/sentry-mcp PR #1056 — Untrusted data boundary (open, June 2026)",
+    "getsentry/sentry-mcp PR #1045 — Structured tool results (open, June 2026)",
+    "getsentry/sentry-mcp PR #1144 — Tool hint annotations (open, July 2026)",
+    "getsentry/sentry-mcp Issue #1093 — Provenance/action-gate proposal (open, June 2026)",
+    "getsentry/sentry-mcp docs/operations/security.md — Official security documentation",
+    "getsentry/sentry-mcp docs/operations/monitoring.md — Official monitoring documentation",
+    "getsentry/sentry-mcp docs/operations/embedded-agents.md — Embedded agent configuration",
+    "getsentry/sentry-mcp docs/integrations/claude-code-plugin.md — Claude Code plugin architecture",
+    "getsentry/sentry-mcp docs/architecture/overview.md — System architecture",
+    "Invariant Labs — MCP-Scan security scanner",
+    "Invariant Labs — Guardrails contextual security layer"
+  ]
+}
