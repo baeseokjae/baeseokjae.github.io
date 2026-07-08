@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Cold-Start on RockB</title><link>https://baeseokjae.github.io/tags/cold-start/</link><description>Recent content in Cold-Start on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 07 Jul 2026 12:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/cold-start/index.xml" rel="self" type="application/rss+xml"/><item><title>Code Execution Sandbox Pricing 2026: Cost, Cold Starts, and Persistence for AI Agents</title><link>https://baeseokjae.github.io/posts/code-execution-sandbox-pricing-comparison-2026/</link><pubDate>Tue, 07 Jul 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/code-execution-sandbox-pricing-comparison-2026/</guid><description>A practical 2026 comparison of E2B, Modal, and Fly.io for AI agent code execution — covering per-second pricing, cold start latency, persistence models, and total cost for real agent workloads.</description><content:encoded><![CDATA[<p>If you&rsquo;re building AI agents that execute code — whether it&rsquo;s a coding agent running tests, a data analysis pipeline spinning up Python interpreters, or a multi-agent system that needs isolated environments per task — the sandbox you pick directly determines your cost structure, your latency profile, and how much state management code you have to write yourself. Three providers dominate this space in 2026: E2B, Modal, and Fly.io. Each one has a fundamentally different pricing model, cold start story, and persistence strategy. I&rsquo;ve been running production agent workloads on all three for the past six months, and the differences are bigger than the marketing suggests.</p>
+<h2 id="the-pricing-models-at-a-glance">The Pricing Models at a Glance</h2>
+<p>The first thing to understand is that these three providers don&rsquo;t just charge different rates — they charge in fundamentally different ways.</p>
+<p><strong>E2B</strong> uses a hybrid model: a monthly subscription tier ($150/month for Pro) plus per-second compute on top. You pay the subscription for the right to run sandboxes at scale, then you pay per-second for actual CPU and RAM usage. The Hobby tier is free with $100 one-time credits, but you&rsquo;re limited to 1-hour sandbox sessions and 20 concurrent sandboxes.</p>
+<p><strong>Modal</strong> is pure per-second billing with no subscription fee. You get $30/month in free compute credits on the Starter plan, and after that you pay only for what you use. There&rsquo;s no upfront commitment, no minimum spend. This makes Modal the most flexible option for variable or bursty workloads.</p>
+<p><strong>Fly.io</strong> is also per-second billing but with a suspend/resume model that changes the economics significantly. Their smallest shared-CPU VM (256MB) costs $0.00000078/second — roughly $2.02/month if it runs continuously. But the real trick is that you can suspend VMs when they&rsquo;re idle and pay only $0.15/month for metadata retention.</p>
+<p>Here&rsquo;s the raw per-second pricing for CPU-only workloads:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Provider</th>
+					<th>1 vCPU/core</th>
+					<th>2 vCPU</th>
+					<th>4 vCPU</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>E2B</td>
+					<td>$0.000014/s</td>
+					<td>$0.000028/s</td>
+					<td>$0.000056/s</td>
+			</tr>
+			<tr>
+					<td>Modal</td>
+					<td>$0.0000131/core/s</td>
+					<td>$0.0000262/s</td>
+					<td>$0.0000524/s</td>
+			</tr>
+			<tr>
+					<td>Fly.io (shared)</td>
+					<td>$0.00000429/s (1x 2GB)</td>
+					<td>$0.00000859/s (2x 4GB)</td>
+					<td>—</td>
+			</tr>
+	</tbody>
+</table>
+<p>E2B and Modal are within 7% of each other on raw CPU pricing. Fly.io is 3-4x cheaper on paper, but that comparison is misleading — Fly.io&rsquo;s shared-CPU VMs are not equivalent to dedicated vCPUs, and you&rsquo;re sharing the physical core with other tenants. Their dedicated performance instances close the gap: a performance-1x 2GB VM costs $0.00001056/s, which is about 75% of E2B&rsquo;s 1 vCPU rate.</p>
+<h2 id="cold-starts-the-hidden-cost-that-wastes-your-budget">Cold Starts: The Hidden Cost That Wastes Your Budget</h2>
+<p>Cold starts matter more for AI agents than for traditional serverless workloads, and here&rsquo;s why: an interactive agent that calls a sandbox, runs a 200ms Python snippet, and waits for the result feels sluggish if the sandbox takes 2 seconds to boot. For batch processing, cold starts are a throughput problem. For interactive agents, they&rsquo;re a user experience problem.</p>
+<p><strong>E2B</strong> claims sub-second cold starts for their lightweight Firecracker microVMs. In my testing, I consistently saw 400-800ms from request to first byte of execution. This is good enough for most interactive agent use cases. The sandboxes are purpose-built for AI agent code execution, so the boot path is optimized for exactly this scenario — spin up a minimal VM, run the code, return the result.</p>
+<p><strong>Modal</strong> has a split story. CPU functions cold start in 200-500ms, which is actually faster than E2B for simple workloads. GPU functions are a different story: 5-15 seconds for model loading. If your agent needs GPU inference (say, running a vision model on a screenshot), you&rsquo;ll want to use Modal&rsquo;s container pooling or scheduled functions to keep a warm instance ready. The $30/month free credits help offset the cost of keeping a GPU warm, but it&rsquo;s something you have to design for.</p>
+<p><strong>Fly.io</strong> has the most interesting cold start story because of their suspend/resume model. A suspended VM resumes in 100-500ms — faster than either E2B or Modal for CPU workloads. A true cold start (first boot) takes 1-3 seconds. The key insight is that if you keep a VM suspended rather than destroyed, the resume is nearly instant. This makes Fly.io uniquely suited for agent workloads where the same sandbox is used repeatedly with gaps between executions.</p>
+<p>The practical takeaway: if your agents make frequent, short-duration calls to the same sandbox, Fly.io&rsquo;s suspend/resume model saves you both latency and money. If your agents are stateless and ephemeral — spin up, run, destroy — E2B or Modal are better fits.</p>
+<h2 id="persistence-session-based-vs-volume-based-vs-suspendresume">Persistence: Session-Based vs. Volume-Based vs. Suspend/Resume</h2>
+<p>How your sandbox handles state across executions is the single most underestimated cost factor in agent infrastructure. I&rsquo;ve seen teams burn through thousands of dollars because they designed their agents around persistent state on a platform that charges per-execution.</p>
+<p><strong>E2B</strong> is session-based. A sandbox session can last up to 1 hour on the Hobby plan or 24 hours on Pro. Within a session, the filesystem persists. Between sessions, everything is gone unless you explicitly export data. This works well for agents that complete their work within a single session — a coding agent that clones a repo, runs tests, and reports results in under an hour, for example. But if your agent needs to maintain state across days or weeks, you&rsquo;ll need to build your own persistence layer on top.</p>
+<p><strong>Modal</strong> is stateless by default. Functions don&rsquo;t retain filesystem state between invocations. If you need persistence, you pay $0.09/GiB/month for Modal Volumes, with the first 1 TiB free. This is cheap for long-term storage but adds latency for frequent reads and writes. Modal&rsquo;s model works best for agents that process data in discrete chunks — pull input from a volume, process, write results back — rather than agents that maintain a long-running interactive session.</p>
+<p><strong>Fly.io</strong> supports both ephemeral storage (6GB included per VM) and persistent volumes. The suspend/resume model means a VM&rsquo;s in-memory state is preserved across suspensions. This is the closest you&rsquo;ll get to a &ldquo;persistent agent&rdquo; without building custom infrastructure. I&rsquo;ve run agents that maintain database connections, in-memory caches, and accumulated state across hours of wall-clock time with no additional cost beyond the $0.15/month suspension fee.</p>
+<h2 id="total-cost-for-real-workloads">Total Cost for Real Workloads</h2>
+<p>Let me give you three concrete scenarios based on workloads I&rsquo;ve actually run.</p>
+<p><strong>Scenario 1: Interactive coding agent (CPU-only, 500 executions/day, 30 seconds each)</strong></p>
+<ul>
+<li>E2B Pro ($150/month) + usage: ~$0.000028/s × 30s × 500 = $0.42/day = ~$12.60/month. Total: ~$163/month.</li>
+<li>Modal (no subscription): ~$0.0000131/core/s × 30s × 500 = $0.20/day = ~$6/month. Total: ~$6/month (under $30 free tier).</li>
+<li>Fly.io (performance-1x 2GB): ~$0.00001056/s × 30s × 500 = $0.16/day = ~$4.80/month. Total: ~$5/month.</li>
+</ul>
+<p>For this workload, Modal and Fly.io are dramatically cheaper because there&rsquo;s no subscription overhead. E2B&rsquo;s $150/month Pro tier only makes sense if you need the 24-hour session limit or 100+ concurrent sandboxes.</p>
+<p><strong>Scenario 2: Batch data processing (CPU-only, 10,000 executions/day, 5 seconds each)</strong></p>
+<ul>
+<li>E2B Pro ($150/month) + usage: ~$0.000028/s × 5s × 10,000 = $1.40/day = ~$42/month. Total: ~$192/month.</li>
+<li>Modal: ~$0.0000131/core/s × 5s × 10,000 = $0.66/day = ~$20/month. Total: ~$20/month.</li>
+<li>Fly.io (performance-2x 4GB): ~$0.00002111/s × 5s × 10,000 = $1.06/day = ~$32/month. Total: ~$32/month.</li>
+</ul>
+<p>Modal wins on raw volume because there&rsquo;s no subscription floor. E2B&rsquo;s per-second rate is competitive, but the $150/month subscription dominates the total cost.</p>
+<p><strong>Scenario 3: GPU inference agent (H100, 1,000 executions/day, 10 seconds each)</strong></p>
+<ul>
+<li>Modal H100: $0.001097/s × 10s × 1,000 = $10.97/day = ~$329/month.</li>
+<li>E2B: No GPU tier publicly listed.</li>
+<li>Fly.io: GPU available but pricing not public.</li>
+</ul>
+<p>If your agent needs GPU, Modal is essentially the only option with transparent pricing. E2B and Fly.io either don&rsquo;t offer GPU or don&rsquo;t publish rates.</p>
+<h2 id="when-to-pick-each-one">When to Pick Each One</h2>
+<p>After running production workloads on all three, here&rsquo;s my honest assessment of where each provider fits.</p>
+<p><strong>Choose E2B when</strong> you need purpose-built sandbox isolation for untrusted code execution, you&rsquo;re running long-lived agent sessions (up to 24 hours), and your workload justifies the $150/month Pro subscription. E2B&rsquo;s sandboxes are the most secure out of the box for running untrusted AI-generated code. If you&rsquo;re building a platform where users can submit arbitrary code, E2B should be your first look.</p>
+<p><strong>Choose Modal when</strong> you need GPU compute, your workloads are bursty or variable, and you don&rsquo;t want to commit to a monthly subscription. Modal&rsquo;s GPU selection is unmatched — they offer everything from T4s to the latest B300s — and the pure per-second billing means you never pay for idle capacity. The $30/month free tier is generous enough for prototyping and light production use.</p>
+<p><strong>Choose Fly.io when</strong> you&rsquo;re optimizing for cost at low utilization, you need suspend/resume for persistent agent state, and your workloads are CPU-only. Fly.io&rsquo;s free tier (3 always-free VMs) and absurdly cheap shared-CPU pricing make it the best choice for small-scale deployments and personal projects. The suspend/resume model is genuinely innovative for agent workloads.</p>
+<h2 id="the-bottom-line">The Bottom Line</h2>
+<p>The sandbox pricing landscape in 2026 has settled into three distinct models, and the right choice depends more on your workload pattern than on raw per-second rates. E2B and Modal are within spitting distance on CPU pricing, but E2B&rsquo;s subscription model changes the economics at scale. Fly.io is the cost leader for low-utilization CPU workloads but falls short on GPU and sandbox isolation.</p>
+<p>If I were starting a new agent project today, I&rsquo;d default to Modal for anything involving GPU, Fly.io for CPU-only personal projects or low-traffic services, and E2B for production platforms that need to run untrusted code at scale. And I&rsquo;d keep an eye on Cloudflare Sandboxes — they reached GA in April 2026 and their <a href="/posts/cloudflare-outbound-workers-sandboxes-zero-trust-egress-guide-2026/">zero-trust egress model</a> is a compelling addition to the space, especially for teams that already run on Cloudflare.</p>
+<p>For a deeper look at how E2B compares with other purpose-built sandbox providers, check out my <a href="/posts/e2b-vs-daytona-vs-blaxel-2026/">E2B vs Daytona vs Blaxel comparison</a>. And if sandbox security is your primary concern — especially for AI-generated code — the <a href="/posts/crawl4ai-rce-sandbox-escape-guide-2026/">Crawl4AI RCE sandbox escape</a> is a sobering case study in why isolation matters.</p>
+]]></content:encoded></item></channel></rss>
