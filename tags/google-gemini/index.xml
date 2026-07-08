@@ -7,42 +7,42 @@
 <p>Every function calling implementation follows the same five steps, regardless of which LLM you use. First, <strong>define your tools</strong> as structured schemas describing function names, descriptions, and parameter types. Second, <strong>send a request</strong> with both the user message and the tools array attached. Third, <strong>detect a tool call</strong> in the response—the model returns a structured object instead of plain text when it decides to invoke a function. Fourth, <strong>execute the function</strong> in your application code and capture the result. Fifth, <strong>return the result</strong> to the model in a follow-up request so it can formulate a final answer. This loop can repeat multiple times—multi-step agent patterns chain dozens of tool calls before returning to the user. The difference between providers is entirely in the JSON structure of steps 1, 3, and 5. Step 4 is always pure Python (or whatever language you use), and the result you return is just a string or structured object. Mastering the universal pattern first makes provider-specific syntax a minor detail rather than a conceptual hurdle.</p>
 <h3 id="core-vocabulary">Core Vocabulary</h3>
 <table>
-	<thead>
-			<tr>
-					<th>Term</th>
-					<th>Meaning</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>Tool / Function</td>
-					<td>A callable action the model can request</td>
-			</tr>
-			<tr>
-					<td>Tool definition</td>
-					<td>JSON schema describing the function&rsquo;s name, description, and parameters</td>
-			</tr>
-			<tr>
-					<td>Tool call</td>
-					<td>The model&rsquo;s structured request to invoke a specific function</td>
-			</tr>
-			<tr>
-					<td>Tool result</td>
-					<td>Your application&rsquo;s response after executing the function</td>
-			</tr>
-			<tr>
-					<td>Parallel tool calls</td>
-					<td>Multiple tool calls in a single model turn</td>
-			</tr>
-			<tr>
-					<td>Agent loop</td>
-					<td>Repeated tool call / result cycles until the model produces a final answer</td>
-			</tr>
-	</tbody>
+  <thead>
+      <tr>
+          <th>Term</th>
+          <th>Meaning</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Tool / Function</td>
+          <td>A callable action the model can request</td>
+      </tr>
+      <tr>
+          <td>Tool definition</td>
+          <td>JSON schema describing the function&rsquo;s name, description, and parameters</td>
+      </tr>
+      <tr>
+          <td>Tool call</td>
+          <td>The model&rsquo;s structured request to invoke a specific function</td>
+      </tr>
+      <tr>
+          <td>Tool result</td>
+          <td>Your application&rsquo;s response after executing the function</td>
+      </tr>
+      <tr>
+          <td>Parallel tool calls</td>
+          <td>Multiple tool calls in a single model turn</td>
+      </tr>
+      <tr>
+          <td>Agent loop</td>
+          <td>Repeated tool call / result cycles until the model produces a final answer</td>
+      </tr>
+  </tbody>
 </table>
 <h2 id="openai-implementation-tools-array-strict-mode-and-parallel-calls">OpenAI Implementation: Tools Array, Strict Mode, and Parallel Calls</h2>
 <p>OpenAI&rsquo;s function calling API uses a <code>tools</code> parameter that accepts an array of objects, each with <code>type: &quot;function&quot;</code> and a nested <code>function</code> object containing <code>name</code>, <code>description</code>, and <code>parameters</code> (a JSON Schema object). When the model decides to call a function, the response&rsquo;s <code>choices[0].finish_reason</code> is <code>&quot;tool_calls&quot;</code> and <code>choices[0].message.tool_calls</code> contains an array of call objects. Each call has an <code>id</code>, a <code>type</code>, and a <code>function</code> sub-object with <code>name</code> and <code>arguments</code> (a JSON string). You execute the function, then append both the assistant message and a <code>tool</code> role message to the conversation history before the next request. OpenAI&rsquo;s <code>strict: true</code> mode—added in late 2024—enforces exact schema compliance on arguments, eliminating the hallucinated-field class of bugs. The tradeoff: <code>strict</code> mode is incompatible with parallel tool calls, so you pick one guarantee or the other. As of 2026, the <code>gpt-4.1</code> series and <code>o3</code> models all support parallel tool calls when <code>strict</code> is disabled, enabling the 3.7x latency improvement from the LLMCompiler paper.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> json
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> json
 </span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> openai <span style="color:#f92672">import</span> OpenAI
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span>client <span style="color:#f92672">=</span> OpenAI()
@@ -99,7 +99,7 @@
 <p>The <code>tool_choice</code> parameter controls whether the model must use tools. <code>&quot;auto&quot;</code> lets it decide, <code>&quot;required&quot;</code> forces at least one call, <code>{&quot;type&quot;: &quot;function&quot;, &quot;function&quot;: {&quot;name&quot;: &quot;get_weather&quot;}}</code> forces a specific function. Setting <code>&quot;none&quot;</code> disables tool calling entirely, useful when you want a plain text response after results are returned.</p>
 <h2 id="anthropic-tool-use-architecture-input-schema-content-blocks-and-server-side-tools">Anthropic Tool Use Architecture: Input Schema, Content Blocks, and Server-Side Tools</h2>
 <p>Anthropic&rsquo;s tool use API differs from OpenAI in three important ways: tools are defined with <code>input_schema</code> instead of <code>parameters</code>, responses use typed content blocks instead of a <code>tool_calls</code> array, and Anthropic uniquely offers server-side built-in tools that run inside the API without any execution code on your end. When Claude decides to use a tool, <code>stop_reason</code> is <code>&quot;tool_use&quot;</code> and the <code>content</code> array contains a block of <code>type: &quot;tool_use&quot;</code> alongside any text blocks. You match on <code>type == &quot;tool_use&quot;</code> to extract <code>name</code> and <code>input</code> (already a parsed dict, not a JSON string). Results go back as a <code>tool_result</code> content block in a new <code>user</code> turn. The most distinctive Anthropic feature is built-in server-side tools: <code>web_search</code>, <code>code_execution</code> (sandboxed Python), and <code>text_editor</code>. Declaring <code>{&quot;type&quot;: &quot;web_search_20250305&quot;, &quot;name&quot;: &quot;web_search&quot;}</code> in the tools list gives Claude live internet access with zero infrastructure on your end—Anthropic runs the search and returns results as part of the content stream. This removes entire categories of retrieval infrastructure that OpenAI and Google customers must build themselves.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> anthropic
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> anthropic
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span>client <span style="color:#f92672">=</span> anthropic<span style="color:#f92672">.</span>Anthropic()
 </span></span><span style="display:flex;"><span>
@@ -151,7 +151,7 @@
 </span></span><span style="display:flex;"><span>    )
 </span></span><span style="display:flex;"><span>    print(final<span style="color:#f92672">.</span>content[<span style="color:#ae81ff">0</span>]<span style="color:#f92672">.</span>text)
 </span></span></code></pre></div><h3 id="anthropic-server-side-tools">Anthropic Server-Side Tools</h3>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># Web search with no infrastructure required</span>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># Web search with no infrastructure required</span>
 </span></span><span style="display:flex;"><span>response <span style="color:#f92672">=</span> client<span style="color:#f92672">.</span>messages<span style="color:#f92672">.</span>create(
 </span></span><span style="display:flex;"><span>    model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;claude-opus-4-7&#34;</span>,
 </span></span><span style="display:flex;"><span>    max_tokens<span style="color:#f92672">=</span><span style="color:#ae81ff">1024</span>,
@@ -161,7 +161,7 @@
 </span></span><span style="display:flex;"><span><span style="color:#75715e"># Claude handles search internally — no tool_use loop needed</span>
 </span></span></code></pre></div><h2 id="google-gemini-function-declarations-protocol-buffer-types-and-streaming">Google Gemini Function Declarations: Protocol Buffer Types and Streaming</h2>
 <p>Google Gemini uses <code>FunctionDeclaration</code> objects inside a <code>Tool</code> wrapper, passed via the <code>tools</code> parameter. The type system derives from Protocol Buffers: <code>STRING</code>, <code>NUMBER</code>, <code>BOOLEAN</code>, <code>ARRAY</code>, <code>OBJECT</code> (all caps, from <code>google.generativeai.types</code>). When Gemini returns a function call, <code>response.candidates[0].content.parts</code> contains a <code>Part</code> with a <code>function_call</code> attribute holding <code>name</code> and <code>args</code> (a dict). Results go back as a <code>Part</code> with a <code>function_response</code> attribute. Gemini 2.5+ adds streaming function call arguments—arguments arrive incrementally as tokens generate, enabling your UI to show progress before execution completes. This is particularly valuable for latency-sensitive applications where users wait for agent responses. Google also supports <code>ANY</code> mode for <code>tool_config</code> (equivalent to OpenAI&rsquo;s <code>&quot;required&quot;</code>) and specific function forcing via <code>allowed_function_names</code>. Gemini&rsquo;s automatic function calling mode can execute Python functions directly using reflection, though production systems should handle execution explicitly for auditability.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> google.generativeai <span style="color:#66d9ef">as</span> genai
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> google.generativeai <span style="color:#66d9ef">as</span> genai
 </span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> json
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span>genai<span style="color:#f92672">.</span>configure(api_key<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;YOUR_API_KEY&#34;</span>)
@@ -213,76 +213,76 @@
 </span></span></code></pre></div><h2 id="side-by-side-provider-comparison">Side-by-Side Provider Comparison</h2>
 <p>The three providers share conceptual structure but differ significantly in API surface, type systems, unique capabilities, and operational tradeoffs that matter in production. OpenAI&rsquo;s <code>tools</code> parameter uses standard JSON Schema with a <code>parameters</code> key, returns arguments as a JSON string that needs manual parsing, and uniquely offers <code>strict: true</code> mode for guaranteed schema-valid outputs. Anthropic uses <code>input_schema</code> instead of <code>parameters</code>, returns arguments as a pre-parsed Python dict (eliminating a common source of parse errors), and is the only provider offering server-side built-in tools like <code>web_search</code> and <code>code_execution</code> that require zero infrastructure. Google Gemini uses Protocol Buffer-derived types (<code>STRING</code>, <code>NUMBER</code>, <code>OBJECT</code>) rather than JSON Schema keywords, and Gemini 2.5+ uniquely supports streaming function call arguments—arguments arrive token-by-token as they generate, which cuts time-to-execution in latency-sensitive UIs. All three support parallel tool calls, though OpenAI&rsquo;s strict mode disables this feature.</p>
 <table>
-	<thead>
-			<tr>
-					<th>Feature</th>
-					<th>OpenAI</th>
-					<th>Anthropic</th>
-					<th>Google Gemini</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>Schema key</td>
-					<td><code>parameters</code> (JSON Schema)</td>
-					<td><code>input_schema</code> (JSON Schema)</td>
-					<td><code>FunctionDeclaration</code> (Protobuf types)</td>
-			</tr>
-			<tr>
-					<td>Tool call detection</td>
-					<td><code>finish_reason == &quot;tool_calls&quot;</code></td>
-					<td><code>stop_reason == &quot;tool_use&quot;</code></td>
-					<td>Part has <code>function_call</code> attr</td>
-			</tr>
-			<tr>
-					<td>Arguments format</td>
-					<td>JSON string (needs parsing)</td>
-					<td>Dict (pre-parsed)</td>
-					<td>Proto Struct (dict-like)</td>
-			</tr>
-			<tr>
-					<td>Result format</td>
-					<td><code>tool</code> role message</td>
-					<td><code>tool_result</code> content block</td>
-					<td><code>function_response</code> Part</td>
-			</tr>
-			<tr>
-					<td>Parallel calls</td>
-					<td>Yes (not with strict mode)</td>
-					<td>Yes</td>
-					<td>Yes</td>
-			</tr>
-			<tr>
-					<td>Strict schema mode</td>
-					<td><code>strict: true</code></td>
-					<td>N/A</td>
-					<td>N/A</td>
-			</tr>
-			<tr>
-					<td>Server-side tools</td>
-					<td>No</td>
-					<td>Yes (web_search, code_exec)</td>
-					<td>No</td>
-			</tr>
-			<tr>
-					<td>Streaming args</td>
-					<td>No</td>
-					<td>No</td>
-					<td>Yes (Gemini 2.5+)</td>
-			</tr>
-			<tr>
-					<td>Forced tool use</td>
-					<td><code>tool_choice: &quot;required&quot;</code></td>
-					<td><code>tool_choice: {&quot;type&quot;: &quot;any&quot;}</code></td>
-					<td><code>tool_config: ANY</code></td>
-			</tr>
-	</tbody>
+  <thead>
+      <tr>
+          <th>Feature</th>
+          <th>OpenAI</th>
+          <th>Anthropic</th>
+          <th>Google Gemini</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Schema key</td>
+          <td><code>parameters</code> (JSON Schema)</td>
+          <td><code>input_schema</code> (JSON Schema)</td>
+          <td><code>FunctionDeclaration</code> (Protobuf types)</td>
+      </tr>
+      <tr>
+          <td>Tool call detection</td>
+          <td><code>finish_reason == &quot;tool_calls&quot;</code></td>
+          <td><code>stop_reason == &quot;tool_use&quot;</code></td>
+          <td>Part has <code>function_call</code> attr</td>
+      </tr>
+      <tr>
+          <td>Arguments format</td>
+          <td>JSON string (needs parsing)</td>
+          <td>Dict (pre-parsed)</td>
+          <td>Proto Struct (dict-like)</td>
+      </tr>
+      <tr>
+          <td>Result format</td>
+          <td><code>tool</code> role message</td>
+          <td><code>tool_result</code> content block</td>
+          <td><code>function_response</code> Part</td>
+      </tr>
+      <tr>
+          <td>Parallel calls</td>
+          <td>Yes (not with strict mode)</td>
+          <td>Yes</td>
+          <td>Yes</td>
+      </tr>
+      <tr>
+          <td>Strict schema mode</td>
+          <td><code>strict: true</code></td>
+          <td>N/A</td>
+          <td>N/A</td>
+      </tr>
+      <tr>
+          <td>Server-side tools</td>
+          <td>No</td>
+          <td>Yes (web_search, code_exec)</td>
+          <td>No</td>
+      </tr>
+      <tr>
+          <td>Streaming args</td>
+          <td>No</td>
+          <td>No</td>
+          <td>Yes (Gemini 2.5+)</td>
+      </tr>
+      <tr>
+          <td>Forced tool use</td>
+          <td><code>tool_choice: &quot;required&quot;</code></td>
+          <td><code>tool_choice: {&quot;type&quot;: &quot;any&quot;}</code></td>
+          <td><code>tool_config: ANY</code></td>
+      </tr>
+  </tbody>
 </table>
 <h3 id="token-cost-implications">Token Cost Implications</h3>
 <p>Each tool definition consumes input tokens. A typical tool with a medium-complexity schema costs 100–300 tokens. A system with 20 tools adds 2,000–6,000 tokens per request—roughly $0.01–$0.06 at current pricing on GPT-4.1. For high-volume applications (millions of requests/day), tool count is a meaningful cost lever. Strategies: remove unused tools, consolidate related tools into one with an <code>action</code> enum parameter, and cache system prompts (Anthropic prompt caching reduces repeated tool definition costs by ~90%).</p>
 <h2 id="parallel-tool-calls-37x-latency-improvement-in-practice">Parallel Tool Calls: 3.7x Latency Improvement in Practice</h2>
 <p>Parallel tool calls are the single highest-impact performance optimization for agentic systems. The LLMCompiler paper (ICML 2024) demonstrated up to 3.7x latency reduction by executing independent tool calls concurrently rather than waiting for each to complete before starting the next. All three major providers return multiple tool call objects in a single response when the model determines calls are independent. Your application executes them concurrently using <code>asyncio.gather</code> or <code>ThreadPoolExecutor</code>, then returns all results in a single follow-up request. The model sees all results simultaneously and synthesizes a final answer. The pattern requires identifying which tool calls truly are independent—calls where output B depends on output A must remain sequential. The model usually gets this right, but you should validate in production and implement timeout handling so a slow tool doesn&rsquo;t block all parallel results.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> asyncio
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> asyncio
 </span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> json
 </span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> openai <span style="color:#f92672">import</span> AsyncOpenAI
 </span></span><span style="display:flex;"><span>
@@ -332,7 +332,7 @@
 </span></span><span style="display:flex;"><span>asyncio<span style="color:#f92672">.</span>run(run_parallel_tools())
 </span></span></code></pre></div><h2 id="multi-step-agent-loops-building-production-ready-systems">Multi-Step Agent Loops: Building Production-Ready Systems</h2>
 <p>A multi-step agent loop runs the tool call / result cycle until the model produces a final answer with no pending tool calls. Every production agent needs three safeguards that most tutorials skip: a <strong>maximum iteration limit</strong> (prevents infinite loops from hallucinated or broken tools), <strong>timeout handling</strong> (prevents one slow external API from hanging the entire agent), and <strong>loop detection</strong> (prevents the model from calling the same tool with the same arguments repeatedly). A reasonable production ceiling is 15 iterations with a 30-second per-tool timeout and a 120-second total loop timeout. Beyond these hard limits, implement soft controls: log every tool call with arguments and results, alert on loops that exceed 8 iterations (usually indicates a confused model or broken tool), and expose a kill switch for human override.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> json
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> json
 </span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> time
 </span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> openai <span style="color:#f92672">import</span> OpenAI
 </span></span><span style="display:flex;"><span>
@@ -386,7 +386,7 @@
 </span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#e6db74">&#34;Agent exceeded maximum iterations&#34;</span>
 </span></span></code></pre></div><h2 id="error-handling-malformed-arguments-hallucinated-functions-and-recovery">Error Handling: Malformed Arguments, Hallucinated Functions, and Recovery</h2>
 <p>Production function calling systems fail in four distinct ways, each requiring a different recovery strategy. <strong>Malformed arguments</strong> occur when the model generates JSON that doesn&rsquo;t validate against your schema—use Pydantic validation and return a structured error string (not an exception) so the model can retry with corrected arguments. <strong>Hallucinated function names</strong> happen when the model calls a function that doesn&rsquo;t exist in your registry—detect with a dictionary lookup and return <code>&quot;Error: unknown function X&quot;</code> to prompt self-correction. <strong>Timeout failures</strong> occur when external APIs are slow—implement per-call timeouts with <code>asyncio.wait_for</code> and return a timeout error string so the model can acknowledge the failure. <strong>Unexpected results</strong> happen when a function returns data in an unexpected format—validate outputs before returning them to the model and normalize structure. One critical rule: never raise a Python exception inside the tool execution path of an agent loop. Always catch exceptions, convert to error strings, and return them as tool results. This keeps the conversation alive and gives the model a chance to recover or escalate to the user.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> pydantic <span style="color:#f92672">import</span> BaseModel, ValidationError
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> pydantic <span style="color:#f92672">import</span> BaseModel, ValidationError
 </span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> asyncio
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">WeatherArgs</span>(BaseModel):
@@ -423,7 +423,7 @@
 </span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Error: </span><span style="color:#e6db74">{</span>name<span style="color:#e6db74">}</span><span style="color:#e6db74"> raised </span><span style="color:#e6db74">{</span>type(e)<span style="color:#f92672">.</span>__name__<span style="color:#e6db74">}</span><span style="color:#e6db74">: </span><span style="color:#e6db74">{</span>e<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>
 </span></span></code></pre></div><h2 id="security-first-prompt-injection-owasp-llm06-and-authorization">Security First: Prompt Injection, OWASP LLM06, and Authorization</h2>
 <p>Function calling is OWASP LLM06 (Excessive Agency)—the primary attack vector is prompt injection via tool arguments. An attacker embeds instructions in data your tool retrieves (a web page, a database record, an email), and the model executes those instructions as if they came from the user. Defense requires three layers. First, <strong>input sanitization</strong>: strip HTML and markdown from tool results before returning them to the model. Second, <strong>authorization checks</strong>: validate that the current user has permission to call high-privilege tools before executing—never trust the model&rsquo;s decision alone. Third, <strong>audit logging</strong>: record every tool call with the user identity, arguments, and result. For destructive operations (database writes, API calls that spend money, emails), require explicit human approval rather than autonomous execution. Implement a confirmation step where the model proposes the action, your system presents it to the user, and only executes after explicit approval. OWASP also recommends a principle of least privilege: expose only the minimum tool set needed for a given session, not all available tools at once.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> hashlib
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> hashlib
 </span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> time
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span>AUDIT_LOG <span style="color:#f92672">=</span> []
@@ -464,42 +464,42 @@
 <h2 id="decision-framework-function-calling-vs-structured-outputs-vs-mcp">Decision Framework: Function Calling vs Structured Outputs vs MCP</h2>
 <p>Choosing the right tool-integration pattern depends on three questions. <strong>Do you need the model to decide when to call an external system?</strong> If yes, use function calling—the model controls invocation. If you just need the output in a specific JSON format, use structured outputs instead (cheaper, simpler, no execution loop). <strong>Do you need execution to happen inside the API without your infrastructure?</strong> If yes, use Anthropic&rsquo;s server-side tools for web search and code execution. <strong>Do you need to share tool definitions across multiple models or teams?</strong> If yes, use MCP to define tools once and expose them to any compatible model. A common mistake is using function calling when structured outputs would suffice—if you&rsquo;re extracting entities from text or generating a form response, structured outputs give you the same schema guarantees at lower cost and complexity. Reserve function calling for cases where you genuinely need the model to call external systems based on dynamic reasoning.</p>
 <table>
-	<thead>
-			<tr>
-					<th>Use Case</th>
-					<th>Recommended Pattern</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>Extract structured data from text</td>
-					<td>Structured outputs</td>
-			</tr>
-			<tr>
-					<td>Query a live external API</td>
-					<td>Function calling</td>
-			</tr>
-			<tr>
-					<td>Web search without your infrastructure</td>
-					<td>Anthropic server-side tools</td>
-			</tr>
-			<tr>
-					<td>Cross-provider tool sharing</td>
-					<td>MCP</td>
-			</tr>
-			<tr>
-					<td>Real-time UI with streaming args</td>
-					<td>Google Gemini 2.5+</td>
-			</tr>
-			<tr>
-					<td>Guaranteed schema compliance</td>
-					<td>OpenAI strict mode</td>
-			</tr>
-			<tr>
-					<td>Parallel independent queries</td>
-					<td>All providers (use asyncio)</td>
-			</tr>
-	</tbody>
+  <thead>
+      <tr>
+          <th>Use Case</th>
+          <th>Recommended Pattern</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Extract structured data from text</td>
+          <td>Structured outputs</td>
+      </tr>
+      <tr>
+          <td>Query a live external API</td>
+          <td>Function calling</td>
+      </tr>
+      <tr>
+          <td>Web search without your infrastructure</td>
+          <td>Anthropic server-side tools</td>
+      </tr>
+      <tr>
+          <td>Cross-provider tool sharing</td>
+          <td>MCP</td>
+      </tr>
+      <tr>
+          <td>Real-time UI with streaming args</td>
+          <td>Google Gemini 2.5+</td>
+      </tr>
+      <tr>
+          <td>Guaranteed schema compliance</td>
+          <td>OpenAI strict mode</td>
+      </tr>
+      <tr>
+          <td>Parallel independent queries</td>
+          <td>All providers (use asyncio)</td>
+      </tr>
+  </tbody>
 </table>
 <h2 id="faq">FAQ</h2>
 <p><strong>Does function calling work with all models or just the most expensive ones?</strong>
@@ -523,55 +523,55 @@ Use async execution with explicit timeouts. Set a per-tool timeout (typically 10
 <p>Gemini CLI requires Node.js 20 or higher. Node.js 22 LTS is the recommended version for best performance and long-term support. You can check your version with <code>node --version</code> and install the latest LTS via <code>nvm install --lts</code> if needed. The tool also requires at least 4 GB of RAM, though 16 GB is recommended for large context operations involving million-token prompts.</p>
 <h2 id="how-to-install-gemini-cli">How to Install Gemini CLI</h2>
 <p>Gemini CLI offers seven installation methods. The recommended approach is a global npm install, which takes under 30 seconds on a typical connection:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>npm install -g @google/gemini-cli
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>npm install -g @google/gemini-cli
 </span></span></code></pre></div><p>After installation, verify it works:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>gemini --version
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>gemini --version
 </span></span></code></pre></div><p><strong>Alternative installation methods:</strong></p>
 <table>
-	<thead>
-			<tr>
-					<th>Method</th>
-					<th>Command</th>
-					<th>Best For</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>npm global (recommended)</td>
-					<td><code>npm install -g @google/gemini-cli</code></td>
-					<td>Most developers</td>
-			</tr>
-			<tr>
-					<td>npx (no install)</td>
-					<td><code>npx @google/gemini-cli</code></td>
-					<td>Quick trial</td>
-			</tr>
-			<tr>
-					<td>Homebrew (macOS)</td>
-					<td><code>brew install gemini-cli</code></td>
-					<td>macOS users</td>
-			</tr>
-			<tr>
-					<td>Docker</td>
-					<td><code>docker run -it gcr.io/google-gemini/gemini-cli</code></td>
-					<td>Sandboxed environments</td>
-			</tr>
-			<tr>
-					<td>Yarn global</td>
-					<td><code>yarn global add @google/gemini-cli</code></td>
-					<td>Yarn users</td>
-			</tr>
-			<tr>
-					<td>pnpm global</td>
-					<td><code>pnpm add -g @google/gemini-cli</code></td>
-					<td>pnpm users</td>
-			</tr>
-			<tr>
-					<td>Snap (Linux)</td>
-					<td><code>snap install gemini-cli</code></td>
-					<td>Ubuntu/Snap systems</td>
-			</tr>
-	</tbody>
+  <thead>
+      <tr>
+          <th>Method</th>
+          <th>Command</th>
+          <th>Best For</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>npm global (recommended)</td>
+          <td><code>npm install -g @google/gemini-cli</code></td>
+          <td>Most developers</td>
+      </tr>
+      <tr>
+          <td>npx (no install)</td>
+          <td><code>npx @google/gemini-cli</code></td>
+          <td>Quick trial</td>
+      </tr>
+      <tr>
+          <td>Homebrew (macOS)</td>
+          <td><code>brew install gemini-cli</code></td>
+          <td>macOS users</td>
+      </tr>
+      <tr>
+          <td>Docker</td>
+          <td><code>docker run -it gcr.io/google-gemini/gemini-cli</code></td>
+          <td>Sandboxed environments</td>
+      </tr>
+      <tr>
+          <td>Yarn global</td>
+          <td><code>yarn global add @google/gemini-cli</code></td>
+          <td>Yarn users</td>
+      </tr>
+      <tr>
+          <td>pnpm global</td>
+          <td><code>pnpm add -g @google/gemini-cli</code></td>
+          <td>pnpm users</td>
+      </tr>
+      <tr>
+          <td>Snap (Linux)</td>
+          <td><code>snap install gemini-cli</code></td>
+          <td>Ubuntu/Snap systems</td>
+      </tr>
+  </tbody>
 </table>
 <p>For teams evaluating the tool without committing to a global install, <code>npx</code> is ideal — it downloads and runs the latest version on the fly without any global state.</p>
 <h2 id="authentication-options">Authentication Options</h2>
@@ -580,11 +580,11 @@ Use async execution with explicit timeouts. Set a per-tool timeout (typically 10
 <p>This is the default and easiest option. Run <code>gemini auth login</code> and a browser window opens to authenticate with your Google account. You get 60 requests per minute and 1,000 requests per day at zero cost — no credit card, no trial period. The free tier uses the same Gemini 2.5 Pro model as the paid API.</p>
 <p><strong>Google AI Studio API Key (Pay-As-You-Go)</strong></p>
 <p>For developers who exceed the free tier or need programmatic access, create an API key at aistudio.google.com and export it:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>export GEMINI_API_KEY<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;your-api-key-here&#34;</span>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>export GEMINI_API_KEY<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;your-api-key-here&#34;</span>
 </span></span></code></pre></div><p>Gemini Flash models are particularly cost-effective for high-volume tasks like log parsing and automated scripts.</p>
 <p><strong>Vertex AI (Enterprise)</strong></p>
 <p>For enterprise teams with GCP billing, Vertex AI authentication unlocks SLA guarantees, regional data residency, and audit logging. Set up with <code>gcloud auth application-default login</code> and configure your project:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>export GOOGLE_CLOUD_PROJECT<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;your-gcp-project-id&#34;</span>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>export GOOGLE_CLOUD_PROJECT<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;your-gcp-project-id&#34;</span>
 </span></span></code></pre></div><h2 id="free-tier-deep-dive">Free Tier Deep Dive</h2>
 <p>The Gemini CLI free tier is the most generous offering in the terminal AI agent market as of 2026. Here are the specifics:</p>
 <ul>
@@ -599,22 +599,22 @@ Use async execution with explicit timeouts. Set a per-tool timeout (typically 10
 <p>Gemini CLI is built around a core set of tools that operate directly on your filesystem and shell environment. Understanding what each tool does helps you design effective prompts.</p>
 <p><strong>Code Generation and Editing</strong></p>
 <p>Gemini CLI can create new files, modify existing ones, and refactor across multiple files simultaneously. With a 1 million token context window, you can pass an entire medium-sized codebase as context. Example:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>gemini <span style="color:#e6db74">&#34;Add input validation to all API endpoints in src/routes/ and write unit tests for each&#34;</span>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>gemini <span style="color:#e6db74">&#34;Add input validation to all API endpoints in src/routes/ and write unit tests for each&#34;</span>
 </span></span></code></pre></div><p><strong>Google Search Grounding</strong></p>
 <p>Unlike most AI coding tools, Gemini CLI has native Google Search integration. It can ground answers in real-time search results — useful for &ldquo;what&rsquo;s the current syntax for X in library Y version Z?&rdquo; queries where training data may be stale.</p>
 <p><strong>Multimodal Input</strong></p>
 <p>Gemini CLI accepts images, PDFs, and diagrams as input. Pass a screenshot of an error, an architecture diagram, or a UI mockup:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>gemini <span style="color:#e6db74">&#34;Here&#39;s a screenshot of the error: error.png — what&#39;s causing it and how do I fix it?&#34;</span>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>gemini <span style="color:#e6db74">&#34;Here&#39;s a screenshot of the error: error.png — what&#39;s causing it and how do I fix it?&#34;</span>
 </span></span></code></pre></div><p><strong>Non-Interactive Scripting Mode</strong></p>
 <p>For CI/CD pipelines and automation scripts, use <code>--non-interactive</code> mode. This disables prompts and returns structured output suitable for piping:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>gemini --non-interactive <span style="color:#e6db74">&#34;Review this diff for security issues&#34;</span> &lt; git.diff
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>gemini --non-interactive <span style="color:#e6db74">&#34;Review this diff for security issues&#34;</span> &lt; git.diff
 </span></span></code></pre></div><p><strong>MCP Server Integration</strong></p>
 <p>Gemini CLI supports the Model Context Protocol (MCP), allowing integration with external tools — databases, APIs, file systems, and custom services. Configure MCP servers in <code>~/.gemini/settings.json</code>.</p>
 <h2 id="geminimd-mcp-servers-and-settingsjson">GEMINI.md, MCP Servers, and settings.json</h2>
 <p>Gemini CLI&rsquo;s customization system has three layers that work together to make the tool aware of your specific project, tools, and preferences. The first layer is <code>GEMINI.md</code>, a plain Markdown file you place at the root of any project to provide persistent context — stack details, coding conventions, and off-limits files — without repeating them in every prompt. The second layer is <code>settings.json</code> at <code>~/.gemini/settings.json</code>, which controls global defaults like sandbox mode, auto-approval behavior, and default model. The third layer is MCP server integration, which extends Gemini CLI&rsquo;s built-in tools with external services: databases, APIs, file systems, and custom automation. Together, these three mechanisms transform a generic AI terminal agent into a tool that understands your specific codebase, respects your team&rsquo;s conventions, and can reach out to your infrastructure. Setting up all three layers takes about 15 minutes and pays dividends in every subsequent session.</p>
 <h3 id="geminimd--project-level-context">GEMINI.md — Project-Level Context</h3>
 <p>Similar to <code>.cursorrules</code> or <code>CLAUDE.md</code>, you can create a <code>GEMINI.md</code> file at the root of any project to give Gemini persistent context about your codebase:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-markdown" data-lang="markdown"><span style="display:flex;"><span># Project: Payment Service
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-markdown" data-lang="markdown"><span style="display:flex;"><span># Project: Payment Service
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span><span style="font-weight:bold">**Stack**</span>
 </span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> Node.js 22, TypeScript 5, Fastify 4
@@ -631,7 +631,7 @@ Use async execution with explicit timeouts. Set a per-tool timeout (typically 10
 </span></span></code></pre></div><p>Gemini CLI reads this file automatically when you run it from that directory. Project-level instructions take precedence over default behavior.</p>
 <h3 id="settingsjson-configuration">settings.json Configuration</h3>
 <p>Global settings live at <code>~/.gemini/settings.json</code>. Key configuration options:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
 </span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;defaultModel&#34;</span>: <span style="color:#e6db74">&#34;gemini-2.5-pro&#34;</span>,
 </span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;sandbox&#34;</span>: <span style="color:#66d9ef">true</span>,
 </span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;autoApprove&#34;</span>: <span style="color:#66d9ef">false</span>,
@@ -644,7 +644,7 @@ Use async execution with explicit timeouts. Set a per-tool timeout (typically 10
 </span></span><span style="display:flex;"><span>}
 </span></span></code></pre></div><h3 id="mcp-integration-example">MCP Integration Example</h3>
 <p>To add a PostgreSQL MCP server for database-aware queries:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
 </span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;mcpServers&#34;</span>: {
 </span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;postgres&#34;</span>: {
 </span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;command&#34;</span>: <span style="color:#e6db74">&#34;npx&#34;</span>,
@@ -660,97 +660,97 @@ Use async execution with explicit timeouts. Set a per-tool timeout (typically 10
 <p>Gemini CLI&rsquo;s safety model is built around three mechanisms that prevent unintended changes. Every file modification and shell command requires explicit user approval by default — the CLI shows you exactly what will change before executing. You can type <code>y</code> to approve, <code>n</code> to reject, or <code>e</code> to edit the proposed change.</p>
 <p><strong>Sandbox Mode</strong> runs Gemini CLI inside a Docker or Podman container, isolating all filesystem and network access. Enable it globally in <code>settings.json</code> with <code>&quot;sandbox&quot;: true</code> or per-session with <code>gemini --sandbox</code>. In sandbox mode, any command that would affect your host system requires an explicit breakout approval.</p>
 <p><strong>Checkpointing</strong> creates automatic snapshots before any batch of file changes. If a refactoring goes wrong, roll back with:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>gemini checkpoint restore
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>gemini checkpoint restore
 </span></span></code></pre></div><p>This is especially valuable during large-scale refactors where multiple files change simultaneously. Unlike a simple <code>git stash</code>, checkpoints capture the exact state at each approval point, letting you step back incrementally.</p>
 <h2 id="real-world-workflows-and-use-cases">Real-World Workflows and Use Cases</h2>
 <p>Gemini CLI&rsquo;s combination of a 1 million token context window, Google Search grounding, multimodal input, and non-interactive scripting mode makes it uniquely suited for several developer workflows that other tools handle poorly. Where most AI coding tools force you to cherry-pick files to stay within a 64K or 128K context limit, Gemini CLI lets you reason about an entire codebase in a single prompt. Where other tools require web searches or browsing integrations, Gemini CLI grounds answers natively in real-time Google Search results. And where interactive tools fall short in automation, the <code>--non-interactive</code> mode enables Gemini CLI to run cleanly in CI/CD pipelines. The four most productive use cases — large codebase analysis, DevOps scripting, rapid prototyping, and documentation generation — each leverage a different combination of these capabilities and represent where Gemini CLI consistently outperforms narrower alternatives.</p>
 <h3 id="large-codebase-analysis">Large Codebase Analysis</h3>
 <p>The 1 million token context window is Gemini CLI&rsquo;s most distinctive capability. A typical Node.js monorepo with 200+ files might total 150,000–300,000 tokens — well within a single context. This enables queries impossible with smaller-context tools:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>gemini <span style="color:#e6db74">&#34;Find all places where we directly mutate shared state across the entire src/ directory and suggest refactors&#34;</span>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>gemini <span style="color:#e6db74">&#34;Find all places where we directly mutate shared state across the entire src/ directory and suggest refactors&#34;</span>
 </span></span></code></pre></div><h3 id="devops-and-infrastructure-scripting">DevOps and Infrastructure Scripting</h3>
 <p>Gemini CLI excels at writing and debugging shell scripts, Dockerfiles, and CI/CD configurations. The Google Search grounding keeps syntax references current:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>cat failing-deploy.log | gemini <span style="color:#e6db74">&#34;Diagnose this Kubernetes deployment failure and write a corrected deployment.yaml&#34;</span>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>cat failing-deploy.log | gemini <span style="color:#e6db74">&#34;Diagnose this Kubernetes deployment failure and write a corrected deployment.yaml&#34;</span>
 </span></span></code></pre></div><h3 id="rapid-prototyping">Rapid Prototyping</h3>
 <p>The fast iteration loop — type a prompt, approve changes, see results — makes Gemini CLI ideal for throwaway prototypes and spike solutions. The free tier&rsquo;s 60 RPM supports aggressive back-and-forth without cost concerns.</p>
 <h3 id="documentation-generation">Documentation Generation</h3>
 <p>Feed Gemini CLI an entire module and generate comprehensive documentation:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>gemini <span style="color:#e6db74">&#34;Read src/auth/ and generate API documentation in Markdown format, including parameter types, return values, and error codes&#34;</span>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>gemini <span style="color:#e6db74">&#34;Read src/auth/ and generate API documentation in Markdown format, including parameter types, return values, and error codes&#34;</span>
 </span></span></code></pre></div><h2 id="gemini-cli-vs-claude-code-vs-cursor-vs-github-copilot-2026-comparison">Gemini CLI vs Claude Code vs Cursor vs GitHub Copilot (2026 Comparison)</h2>
 <table>
-	<thead>
-			<tr>
-					<th>Feature</th>
-					<th>Gemini CLI</th>
-					<th>Claude Code</th>
-					<th>Cursor</th>
-					<th>GitHub Copilot</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>Price (free tier)</td>
-					<td>1,000 req/day free</td>
-					<td>Token-based, no free tier</td>
-					<td>Free plan limited</td>
-					<td>Free for students</td>
-			</tr>
-			<tr>
-					<td>Context window</td>
-					<td>1M tokens</td>
-					<td>200K tokens</td>
-					<td>128K tokens</td>
-					<td>64K tokens</td>
-			</tr>
-			<tr>
-					<td>Terminal-native</td>
-					<td>Yes</td>
-					<td>Yes</td>
-					<td>No (IDE)</td>
-					<td>Partial (CLI)</td>
-			</tr>
-			<tr>
-					<td>Open source</td>
-					<td>Yes (Apache 2.0)</td>
-					<td>No</td>
-					<td>No</td>
-					<td>No</td>
-			</tr>
-			<tr>
-					<td>MCP support</td>
-					<td>Yes</td>
-					<td>Yes</td>
-					<td>No</td>
-					<td>No</td>
-			</tr>
-			<tr>
-					<td>Search grounding</td>
-					<td>Yes (Google Search)</td>
-					<td>No</td>
-					<td>No</td>
-					<td>No</td>
-			</tr>
-			<tr>
-					<td>Multi-file edits</td>
-					<td>Yes</td>
-					<td>Yes</td>
-					<td>Yes</td>
-					<td>Limited</td>
-			</tr>
-			<tr>
-					<td>Autonomous agents</td>
-					<td>Yes</td>
-					<td>Yes</td>
-					<td>Yes</td>
-					<td>Limited</td>
-			</tr>
-			<tr>
-					<td>Best for</td>
-					<td>High-volume, large context</td>
-					<td>Complex reasoning, safety</td>
-					<td>IDE users</td>
-					<td>IDE-first teams</td>
-			</tr>
-	</tbody>
+  <thead>
+      <tr>
+          <th>Feature</th>
+          <th>Gemini CLI</th>
+          <th>Claude Code</th>
+          <th>Cursor</th>
+          <th>GitHub Copilot</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Price (free tier)</td>
+          <td>1,000 req/day free</td>
+          <td>Token-based, no free tier</td>
+          <td>Free plan limited</td>
+          <td>Free for students</td>
+      </tr>
+      <tr>
+          <td>Context window</td>
+          <td>1M tokens</td>
+          <td>200K tokens</td>
+          <td>128K tokens</td>
+          <td>64K tokens</td>
+      </tr>
+      <tr>
+          <td>Terminal-native</td>
+          <td>Yes</td>
+          <td>Yes</td>
+          <td>No (IDE)</td>
+          <td>Partial (CLI)</td>
+      </tr>
+      <tr>
+          <td>Open source</td>
+          <td>Yes (Apache 2.0)</td>
+          <td>No</td>
+          <td>No</td>
+          <td>No</td>
+      </tr>
+      <tr>
+          <td>MCP support</td>
+          <td>Yes</td>
+          <td>Yes</td>
+          <td>No</td>
+          <td>No</td>
+      </tr>
+      <tr>
+          <td>Search grounding</td>
+          <td>Yes (Google Search)</td>
+          <td>No</td>
+          <td>No</td>
+          <td>No</td>
+      </tr>
+      <tr>
+          <td>Multi-file edits</td>
+          <td>Yes</td>
+          <td>Yes</td>
+          <td>Yes</td>
+          <td>Limited</td>
+      </tr>
+      <tr>
+          <td>Autonomous agents</td>
+          <td>Yes</td>
+          <td>Yes</td>
+          <td>Yes</td>
+          <td>Limited</td>
+      </tr>
+      <tr>
+          <td>Best for</td>
+          <td>High-volume, large context</td>
+          <td>Complex reasoning, safety</td>
+          <td>IDE users</td>
+          <td>IDE-first teams</td>
+      </tr>
+  </tbody>
 </table>
 <p>Gemini CLI wins on context size, price, and openness. Claude Code wins on reasoning depth and multi-step autonomous workflows — teams using Claude Code report 2–5× faster feature completion on complex tasks. The tools complement rather than replace each other.</p>
 <h2 id="performance-benchmarks-speed-vs-quality">Performance Benchmarks: Speed vs Quality</h2>
@@ -775,15 +775,55 @@ Use async execution with explicit timeouts. Set a per-tool timeout (typically 10
 <h2 id="troubleshooting-common-issues">Troubleshooting Common Issues</h2>
 <p>Gemini CLI issues fall into four predictable categories: Node.js version mismatches, authentication failures, sandbox container problems, and rate limit errors. The majority of installation failures trace back to running an outdated Node.js — checking <code>node --version</code> before filing a bug report resolves about 40% of reported issues. Authentication failures are almost always caused by browser or network problems during the OAuth flow, or missing environment variable exports for API key auth. Sandbox issues invariably mean Docker Desktop isn&rsquo;t running or lacks sufficient permissions. Rate limit errors (HTTP 429) during free-tier usage indicate burst usage exceeding 60 RPM, which rarely affects interactive sessions but can surface in tight automation loops. This section covers the fix for each scenario with the exact commands to run, so you can diagnose and resolve the most common problems in under five minutes.</p>
 <h3 id="nodejs-version-errors">Node.js Version Errors</h3>
-<pre tabindex="0"><code>Error: requires Node.js 20+
-</code></pre><p>Fix: <code>nvm install 22 &amp;&amp; nvm use 22</code></p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 224 25"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>E</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>q</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>N</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='144' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='152' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>j</text>
+<text text-anchor='middle' x='176' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='192' y='4' fill='currentColor' style='font-size:1em'>2</text>
+<text text-anchor='middle' x='200' y='4' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='208' y='4' fill='currentColor' style='font-size:1em'>+</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>Fix: <code>nvm install 22 &amp;&amp; nvm use 22</code></p>
 <h3 id="authentication-failures">Authentication Failures</h3>
 <p>If <code>gemini auth login</code> fails to open a browser or hangs, try:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>gemini auth login --no-browser
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>gemini auth login --no-browser
 </span></span></code></pre></div><p>This prints a URL to paste manually. For API key auth, ensure the key is exported in the same shell session where you run Gemini CLI.</p>
 <h3 id="sandbox-not-starting">Sandbox Not Starting</h3>
 <p>Docker Desktop must be running for sandbox mode. If you see <code>Error: sandbox container failed to start</code>:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>docker info  <span style="color:#75715e"># Verify Docker is running</span>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>docker info  <span style="color:#75715e"># Verify Docker is running</span>
 </span></span><span style="display:flex;"><span>gemini --sandbox  <span style="color:#75715e"># Retry with explicit sandbox flag</span>
 </span></span></code></pre></div><h3 id="rate-limit-errors-429">Rate Limit Errors (429)</h3>
 <p>If you hit 60 RPM on the free tier, the CLI surfaces a <code>RESOURCE_EXHAUSTED</code> error. Solutions: add a brief pause between automated calls, switch to an AI Studio API key for pay-as-you-go, or use Gemini Flash for lower-cost high-volume operations.</p>

@@ -1,247 +1,4 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Serverless on RockB</title><link>https://baeseokjae.github.io/tags/serverless/</link><description>Recent content in Serverless on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 07 Jul 2026 12:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/serverless/index.xml" rel="self" type="application/rss+xml"/><item><title>Code Execution Sandbox Pricing 2026: Cost, Cold Starts, and Persistence for AI Agents</title><link>https://baeseokjae.github.io/posts/code-execution-sandbox-pricing-comparison-2026/</link><pubDate>Tue, 07 Jul 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/code-execution-sandbox-pricing-comparison-2026/</guid><description>A practical 2026 comparison of E2B, Modal, and Fly.io for AI agent code execution — covering per-second pricing, cold start latency, persistence models, and total cost for real agent workloads.</description><content:encoded><![CDATA[<p>If you&rsquo;re building AI agents that execute code — whether it&rsquo;s a coding agent running tests, a data analysis pipeline spinning up Python interpreters, or a multi-agent system that needs isolated environments per task — the sandbox you pick directly determines your cost structure, your latency profile, and how much state management code you have to write yourself. Three providers dominate this space in 2026: E2B, Modal, and Fly.io. Each one has a fundamentally different pricing model, cold start story, and persistence strategy. I&rsquo;ve been running production agent workloads on all three for the past six months, and the differences are bigger than the marketing suggests.</p>
-<h2 id="the-pricing-models-at-a-glance">The Pricing Models at a Glance</h2>
-<p>The first thing to understand is that these three providers don&rsquo;t just charge different rates — they charge in fundamentally different ways.</p>
-<p><strong>E2B</strong> uses a hybrid model: a monthly subscription tier ($150/month for Pro) plus per-second compute on top. You pay the subscription for the right to run sandboxes at scale, then you pay per-second for actual CPU and RAM usage. The Hobby tier is free with $100 one-time credits, but you&rsquo;re limited to 1-hour sandbox sessions and 20 concurrent sandboxes.</p>
-<p><strong>Modal</strong> is pure per-second billing with no subscription fee. You get $30/month in free compute credits on the Starter plan, and after that you pay only for what you use. There&rsquo;s no upfront commitment, no minimum spend. This makes Modal the most flexible option for variable or bursty workloads.</p>
-<p><strong>Fly.io</strong> is also per-second billing but with a suspend/resume model that changes the economics significantly. Their smallest shared-CPU VM (256MB) costs $0.00000078/second — roughly $2.02/month if it runs continuously. But the real trick is that you can suspend VMs when they&rsquo;re idle and pay only $0.15/month for metadata retention.</p>
-<p>Here&rsquo;s the raw per-second pricing for CPU-only workloads:</p>
-<table>
-	<thead>
-			<tr>
-					<th>Provider</th>
-					<th>1 vCPU/core</th>
-					<th>2 vCPU</th>
-					<th>4 vCPU</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>E2B</td>
-					<td>$0.000014/s</td>
-					<td>$0.000028/s</td>
-					<td>$0.000056/s</td>
-			</tr>
-			<tr>
-					<td>Modal</td>
-					<td>$0.0000131/core/s</td>
-					<td>$0.0000262/s</td>
-					<td>$0.0000524/s</td>
-			</tr>
-			<tr>
-					<td>Fly.io (shared)</td>
-					<td>$0.00000429/s (1x 2GB)</td>
-					<td>$0.00000859/s (2x 4GB)</td>
-					<td>—</td>
-			</tr>
-	</tbody>
-</table>
-<p>E2B and Modal are within 7% of each other on raw CPU pricing. Fly.io is 3-4x cheaper on paper, but that comparison is misleading — Fly.io&rsquo;s shared-CPU VMs are not equivalent to dedicated vCPUs, and you&rsquo;re sharing the physical core with other tenants. Their dedicated performance instances close the gap: a performance-1x 2GB VM costs $0.00001056/s, which is about 75% of E2B&rsquo;s 1 vCPU rate.</p>
-<h2 id="cold-starts-the-hidden-cost-that-wastes-your-budget">Cold Starts: The Hidden Cost That Wastes Your Budget</h2>
-<p>Cold starts matter more for AI agents than for traditional serverless workloads, and here&rsquo;s why: an interactive agent that calls a sandbox, runs a 200ms Python snippet, and waits for the result feels sluggish if the sandbox takes 2 seconds to boot. For batch processing, cold starts are a throughput problem. For interactive agents, they&rsquo;re a user experience problem.</p>
-<p><strong>E2B</strong> claims sub-second cold starts for their lightweight Firecracker microVMs. In my testing, I consistently saw 400-800ms from request to first byte of execution. This is good enough for most interactive agent use cases. The sandboxes are purpose-built for AI agent code execution, so the boot path is optimized for exactly this scenario — spin up a minimal VM, run the code, return the result.</p>
-<p><strong>Modal</strong> has a split story. CPU functions cold start in 200-500ms, which is actually faster than E2B for simple workloads. GPU functions are a different story: 5-15 seconds for model loading. If your agent needs GPU inference (say, running a vision model on a screenshot), you&rsquo;ll want to use Modal&rsquo;s container pooling or scheduled functions to keep a warm instance ready. The $30/month free credits help offset the cost of keeping a GPU warm, but it&rsquo;s something you have to design for.</p>
-<p><strong>Fly.io</strong> has the most interesting cold start story because of their suspend/resume model. A suspended VM resumes in 100-500ms — faster than either E2B or Modal for CPU workloads. A true cold start (first boot) takes 1-3 seconds. The key insight is that if you keep a VM suspended rather than destroyed, the resume is nearly instant. This makes Fly.io uniquely suited for agent workloads where the same sandbox is used repeatedly with gaps between executions.</p>
-<p>The practical takeaway: if your agents make frequent, short-duration calls to the same sandbox, Fly.io&rsquo;s suspend/resume model saves you both latency and money. If your agents are stateless and ephemeral — spin up, run, destroy — E2B or Modal are better fits.</p>
-<h2 id="persistence-session-based-vs-volume-based-vs-suspendresume">Persistence: Session-Based vs. Volume-Based vs. Suspend/Resume</h2>
-<p>How your sandbox handles state across executions is the single most underestimated cost factor in agent infrastructure. I&rsquo;ve seen teams burn through thousands of dollars because they designed their agents around persistent state on a platform that charges per-execution.</p>
-<p><strong>E2B</strong> is session-based. A sandbox session can last up to 1 hour on the Hobby plan or 24 hours on Pro. Within a session, the filesystem persists. Between sessions, everything is gone unless you explicitly export data. This works well for agents that complete their work within a single session — a coding agent that clones a repo, runs tests, and reports results in under an hour, for example. But if your agent needs to maintain state across days or weeks, you&rsquo;ll need to build your own persistence layer on top.</p>
-<p><strong>Modal</strong> is stateless by default. Functions don&rsquo;t retain filesystem state between invocations. If you need persistence, you pay $0.09/GiB/month for Modal Volumes, with the first 1 TiB free. This is cheap for long-term storage but adds latency for frequent reads and writes. Modal&rsquo;s model works best for agents that process data in discrete chunks — pull input from a volume, process, write results back — rather than agents that maintain a long-running interactive session.</p>
-<p><strong>Fly.io</strong> supports both ephemeral storage (6GB included per VM) and persistent volumes. The suspend/resume model means a VM&rsquo;s in-memory state is preserved across suspensions. This is the closest you&rsquo;ll get to a &ldquo;persistent agent&rdquo; without building custom infrastructure. I&rsquo;ve run agents that maintain database connections, in-memory caches, and accumulated state across hours of wall-clock time with no additional cost beyond the $0.15/month suspension fee.</p>
-<h2 id="total-cost-for-real-workloads">Total Cost for Real Workloads</h2>
-<p>Let me give you three concrete scenarios based on workloads I&rsquo;ve actually run.</p>
-<p><strong>Scenario 1: Interactive coding agent (CPU-only, 500 executions/day, 30 seconds each)</strong></p>
-<ul>
-<li>E2B Pro ($150/month) + usage: ~$0.000028/s × 30s × 500 = $0.42/day = ~$12.60/month. Total: ~$163/month.</li>
-<li>Modal (no subscription): ~$0.0000131/core/s × 30s × 500 = $0.20/day = ~$6/month. Total: ~$6/month (under $30 free tier).</li>
-<li>Fly.io (performance-1x 2GB): ~$0.00001056/s × 30s × 500 = $0.16/day = ~$4.80/month. Total: ~$5/month.</li>
-</ul>
-<p>For this workload, Modal and Fly.io are dramatically cheaper because there&rsquo;s no subscription overhead. E2B&rsquo;s $150/month Pro tier only makes sense if you need the 24-hour session limit or 100+ concurrent sandboxes.</p>
-<p><strong>Scenario 2: Batch data processing (CPU-only, 10,000 executions/day, 5 seconds each)</strong></p>
-<ul>
-<li>E2B Pro ($150/month) + usage: ~$0.000028/s × 5s × 10,000 = $1.40/day = ~$42/month. Total: ~$192/month.</li>
-<li>Modal: ~$0.0000131/core/s × 5s × 10,000 = $0.66/day = ~$20/month. Total: ~$20/month.</li>
-<li>Fly.io (performance-2x 4GB): ~$0.00002111/s × 5s × 10,000 = $1.06/day = ~$32/month. Total: ~$32/month.</li>
-</ul>
-<p>Modal wins on raw volume because there&rsquo;s no subscription floor. E2B&rsquo;s per-second rate is competitive, but the $150/month subscription dominates the total cost.</p>
-<p><strong>Scenario 3: GPU inference agent (H100, 1,000 executions/day, 10 seconds each)</strong></p>
-<ul>
-<li>Modal H100: $0.001097/s × 10s × 1,000 = $10.97/day = ~$329/month.</li>
-<li>E2B: No GPU tier publicly listed.</li>
-<li>Fly.io: GPU available but pricing not public.</li>
-</ul>
-<p>If your agent needs GPU, Modal is essentially the only option with transparent pricing. E2B and Fly.io either don&rsquo;t offer GPU or don&rsquo;t publish rates.</p>
-<h2 id="when-to-pick-each-one">When to Pick Each One</h2>
-<p>After running production workloads on all three, here&rsquo;s my honest assessment of where each provider fits.</p>
-<p><strong>Choose E2B when</strong> you need purpose-built sandbox isolation for untrusted code execution, you&rsquo;re running long-lived agent sessions (up to 24 hours), and your workload justifies the $150/month Pro subscription. E2B&rsquo;s sandboxes are the most secure out of the box for running untrusted AI-generated code. If you&rsquo;re building a platform where users can submit arbitrary code, E2B should be your first look.</p>
-<p><strong>Choose Modal when</strong> you need GPU compute, your workloads are bursty or variable, and you don&rsquo;t want to commit to a monthly subscription. Modal&rsquo;s GPU selection is unmatched — they offer everything from T4s to the latest B300s — and the pure per-second billing means you never pay for idle capacity. The $30/month free tier is generous enough for prototyping and light production use.</p>
-<p><strong>Choose Fly.io when</strong> you&rsquo;re optimizing for cost at low utilization, you need suspend/resume for persistent agent state, and your workloads are CPU-only. Fly.io&rsquo;s free tier (3 always-free VMs) and absurdly cheap shared-CPU pricing make it the best choice for small-scale deployments and personal projects. The suspend/resume model is genuinely innovative for agent workloads.</p>
-<h2 id="the-bottom-line">The Bottom Line</h2>
-<p>The sandbox pricing landscape in 2026 has settled into three distinct models, and the right choice depends more on your workload pattern than on raw per-second rates. E2B and Modal are within spitting distance on CPU pricing, but E2B&rsquo;s subscription model changes the economics at scale. Fly.io is the cost leader for low-utilization CPU workloads but falls short on GPU and sandbox isolation.</p>
-<p>If I were starting a new agent project today, I&rsquo;d default to Modal for anything involving GPU, Fly.io for CPU-only personal projects or low-traffic services, and E2B for production platforms that need to run untrusted code at scale. And I&rsquo;d keep an eye on Cloudflare Sandboxes — they reached GA in April 2026 and their <a href="/posts/cloudflare-outbound-workers-sandboxes-zero-trust-egress-guide-2026/">zero-trust egress model</a> is a compelling addition to the space, especially for teams that already run on Cloudflare.</p>
-<p>For a deeper look at how E2B compares with other purpose-built sandbox providers, check out my <a href="/posts/e2b-vs-daytona-vs-blaxel-2026/">E2B vs Daytona vs Blaxel comparison</a>. And if sandbox security is your primary concern — especially for AI-generated code — the <a href="/posts/crawl4ai-rce-sandbox-escape-guide-2026/">Crawl4AI RCE sandbox escape</a> is a sobering case study in why isolation matters.</p>
-]]></content:encoded></item><item><title>Northflank vs Blaxel vs Modal 2026: AI Agent Sandbox Infrastructure Compared</title><link>https://baeseokjae.github.io/posts/northflank-vs-blaxel-vs-modal-2026-ai-agent-sandbox-infrastructure-compared/</link><pubDate>Tue, 07 Jul 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/northflank-vs-blaxel-vs-modal-2026-ai-agent-sandbox-infrastructure-compared/</guid><description>A practical 2026 comparison of Northflank, Blaxel, and Modal for AI agent sandbox infrastructure — covering cold starts, GPU pricing, agent-specific features, BYOC, and which platform fits which workload profile.</description><content:encoded><![CDATA[<p>The AI agent sandbox market in 2026 has three platforms that keep coming up in the same conversation, but they are not the same kind of product. Northflank is a general-purpose developer platform that happens to support sandbox workloads. Blaxel is purpose-built infrastructure for autonomous agents — nothing else. Modal is a high-performance serverless AI compute platform with sandboxing as one feature among many. Picking the wrong one for your workload profile means paying for infrastructure you do not need or missing capabilities you cannot bolt on later.</p>
-<p>I have been running production agent workloads across all three for the past six months, and the differences are not subtle. This article breaks down exactly where each platform wins, where it falls short, and how to match them to your actual agent architecture.</p>
-<h2 id="what-each-platform-actually-is">What Each Platform Actually Is</h2>
-<p>Before comparing numbers, it helps to understand what each platform was built to do, because the architectural DNA shows up in every dimension.</p>
-<p><strong>Northflank</strong> started as a developer platform for deploying any project — apps, databases, jobs, CI/CD, and later sandboxes. It processes 130B+ requests and serves 80k+ developers. The sandbox feature uses microVM-backed containers with boot times around 200ms, but it is one capability inside a much larger platform that includes BYOC (AWS, GCP, Azure), multi-tenancy, and an internal developer platform (IDP) layer. Northflank&rsquo;s GPU options run from L4 ($0.80/hr) through A100 80GB ($1.76/hr) to H100 ($2.74/hr) and RTX PRO 6000 ($3.00/hr). You are not buying a sandbox — you are buying a platform that includes sandboxes.</p>
-<p><strong>Blaxel</strong> is the only platform in this comparison built from scratch for autonomous agents. Its architecture centers on microVMs that boot in milliseconds and resume from snapshots in ~25ms. Beyond sandboxes, Blaxel ships Agent Drive (a distributed filesystem for multi-agent collaboration), a Model Gateway (co-located endpoint for every model provider), and MCP Server support. There is no GPU compute — Blaxel is focused on CPU agent sandbox workloads with state persistence. Pricing is $0.0000115/GB RAM·second for active CPU time, with up to $200 free credits.</p>
-<p><strong>Modal</strong> is serverless AI infrastructure first — inference, training, batch jobs, and sandboxes. Its headline capability is instant autoscaling from 0 to 1000+ GPUs with sub-second cold starts for CPU functions. GPU options range from H100 ($3.95/hr) to B300 ($7.10/hr). The Python SDK is the primary interface: you write Python functions, decorate them with <code>@modal.app</code>, and Modal handles containerization, scaling, and billing. Sandboxes are a feature for secure ephemeral execution, not the product. Modal offers $30/month free credits and academic grants up to $10k.</p>
-<h2 id="cold-start-performance-the-agent-responsiveness-factor">Cold Start Performance: The Agent Responsiveness Factor</h2>
-<p>Cold start latency is the single most visible performance metric for agent sandboxes because it directly impacts how fast an agent can respond to a tool call or resume after a pause.</p>
-<table>
-	<thead>
-			<tr>
-					<th>Platform</th>
-					<th>Cold Start / Resume</th>
-					<th>Measurement Context</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>Northflank</td>
-					<td>~200ms</td>
-					<td>MicroVM-backed container boot</td>
-			</tr>
-			<tr>
-					<td>Blaxel</td>
-					<td>~25ms resume</td>
-					<td>Snapshot-based resume from persisted state</td>
-			</tr>
-			<tr>
-					<td>Modal</td>
-					<td>Sub-second (CPU), 5-15s (GPU)</td>
-					<td>CPU functions vs GPU model loading</td>
-			</tr>
-	</tbody>
-</table>
-<p>Blaxel&rsquo;s 25ms resume is the fastest in this group, but it is a resume from a warm snapshot, not a cold boot. If your agent pauses and resumes frequently — a coding agent that checkpoints between phases, a research agent that waits for external data — Blaxel&rsquo;s model means the environment is back in under 30ms with full filesystem, process, and memory state intact. Northflank&rsquo;s 200ms cold boot is competitive for a fresh sandbox, but every resume is a full boot. Modal&rsquo;s CPU cold starts are fast, but GPU functions require 5-15 seconds for model loading unless you use container pooling or scheduled functions to keep instances warm.</p>
-<p>In practice, the gap matters most for interactive agents where the user waits for a response. A 200ms cold start is imperceptible for a single tool call. A 5-second GPU cold start is not. Blaxel&rsquo;s 25ms resume only helps if your workload profile actually pauses and resumes — if your agents run to completion in a single session, the persistence advantage disappears.</p>
-<h2 id="gpu-support-and-pricing">GPU Support and Pricing</h2>
-<p>If your agent needs GPU compute — running vision models, generating embeddings, or serving inference — the choice narrows quickly.</p>
-<table>
-	<thead>
-			<tr>
-					<th>Platform</th>
-					<th>GPU Options</th>
-					<th>Starting Price</th>
-					<th>Pricing Model</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>Northflank</td>
-					<td>L4, A100 40GB, A100 80GB, H100, RTX PRO 6000</td>
-					<td>$0.80/hr (L4)</td>
-					<td>Per vCPU/hour + GPU/hour</td>
-			</tr>
-			<tr>
-					<td>Blaxel</td>
-					<td>None</td>
-					<td>N/A</td>
-					<td>Per GB RAM·second (CPU only)</td>
-			</tr>
-			<tr>
-					<td>Modal</td>
-					<td>T4, A10G, A100, H100, H200, B200, B300</td>
-					<td>$3.95/hr (H100)</td>
-					<td>Per-second billing</td>
-			</tr>
-	</tbody>
-</table>
-<p>Modal dominates for GPU-heavy workloads. Its GPU selection is the widest, the autoscaling from 0 to 1000+ GPUs is genuinely useful for bursty inference loads, and the per-second billing means you do not pay for idle GPU time. I have run batch embedding jobs on Modal that scaled to 50 H100s in under 30 seconds, processed 2M documents in 12 minutes, and cost $47. You cannot do that on Northflank or Blaxel.</p>
-<p>Northflank&rsquo;s GPU pricing is competitive for sustained workloads — $1.76/hr for A100 80GB versus Modal&rsquo;s $3.95/hr for H100 — but the platform is not optimized for GPU autoscaling. You provision GPU resources per service or job, and scaling is less automatic than Modal&rsquo;s function-level model.</p>
-<p>Blaxel has no GPU compute. If your agent pipeline includes any GPU-dependent step, you need a second platform for that workload. This is the single biggest limitation for teams evaluating Blaxel as their sole infrastructure provider.</p>
-<h2 id="agent-specific-features">Agent-Specific Features</h2>
-<p>This is where the platforms diverge most sharply because they were designed for different abstractions.</p>
-<p>Blaxel is the only platform with agent-first storage and networking primitives. Agent Drive is a distributed filesystem that multiple agents can read and write concurrently — useful for multi-agent systems where a researcher agent writes findings and a writer agent picks them up. The Model Gateway provides a co-located endpoint for every model provider, which eliminates the cross-region latency penalty of routing agent model calls through a separate API gateway. MCP Server support means agents can expose tools through the Model Context Protocol without running their own server infrastructure. These features are not available on Northflank or Modal — you would build them yourself or integrate third-party services.</p>
-<p>Northflank&rsquo;s agent-specific features are thinner but its general platform is deeper. You get CI/CD pipelines, Postgres and Redis addons, secrets management, observability, and multi-cloud BYOC. If your agent system needs a database, a message queue, and deployment automation, Northflank provides them as first-class resources rather than requiring separate infrastructure.</p>
-<p>Modal&rsquo;s agent-specific features are limited to what the Python SDK and sandbox API expose. You get snapshots for fast environment initialization, warm sandbox pools, and detach/terminate workflows. But there is no agent-specific storage layer, no model gateway, and no MCP server infrastructure. Modal is excellent for compute; it is not designed to be an agent platform.</p>
-<h2 id="enterprise-readiness-byoc-hipaa-vpc">Enterprise Readiness: BYOC, HIPAA, VPC</h2>
-<table>
-	<thead>
-			<tr>
-					<th>Platform</th>
-					<th>BYOC</th>
-					<th>HIPAA</th>
-					<th>VPC / Private Networking</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>Northflank</td>
-					<td>Yes (AWS, GCP, Azure)</td>
-					<td>Yes</td>
-					<td>Yes, with microVM isolation</td>
-			</tr>
-			<tr>
-					<td>Blaxel</td>
-					<td>VPC self-hosting available</td>
-					<td>Yes ($250/mo)</td>
-					<td>Yes</td>
-			</tr>
-			<tr>
-					<td>Modal</td>
-					<td>No</td>
-					<td>Yes (Enterprise)</td>
-					<td>No (managed cloud only)</td>
-			</tr>
-	</tbody>
-</table>
-<p>Northflank is the strongest enterprise option because BYOC is a first-class feature, not an enterprise add-on. You deploy sandbox workloads into your own cloud account with microVM isolation enabled by default. For regulated teams with data residency requirements or procurement mandates to use specific cloud providers, this is often a requirement rather than a preference.</p>
-<p>Blaxel offers HIPAA compliance at $250/month and VPC self-hosting, but BYOC is less mature than Northflank&rsquo;s. The platform is newer and the enterprise deployment patterns are still evolving.</p>
-<p>Modal does not offer BYOC. All workloads run on Modal&rsquo;s managed cloud infrastructure. HIPAA is available at the Enterprise tier, but if your compliance framework requires data to stay on your own cloud infrastructure, Modal is not an option.</p>
-<h2 id="pricing-comparison-for-real-workloads">Pricing Comparison for Real Workloads</h2>
-<p>The pricing models are so different that comparing per-unit rates is misleading. Here is what three real workloads actually cost.</p>
-<p><strong>Workload 1: Interactive coding agent, CPU-only, 500 sessions/day, 30 seconds each</strong></p>
-<ul>
-<li><strong>Northflank</strong>: $0.01667/vCPU/hour × 500 sessions × 30s = ~$0.07/day in compute. But you are paying for provisioned resources, not per-session usage. A single always-on service at $0.01667/vCPU/hour × 24h = $0.40/day. Total: ~$12/month plus any addon costs.</li>
-<li><strong>Blaxel</strong>: $0.0000115/GB RAM·second × 500 sessions × 30s = ~$0.17/day for active time. Idle time is not billed. Total: ~$5/month within free credits.</li>
-<li><strong>Modal</strong>: $0.0000131/core/s × 500 sessions × 30s = ~$0.20/day. Under the $30/month free tier. Total: ~$0/month.</li>
-</ul>
-<p>For short CPU-only sessions, Modal&rsquo;s free tier covers the entire workload. Blaxel&rsquo;s per-active-second billing is competitive. Northflank&rsquo;s provisioned-resource model is more expensive at low utilization.</p>
-<p><strong>Workload 2: GPU inference agent, H100, 1,000 sessions/day, 10 seconds each</strong></p>
-<ul>
-<li><strong>Northflank</strong>: H100 at $2.74/hr. If provisioned 24/7: $65.76/day = ~$1,973/month. If you can scale down, costs decrease proportionally.</li>
-<li><strong>Blaxel</strong>: Not available — no GPU compute.</li>
-<li><strong>Modal</strong>: H100 at $0.001097/s × 10s × 1,000 = $10.97/day = ~$329/month. Autoscaling means you pay only for active GPU seconds.</li>
-</ul>
-<p>Modal wins by a wide margin for GPU workloads because of per-second billing and instant autoscaling. Northflank&rsquo;s provisioned GPU model is expensive for bursty workloads. Blaxel is not in this category.</p>
-<p><strong>Workload 3: Long-running persistent agent, 50 concurrent agents, 8 hours active/day</strong></p>
-<ul>
-<li><strong>Northflank</strong>: 50 microVM-backed sandboxes at ~$0.01667/vCPU/hour × 8h × 50 = ~$6.67/day = ~$200/month. Plus storage and networking.</li>
-<li><strong>Blaxel</strong>: 50 environments at $0.0000115/GB RAM·second × 8h × 3,600 × 50 = ~$16.56/day = ~$497/month for active time. But resume costs are near-zero.</li>
-<li><strong>Modal</strong>: 50 sandboxes at $0.0000131/core/s × 8h × 3,600 × 50 = ~$18.86/day = ~$566/month. No persistence between sessions.</li>
-</ul>
-<p>For persistent agents, Northflank&rsquo;s provisioned model is actually cheaper at scale because you pay for allocated resources rather than per-second compute. Blaxel&rsquo;s per-active-second model becomes expensive with many concurrent environments. Modal&rsquo;s stateless model requires external state management.</p>
-<h2 id="use-case-scenarios">Use Case Scenarios</h2>
-<p><strong>Best for GPU-Heavy AI Inference: Modal</strong></p>
-<p>If your agent pipeline runs vision models, generates embeddings at scale, or serves inference, Modal is the clear choice. The GPU selection, autoscaling, and per-second billing are unmatched. The $30/month free tier covers prototyping, and academic grants up to $10k make it accessible for research teams. The trade-off is that you are locked into Modal&rsquo;s managed cloud and Python-first deployment model.</p>
-<p><strong>Best for Autonomous Agent Deployments: Blaxel</strong></p>
-<p>If you are building multi-agent systems with long-running, stateful agents that pause and resume frequently, Blaxel&rsquo;s architecture is purpose-built for this. The 25ms resume, Agent Drive for multi-agent storage, and Model Gateway for co-located model endpoints eliminate infrastructure work you would otherwise have to build yourself. The lack of GPU compute means you may need a second platform for inference workloads, but for CPU-bound agent orchestration, Blaxel is the most coherent option.</p>
-<p><strong>Best for Full-Stack Teams: Northflank</strong></p>
-<p>If your agent system is part of a larger production application — with databases, message queues, CI/CD, and compliance requirements — Northflank&rsquo;s unified platform reduces operational complexity. BYOC means you deploy into your own cloud account. The GPU options cover most inference needs. The trade-off is that the sandbox features are less specialized than Blaxel&rsquo;s and the GPU autoscaling is less automatic than Modal&rsquo;s. But for teams that need one platform for everything, Northflank is the most complete option.</p>
-<h2 id="verdict--which-platform-should-you-choose-in-2026">Verdict — Which Platform Should You Choose in 2026?</h2>
-<p>There is no universal winner. The right choice depends on your workload profile:</p>
-<ul>
-<li><strong>Your primary bottleneck is GPU compute</strong> → Modal. Nothing else in this comparison matches its GPU autoscaling and per-second billing.</li>
-<li><strong>Your agents are long-running, stateful, and pause frequently</strong> → Blaxel. The 25ms resume and agent-specific features eliminate real infrastructure work.</li>
-<li><strong>You need a unified platform for agents plus traditional application infrastructure</strong> → Northflank. BYOC, databases, CI/CD, and sandboxes in one control plane.</li>
-<li><strong>You need HIPAA and BYOC</strong> → Northflank or Blaxel. Modal does not offer BYOC.</li>
-<li><strong>You are prototyping on a budget</strong> → Modal ($30/month free) or Blaxel (up to $200 free credits). Northflank&rsquo;s free tier is limited to 2 services.</li>
-</ul>
-<p>For a broader look at how these platforms fit into the overall agent deployment landscape, my <a href="/posts/ai-agent-deployment-infrastructure-guide-2026/">AI Agent Deployment Infrastructure Guide 2026</a> covers the full set of options including E2B and Ampere.sh. And if pricing is your primary concern, the <a href="/posts/code-execution-sandbox-pricing-comparison-2026/">Code Execution Sandbox Pricing Comparison 2026</a> breaks down per-second costs across E2B, Modal, and Fly.io with real workload scenarios.</p>
-<h2 id="frequently-asked-questions">Frequently Asked Questions</h2>
-<p><strong>Q: Can I use Blaxel for GPU inference?</strong>
-A: No. Blaxel does not offer GPU compute as of July 2026. If your agent pipeline needs GPU, you will need a second platform like Modal for inference and Blaxel for agent orchestration.</p>
-<p><strong>Q: Does Northflank support autoscaling for GPU workloads?</strong>
-A: Yes, but it is less automatic than Modal&rsquo;s function-level scaling. Northflank scales services and jobs based on configured policies, not per-invocation. For bursty GPU workloads, Modal&rsquo;s model is more cost-effective.</p>
-<p><strong>Q: Is Modal suitable for long-running persistent agents?</strong>
-A: Modal sandboxes support long-running processes and snapshots, but the platform is stateless by default. Persistent state requires Modal Volumes ($0.09/GiB/month) or external storage. For agents that need to maintain state across days, Blaxel or Northflank are better fits.</p>
-<p><strong>Q: Which platform has the best free tier for prototyping?</strong>
-A: Blaxel offers up to $200 in free credits, which is the most generous for CPU workloads. Modal offers $30/month free credits, which covers light GPU prototyping. Northflank&rsquo;s free Developer Sandbox plan supports 2 services and 2 jobs but is not intended for production use.</p>
-<p><strong>Q: Can I deploy Northflank sandboxes in my own cloud account?</strong>
-A: Yes. Northflank&rsquo;s BYOC feature lets you deploy sandbox workloads into AWS, GCP, or Azure accounts with microVM isolation enabled by default. This is a first-class feature, not an enterprise add-on.</p>
-]]></content:encoded></item><item><title>Cloudflare Project Think Guide 2026: Build Long-Running AI Agents with Durable Execution</title><link>https://baeseokjae.github.io/posts/cloudflare-project-think-ai-agents-guide/</link><pubDate>Thu, 07 May 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/cloudflare-project-think-ai-agents-guide/</guid><description>Cloudflare Project Think 2026: build long-running AI agents with durable execution, Fibers, Facets, and Workers infrastructure.</description><content:encoded><![CDATA[<p>During Cloudflare Agents Week 2026, the internal AI engineering stack processed 20 million requests through AI Gateway and 241 billion tokens through Workers AI — the largest proof-of-concept for Cloudflare&rsquo;s own infrastructure as an AI agent runtime. Project Think is Cloudflare&rsquo;s answer to the question of how you build AI agents that run for minutes or hours, maintain state across tool calls, and spawn specialized sub-agents, all on serverless infrastructure. The framework provides a base class (<code>@cloudflare/think</code>) built on top of Durable Objects, giving agents persistent state, hibernation (zero billing during idle), and colocated sub-agent execution via RPC. As of April 2026, Project Think is in developer preview — APIs may change as feedback is incorporated. Here is a complete guide to the architecture and how to build with it.</p>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Serverless on RockB</title><link>https://baeseokjae.github.io/tags/serverless/</link><description>Recent content in Serverless on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 07 May 2026 00:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/serverless/index.xml" rel="self" type="application/rss+xml"/><item><title>Cloudflare Project Think Guide 2026: Build Long-Running AI Agents with Durable Execution</title><link>https://baeseokjae.github.io/posts/cloudflare-project-think-ai-agents-guide/</link><pubDate>Thu, 07 May 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/cloudflare-project-think-ai-agents-guide/</guid><description>Cloudflare Project Think 2026: build long-running AI agents with durable execution, Fibers, Facets, and Workers infrastructure.</description><content:encoded><![CDATA[<p>During Cloudflare Agents Week 2026, the internal AI engineering stack processed 20 million requests through AI Gateway and 241 billion tokens through Workers AI — the largest proof-of-concept for Cloudflare&rsquo;s own infrastructure as an AI agent runtime. Project Think is Cloudflare&rsquo;s answer to the question of how you build AI agents that run for minutes or hours, maintain state across tool calls, and spawn specialized sub-agents, all on serverless infrastructure. The framework provides a base class (<code>@cloudflare/think</code>) built on top of Durable Objects, giving agents persistent state, hibernation (zero billing during idle), and colocated sub-agent execution via RPC. As of April 2026, Project Think is in developer preview — APIs may change as feedback is incorporated. Here is a complete guide to the architecture and how to build with it.</p>
 <h2 id="what-is-cloudflare-project-think">What is Cloudflare Project Think?</h2>
 <p>Cloudflare Project Think is a TypeScript framework for building long-running AI agents on Cloudflare&rsquo;s serverless infrastructure. It extends Durable Objects — Cloudflare&rsquo;s stateful, actor-model compute primitive — with primitives specifically designed for AI agent patterns: parallel execution threads (Fibers), modular sub-agents (Facets), persistent conversation trees (Sessions), and sandboxed code execution. The core insight behind Project Think is that most AI agent frameworks treat each tool call as a new stateless HTTP request. This works for short tasks but breaks for agents that need to maintain context across hours of execution, accumulate state between tool calls, and spawn specialized sub-agents for parallel work. Dynamic Workers, which power Project Think&rsquo;s sandboxed execution, are approximately 100x faster to start and up to 100x more memory-efficient than traditional containers — critical when agents need to spin up isolated execution environments on demand. Project Think is part of a broader 2026 Cloudflare push into AI infrastructure alongside Workers AI (model inference) and AI Gateway (observability and routing), positioning Cloudflare as a full-stack AI agent deployment target.</p>
 <h2 id="core-primitives-fibers-facets-sessions-and-sandboxed-execution">Core Primitives: Fibers, Facets, Sessions, and Sandboxed Execution</h2>
@@ -252,7 +9,7 @@ A: Yes. Northflank&rsquo;s BYOC feature lets you deploy sandbox workloads into A
 <p><strong>Sandboxed Execution</strong> provides isolated environments for running AI-generated code. Rather than executing model-generated code directly in the agent context, Project Think routes code execution through a sandboxed Dynamic Worker. The Execution Ladder (covered in its own section) controls which level of sandbox access an agent can escalate to, based on trust level.</p>
 <h2 id="getting-started-with-the-think-base-class-cloudflarethink">Getting Started with the Think Base Class (@cloudflare/think)</h2>
 <p>The Think base class wraps a Durable Object with the agent primitives. A basic agent implementation:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">Think</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#39;@cloudflare/think&#39;</span>;
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">Think</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#39;@cloudflare/think&#39;</span>;
 </span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">Anthropic</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#39;@anthropic-ai/sdk&#39;</span>;
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">ResearchAgent</span> <span style="color:#66d9ef">extends</span> <span style="color:#a6e22e">Think</span> {
@@ -260,7 +17,7 @@ A: Yes. Northflank&rsquo;s BYOC feature lets you deploy sandbox workloads into A
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">async</span> <span style="color:#a6e22e">run</span>(<span style="color:#a6e22e">query</span>: <span style="color:#66d9ef">string</span>)<span style="color:#f92672">:</span> <span style="color:#a6e22e">Promise</span>&lt;<span style="color:#f92672">string</span>&gt; {
 </span></span><span style="display:flex;"><span>    <span style="color:#75715e">// think() manages the tool call loop
-</span></span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">result</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">think</span>(<span style="color:#a6e22e">query</span>, {
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">result</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">think</span>(<span style="color:#a6e22e">query</span>, {
 </span></span><span style="display:flex;"><span>      <span style="color:#a6e22e">tools</span><span style="color:#f92672">:</span> [
 </span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">webSearch</span>,
 </span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">readFile</span>,
@@ -272,18 +29,18 @@ A: Yes. Northflank&rsquo;s BYOC feature lets you deploy sandbox workloads into A
 </span></span><span style="display:flex;"><span>  }
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span>  <span style="color:#75715e">// Tool methods are automatically discovered and wrapped
-</span></span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">async</span> <span style="color:#a6e22e">webSearch</span>(<span style="color:#a6e22e">query</span>: <span style="color:#66d9ef">string</span>)<span style="color:#f92672">:</span> <span style="color:#a6e22e">Promise</span>&lt;<span style="color:#f92672">string</span>&gt; {
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#66d9ef">async</span> <span style="color:#a6e22e">webSearch</span>(<span style="color:#a6e22e">query</span>: <span style="color:#66d9ef">string</span>)<span style="color:#f92672">:</span> <span style="color:#a6e22e">Promise</span>&lt;<span style="color:#f92672">string</span>&gt; {
 </span></span><span style="display:flex;"><span>    <span style="color:#75715e">// implementation
-</span></span></span><span style="display:flex;"><span>  }
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  }
 </span></span><span style="display:flex;"><span>}
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span><span style="color:#75715e">// Worker export
-</span></span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">default</span> {
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">default</span> {
 </span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">fetch</span>: <span style="color:#66d9ef">ResearchAgent.mount</span>(<span style="color:#e6db74">&#39;/agent&#39;</span>)
 </span></span><span style="display:flex;"><span>};
 </span></span></code></pre></div><p>The <code>think()</code> method manages the agent loop: it calls the LLM, executes tool calls, feeds results back to the model, and iterates until the task is complete or <code>maxSteps</code> is reached. The agent&rsquo;s state (conversation history, tool outputs, session tree) persists in the Durable Object&rsquo;s storage, surviving hibernation and resuming on the next wake event.</p>
 <p>Wrangler configuration for a Think-based agent requires Durable Objects:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-toml" data-lang="toml"><span style="display:flex;"><span><span style="color:#a6e22e">name</span> = <span style="color:#e6db74">&#34;my-agent&#34;</span>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-toml" data-lang="toml"><span style="display:flex;"><span><span style="color:#a6e22e">name</span> = <span style="color:#e6db74">&#34;my-agent&#34;</span>
 </span></span><span style="display:flex;"><span><span style="color:#a6e22e">main</span> = <span style="color:#e6db74">&#34;src/index.ts&#34;</span>
 </span></span><span style="display:flex;"><span><span style="color:#a6e22e">compatibility_date</span> = <span style="color:#e6db74">&#34;2026-04-01&#34;</span>
 </span></span><span style="display:flex;"><span>
@@ -302,21 +59,21 @@ A: Yes. Northflank&rsquo;s BYOC feature lets you deploy sandbox workloads into A
 <p>The Execution Ladder prevents runaway code execution by requiring explicit escalation. An agent that starts at Level 1 must request Level 2 access and receive approval (manual or automated, depending on configuration) before gaining write capability. This applies even to self-authored extensions — when an agent writes a new tool and wants to execute it, the execution goes through the Execution Ladder rather than running directly in the agent context.</p>
 <h2 id="building-modular-agents-with-facets-sub-agents">Building Modular Agents with Facets (Sub-Agents)</h2>
 <p>Facets enable multi-agent architectures where specialized agents collaborate. The orchestrator spawns Facets for specific subtasks; Facets maintain their own state and return results to the orchestrator via RPC:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">OrchestratorAgent</span> <span style="color:#66d9ef">extends</span> <span style="color:#a6e22e">Think</span> {
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">OrchestratorAgent</span> <span style="color:#66d9ef">extends</span> <span style="color:#a6e22e">Think</span> {
 </span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">async</span> <span style="color:#a6e22e">run</span>(<span style="color:#a6e22e">project</span>: <span style="color:#66d9ef">string</span>)<span style="color:#f92672">:</span> <span style="color:#a6e22e">Promise</span>&lt;<span style="color:#f92672">string</span>&gt; {
 </span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Spawn specialized Facets
-</span></span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">researcher</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">facet</span>(<span style="color:#e6db74">&#39;ResearcherFacet&#39;</span>);
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">researcher</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">facet</span>(<span style="color:#e6db74">&#39;ResearcherFacet&#39;</span>);
 </span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">analyst</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">facet</span>(<span style="color:#e6db74">&#39;AnalystFacet&#39;</span>);
 </span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">writer</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">facet</span>(<span style="color:#e6db74">&#39;WriterFacet&#39;</span>);
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Fan out to Facets in parallel using Fibers
-</span></span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">const</span> [<span style="color:#a6e22e">researchData</span>, <span style="color:#a6e22e">marketData</span>] <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">Promise</span>.<span style="color:#a6e22e">all</span>([
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">const</span> [<span style="color:#a6e22e">researchData</span>, <span style="color:#a6e22e">marketData</span>] <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">Promise</span>.<span style="color:#a6e22e">all</span>([
 </span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">fiber</span>(() <span style="color:#f92672">=&gt;</span> <span style="color:#a6e22e">researcher</span>.<span style="color:#a6e22e">research</span>(<span style="color:#a6e22e">project</span>)),
 </span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">fiber</span>(() <span style="color:#f92672">=&gt;</span> <span style="color:#a6e22e">analyst</span>.<span style="color:#a6e22e">marketAnalysis</span>(<span style="color:#a6e22e">project</span>)),
 </span></span><span style="display:flex;"><span>    ]);
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Writer Facet receives outputs from both
-</span></span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">report</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">writer</span>.<span style="color:#a6e22e">generate</span>({
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>    <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">report</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">writer</span>.<span style="color:#a6e22e">generate</span>({
 </span></span><span style="display:flex;"><span>      <span style="color:#a6e22e">research</span>: <span style="color:#66d9ef">researchData</span>,
 </span></span><span style="display:flex;"><span>      <span style="color:#a6e22e">market</span>: <span style="color:#66d9ef">marketData</span>,
 </span></span><span style="display:flex;"><span>    });
@@ -327,104 +84,104 @@ A: Yes. Northflank&rsquo;s BYOC feature lets you deploy sandbox workloads into A
 </span></span></code></pre></div><p>Each Facet (ResearcherFacet, AnalystFacet, WriterFacet) is its own Durable Object with its own tool set, system prompt, and state. Colocated RPC means the latency between orchestrator and Facets is negligible — unlike HTTP-based multi-agent architectures where each agent-to-agent call adds network overhead.</p>
 <h2 id="persistent-sessions-tree-structured-conversations-and-branching">Persistent Sessions: Tree-Structured Conversations and Branching</h2>
 <p>The Sessions primitive implements conversation history as a tree rather than a flat array. This enables a key capability: the agent can &ldquo;branch&rdquo; to explore an alternative approach without losing the path not taken.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">session</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">session</span>.<span style="color:#a6e22e">create</span>(<span style="color:#e6db74">&#39;task-001&#39;</span>);
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">session</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">session</span>.<span style="color:#a6e22e">create</span>(<span style="color:#e6db74">&#39;task-001&#39;</span>);
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span><span style="color:#75715e">// Branch A: try approach 1
-</span></span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">branchA</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">session</span>.<span style="color:#a6e22e">branch</span>();
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">branchA</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">session</span>.<span style="color:#a6e22e">branch</span>();
 </span></span><span style="display:flex;"><span><span style="color:#66d9ef">await</span> <span style="color:#a6e22e">branchA</span>.<span style="color:#a6e22e">execute</span>(<span style="color:#a6e22e">approach1</span>);
 </span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">resultA</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">branchA</span>.<span style="color:#a6e22e">evaluate</span>();
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span><span style="color:#75715e">// Branch B: try approach 2 (from same starting point)
-</span></span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">branchB</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">session</span>.<span style="color:#a6e22e">branch</span>();
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">branchB</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">session</span>.<span style="color:#a6e22e">branch</span>();
 </span></span><span style="display:flex;"><span><span style="color:#66d9ef">await</span> <span style="color:#a6e22e">branchB</span>.<span style="color:#a6e22e">execute</span>(<span style="color:#a6e22e">approach2</span>);
 </span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">resultB</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">branchB</span>.<span style="color:#a6e22e">evaluate</span>();
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span><span style="color:#75715e">// Select the better result and continue from that branch
-</span></span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">bestBranch</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">resultA</span>.<span style="color:#a6e22e">score</span> <span style="color:#f92672">&gt;</span> <span style="color:#a6e22e">resultB</span>.<span style="color:#a6e22e">score</span> <span style="color:#f92672">?</span> <span style="color:#a6e22e">branchA</span> : <span style="color:#66d9ef">branchB</span>;
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">bestBranch</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">resultA</span>.<span style="color:#a6e22e">score</span> <span style="color:#f92672">&gt;</span> <span style="color:#a6e22e">resultB</span>.<span style="color:#a6e22e">score</span> <span style="color:#f92672">?</span> <span style="color:#a6e22e">branchA</span> : <span style="color:#66d9ef">branchB</span>;
 </span></span><span style="display:flex;"><span><span style="color:#66d9ef">await</span> <span style="color:#a6e22e">session</span>.<span style="color:#a6e22e">mergeBranch</span>(<span style="color:#a6e22e">bestBranch</span>);
 </span></span></code></pre></div><p>Sessions persist in Durable Object storage, making them available across agent restarts and hibernation events. For long-running tasks that span hours, the session tree provides a complete audit trail of every reasoning path the agent explored, which approach was selected, and why — valuable for debugging and compliance.</p>
 <h2 id="self-authored-extensions-agents-that-build-their-own-tools">Self-Authored Extensions: Agents That Build Their Own Tools</h2>
 <p>Project Think enables agents to write and register new tools at runtime. When an agent encounters a capability it needs but doesn&rsquo;t have, it can generate the tool implementation, register it via the Extensions API, and use it in subsequent steps — without redeployment:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#75715e">// Agent generates a tool when needed
-</span></span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">toolCode</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">model</span>.<span style="color:#a6e22e">generate</span>(
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#75715e">// Agent generates a tool when needed
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">toolCode</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">model</span>.<span style="color:#a6e22e">generate</span>(
 </span></span><span style="display:flex;"><span>  <span style="color:#e6db74">`Write a TypeScript function that parses CSV files and returns structured data`</span>
 </span></span><span style="display:flex;"><span>);
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span><span style="color:#75715e">// Register the generated tool
-</span></span></span><span style="display:flex;"><span><span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">extensions</span>.<span style="color:#a6e22e">register</span>({
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">extensions</span>.<span style="color:#a6e22e">register</span>({
 </span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">name</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;parseCSV&#39;</span>,
 </span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">code</span>: <span style="color:#66d9ef">toolCode</span>,
 </span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">sandbox</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;level-2&#39;</span>,  <span style="color:#75715e">// Execution Ladder level for this tool
-</span></span></span><span style="display:flex;"><span>});
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>});
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span><span style="color:#75715e">// The tool is now available for subsequent steps
-</span></span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">data</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">tools</span>.<span style="color:#a6e22e">parseCSV</span>(<span style="color:#a6e22e">csvContent</span>);
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">data</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">tools</span>.<span style="color:#a6e22e">parseCSV</span>(<span style="color:#a6e22e">csvContent</span>);
 </span></span></code></pre></div><p>All self-authored extensions execute through the Execution Ladder at the specified level — Level 2 by default, requiring explicit escalation to Level 3 for system access. The extensions registry persists in Durable Object storage, so tools the agent creates in one session are available in subsequent sessions.</p>
 <h2 id="project-think-vs-aws-bedrock-agentcore-vs-google-adk">Project Think vs AWS Bedrock AgentCore vs Google ADK</h2>
 <table>
-	<thead>
-			<tr>
-					<th></th>
-					<th>Cloudflare Project Think</th>
-					<th>AWS Bedrock AgentCore</th>
-					<th>Google ADK</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td><strong>Infrastructure</strong></td>
-					<td>Cloudflare Workers + Durable Objects</td>
-					<td>AWS Lambda + Bedrock</td>
-					<td>Google Cloud + Vertex</td>
-			</tr>
-			<tr>
-					<td><strong>State model</strong></td>
-					<td>Durable Object (actor model)</td>
-					<td>Session service</td>
-					<td>Session management</td>
-			</tr>
-			<tr>
-					<td><strong>Sub-agents</strong></td>
-					<td>Colocated Durable Objects (RPC)</td>
-					<td>Lambda functions (HTTP)</td>
-					<td>ADK agents (HTTP)</td>
-			</tr>
-			<tr>
-					<td><strong>Cold start</strong></td>
-					<td>~0ms (Durable Objects warm)</td>
-					<td>100-500ms (Lambda)</td>
-					<td>100-500ms</td>
-			</tr>
-			<tr>
-					<td><strong>Idle billing</strong></td>
-					<td>Zero (hibernation)</td>
-					<td>Minimal (Lambda)</td>
-					<td>Minimal</td>
-			</tr>
-			<tr>
-					<td><strong>Code execution</strong></td>
-					<td>Sandboxed Dynamic Workers</td>
-					<td>AWS SageMaker/Batch</td>
-					<td>Cloud Run</td>
-			</tr>
-			<tr>
-					<td><strong>Best for</strong></td>
-					<td>Teams on Cloudflare, latency-sensitive agents</td>
-					<td>Teams on AWS, Bedrock models</td>
-					<td>Teams on GCP, Gemini-native</td>
-			</tr>
-	</tbody>
+  <thead>
+      <tr>
+          <th></th>
+          <th>Cloudflare Project Think</th>
+          <th>AWS Bedrock AgentCore</th>
+          <th>Google ADK</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Infrastructure</strong></td>
+          <td>Cloudflare Workers + Durable Objects</td>
+          <td>AWS Lambda + Bedrock</td>
+          <td>Google Cloud + Vertex</td>
+      </tr>
+      <tr>
+          <td><strong>State model</strong></td>
+          <td>Durable Object (actor model)</td>
+          <td>Session service</td>
+          <td>Session management</td>
+      </tr>
+      <tr>
+          <td><strong>Sub-agents</strong></td>
+          <td>Colocated Durable Objects (RPC)</td>
+          <td>Lambda functions (HTTP)</td>
+          <td>ADK agents (HTTP)</td>
+      </tr>
+      <tr>
+          <td><strong>Cold start</strong></td>
+          <td>~0ms (Durable Objects warm)</td>
+          <td>100-500ms (Lambda)</td>
+          <td>100-500ms</td>
+      </tr>
+      <tr>
+          <td><strong>Idle billing</strong></td>
+          <td>Zero (hibernation)</td>
+          <td>Minimal (Lambda)</td>
+          <td>Minimal</td>
+      </tr>
+      <tr>
+          <td><strong>Code execution</strong></td>
+          <td>Sandboxed Dynamic Workers</td>
+          <td>AWS SageMaker/Batch</td>
+          <td>Cloud Run</td>
+      </tr>
+      <tr>
+          <td><strong>Best for</strong></td>
+          <td>Teams on Cloudflare, latency-sensitive agents</td>
+          <td>Teams on AWS, Bedrock models</td>
+          <td>Teams on GCP, Gemini-native</td>
+      </tr>
+  </tbody>
 </table>
 <p>Project Think&rsquo;s primary advantage is the actor model: Durable Objects never have cold starts after first activation, making agent wake-from-hibernation nearly instant. For agents that sleep for hours between user interactions, this eliminates the cold start latency that Lambda-based architectures introduce.</p>
 <h2 id="production-deployment-cost-scheduling-and-hibernation">Production Deployment: Cost, Scheduling, and Hibernation</h2>
 <p><strong>Hibernation</strong> is the core cost-control mechanism. When a Think agent has no active requests or scheduled tasks, it hibernates — consuming zero compute billing. The next request or scheduled wake wakes the Durable Object, loading its state from storage. For agents that run tasks on user request rather than continuously, hibernation means you pay only during actual execution.</p>
 <p><strong>Scheduling</strong> with Cron triggers runs agents on a schedule without keeping them alive:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#75715e">// In wrangler.toml
-</span></span></span><span style="display:flex;"><span>[<span style="color:#a6e22e">triggers</span>]
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#75715e">// In wrangler.toml
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>[<span style="color:#a6e22e">triggers</span>]
 </span></span><span style="display:flex;"><span><span style="color:#a6e22e">crons</span> <span style="color:#f92672">=</span> [<span style="color:#e6db74">&#34;0 9 * * 1&#34;</span>]  <span style="color:#960050;background-color:#1e0010">#</span> <span style="color:#a6e22e">Every</span> <span style="color:#a6e22e">Monday</span> <span style="color:#a6e22e">at</span> <span style="color:#ae81ff">9</span><span style="color:#a6e22e">am</span> <span style="color:#a6e22e">UTC</span>
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span><span style="color:#75715e">// In agent
-</span></span></span><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#a6e22e">scheduled</span>(<span style="color:#a6e22e">event</span>: <span style="color:#66d9ef">ScheduledEvent</span>)<span style="color:#f92672">:</span> <span style="color:#a6e22e">Promise</span>&lt;<span style="color:#f92672">void</span>&gt; {
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">async</span> <span style="color:#a6e22e">scheduled</span>(<span style="color:#a6e22e">event</span>: <span style="color:#66d9ef">ScheduledEvent</span>)<span style="color:#f92672">:</span> <span style="color:#a6e22e">Promise</span>&lt;<span style="color:#f92672">void</span>&gt; {
 </span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">await</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">run</span>(<span style="color:#e6db74">&#39;generate weekly report&#39;</span>);
 </span></span><span style="display:flex;"><span>}
 </span></span></code></pre></div><p><strong>Pricing</strong> for a Think-based agent on the Workers Paid plan ($5/month base): Durable Object requests at $0.15/million, Durable Object compute at $12.50/million GB-seconds, Workers AI inference at model-specific rates. For an agent that processes 100 requests per day with 30-second average execution at 128MB: roughly $15-25/month in Durable Object compute, plus model inference costs.</p>
