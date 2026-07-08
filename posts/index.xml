@@ -688,6 +688,505 @@
 <p>They can be, but the safe default is read-only access, narrow scopes, short timeouts, explicit approvals for writes, and regular audits. Treat MCP output from issue trackers, monitoring systems, browsers, and docs sites as untrusted because it can contain prompt injection content.</p>
 <h3 id="when-should-a-team-create-a-claude-code-plugin">When should a team create a Claude Code plugin?</h3>
 <p>Create a plugin when the same skills, hooks, subagents, and MCP configuration are needed across multiple repositories. Do not start with a plugin. Let the workflow prove itself in one repo, refine it, then package it when duplication becomes the maintenance problem.</p>
+]]></content:encoded></item><item><title>Claude Code Subagents Parallel Agents Guide 2026: Faster Development Without Context Bloat</title><link>https://baeseokjae.github.io/posts/claude-code-subagents-guide-2026/</link><pubDate>Wed, 08 Jul 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/claude-code-subagents-guide-2026/</guid><description>A practical Claude Code subagents guide for parallel agents, worktrees, model routing, and real developer workflows in 2026.</description><content:encoded><![CDATA[<p>Claude Code subagents are the cleanest way to delegate noisy, self-contained coding work without filling your main session with logs, search results, and half-finished reasoning. In 2026, they are also the simplest entry point to parallel AI development: Markdown files, YAML frontmatter, scoped tools, optional worktree isolation.</p>
+<p>I use subagents when a task has a clear boundary and a noisy execution path. Running a full test suite, researching three unrelated modules, auditing a diff for security issues, or generating migration notes are good fits. Asking a subagent to co-own an ambiguous refactor with you is usually a bad fit. The difference matters because subagents do not share your full conversation by default. They start with their own prompt, their own context window, and a task summary from the main agent.</p>
+<p>This guide focuses on the parts that actually change day-to-day Claude Code usage: how subagents are defined, how to run them in parallel, when to add <code>isolation: worktree</code>, how model routing affects cost, and when you should step up to agent teams instead. I am using the current Claude Code behavior from the official <a href="https://code.claude.com/docs/en/sub-agents">subagents documentation</a>, including the v2.1.198 changes where <code>/agents</code> no longer opens the old interactive wizard and subagents run in the background by default.</p>
+<h2 id="what-are-claude-code-subagents">What Are Claude Code Subagents?</h2>
+<p>A Claude Code subagent is a specialized worker that Claude can delegate to from your main session. Each custom subagent is a Markdown file with YAML frontmatter at the top and a system prompt in the body. Claude Code discovers these files from known scopes such as <code>.claude/agents/</code> for a project or <code>~/.claude/agents/</code> for your personal machine-wide agents.</p>
+<p>In practice, a subagent gives you three things that a normal prompt does not:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Capability</th>
+					<th>What it means in practice</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Isolated context</td>
+					<td>Logs, search output, and exploratory reads stay inside the subagent instead of bloating the main chat</td>
+			</tr>
+			<tr>
+					<td>Specialized behavior</td>
+					<td>The subagent can have a tighter role, output format, and tool policy than your main session</td>
+			</tr>
+			<tr>
+					<td>Parallel execution</td>
+					<td>Multiple independent subagents can investigate separate paths at the same time</td>
+			</tr>
+	</tbody>
+</table>
+<p>The context isolation is the feature I care about most. When building a migration plan, I often want one worker to inspect schema files, another to scan API handlers, and a third to read test failures. I do not want all intermediate file reads and dead-end hypotheses in the main session. I want the final summary, affected files, risks, and recommended patch order.</p>
+<p>Subagents are not magic concurrency. They are useful when the work can be split cleanly. If two workers need to edit the same file or make decisions based on each other&rsquo;s partial results, you need stronger coordination. That is where agent teams or explicit sequential phases become better choices.</p>
+<h2 id="how-do-subagents-differ-from-agent-teams">How Do Subagents Differ From Agent Teams?</h2>
+<p>Claude Code now has several parallel-work primitives: subagents, agent teams, worktrees, background agents, and plain multiple terminal sessions. The confusing part is that they overlap. The practical decision is simple: use subagents when workers only need to report back to the caller; use <a href="https://code.claude.com/docs/en/agent-teams">agent teams</a> when workers need to talk to each other.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Pattern</th>
+					<th>Best for</th>
+					<th>Communication</th>
+					<th>Cost profile</th>
+					<th>Main risk</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Subagents</td>
+					<td>Focused research, review, test runs, summaries</td>
+					<td>Report back to main agent</td>
+					<td>Lower than agent teams</td>
+					<td>Poor task boundaries</td>
+			</tr>
+			<tr>
+					<td>Agent teams</td>
+					<td>Multi-role design, competing hypotheses, cross-layer features</td>
+					<td>Teammates can message each other</td>
+					<td>Higher, each teammate is a full Claude instance</td>
+					<td>Coordination overhead</td>
+			</tr>
+			<tr>
+					<td>Worktrees</td>
+					<td>File isolation for parallel edits</td>
+					<td>No orchestration by itself</td>
+					<td>Similar to separate sessions</td>
+					<td>Environment drift</td>
+			</tr>
+			<tr>
+					<td>Multiple terminals</td>
+					<td>Manual parallel work</td>
+					<td>You coordinate everything</td>
+					<td>Depends on usage</td>
+					<td>Human context switching</td>
+			</tr>
+	</tbody>
+</table>
+<p>I reach for subagents first because the overhead is low. A reviewer subagent can inspect code and return a short report. A test-runner subagent can run noisy commands and return only failing tests. A docs-writer subagent can draft release notes without mixing prose work into an implementation session.</p>
+<p>Agent teams are different. They are experimental, disabled by default, and require <code>CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1</code>. They make sense when you want a lead session to coordinate several independent Claude Code instances through a shared task list and mailbox. In the official docs, Anthropic recommends agent teams for research and review, new modules or features, debugging with competing hypotheses, and cross-layer coordination.</p>
+<p>The trade-off is token cost. Anthropic&rsquo;s cost guidance says agent teams consume significantly more tokens because each teammate maintains its own context window. For routine sub-tasks, a subagent is cheaper and easier to reason about.</p>
+<h2 id="how-do-you-create-a-custom-subagent">How Do You Create a Custom Subagent?</h2>
+<p>As of Claude Code v2.1.198, the <code>/agents</code> command no longer opens the old interactive creation wizard. The current path is to ask Claude to write the agent file or create the Markdown file directly. This is a good change for teams because the actual artifact is reviewable and versionable.</p>
+<p>Create a project-scoped subagent here:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>.claude/
+</span></span><span style="display:flex;"><span>  agents/
+</span></span><span style="display:flex;"><span>    code-reviewer.md
+</span></span><span style="display:flex;"><span>    test-runner.md
+</span></span><span style="display:flex;"><span>    migration-planner.md
+</span></span></code></pre></div><p>Create a personal subagent here:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>~/.claude/
+</span></span><span style="display:flex;"><span>  agents/
+</span></span><span style="display:flex;"><span>    code-reviewer.md
+</span></span></code></pre></div><p>Project subagents are best when the role depends on repository conventions. For example, a Rails monolith reviewer and a Next.js edge-runtime reviewer should not share the same assumptions. Personal subagents are better for generic habits you want everywhere, such as &ldquo;summarize failing tests without editing files.&rdquo;</p>
+<p>Here is a subagent definition I would actually start from:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-markdown" data-lang="markdown"><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span>name: test-runner
+</span></span><span style="display:flex;"><span>description: Runs test commands, captures failures, and returns concise debugging notes. Use after code changes or when tests are failing.
+</span></span><span style="display:flex;"><span>tools: Read, Bash, Grep, Glob
+</span></span><span style="display:flex;"><span>model: sonnet
+</span></span><span style="display:flex;"><span>permissionMode: default
+</span></span><span style="display:flex;"><span>maxTurns: 8
+</span></span><span style="display:flex;"><span>background: true
+</span></span><span style="display:flex;"><span>color: cyan
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>You are a test runner for this repository.
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Run the smallest relevant test command first. If that fails because the target is unclear,
+</span></span><span style="display:flex;"><span>inspect package scripts, Makefiles, or project docs to find the right command.
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Return:
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">1.</span> The command you ran
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">2.</span> Passing or failing status
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">3.</span> The smallest useful failure excerpt
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">4.</span> Likely cause
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">5.</span> Next debugging step
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Do not modify source files.
+</span></span><span style="display:flex;"><span>Do not paste full logs unless the user explicitly asks.
+</span></span></code></pre></div><p>There are a few details in that file that matter.</p>
+<p>The <code>description</code> is not a label. It is the routing rule. Claude uses the task description, the current context, and this field to decide whether to delegate. Generic descriptions like &ldquo;helps with tests&rdquo; are weak. Specific descriptions like &ldquo;Runs test commands, captures failures, and returns concise debugging notes&rdquo; trigger more reliably.</p>
+<p>The <code>tools</code> list is deliberately narrow. If a test runner should not edit files, do not give it edit tools. If a researcher only needs <code>Read</code>, <code>Grep</code>, and <code>Glob</code>, keep it read-only. I have found that tool scoping is one of the easiest ways to make agent behavior more predictable.</p>
+<p>The <code>model</code> field should match the task. Use <code>sonnet</code> for most implementation and review work. Use <code>haiku</code> for simple summarization, changelog drafting, and low-risk lookups. Reserve <code>opus</code> for difficult architecture or debugging tasks where a wrong answer costs more than the tokens.</p>
+<h2 id="which-frontmatter-fields-matter-most">Which Frontmatter Fields Matter Most?</h2>
+<p>The official frontmatter surface is broader than most teams need on day one. Only <code>name</code> and <code>description</code> are required, but the optional fields are where subagents become production-grade.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Field</th>
+					<th>Use it when</th>
+					<th>Example</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>name</code></td>
+					<td>You need a stable agent identifier</td>
+					<td><code>security-reviewer</code></td>
+			</tr>
+			<tr>
+					<td><code>description</code></td>
+					<td>You want automatic delegation to work</td>
+					<td><code>Reviews auth changes for token, session, and input validation risks</code></td>
+			</tr>
+			<tr>
+					<td><code>tools</code></td>
+					<td>The agent should only use selected tools</td>
+					<td><code>Read, Grep, Glob</code></td>
+			</tr>
+			<tr>
+					<td><code>disallowedTools</code></td>
+					<td>You inherit tools but want to block a few</td>
+					<td><code>Edit, Write</code></td>
+			</tr>
+			<tr>
+					<td><code>model</code></td>
+					<td>The task needs explicit model routing</td>
+					<td><code>haiku</code>, <code>sonnet</code>, <code>opus</code>, <code>claude-sonnet-5</code></td>
+			</tr>
+			<tr>
+					<td><code>permissionMode</code></td>
+					<td>You want a specific approval posture</td>
+					<td><code>default</code>, <code>plan</code>, <code>acceptEdits</code></td>
+			</tr>
+			<tr>
+					<td><code>maxTurns</code></td>
+					<td>You want to cap runaway loops</td>
+					<td><code>6</code></td>
+			</tr>
+			<tr>
+					<td><code>background</code></td>
+					<td>The task can run while you continue</td>
+					<td><code>true</code></td>
+			</tr>
+			<tr>
+					<td><code>effort</code></td>
+					<td>The model supports effort levels and this task needs tuning</td>
+					<td><code>low</code>, <code>medium</code>, <code>high</code></td>
+			</tr>
+			<tr>
+					<td><code>isolation</code></td>
+					<td>The subagent may edit files in parallel</td>
+					<td><code>worktree</code></td>
+			</tr>
+			<tr>
+					<td><code>skills</code></td>
+					<td>The subagent should start with known skill content loaded</td>
+					<td><code>[&quot;review-pr&quot;]</code></td>
+			</tr>
+			<tr>
+					<td><code>hooks</code></td>
+					<td>You need lifecycle automation around the subagent</td>
+					<td><code>SubagentStart</code>, <code>SubagentStop</code></td>
+			</tr>
+	</tbody>
+</table>
+<p>Two fields deserve special attention in 2026: <code>background</code> and <code>isolation</code>.</p>
+<p>As of v2.1.198, subagents run in the background by default unless Claude needs the result before continuing. Permission prompts still surface in the main session. That means background execution is not a permission bypass; it is a scheduling behavior.</p>
+<p>The <code>isolation: worktree</code> field gives a subagent a temporary git worktree. This matters when a subagent can modify files while other work is happening. Without worktree isolation, two agents editing the same checkout can collide. With isolation, each agent gets a separate working directory and branch context.</p>
+<h2 id="how-do-you-run-subagents-in-parallel">How Do You Run Subagents in Parallel?</h2>
+<p>You can invoke a subagent in natural language:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>Use the test-runner subagent to run the auth tests and summarize failures.
+</span></span></code></pre></div><p>You can also ask for multiple independent subagents:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>Research the authentication, billing, and notification modules in parallel using separate subagents.
+</span></span><span style="display:flex;"><span>Return a table with each module&#39;s entry points, risky dependencies, and test coverage gaps.
+</span></span></code></pre></div><p>For more control, mention specific subagents:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>Use the security-reviewer, test-runner, and docs-writer subagents in parallel.
+</span></span><span style="display:flex;"><span>security-reviewer: inspect the auth diff for session and token risks.
+</span></span><span style="display:flex;"><span>test-runner: run the smallest relevant auth test target and report failures only.
+</span></span><span style="display:flex;"><span>docs-writer: draft migration notes for the changed login behavior.
+</span></span><span style="display:flex;"><span>Wait for all three summaries before recommending the next patch.
+</span></span></code></pre></div><p>The last sentence is not cosmetic. I often tell Claude to wait for all summaries because otherwise the main agent may start synthesizing too early. Parallel work is only useful if you collect the independent findings before deciding.</p>
+<p>When building a real feature, I prefer a three-phase flow:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Phase</th>
+					<th>Main agent action</th>
+					<th>Subagent action</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Explore</td>
+					<td>Define boundaries and questions</td>
+					<td>Inspect modules, logs, docs, tests</td>
+			</tr>
+			<tr>
+					<td>Plan</td>
+					<td>Merge findings into one patch plan</td>
+					<td>Review plan for missing risks</td>
+			</tr>
+			<tr>
+					<td>Execute</td>
+					<td>Make changes in controlled order</td>
+					<td>Run tests, review diff, draft docs</td>
+			</tr>
+	</tbody>
+</table>
+<p>This maps well to the broader <a href="/posts/ai-dlc-framework-2026/">AI-DLC framework</a> pattern: agents are strongest when you give them explicit lifecycle stages instead of one vague &ldquo;build this&rdquo; instruction.</p>
+<h2 id="when-should-you-use-worktrees-with-subagents">When Should You Use Worktrees With Subagents?</h2>
+<p>Use worktrees when parallel agents might edit files. Do not overthink it. If a subagent is read-only, worktrees are usually unnecessary. If it may write code while your main session or another agent is also writing code, add worktree isolation.</p>
+<p>Claude Code supports worktree-backed sessions through <code>claude --worktree</code>, and subagents can use worktree isolation through frontmatter:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-markdown" data-lang="markdown"><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span>name: feature-implementer
+</span></span><span style="display:flex;"><span>description: Implements isolated feature slices that can be reviewed and merged back by the main agent. Use when a task owns a distinct file area.
+</span></span><span style="display:flex;"><span>tools: Read, Edit, Bash, Grep, Glob
+</span></span><span style="display:flex;"><span>model: sonnet
+</span></span><span style="display:flex;"><span>isolation: worktree
+</span></span><span style="display:flex;"><span>maxTurns: 12
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>You implement a single isolated feature slice.
+</span></span><span style="display:flex;"><span>Before editing, identify the files you expect to own.
+</span></span><span style="display:flex;"><span>Do not edit files outside that ownership boundary without stopping and reporting why.
+</span></span><span style="display:flex;"><span>Run the narrowest relevant verification command before returning.
+</span></span></code></pre></div><p>The current <a href="https://code.claude.com/docs/en/worktrees">worktrees documentation</a> has a few operational details that are easy to miss:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Worktree behavior</th>
+					<th>Why it matters</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>claude --worktree name</code> creates an isolated checkout under <code>.claude/worktrees/&lt;name&gt;/</code> by default</td>
+					<td>Parallel sessions do not touch the same files</td>
+			</tr>
+			<tr>
+					<td><code>.worktreeinclude</code> copies gitignored files such as <code>.env.local</code></td>
+					<td>Agents can run tests that need local config</td>
+			</tr>
+			<tr>
+					<td><code>worktree.baseRef</code> can use <code>&quot;fresh&quot;</code> or <code>&quot;head&quot;</code></td>
+					<td>Use <code>&quot;head&quot;</code> when subagents must see your unpushed changes</td>
+			</tr>
+			<tr>
+					<td>Subagent worktrees are removed automatically if they finish without changes</td>
+					<td>Read-only or no-op work does not leave clutter</td>
+			</tr>
+			<tr>
+					<td>v2.1.203 tightened behavior when a worktree directory disappears</td>
+					<td>Commands should fail rather than accidentally run in the main checkout</td>
+			</tr>
+	</tbody>
+</table>
+<p>The <code>worktree.baseRef</code> setting is the one I see teams get wrong. The default branches from the repository default branch. That is good for clean isolated tasks, but bad if your subagent needs the uncommitted or unpushed work in your current branch. For that case:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;worktree&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;baseRef&#34;</span>: <span style="color:#e6db74">&#34;head&#34;</span>
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>Also add this to <code>.gitignore</code>:</p>
+<pre tabindex="0"><code class="language-gitignore" data-lang="gitignore">.claude/worktrees/
+</code></pre><p>If your tests depend on local secrets, use <code>.worktreeinclude</code> rather than asking every agent to manually copy files:</p>
+<pre tabindex="0"><code class="language-gitignore" data-lang="gitignore">.env
+.env.local
+config/secrets.json
+</code></pre><p>Only gitignored files matching <code>.worktreeinclude</code> patterns are copied. Tracked files are not duplicated through this mechanism.</p>
+<h2 id="how-should-you-route-opus-sonnet-and-haiku">How Should You Route Opus, Sonnet, and Haiku?</h2>
+<p>Model routing is where subagents become economically useful. The mistake is running every worker on your strongest model. That feels safe, but it burns budget on tasks that do not need deep reasoning.</p>
+<p>My default routing looks like this:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Task</th>
+					<th>Model</th>
+					<th>Reason</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Architecture review</td>
+					<td><code>opus</code></td>
+					<td>Higher reasoning value, fewer cheap shortcuts</td>
+			</tr>
+			<tr>
+					<td>Implementation</td>
+					<td><code>sonnet</code></td>
+					<td>Best default balance for code edits</td>
+			</tr>
+			<tr>
+					<td>Test failure triage</td>
+					<td><code>sonnet</code></td>
+					<td>Needs code understanding and command output interpretation</td>
+			</tr>
+			<tr>
+					<td>Changelog or PR summary</td>
+					<td><code>haiku</code></td>
+					<td>Low-risk summarization</td>
+			</tr>
+			<tr>
+					<td>File inventory or dependency list</td>
+					<td><code>haiku</code></td>
+					<td>Mostly extraction</td>
+			</tr>
+			<tr>
+					<td>Security review of auth or payment code</td>
+					<td><code>opus</code> or pinned full model ID</td>
+					<td>False negatives are expensive</td>
+			</tr>
+	</tbody>
+</table>
+<p>Claude Code also supports <code>CLAUDE_CODE_SUBAGENT_MODEL</code>, which overrides the per-invocation model and the subagent definition&rsquo;s <code>model</code> field. That is useful for controlled rollouts:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>export CLAUDE_CODE_SUBAGENT_MODEL<span style="color:#f92672">=</span>sonnet
+</span></span></code></pre></div><p>For third-party deployments such as Amazon Bedrock, Google Cloud&rsquo;s Agent Platform, or Microsoft Foundry, the official model configuration docs recommend pinning provider-specific model IDs instead of relying blindly on aliases. Aliases are convenient for local use, but production teams usually want controlled upgrades.</p>
+<p>This is the same basic trade-off I covered in the <a href="/posts/claude-sonnet-5-review-2026/">Claude Sonnet 5 review</a>: the best model is not always the most expensive model. The best model is the cheapest one that reliably clears the quality bar for that task.</p>
+<h2 id="what-real-world-subagent-patterns-work-best">What Real-World Subagent Patterns Work Best?</h2>
+<p>After using subagents on real repositories, I would start with five patterns. They are boring, which is a compliment. Boring agent workflows are easier to debug.</p>
+<h3 id="how-do-you-use-a-review-swarm-without-getting-duplicate-findings">How Do You Use a Review Swarm Without Getting Duplicate Findings?</h3>
+<p>Do not spawn five generic reviewers. Give each reviewer a different lens:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>Run three subagents in parallel:
+</span></span><span style="display:flex;"><span>1. security-reviewer: auth, secrets, injection, unsafe file access
+</span></span><span style="display:flex;"><span>2. performance-reviewer: N+1 queries, caching, hot paths, bundle size
+</span></span><span style="display:flex;"><span>3. test-reviewer: missing regression coverage and brittle tests
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Each subagent should return only high-confidence findings with file paths and severity.
+</span></span></code></pre></div><p>This works because the domains do not overlap too much. A generic &ldquo;review this PR&rdquo; prompt produces duplicate comments and shallow coverage. Separate review lenses produce fewer but better findings.</p>
+<p>For security-sensitive agent work, read the <a href="/posts/mozilla-0din-claude-code-case-study-2026/">Mozilla 0DIN Claude Code case study</a> as a reminder that clean-looking repositories can still manipulate coding agents through instructions, scripts, or environment assumptions. A subagent with fewer tools is not just cleaner; it is a smaller blast radius.</p>
+<h3 id="how-do-you-keep-test-runs-from-polluting-context">How Do You Keep Test Runs From Polluting Context?</h3>
+<p>A test-runner subagent should be one of the first agents you create. Test output is high-volume and mostly disposable. You rarely need 2,000 lines of stack traces in your main conversation.</p>
+<p>Use a prompt like this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>Use the test-runner subagent to run the smallest relevant test target for the checkout flow.
+</span></span><span style="display:flex;"><span>Return the command, pass/fail status, and at most 40 lines of failure output.
+</span></span><span style="display:flex;"><span>Do not edit files.
+</span></span></code></pre></div><p>That &ldquo;at most 40 lines&rdquo; constraint matters. Subagents return summaries to the main session, and detailed summaries still consume context. If you need the full log, ask for it later.</p>
+<h3 id="how-do-you-split-a-migration-safely">How Do You Split A Migration Safely?</h3>
+<p>For migrations, I use subagents for exploration, not blind implementation:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>Use parallel subagents to inspect:
+</span></span><span style="display:flex;"><span>1. database schema and migrations
+</span></span><span style="display:flex;"><span>2. API handlers and service objects
+</span></span><span style="display:flex;"><span>3. frontend form and validation code
+</span></span><span style="display:flex;"><span>4. tests and factories
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Each subagent should report affected files, coupling points, and migration risks.
+</span></span><span style="display:flex;"><span>Do not edit files yet.
+</span></span></code></pre></div><p>Then the main agent creates one plan. This avoids the common failure mode where four workers each make locally reasonable changes that do not compose.</p>
+<h3 id="how-do-you-use-community-subagents-safely">How Do You Use Community Subagents Safely?</h3>
+<p>The <a href="https://github.com/VoltAgent/awesome-claude-code-subagents">VoltAgent awesome-claude-code-subagents repository</a> has grown into a large catalog of community subagents, with language specialists, backend roles, frontend roles, infrastructure roles, and meta-orchestration agents. It is useful, but I would not install a large pack into a production repository without review.</p>
+<p>Treat community subagents like shell scripts from the internet:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Check</th>
+					<th>Why</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Read the prompt body</td>
+					<td>It is executable behavior, even if it is Markdown</td>
+			</tr>
+			<tr>
+					<td>Narrow the <code>tools</code> list</td>
+					<td>Do not inherit broad tools by accident</td>
+			</tr>
+			<tr>
+					<td>Prefer project scope for team agents</td>
+					<td>Review changes through normal code review</td>
+			</tr>
+			<tr>
+					<td>Avoid secrets access by default</td>
+					<td>Most agents do not need environment files</td>
+			</tr>
+			<tr>
+					<td>Pin behavior in your repo</td>
+					<td>Do not depend on changing upstream prompts</td>
+			</tr>
+	</tbody>
+</table>
+<p>Community agents are strongest as starting points. Copy the useful role structure, remove assumptions that do not match your stack, and tighten the output format.</p>
+<h3 id="how-do-you-avoid-parallel-agent-conflicts">How Do You Avoid Parallel Agent Conflicts?</h3>
+<p>Most failed subagent workflows come from weak ownership boundaries. If two agents can touch the same files, you need either worktrees or a different plan.</p>
+<p>I use this rule:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Situation</th>
+					<th>Use</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Multiple agents reading different areas</td>
+					<td>Plain subagents</td>
+			</tr>
+			<tr>
+					<td>Multiple agents editing different packages</td>
+					<td>Subagents with <code>isolation: worktree</code></td>
+			</tr>
+			<tr>
+					<td>Agents need to debate or coordinate</td>
+					<td>Agent teams</td>
+			</tr>
+			<tr>
+					<td>Same file needs careful edits</td>
+					<td>Main session only</td>
+			</tr>
+			<tr>
+					<td>High-risk production migration</td>
+					<td>Plan mode plus review subagents</td>
+			</tr>
+	</tbody>
+</table>
+<p>For same-file edits, parallelism is usually fake speed. You save five minutes of agent time and spend fifteen minutes resolving inconsistent patches.</p>
+<h2 id="what-configuration-should-a-team-start-with">What Configuration Should A Team Start With?</h2>
+<p>For a real engineering team, I would check in three project subagents first:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>.claude/agents/
+</span></span><span style="display:flex;"><span>  code-reviewer.md
+</span></span><span style="display:flex;"><span>  test-runner.md
+</span></span><span style="display:flex;"><span>  migration-planner.md
+</span></span></code></pre></div><p>The <code>code-reviewer</code> should be read-only unless your process explicitly allows reviewer-suggested edits. The <code>test-runner</code> can use <code>Bash</code>, but should not use edit tools. The <code>migration-planner</code> should be read-only and biased toward plans, affected files, and risk tables.</p>
+<p>Then add team guidance to your <code>CLAUDE.md</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-markdown" data-lang="markdown"><span style="display:flex;"><span><span style="color:#75715e">## Subagent usage
+</span></span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> Use <span style="color:#e6db74">`test-runner`</span> after source changes that affect behavior.
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> Use <span style="color:#e6db74">`code-reviewer`</span> before final summaries for non-trivial diffs.
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> Use <span style="color:#e6db74">`migration-planner`</span> before database, API contract, or auth-flow changes.
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> Use worktree isolation before running any subagent that may edit files in parallel.
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> Do not spawn more than three subagents unless the task has independent ownership boundaries.
+</span></span></code></pre></div><p>This gives Claude enough policy to delegate without turning every prompt into a long orchestration script.</p>
+<p>For teams already thinking about AI coding as a lifecycle rather than a chat tool, subagents fit naturally into review, verification, and documentation stages. They are less useful as a substitute for architecture ownership. A senior developer still needs to define the boundaries, name the risks, and decide which results are trustworthy.</p>
+<h2 id="what-are-the-common-mistakes">What Are The Common Mistakes?</h2>
+<p>The first mistake is creating too many agents. A dozen vague roles such as <code>backend-helper</code>, <code>frontend-helper</code>, and <code>cleanup-helper</code> make delegation less predictable. Start with three high-value roles and add more only when you see repeated work.</p>
+<p>The second mistake is giving every subagent every tool. Tool access should reflect the job. A docs agent rarely needs <code>Bash</code>. A security reviewer may not need <code>Edit</code>. A test runner may need <code>Bash</code> but not <code>Write</code>.</p>
+<p>The third mistake is parallelizing dependent work. If the API contract is not decided, do not spawn frontend, backend, and test implementers and hope they converge. Have subagents research options, then let the main agent create the contract.</p>
+<p>The fourth mistake is ignoring cost. Subagents are cheaper than agent teams, but they still consume tokens. Running eight subagents that each scan the whole repository is rarely better than asking three precise subagents to inspect known areas.</p>
+<p>The fifth mistake is using community subagents without adapting them. A good public prompt can still be wrong for your repository&rsquo;s deployment model, security posture, or test commands.</p>
+<h2 id="what-is-my-recommended-claude-code-subagents-workflow">What Is My Recommended Claude Code Subagents Workflow?</h2>
+<p>For most developers, the best 2026 workflow is:</p>
+<ol>
+<li>Create a small set of project subagents in <code>.claude/agents/</code>.</li>
+<li>Keep descriptions specific enough for automatic delegation.</li>
+<li>Restrict tools aggressively.</li>
+<li>Use <code>sonnet</code> as the default implementation and review model.</li>
+<li>Use <code>haiku</code> for low-risk summaries and extraction.</li>
+<li>Use <code>opus</code> for high-risk architecture, security, or ambiguous debugging.</li>
+<li>Add <code>isolation: worktree</code> before parallel edits.</li>
+<li>Use agent teams only when workers need direct communication.</li>
+</ol>
+<p>Here is the prompt I use when I want useful parallel work without chaos:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>Use parallel subagents for research only. Spawn:
+</span></span><span style="display:flex;"><span>- one subagent for API handlers
+</span></span><span style="display:flex;"><span>- one subagent for database schema and migrations
+</span></span><span style="display:flex;"><span>- one subagent for tests
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>Each subagent should return affected files, risks, and recommended changes.
+</span></span><span style="display:flex;"><span>Do not edit files.
+</span></span><span style="display:flex;"><span>After all three return, synthesize one implementation plan with patch order and verification commands.
+</span></span></code></pre></div><p>That shape keeps exploration parallel and implementation coherent. It is not flashy, but it works.</p>
+<p>Claude Code subagents are at their best when they act like focused senior assistants: inspect a bounded area, apply a specific lens, and return a concise judgment. They are at their worst when treated like a swarm of unsupervised junior developers editing the same checkout. The technology is useful, but the boundary-setting is still your job.</p>
+<h2 id="what-do-developers-usually-ask-about-claude-code-subagents">What Do Developers Usually Ask About Claude Code Subagents?</h2>
+<h3 id="what-is-the-difference-between-claude-code-subagents-and-the-agent-tool">What is the difference between Claude Code subagents and the Agent tool?</h3>
+<p>The Agent tool is the mechanism Claude uses to delegate work. A custom subagent is a named, reusable agent definition that controls the delegated worker&rsquo;s prompt, tools, model, permissions, and optional isolation behavior. In normal usage, you create subagent files and ask Claude to use them; Claude handles the Agent tool call internally.</p>
+<h3 id="where-should-i-store-claude-code-subagents">Where should I store Claude Code subagents?</h3>
+<p>Use <code>.claude/agents/</code> for project-specific agents that should be reviewed and shared with the repository. Use <code>~/.claude/agents/</code> for personal agents you want across projects. Managed settings and CLI-defined agents can override those scopes, and plugin agents have the lowest precedence.</p>
+<h3 id="do-claude-code-subagents-share-the-main-conversation-context">Do Claude Code subagents share the main conversation context?</h3>
+<p>Normal subagents start with a fresh context window and receive a task summary from the main agent. They do not automatically see your whole conversation history. Forked subagents are different: they inherit the parent conversation, but that reduces the isolation benefit and should be used when the worker needs substantial prior context.</p>
+<h3 id="can-claude-code-subagents-run-in-parallel-safely">Can Claude Code subagents run in parallel safely?</h3>
+<p>Yes, when the tasks are independent. Parallel research, review, and test runs work well. Parallel implementation is safe only when file ownership is clear or the subagents use <code>isolation: worktree</code>. If agents need to coordinate directly, use agent teams instead of plain subagents.</p>
+<h3 id="should-i-use-community-claude-code-subagents">Should I use community Claude Code subagents?</h3>
+<p>Yes, but review them first. Community subagents are useful templates, especially from curated catalogs, but they are still prompts with tool policies. Read the system prompt, narrow tools, remove assumptions that do not match your stack, and prefer checking project agents into version control.</p>
 ]]></content:encoded></item><item><title>GitHub Copilot SDK Embeddable Agent Runtime 2026: GA Guide for Six Languages</title><link>https://baeseokjae.github.io/posts/github-copilot-sdk-ga-guide-2026/</link><pubDate>Wed, 08 Jul 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/github-copilot-sdk-ga-guide-2026/</guid><description>Practical GitHub Copilot SDK GA guide for embedding Copilot&amp;#39;s agent runtime, tools, MCP, BYOK, tracing, and billing.</description><content:encoded><![CDATA[<p>GitHub Copilot SDK reached GA on June 2, 2026, and it is best understood as an embeddable agent runtime, not a chat wrapper. It gives your app Copilot&rsquo;s planning, tool calling, file edits, streaming, multi-turn sessions, MCP, hooks, and tracing across TypeScript, Python, Go, .NET, Java, and Rust.</p>
 <p>I have built enough agent integrations to be suspicious of &ldquo;SDK&rdquo; announcements that are mostly a thin prompt API with a nicer package name. The <a href="https://github.com/github/copilot-sdk">GitHub Copilot SDK</a> is different because it exposes the same runtime layer behind Copilot CLI: your application talks to an SDK client, the SDK talks to Copilot CLI server mode over JSON-RPC, and the runtime handles the agent loop. That matters when you need an agent to inspect files, request permissions, stream events, call tools, and stay useful across multiple turns.</p>
 <p>The trade-off is that you inherit Copilot&rsquo;s shape. If you want a GitHub-native developer agent embedded inside an internal portal, desktop app, CI remediation flow, or support-ticket-to-PR workflow, that is a feature. If you want total provider neutrality or a custom orchestration graph, you may still reach for OpenAI Agents SDK, LangGraph, Microsoft Agent Framework, or a lower-level runtime.</p>
@@ -103006,147 +103505,6 @@ It&rsquo;s arguably more valuable for solo developers. Without a team to divide 
 <p>Qwen3-Coder-Next (70.6% SWE-bench) edges out comparable DeepSeek variants on most benchmarks as of April 2026. Both are Apache 2.0 licensed and self-hostable. DeepSeek tends to have faster inference on equivalent hardware; Qwen3-Coder&rsquo;s MoE architecture gives it a memory efficiency advantage for the frontier-quality models.</p>
 <h3 id="is-the-qwen3-coder-license-truly-open-source">Is the Qwen3-Coder license truly open-source?</h3>
 <p>Yes. Qwen3-Coder is released under Apache 2.0, which allows commercial use, modification, distribution, and private deployment without royalties. This covers all model sizes from 1.5B to 480B. LoRA fine-tuning is supported and the fine-tuned weights remain under Apache 2.0. The only restriction: redistribution requires attribution and preservation of the original license file.</p>
-]]></content:encoded></item><item><title>Claude Code Subagents Guide 2026: Parallel Agents for Faster Development</title><link>https://baeseokjae.github.io/posts/claude-code-subagents-guide-2026/</link><pubDate>Fri, 24 Apr 2026 07:12:07 +0000</pubDate><guid>https://baeseokjae.github.io/posts/claude-code-subagents-guide-2026/</guid><description>Complete guide to Claude Code subagents: create custom agents, run parallel workflows, optimize costs with model routing, and ship faster.</description><content:encoded><![CDATA[<p>Claude Code subagents are isolated AI workers that your main Claude session can spin up, delegate tasks to, and collect results from — letting you run multiple jobs in parallel instead of waiting for each one to finish sequentially. If you&rsquo;ve ever watched Claude slowly work through a 10-file refactor one file at a time, subagents are the fix.</p>
-<h2 id="what-are-claude-code-subagents-architecture-and-how-they-work">What Are Claude Code Subagents? (Architecture and How They Work)</h2>
-<p>Claude Code subagents are purpose-built AI workers that run inside their own isolated context windows, each with a dedicated system prompt, a specific toolset, and optionally a different model than the parent session. When the main agent calls the <code>Agent</code> tool, it spawns a subagent, passes a task description, and the subagent executes fully independently — reading files, running searches, writing code — then returns only its final result. The parent&rsquo;s context window never sees the subagent&rsquo;s intermediate steps, tool outputs, or reasoning chains. This context isolation is the key architectural advantage: a subagent researching API documentation might consume 200K tokens of intermediate output, but the parent receives a clean 500-word summary.</p>
-<p>Claude Code supports 16+ parallel agents running simultaneously for complex workflows. Each subagent is a first-class Claude instance with the same tool access as the parent — Bash, Read, Write, Grep, Glob — or a restricted subset you define. The separation isn&rsquo;t just logical: with the <code>isolation: &quot;worktree&quot;</code> flag, each subagent gets its own git worktree, meaning they can write to different files without merge conflicts. Opus 4.7 became the default model for Claude Code starting April 23, 2026, but individual subagents can override this to use cheaper models for routine tasks — a design decision that directly drives cost and speed. The agent lifecycle is: parent delegates → subagent spawns in fresh context → subagent works autonomously → subagent returns result → parent continues. There is no back-and-forth; once spawned, a subagent runs to completion.</p>
-<h3 id="how-subagent-context-isolation-works">How Subagent Context Isolation Works</h3>
-<p>Subagent context isolation means the subagent&rsquo;s entire conversation thread — tool calls, search results, file reads — exists in a separate memory space from the parent. When the subagent finishes, only the text in its final message comes back to the parent. A subagent exploring 50,000 lines of legacy code returns &ldquo;Found 3 relevant functions in auth/middleware.go&rdquo; — not the full exploration trace. This keeps the parent&rsquo;s context window clean and focused on high-level coordination rather than drowning in implementation noise.</p>
-<h2 id="subagents-vs-agent-teams-choosing-the-right-pattern">Subagents vs Agent Teams: Choosing the Right Pattern</h2>
-<p>Subagents and Agent Teams solve different coordination problems. Subagents are the right choice when workers don&rsquo;t need to communicate with each other — each one gets a task, runs it, and reports back to the parent. Agent Teams are for situations where workers need to share state, pass intermediate results between themselves, or react to each other&rsquo;s outputs during execution. If you&rsquo;re running 9 parallel code reviews (each reviewer looks at a different quality dimension), subagents are ideal: they&rsquo;re independent, they don&rsquo;t need to know what the security reviewer found before the performance reviewer starts. If you&rsquo;re building a multi-step pipeline where Step B needs Step A&rsquo;s output before it can begin, that&rsquo;s a sequential workflow, and orchestrating it through the parent is cleaner than subagents.</p>
-<p>The practical decision framework comes down to three questions: (1) Can all tasks start at the same time with the same inputs? (2) Does each task produce a standalone result? (3) Are the tasks touching different files or resources? If yes to all three, use parallel subagents. If any task depends on another task&rsquo;s output, run them sequentially through the parent or consider an Agent Team with shared memory. Cost matters here too: parallel subagents all bill simultaneously, so spawning 10 agents at once costs the same in wall-clock time as one but burns 10× the tokens in the same minute.</p>
-<h3 id="when-sequential-beats-parallel">When Sequential Beats Parallel</h3>
-<p>Sequential subagent execution makes sense when the output of one step is the input for the next — a research subagent finds the relevant files, then a coding subagent rewrites them based on those findings. Running these in parallel would mean the coding agent starts without knowing which files to touch. The parent orchestrates sequentially: spawn Researcher → wait for result → spawn Coder with Researcher&rsquo;s output → wait for result → commit.</p>
-<h2 id="how-to-create-custom-subagents-agents-directory-and-frontmatter">How to Create Custom Subagents (agents/ directory and frontmatter)</h2>
-<p>Custom subagents live as Markdown files in your project&rsquo;s <code>.claude/agents/</code> directory. Each file defines a specialized worker: its name (used to invoke it), a description (used by the parent to decide when to delegate to it), optional tool restrictions, and an optional model override. The frontmatter fields are <code>name</code>, <code>description</code>, <code>tools</code>, and <code>model</code>. The body of the file is the system prompt — the instructions the subagent follows when it runs.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-markdown" data-lang="markdown"><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span>name: security-reviewer
-</span></span><span style="display:flex;"><span>description: Reviews code changes for security vulnerabilities — SQL injection, XSS, auth bypasses, secrets in code. Use when reviewing PRs or auditing new endpoints.
-</span></span><span style="display:flex;"><span>tools: Read, Grep, Glob
-</span></span><span style="display:flex;"><span>model: claude-sonnet-4-6
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>You are a security-focused code reviewer. When given a file or diff, check for:
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> SQL injection via string concatenation in queries
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> XSS via unescaped user input in templates
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> Hardcoded secrets, API keys, or credentials
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> Auth bypass patterns (missing middleware, direct object references)
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">-</span> Insecure deserialization
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>Report each finding with: file path, line number, severity (Critical/High/Medium), and a one-sentence fix recommendation.
-</span></span></code></pre></div><p>Save this as <code>.claude/agents/security-reviewer.md</code>. Now the parent session&rsquo;s <code>Agent</code> tool can invoke it by description match — or you can explicitly reference it. The <code>tools</code> field restricts the subagent to only Read, Grep, and Glob: it can look at code but not execute shell commands or write files. This is a security boundary for untrusted or narrow tasks. The <code>model</code> field routes this subagent to <code>claude-sonnet-4-6</code> instead of the default Opus — appropriate for a structured review task that doesn&rsquo;t require deep reasoning.</p>
-<h3 id="global-vs-project-subagents">Global vs Project Subagents</h3>
-<p>Subagents in <code>~/.claude/agents/</code> are global and available in every project. Subagents in <code>.claude/agents/</code> (project-level) are only available in that project. Global agents are ideal for utility workers you reuse everywhere — a <code>grep-expert</code> that knows advanced search patterns, a <code>commit-message-writer</code> that follows your conventions. Project agents encode domain-specific knowledge: a <code>schema-validator</code> that knows your company&rsquo;s API schema format, or a <code>migration-reviewer</code> that knows your database conventions.</p>
-<h2 id="running-parallel-subagents-for-10x-faster-development">Running Parallel Subagents for 10x Faster Development</h2>
-<p>Parallel subagent execution is the most direct path to faster development in Claude Code. Instead of reading 10 files sequentially — each file read blocking the next — you delegate all 10 reads simultaneously and wait for the first to finish while the others run in the background. The explicit pattern is to tell Claude: &ldquo;Use parallel subagents for each of these tasks&rdquo; and list independent work items. Claude&rsquo;s internal <code>Agent</code> tool accepts a <code>run_in_background</code> flag that makes this automatic for independent work.</p>
-<p>A real-world benchmark: exploring 5 large files for API usage patterns takes roughly 45 seconds sequentially (9 seconds per file). Running 5 subagents in parallel returns all results in ~12 seconds — the time of the slowest single lookup. The split-and-merge pattern scales this further: 50 functions split into 10 batches of 5, all 10 batches run simultaneously, results merged by the parent. Review time for a 50-function audit drops from 7+ minutes to under 90 seconds. The <code>/resume</code> command on large sessions is up to 67% faster on 40MB+ sessions after recent Claude Code optimizations, meaning even the overhead of managing large parallel sessions has been reduced.</p>
-<h3 id="prompting-for-parallel-execution">Prompting for Parallel Execution</h3>
-<p>The most reliable way to trigger parallel subagents is explicit instruction in your prompt:</p>
-<pre tabindex="0"><code>Analyze the authentication system across these 4 files in parallel using separate subagents:
-- src/auth/login.ts
-- src/auth/session.ts  
-- src/middleware/auth.ts
-- src/utils/tokens.ts
-
-Each subagent should identify: exported functions, external dependencies, and potential security issues.
-Collect all results and give me a unified summary.
-</code></pre><p>Claude will spawn 4 agents simultaneously, each reading and analyzing one file, then synthesize the results. Without &ldquo;in parallel&rdquo; or &ldquo;using separate subagents,&rdquo; Claude may default to sequential execution in a single context.</p>
-<h2 id="git-worktrees--subagents-true-file-isolation-for-parallel-work">Git Worktrees + Subagents: True File Isolation for Parallel Work</h2>
-<p>The critical constraint on parallel subagents is file conflicts: if two subagents try to write to the same file simultaneously, one will overwrite the other&rsquo;s changes. The <code>isolation: &quot;worktree&quot;</code> flag solves this at the filesystem level. When a subagent runs with worktree isolation, Claude Code creates a new git worktree — a separate working directory linked to the same repository — and the subagent operates entirely within that worktree. The main branch and other worktrees are unaffected until you explicitly merge.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-markdown" data-lang="markdown"><span style="display:flex;"><span># In your prompt or subagent definition:
-</span></span><span style="display:flex;"><span># isolation: &#34;worktree&#34; enables per-subagent git worktrees
-</span></span></code></pre></div><p>The workflow for parallel feature development: define 3 subagents, each working on a different feature branch in its own worktree. Subagent A adds the user profile endpoint, Subagent B adds the notification system, Subagent C adds the analytics dashboard. All three run simultaneously. Each commits to its worktree&rsquo;s branch. The parent then reviews the three branches, runs tests, and merges the passing ones. This is genuine parallel development — not just parallel reading, but parallel writing with zero risk of interference. Worktrees are automatically cleaned up if the subagent makes no changes; if changes were made, the path and branch are returned so the parent can inspect and merge.</p>
-<h3 id="worktree-isolation-tradeoffs">Worktree Isolation Tradeoffs</h3>
-<p>Worktree isolation adds overhead: each worktree is a full working directory copy (though shared via git&rsquo;s object store, so not as expensive as a full clone). For read-only tasks — code analysis, documentation lookup, search — the overhead isn&rsquo;t worth it; just run parallel subagents without isolation. Reserve worktree isolation for subagents that will write files, create migrations, or make commits. The rule of thumb: if the subagent&rsquo;s output is a text result, no isolation needed. If the output is file changes, use <code>isolation: &quot;worktree&quot;</code>.</p>
-<h2 id="model-selection-strategy-opus-sonnet-and-haiku-for-cost-optimization">Model Selection Strategy: Opus, Sonnet, and Haiku for Cost Optimization</h2>
-<p>Claude Code&rsquo;s model routing capability — assigning different models to different subagents — is one of the most underused cost optimization levers available. Opus output tokens cost nearly 19× more than Haiku output tokens: a 5,000-token task costs $0.375 with Opus vs $0.02 with Haiku. The Advisor Strategy (Opus for planning + Sonnet/Haiku for execution) cuts costs 11% while improving code quality compared to running everything on Opus. The logic: Opus&rsquo;s reasoning advantage matters most for ambiguous, multi-step decisions. For structured, well-defined tasks — format a JSON file, check syntax, count lines, grep for a pattern — Haiku is just as accurate and costs a fraction of the price.</p>
-<p>The routing framework by task type:</p>
-<table>
-	<thead>
-			<tr>
-					<th>Task Type</th>
-					<th>Recommended Model</th>
-					<th>Why</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>Architecture decisions, complex debugging</td>
-					<td>Opus 4.7</td>
-					<td>Needs deep reasoning</td>
-			</tr>
-			<tr>
-					<td>Feature implementation, code generation</td>
-					<td>Sonnet 4.6</td>
-					<td>Best speed/quality balance</td>
-			</tr>
-			<tr>
-					<td>File lookup, syntax check, grep, count</td>
-					<td>Haiku 4.5</td>
-					<td>Routine, deterministic output</td>
-			</tr>
-			<tr>
-					<td>Code review (structured checklist)</td>
-					<td>Sonnet 4.6</td>
-					<td>Pattern matching, not reasoning</td>
-			</tr>
-			<tr>
-					<td>Research synthesis, writing documentation</td>
-					<td>Sonnet 4.6</td>
-					<td>High-quality text, not code logic</td>
-			</tr>
-	</tbody>
-</table>
-<p>The <code>model</code> field in a subagent&rsquo;s frontmatter overrides the session default:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-markdown" data-lang="markdown"><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span>name: fast-grep
-</span></span><span style="display:flex;"><span>description: Finds function definitions, import patterns, and usage examples quickly.
-</span></span><span style="display:flex;"><span>tools: Read, Grep, Glob
-</span></span><span style="display:flex;"><span>model: claude-haiku-4-5-20251001
-</span></span><span style="display:flex;"><span>---
-</span></span><span style="display:flex;"><span>You are a fast search specialist. Return exact file paths and line numbers. No explanations.
-</span></span></code></pre></div><p>A realistic cost comparison for a 20-file codebase audit: all-Opus runs at ~$1.50 total. Routed (Opus orchestrator, Sonnet reviewers, Haiku for file lookups) runs at ~$0.35. Same quality on the output that matters; 77% cheaper on the routine steps.</p>
-<h2 id="5-real-world-subagent-patterns-every-developer-should-know">5 Real-World Subagent Patterns Every Developer Should Know</h2>
-<p>Real-world subagent patterns are reusable templates for common development workflows that benefit from delegation, parallelism, or context isolation. Each pattern targets a specific bottleneck: slow sequential file reads, contaminated context windows, bulk processing, comprehensive code review, and complex multi-phase tasks. Knowing these five patterns means you can immediately apply subagents to concrete situations rather than designing workflows from scratch. The patterns below come from production use cases, including the 9-agent code review framework that reduced review time from minutes to seconds, and the split-and-merge pattern used for auditing codebases with 50+ functions simultaneously. Two factors determine which pattern to reach for: whether tasks are independent (parallel patterns) or sequential (pipeline patterns), and whether tasks produce file changes (worktree isolation required) or just text results (no isolation needed). Start with the parallel code review pattern — it&rsquo;s immediately applicable to any PR workflow and demonstrates the full subagent value proposition with zero custom setup required beyond listing what each reviewer should check.</p>
-<h3 id="pattern-1-9-agent-parallel-code-review">Pattern 1: 9-Agent Parallel Code Review</h3>
-<p>Spawn 9 subagents simultaneously, each focused on one quality dimension:</p>
-<ol>
-<li>Security reviewer (injection, auth, secrets)</li>
-<li>Performance reviewer (N+1 queries, large allocations)</li>
-<li>Error handling reviewer (unhandled exceptions, missing rollbacks)</li>
-<li>Type safety reviewer (any casts, missing null checks)</li>
-<li>Test coverage reviewer (untested paths, edge cases)</li>
-<li>Documentation reviewer (missing docstrings, outdated comments)</li>
-<li>Dependency reviewer (new packages, license issues)</li>
-<li>API contract reviewer (breaking changes, versioning)</li>
-<li>Accessibility reviewer (for frontend changes)</li>
-</ol>
-<p>Each reviewer reads the same diff but focuses on its own checklist. The parent collects 9 reports and synthesizes a final review. Review time drops from 5+ minutes to under 60 seconds.</p>
-<h3 id="pattern-2-explore-plan-execute-pipeline">Pattern 2: Explore-Plan-Execute Pipeline</h3>
-<p>Three sequential subagents for complex features: (1) Explorer scans the codebase to find relevant files, patterns, and potential conflicts; (2) Planner takes the Explorer&rsquo;s report and drafts a step-by-step implementation plan; (3) Executor implements the plan file by file using worktree isolation. The parent&rsquo;s context never fills up with raw exploration data — it receives clean handoffs at each phase boundary.</p>
-<h3 id="pattern-3-split-and-merge-for-bulk-processing">Pattern 3: Split-and-Merge for Bulk Processing</h3>
-<p>For tasks like &ldquo;add JSDoc comments to 50 functions&rdquo; or &ldquo;migrate 40 tests from Jest to Vitest&rdquo;: split the work into batches of 5-10, spawn one subagent per batch, collect results, merge. Each subagent handles a bounded, well-defined chunk. The parent&rsquo;s job is coordination and final merge, not execution.</p>
-<h3 id="pattern-4-context-clean-research">Pattern 4: Context-Clean Research</h3>
-<p>Delegate all web searches, documentation lookups, and file explorations to subagents before starting implementation. The subagent returns a 200-word briefing. The parent implements against the briefing without ever seeing the raw search results. This keeps the implementation context clean and prevents the 100K-token research dumps that slow down late-session performance.</p>
-<h3 id="pattern-5-parallel-feature-branches">Pattern 5: Parallel Feature Branches</h3>
-<p>For independent features on the same sprint: each subagent gets a worktree, a feature spec, and a deadline. They develop in parallel. The parent reviews each branch, runs the test suite, and merges passing branches. The bottleneck shifts from &ldquo;one feature at a time&rdquo; to &ldquo;review and merge throughput.&rdquo;</p>
-<h2 id="getting-started-with-community-subagents-awesome-claude-code-subagents">Getting Started with Community Subagents (awesome-claude-code-subagents)</h2>
-<p>The VoltAgent <code>awesome-claude-code-subagents</code> repository on GitHub contains 100+ specialized community subagents covering everything from Rust borrow checker guidance to Next.js performance auditing to SQL query optimization. Rather than writing every subagent from scratch, this library is the fastest way to get production-grade subagents into your workflow. Each entry in the repo is a ready-to-use <code>.md</code> file with tested frontmatter and a proven system prompt. The community has already debugged the edge cases: prompt phrasing that reliably triggers the right behavior, tool restrictions that prevent subagents from taking destructive actions, model assignments tuned for each task type.</p>
-<p>To get started: browse the repository&rsquo;s categories (Security, Performance, Testing, Documentation, Architecture), copy the files for the subagents most relevant to your work, and drop them into <code>.claude/agents/</code> in your project or <code>~/.claude/agents/</code> for global access. Test each subagent on a small task before including it in production workflows. The most-forked entries as of early 2026 are the security-reviewer, the test-generator, and the migration-planner — all representing tasks that benefit from focused context and structured output.</p>
-<h3 id="writing-your-first-custom-subagent">Writing Your First Custom Subagent</h3>
-<p>Start with a task you currently delegate to Claude via long, repeated prompts. If you find yourself typing the same 200-word instruction block every time you want a certain kind of review or analysis, that&rsquo;s a subagent. Write the instruction block into a frontmatter <code>.md</code> file, decide which tools the subagent needs, choose the cheapest model that handles the task reliably, and save it to <code>.claude/agents/</code>. Run it on 3-4 representative tasks. Adjust the system prompt based on the outputs. After 5 iterations, you&rsquo;ll have a reliable, reusable worker that handles that task better than an ad-hoc prompt ever did.</p>
-<hr>
-<h2 id="faq">FAQ</h2>
-<p><strong>What is the difference between a Claude Code subagent and a regular Claude session?</strong>
-A subagent runs in an isolated context window with its own system prompt, tool access restrictions, and optional model override. The parent session delegates a task, the subagent executes it independently, and only the final result comes back to the parent. A regular session shares the full conversation history with the model on every turn.</p>
-<p><strong>How many subagents can run in parallel in Claude Code?</strong>
-Claude Code supports 16+ parallel agents simultaneously. The practical limit depends on your API rate limits and the size of each subagent&rsquo;s workload. For most codebases, 5-10 parallel subagents covers the useful parallelism; beyond that, orchestration overhead starts to offset the gains.</p>
-<p><strong>Can subagents write to files without conflicting with each other?</strong>
-Yes, if you use the <code>isolation: &quot;worktree&quot;</code> flag. Each subagent with worktree isolation gets its own git worktree — a separate working directory — so simultaneous writes go to different locations. Without worktree isolation, parallel subagents that write to the same file will conflict.</p>
-<p><strong>How does model routing in subagents affect cost?</strong>
-Significant impact. Opus output tokens cost ~19× more than Haiku. Routing routine tasks (file lookups, pattern matching, syntax checks) to Haiku and reserving Opus for architectural decisions can reduce total session costs by 70-80% with no quality loss on the simple tasks.</p>
-<p><strong>Where do I find pre-built community subagents for Claude Code?</strong>
-The <code>VoltAgent/awesome-claude-code-subagents</code> repository on GitHub is the main community library with 100+ specialized subagents. Copy the relevant <code>.md</code> files to <code>.claude/agents/</code> in your project or <code>~/.claude/agents/</code> for global use.</p>
 ]]></content:encoded></item><item><title>Superpowers Framework: TDD Methodology for AI Coding Agents 2026</title><link>https://baeseokjae.github.io/posts/superpowers-framework-ai-coding-2026/</link><pubDate>Fri, 24 Apr 2026 04:12:05 +0000</pubDate><guid>https://baeseokjae.github.io/posts/superpowers-framework-ai-coding-2026/</guid><description>Superpowers is the open-source framework that enforces TDD discipline on AI coding agents—here&amp;#39;s how to install it and why it works.</description><content:encoded><![CDATA[<p>The Superpowers framework is the fastest way to stop your AI coding agent from shipping broken code. Instead of hoping the model follows best practices, Superpowers installs a structured set of skills that <em>enforce</em> a clarify → design → plan → code → verify discipline on every task—red tests before green, always.</p>
 <h2 id="what-is-the-superpowers-framework-the-problem-it-solves">What Is the Superpowers Framework? (The Problem It Solves)</h2>
 <p>Superpowers is an open-source agent skills framework created by Jesse Vincent (obra) that encodes professional software engineering discipline—particularly test-driven development—into reusable skill files that AI coding agents auto-trigger by context. Released in October 2025, it gained 1,528 GitHub stars in its first 24 hours and reached 129,443 stars by April 2026, making it one of the most starred coding-agent repositories ever. The framework emerged from a concrete frustration: AI agents like Claude Code are capable of writing correct code, but when left unguided they skip tests, cut corners on design, and produce implementations that pass their own ad-hoc checks rather than actual requirements. Superpowers solves this by shipping 14 composable skills—from brainstorming to subagent code review—that transform an unconstrained coding agent into a disciplined engineering collaborator. Rather than patching behavior with a long CLAUDE.md paragraph, each skill is a focused SKILL.md file that triggers at the right moment and dispatches fresh subagents to handle isolated subtasks like writing failing tests or running a two-stage review.</p>
