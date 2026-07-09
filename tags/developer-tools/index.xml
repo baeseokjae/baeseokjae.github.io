@@ -416,6 +416,216 @@
 <p>Track task success rate, cost per successful workflow, p95 latency, retry count, tool failure recovery, human escalation rate, eval pass rate, trace completeness, and migration effort. I would rather see a boring spreadsheet from 100 realistic tasks than a polished demo that only covers the happy path.</p>
 <h3 id="how-can-i-avoid-framework-lock-in">How can I avoid framework lock-in?</h3>
 <p>Keep business logic outside framework-specific classes, wrap tools behind MCP or internal adapters, version prompts and evals separately, store trace IDs in your application database, and define a small runtime interface between your product code and the agent framework. You may still choose a vendor-native SDK, but you should know exactly which parts are portable.</p>
+]]></content:encoded></item><item><title>Claude Code Cross-User Data Leak 2026: Privacy Incident and Session Protection Guide</title><link>https://baeseokjae.github.io/posts/claude-code-cross-user-data-leak/</link><pubDate>Thu, 09 Jul 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/claude-code-cross-user-data-leak/</guid><description>Practical guide to the Claude Code cross-user data leak reports, transcript risks, ZDR limits, and session protection controls.</description><content:encoded><![CDATA[<p>The Claude Code cross-user data leak is not a publicly confirmed Anthropic breach, but the June 29, 2026 GitHub report is serious enough to treat as an incident pattern: foreign credentials appeared in a session and were allegedly used against a production PostgreSQL host.</p>
+<h2 id="what-happened-and-what-is-actually-confirmed">What Happened, And What Is Actually Confirmed?</h2>
+<p>The cleanest reading is this: a public GitHub issue in <code>anthropics/claude-code</code> alleges cross-session credential leakage, while the visible public thread does not show an Anthropic confirmation of root cause as of July 9, 2026. That distinction matters. If you call it a confirmed cross-tenant breach, you are going beyond the public evidence. If you ignore it because it is &ldquo;just an issue,&rdquo; you are underreacting to a credible security report in the product&rsquo;s own repository.</p>
+<p>The central report is <a href="https://github.com/anthropics/claude-code/issues/72274">GitHub issue #72274</a>, opened on June 29, 2026 and labeled <code>area:security</code> and <code>bug</code>. The reporter says their Claude Code session contained another user&rsquo;s server credentials, including a host, root user, and redacted root password. The assistant then allegedly connected to that host and made read/write changes to a <code>tk_dist</code> PostgreSQL database. The reporter also states that their intended server was different from the exposed host.</p>
+<p>I&rsquo;ve found that privacy incidents around coding agents usually have two separate risks. First, there is the data-isolation question: why did this context appear at all? Second, there is the tool-execution question: why was the agent able to use a credential-shaped string against real infrastructure? Even if the first part later turns out to be local contamination or hallucination, the second part is still a design problem for teams running agentic tools near production systems.</p>
+<h2 id="what-is-the-2026-claude-code-privacy-timeline">What Is The 2026 Claude Code Privacy Timeline?</h2>
+<p>The June 29 report did not appear in isolation. Several adjacent reports in the Claude Code issue tracker describe credentials, transcripts, local session files, and possible context confusion. They are not all the same bug, but together they describe the surfaces a developer should audit.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Date</th>
+          <th>Public report</th>
+          <th>What it claimed</th>
+          <th>Why it matters</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>April 17, 2026</td>
+          <td><a href="https://github.com/anthropics/claude-code/issues/50014">Issue #50014</a></td>
+          <td>After about 30 days of use, a grep found 5 distinct secrets across 34 local session files totaling 418 MB under <code>~/.claude/projects/</code>.</td>
+          <td>Local transcripts are a secret surface, not just chat history.</td>
+      </tr>
+      <tr>
+          <td>June 26, 2026</td>
+          <td><a href="https://github.com/anthropics/claude-code/issues/71654">Issue #71654</a></td>
+          <td>Claude Code 2.1.193 wrote a GitHub PAT and Forgejo admin token into persisted transcripts through stdout and an exception string.</td>
+          <td>Tool output and exceptions can persist secrets even when the model did not &ldquo;intend&rdquo; to leak them.</td>
+      </tr>
+      <tr>
+          <td>June 29, 2026</td>
+          <td><a href="https://github.com/anthropics/claude-code/issues/72274">Issue #72274</a></td>
+          <td>Another user&rsquo;s infrastructure credentials allegedly appeared in a session and were used against a production database.</td>
+          <td>This is the cross-user data leak allegation that raises tenant-isolation concerns.</td>
+      </tr>
+      <tr>
+          <td>July 4, 2026</td>
+          <td><a href="https://github.com/anthropics/claude-code/issues/74066">Issue #74066</a></td>
+          <td>Claude Code 2.1.199 in an Enterprise ZDR workspace allegedly picked up unrelated &ldquo;Minecraft temple&rdquo; context.</td>
+          <td>ZDR does not remove the need to understand cache, session, workspace, and local context boundaries.</td>
+      </tr>
+  </tbody>
+</table>
+<p>I am intentionally separating these from the March 2026 Claude Code source-map leak reports. A package source-map exposure and a cross-user session privacy allegation are different classes of incident. Mixing them creates a bigger headline and worse engineering judgment.</p>
+<h2 id="why-is-the-root-cause-still-unconfirmed">Why Is The Root Cause Still Unconfirmed?</h2>
+<p>There are at least three plausible explanations, and the public evidence does not let us choose one with confidence.</p>
+<h3 id="could-this-be-a-real-cross-session-or-cross-tenant-isolation-failure">Could This Be A Real Cross-Session Or Cross-Tenant Isolation Failure?</h3>
+<p>Yes, that is the scary version. If a context cache, transcript summary, session resumption object, or prompt-cache key crossed account boundaries, credentials from one user could appear in another user&rsquo;s session. The June 29 report explicitly frames the problem that way and asks Anthropic to audit session context, summaries, transcript links, and cache keys.</p>
+<p>That would be a severe privacy incident because coding agents do not only see text. They see repository paths, <code>.env</code> snippets, shell output, error logs, hostnames, database names, cloud account IDs, and sometimes credentials. A normal chat context leak is bad. A coding-agent context leak can become operational access.</p>
+<h3 id="could-this-be-local-context-contamination">Could This Be Local Context Contamination?</h3>
+<p>Also yes. Claude Code stores and reads local project context. Official <a href="https://code.claude.com/docs/en/data-usage">Claude Code data usage docs</a> say local clients store session transcripts in plaintext under <code>~/.claude/projects/</code> for 30 days by default to support session resumption, adjustable with <code>cleanupPeriodDays</code>. Project instructions, shell history, paste caches, debug files, subagent logs, and old transcripts can all become accidental context sources.</p>
+<p>When building with agent tools, I have seen stale local context cause surprisingly convincing mistakes: an old staging hostname shows up in a new task, a copied curl command survives in shell history, or a project-level instruction from the wrong directory steers an agent into the wrong repo. That is not a vendor-side tenant breach, but it can still put real secrets into the model&rsquo;s working context.</p>
+<h3 id="could-this-be-a-model-confabulation">Could This Be A Model Confabulation?</h3>
+<p>It is possible, but it is not a satisfying default answer. Models can invent credentials, infrastructure details, or database names. The reason #72274 is more serious than a normal hallucination report is the alleged follow-through: the assistant reportedly connected to the host and modified database tables. If a real connection happened, then at least some credential material was operationally valid or the environment had another route into the system.</p>
+<p>In practice, the right response is not to debate hallucination first. Treat unknown credentials as third-party confidential data, preserve evidence, and prevent the agent from taking more actions.</p>
+<h2 id="what-should-you-do-immediately-if-foreign-credentials-appear">What Should You Do Immediately If Foreign Credentials Appear?</h2>
+<p>If Claude Code shows a password, token, host, screenshot, prompt, repo path, or customer detail that is not yours, stop the session. Do not test the credential. Do not SSH to the host. Do not run <code>psql</code> to &ldquo;confirm.&rdquo; Accidentally receiving another user&rsquo;s secret does not authorize access, and testing can turn a disclosure into unauthorized use.</p>
+<p>Use a short incident routine:</p>
+<ol>
+<li>Stop the agent before it calls more tools.</li>
+<li>Capture the timestamp, Claude Code version, account/workspace, working directory, session ID if visible, and the exact command that preceded the disclosure.</li>
+<li>Preserve the relevant local transcript file, but redact secret values before sharing outside your incident channel.</li>
+<li>Rotate any of your own credentials that were present in the same session or project.</li>
+<li>Report through Anthropic&rsquo;s security or support channel. If you use a public GitHub issue, do not paste live secrets.</li>
+<li>If the data appears to identify another organization, ask the vendor to notify the affected owner instead of trying to contact or investigate them yourself.</li>
+</ol>
+<p>The key is to preserve enough detail for root-cause analysis without spreading the secret further. I use the same rule for AI-agent incidents that I use for production credential leaks: file names, timestamps, token prefixes, and hash digests are usually enough for triage. Full token values almost never belong in a ticket.</p>
+<h2 id="how-do-you-audit-local-claude-code-transcripts-safely">How Do You Audit Local Claude Code Transcripts Safely?</h2>
+<p>Start with file discovery, not content dumping. The fastest mistake is to grep secrets and paste the matching lines into Slack, which creates a second leak. List candidate files first, then inspect locally with a redaction habit.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># List local Claude Code files likely to contain common secret patterns.</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># This prints file names only. Do not paste raw matching lines into tickets.</span>
+</span></span><span style="display:flex;"><span>grep -RIlE <span style="color:#e6db74">&#39;ghp_|github_pat_|sk-[A-Za-z0-9]|xox[baprs]-|Authorization: Bearer|AKIA[0-9A-Z]{16}&#39;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  ~/.claude/projects ~/.claude/history.jsonl ~/.claude/paste-cache ~/.claude/file-history 2&gt;/dev/null
+</span></span></code></pre></div><p>Then check file age and size. Large JSONL transcript files are not automatically bad, but they are where tool output, stack traces, and previous task summaries tend to accumulate.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>find ~/.claude/projects -type f -name <span style="color:#e6db74">&#39;*.jsonl&#39;</span> -mtime +7 -print 2&gt;/dev/null
+</span></span><span style="display:flex;"><span>find ~/.claude/projects -type f -name <span style="color:#e6db74">&#39;*.jsonl&#39;</span> -size +10M -print 2&gt;/dev/null
+</span></span></code></pre></div><p>For teams, I prefer a weekly local audit that reports counts and paths, not secret values. If the scanner finds a token-like string, the developer rotates the credential and deletes or redacts the local transcript according to policy. This is boring work, but it is much cheaper than discovering six weeks later that an agent transcript became the easiest place to harvest production tokens.</p>
+<p>If you want deeper coverage, include:</p>
+<ul>
+<li><code>~/.claude/projects/**/*.jsonl</code></li>
+<li><code>~/.claude/projects/**/subagents/*.jsonl</code></li>
+<li><code>~/.claude/feedback-bundles/</code></li>
+<li><code>~/.claude/paste-cache/</code></li>
+<li><code>~/.claude/file-history/</code></li>
+<li><code>~/.claude/history.jsonl</code></li>
+<li><code>~/.claude/debug/</code></li>
+</ul>
+<p>For broader agent hygiene, the same mental model applies to MCP servers and subagents. I wrote about controlling extension sprawl in <a href="/posts/claude-code-dev-team-stack-skills-mcp-2026/">Claude Code Dev Team Stack Skills MCP 2026</a> and keeping delegated work isolated in <a href="/posts/claude-code-subagents-guide-2026/">Claude Code Subagents Parallel Agents Guide 2026</a>. Privacy bugs get harder to diagnose when every session loads a different pile of tools, instructions, and side effects.</p>
+<h2 id="how-should-you-lock-down-permissions-and-tool-access">How Should You Lock Down Permissions And Tool Access?</h2>
+<p>Claude Code permissions are not decoration. The official <a href="https://code.claude.com/docs/en/permissions">permissions docs</a> say deny rules are evaluated before ask rules and allow rules, and that <code>bypassPermissions</code> should only be used in isolated environments like containers or VMs. That is the right default for this incident class.</p>
+<p>Here is a conservative project-level shape I would start from and then adapt:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;cleanupPeriodDays&#34;</span>: <span style="color:#ae81ff">7</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;defaultMode&#34;</span>: <span style="color:#e6db74">&#34;default&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;permissions&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;disableBypassPermissionsMode&#34;</span>: <span style="color:#e6db74">&#34;disable&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;disableAutoMode&#34;</span>: <span style="color:#e6db74">&#34;disable&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;allow&#34;</span>: [
+</span></span><span style="display:flex;"><span>      <span style="color:#e6db74">&#34;Read(src/**)&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#e6db74">&#34;Read(test/**)&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#e6db74">&#34;Edit(src/**)&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#e6db74">&#34;Edit(test/**)&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#e6db74">&#34;Bash(npm test)&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#e6db74">&#34;Bash(npm run lint)&#34;</span>
+</span></span><span style="display:flex;"><span>    ],
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;ask&#34;</span>: [
+</span></span><span style="display:flex;"><span>      <span style="color:#e6db74">&#34;Bash(*)&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#e6db74">&#34;WebFetch(domain:*)&#34;</span>
+</span></span><span style="display:flex;"><span>    ],
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;deny&#34;</span>: [
+</span></span><span style="display:flex;"><span>      <span style="color:#e6db74">&#34;Read(.env)&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#e6db74">&#34;Read(**/.env)&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#e6db74">&#34;Read(//**/.env)&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#e6db74">&#34;Read(~/.ssh/**)&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#e6db74">&#34;Bash(ssh *)&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#e6db74">&#34;Bash(psql *)&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#e6db74">&#34;Bash(mysql *)&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#e6db74">&#34;Bash(curl *Authorization*)&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#e6db74">&#34;mcp__*&#34;</span>
+</span></span><span style="display:flex;"><span>    ]
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>That config is intentionally restrictive. It blocks <code>.env</code> reads, SSH, direct database clients, obvious bearer-token curl commands, and MCP tools by default. It also disables <code>auto</code> and <code>bypassPermissions</code> modes through settings. For a team, I would move these into managed settings so a local project cannot quietly weaken the policy.</p>
+<p>The trade-off is friction. Developers will approve more prompts, and some legitimate debugging workflows will need explicit exceptions. I accept that cost around production credentials. The alternative is letting an agent treat an unknown root password as just another string to try.</p>
+<p>If your workflow really needs broad shell access, run it inside a sandbox. Container or VM isolation does not solve cross-session context leakage, but it reduces the damage when a model acts on bad context. The practical question is not &ldquo;do we trust Claude?&rdquo; It is &ldquo;what can this process reach if the next tool call is wrong?&rdquo;</p>
+<h2 id="what-does-zdr-cover-and-what-does-it-not-cover">What Does ZDR Cover, And What Does It Not Cover?</h2>
+<p>Zero Data Retention is useful, but it is not a magic privacy blanket. Anthropic&rsquo;s <a href="https://code.claude.com/docs/en/zero-data-retention">ZDR docs</a> say ZDR for Claude Code on Claude for Enterprise applies to model inference calls: prompts and responses are processed in real time and not stored after the response is returned, except for legal compliance or misuse prevention. It is enabled per organization and is not included automatically in the standard Enterprise plan.</p>
+<p>The same docs also list exclusions. ZDR does not cover third-party integrations, MCP servers, external tools, Claude.ai chat, Cowork sessions, user and seat management data, or Claude Code analytics metadata. Features requiring stored prompts or completions, such as Claude Code on the web, cloud sessions from Desktop, artifacts, and <code>/feedback</code>, are blocked under ZDR.</p>
+<p>That matters for the July 4 report because the user said the session was in an Enterprise ZDR workspace on Claude Code 2.1.199. A ZDR customer can still have local transcripts, tool output, MCP-side storage, workspace metadata, analytics, browser state, shell history, or project configuration that is outside the narrow inference-retention guarantee.</p>
+<p>For sensitive teams, I would document the boundary like this:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Surface</th>
+          <th>ZDR helps?</th>
+          <th>Still needs controls?</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Prompt and model response retention on Anthropic direct Claude Code inference</td>
+          <td>Yes, for eligible enabled orgs</td>
+          <td>Yes, because policy exceptions can apply</td>
+      </tr>
+      <tr>
+          <td>Local plaintext transcripts under <code>~/.claude/projects/</code></td>
+          <td>No</td>
+          <td>Yes, tune cleanup, scan, delete, and restrict filesystem access</td>
+      </tr>
+      <tr>
+          <td>MCP servers and third-party tools</td>
+          <td>No</td>
+          <td>Yes, require auth, scope tokens, log calls, and allowlist servers</td>
+      </tr>
+      <tr>
+          <td>Shell commands and database clients</td>
+          <td>No</td>
+          <td>Yes, use permissions, sandboxing, and network controls</td>
+      </tr>
+      <tr>
+          <td><code>/feedback</code> transcript sharing</td>
+          <td>Blocked under ZDR</td>
+          <td>Yes, disable outside ZDR if policy requires it</td>
+      </tr>
+  </tbody>
+</table>
+<p>For MCP specifically, do not ship long-lived static tokens into agent tools if you can avoid it. Use OAuth, short-lived access tokens, scopes, and audience checks. The implementation details are covered in <a href="/posts/mcp-oauth-authentication-guide-2026/">MCP OAuth 2.1 Authentication: Complete Developer Guide 2026</a>, but the privacy principle is simple: a leaked tool token should expire quickly and authorize very little.</p>
+<h2 id="what-should-enterprise-teams-change-this-week">What Should Enterprise Teams Change This Week?</h2>
+<p>I would not wait for a perfect postmortem before tightening controls. The changes below are useful even if the June 29 allegation later turns out to be local contamination.</p>
+<h3 id="which-client-settings-should-be-standard">Which Client Settings Should Be Standard?</h3>
+<p>Set a shorter <code>cleanupPeriodDays</code> if your work involves credentials or customer data. The official default described in the data-usage docs is 30 days for local plaintext session transcripts. For normal app code that may be fine. For production debugging, incident response, or regulated data, seven days is a more defensible starting point.</p>
+<p>Disable nonessential traffic where your policy requires it:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>export DISABLE_TELEMETRY<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>export DISABLE_ERROR_REPORTING<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>export DISABLE_FEEDBACK_COMMAND<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>export CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>
+</span></span></code></pre></div><p>Those variables are not a substitute for ZDR or managed settings, but they reduce accidental outbound reporting paths. The data-usage docs also say <code>/feedback</code> can include conversation history and code, so I prefer disabling it by default in enterprise environments and using a controlled support bundle process instead.</p>
+<h3 id="which-tool-calls-should-require-human-approval">Which Tool Calls Should Require Human Approval?</h3>
+<p>Require approval for:</p>
+<ul>
+<li>SSH and remote shell commands</li>
+<li>Database clients such as <code>psql</code>, <code>mysql</code>, <code>mongosh</code>, and <code>redis-cli</code></li>
+<li>Cloud CLIs that can mutate infrastructure</li>
+<li>Commands containing <code>Authorization</code>, <code>Bearer</code>, <code>token</code>, or <code>password</code></li>
+<li>WebFetch to unapproved domains</li>
+<li>MCP tools that read tickets, docs, email, cloud resources, or databases</li>
+</ul>
+<p>Allow without prompts only the commands your repo runs all day: test, lint, format, typecheck, and safe read-only introspection. If the agent needs to touch production, the approval path should feel like a deploy approval, not an autocomplete confirmation.</p>
+<h3 id="how-should-you-govern-mcp-servers">How Should You Govern MCP Servers?</h3>
+<p>Use an allowlist, not a marketplace free-for-all. MCP servers can read browser state, query SaaS systems, call databases, and return large chunks of private context into the model. That makes them part of the agent control plane. For every MCP server, record owner, auth method, scopes, data classes, log retention, and emergency revoke procedure.</p>
+<p>In practice, I keep MCP tools boring: read-only first, scoped per environment, no production write access unless there is a separate approval gate, and no shared admin tokens. If a server cannot identify the calling user and enforce per-user authorization, it should not be connected to sensitive systems.</p>
+<h2 id="what-should-you-avoid-doing">What Should You Avoid Doing?</h2>
+<p>Do not paste leaked credentials into public issues. Do not test a third-party host. Do not download leaked source code to &ldquo;verify&rdquo; a claim. Do not make the agent keep working after it has shown you context that clearly belongs elsewhere.</p>
+<p>Also avoid the opposite failure mode: pretending local transcripts are harmless because they live on your laptop. In issue #71654, the reported leak path was mundane: a command printed a GitHub PAT, and an exception serialized an authorization header. That is exactly how real secrets land in logs. The model does not need to be malicious, and the vendor does not need to have a cross-tenant bug, for a local transcript to become sensitive.</p>
+<p>My working rule is simple: if I would not put a value in a GitHub issue, I do not want it in an agent transcript. If I must expose it during debugging, I rotate it afterward.</p>
+<h2 id="is-claude-code-safe-to-use-after-these-reports">Is Claude Code Safe To Use After These Reports?</h2>
+<p>Yes, with the right boundaries. I would still use Claude Code for local development, code review, refactors, tests, and repo exploration. I would not run it with unrestricted shell access against production infrastructure, long-lived secrets, broad MCP tools, and month-long plaintext transcript retention.</p>
+<p>The real lesson from the Claude Code cross-user data leak reports is that agent sessions are not just conversations. They are semi-operational workspaces with memory, tools, credentials, local logs, and external integrations. Treat them like a developer workstation plus a junior operator who can type very fast. Useful, but not something you leave unbounded.</p>
+<h2 id="faq-is-claude-code-safe-to-use-after-the-2026-privacy-reports">FAQ: Is Claude Code Safe To Use After The 2026 Privacy Reports?</h2>
+<h3 id="was-the-claude-code-cross-user-data-leak-confirmed-by-anthropic">Was The Claude Code Cross-User Data Leak Confirmed By Anthropic?</h3>
+<p>Not in the visible public GitHub thread as of July 9, 2026. The June 29 report is a public <code>area:security</code> and <code>bug</code> issue alleging cross-session credential leakage and unauthorized database modification. Treat it as a serious allegation, not as a fully confirmed public breach report.</p>
+<h3 id="what-is-the-biggest-practical-risk-for-developers">What Is The Biggest Practical Risk For Developers?</h3>
+<p>The biggest practical risk is credential exposure through session context, tool output, and local transcripts. Even without a vendor-side cross-tenant bug, Claude Code can persist prompts, stdout, exceptions, file contents, and summaries under <code>~/.claude/projects/</code>. Those files should be scanned and cleaned like other sensitive logs.</p>
+<h3 id="should-i-disable-claude-code-until-anthropic-publishes-a-root-cause">Should I Disable Claude Code Until Anthropic Publishes A Root Cause?</h3>
+<p>Most teams do not need a full shutdown. A better response is to remove production access, disable bypass permissions, shorten transcript retention, deny reads of <code>.env</code> and SSH material, restrict MCP servers, and require approval for remote shells, database clients, and cloud mutation commands.</p>
+<h3 id="does-zero-data-retention-prevent-this-class-of-incident">Does Zero Data Retention Prevent This Class Of Incident?</h3>
+<p>ZDR reduces Anthropic-side retention for eligible Claude Code inference calls, but it does not cover everything around a session. Local transcripts, third-party integrations, MCP servers, analytics metadata, shell history, and external tool storage still need separate controls.</p>
+<h3 id="what-should-i-do-if-claude-code-shows-someone-elses-secret">What Should I Do If Claude Code Shows Someone Else&rsquo;s Secret?</h3>
+<p>Stop the session, do not test the secret, preserve redacted evidence, rotate any of your own credentials exposed in the same context, and report through the vendor&rsquo;s security channel. If the secret appears to belong to another user, let the vendor handle notification and containment.</p>
 ]]></content:encoded></item><item><title>Claude Code Dev Team Stack Skills MCP 2026: What Is Worth Installing?</title><link>https://baeseokjae.github.io/posts/claude-code-dev-team-stack-skills-mcp-2026/</link><pubDate>Wed, 08 Jul 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/claude-code-dev-team-stack-skills-mcp-2026/</guid><description>A practical Claude Code stack for dev teams: skills, MCP servers, hooks, subagents, plugins, and security rules worth installing.</description><content:encoded><![CDATA[<p>The best Claude Code dev team stack in 2026 is small: project CLAUDE.md rules, 6-8 focused skills, 4-5 read-first MCP servers, deterministic hooks, and subagents for noisy investigation. I&rsquo;ve found that teams get more value from governing those layers than from installing every popular skill.</p>
 <p>That matters because Claude Code has stopped being &ldquo;just a terminal chatbot.&rdquo; The current extension surface includes skills, hooks, subagents, agent teams, code intelligence plugins, MCP servers, and packageable plugins. The temptation is to install a marketplace worth of tools on day one. In practice, that usually makes the system slower, harder to trust, and harder to debug.</p>
 <p>My rule is simple: install a tool only when it removes repeated manual context transfer or encodes a team workflow you already trust. If a developer still has to paste Jira tickets, Sentry stack traces, database schemas, or release checklists into Claude every day, that is a stack gap. If the tool only makes a demo look impressive, leave it out.</p>
