@@ -113,3 +113,25 @@ BrowserAct hitting #1 on Product Hunt is a signal, not a surprise. The market is
 The products that win in this next phase will be the ones that treat the browser as a first-class runtime for agents, not as an afterthought. Session management, human handoff, reusable workflows, and safety gates aren't features you bolt on later. They're the core infrastructure that makes agent browser automation actually work in production.
 
 If you're building AI agents that need to do real work on the web — not just generate text or call APIs, but actually *operate* software — BrowserAct is worth evaluating. The Product Hunt community already voted on that.
+
+## Frequently Asked Questions
+
+### What is BrowserAct and how is it different from Playwright or Puppeteer?
+
+BrowserAct is an agent-native browser runtime, not a developer scripting API. Playwright and Puppeteer are for writing deterministic test scripts where you control every selector and wait. BrowserAct is designed for AI-driven, non-deterministic workflows — the agent decides what to do next based on page state, and BrowserAct handles session persistence, verification challenges, and error recovery automatically. They're complementary: I use Playwright for test suites and BrowserAct for production agent workflows.
+
+### Does BrowserAct work with logged-in sites and SSO portals?
+
+Yes. Session management is one of BrowserAct's core features. It preserves cookies, local storage, and authentication tokens across steps, so your agent can log into a SaaS portal once and maintain that session through a multi-step workflow. For SSO flows that involve redirects and third-party authentication, BrowserAct handles the redirect chain and can escalate to human handoff if a verification challenge appears.
+
+### How does BrowserAct handle CAPTCHAs and verification challenges?
+
+BrowserAct has a two-tier approach: it handles common verification patterns automatically where possible, and escalates the rest to a human via the human handoff feature. The workflow pauses, notifies a designated human operator, lets them complete the verification, and resumes from the same session state. This is the production pattern — treating human intervention as a workflow step rather than a failure.
+
+### What is browser-act-skill-forge?
+
+browser-act-skill-forge is the reuse layer that sits on top of the browser-act runtime. Once you've built a working browser workflow — say, "download the monthly Stripe reconciliation report" — you can save it as a reusable Skill. Any agent in your organization can then invoke that Skill without rebuilding the flow. It turns one-off automations into callable infrastructure.
+
+### Is BrowserAct suitable for small businesses or just developers?
+
+Both. The Product Hunt launch surfaced two distinct user groups. Developers use BrowserAct as the execution layer for AI agents that need to interact with web UIs. Small business owners use it for repetitive browser chores — checking vendor portals, downloading invoices, updating listings across platforms. The reusable Skills pattern is especially useful for small teams: automate a workflow once and run it weekly without rebuilding.

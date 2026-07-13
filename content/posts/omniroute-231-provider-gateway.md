@@ -1,6 +1,6 @@
 ---
 title: "OmniRoute 231-Provider Gateway Review 2026: Free AI Gateway for Coding Agents"
-date: 2026-07-10T12:00:00+00:00
+date: 2026-07-13T12:00:00+00:00
 tags: ["omniroute", "ai-gateway", "coding-agents"]
 description: "OmniRoute 2026 review for coding agents: provider counts, free-tier math, setup, routing, caveats, and alternatives."
 draft: false
