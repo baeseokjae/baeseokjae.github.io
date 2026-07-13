@@ -140,3 +140,25 @@ Here's the bottom line after a year of dealing with benchmark variance:
 6. **Report confidence intervals.** A score without an uncertainty estimate is not a scientific measurement. It's a marketing number.
 
 The benchmarks that still provide genuine signal in 2026 — [SWE-bench Verified and Pro](/posts/swe-bench-coding-benchmarks-guide-2026/), GPQA Diamond, LiveCodeBench — are useful precisely because their designers have grappled with these variance sources. But even the best benchmark is only as reliable as the evaluation protocol around it. Run it once, and you're guessing. Run it five times with confidence intervals, and you have data.
+
+## FAQ
+
+### How much variance is normal in LLM benchmark scores?
+
+For a 100-question benchmark, a 75% score has a standard error of about 4.3%, meaning the 95% confidence interval spans roughly 17 percentage points. For frontier models within 3-5 points of each other, run-to-run variance alone can flip rankings. I've seen 1-2 point swings on MMLU from GPU nondeterminism alone, and 5+ point swings on small subsets from sampling variance.
+
+### Can I trust benchmark scores from model release blog posts?
+
+Only as directional indicators, not as precise measurements. Most model releases report single-run scores without confidence intervals, and many use benchmarks that may be contaminated by training data overlap. Treat a published score as an upper bound — the model's real performance on your specific task is likely lower, and you won't know by how much until you evaluate it yourself.
+
+### What's the minimum number of benchmark questions for reliable evaluation?
+
+At least 250 examples for reliable ranking between models within 5 points of each other, based on the October 2025 micro-benchmarking study. Below that threshold, sampling variance dominates. For production selection decisions, aim for 500+ examples stratified across your task distribution.
+
+### How do I check if a benchmark is contaminated?
+
+Check whether the benchmark dataset was published before the model's training cutoff date. If it was, the score is potentially inflated. The safest approach is to use benchmarks with continuous test-set rotation like LiveCodeBench, or build your own evaluation set from production data that couldn't appear in any public training corpus.
+
+### What's the single most important thing I can do to improve my LLM evaluations?
+
+Run every evaluation at least 3 times and report the mean and standard deviation. This single practice eliminates the most common source of misleading results — treating a single noisy measurement as a reliable score. If two models' means are within 2 standard deviations of each other, they're statistically indistinguishable on that benchmark.
