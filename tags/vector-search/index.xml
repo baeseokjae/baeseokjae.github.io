@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Vector Search on RockB</title><link>https://baeseokjae.github.io/tags/vector-search/</link><description>Recent content in Vector Search on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Fri, 22 May 2026 23:19:54 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/vector-search/index.xml" rel="self" type="application/rss+xml"/><item><title>GitHub Copilot Semantic Code Search: Find Code by Concept, Not Keyword</title><link>https://baeseokjae.github.io/posts/github-copilot-semantic-code-search-2026/</link><pubDate>Fri, 22 May 2026 23:19:54 +0000</pubDate><guid>https://baeseokjae.github.io/posts/github-copilot-semantic-code-search-2026/</guid><description>GitHub Copilot&amp;#39;s semantic code search finds code by meaning, not text. 40% better context recall vs grep, 2% faster task completion—here&amp;#39;s how it works.</description><content:encoded><![CDATA[<p>GitHub Copilot&rsquo;s semantic code search replaces grep-style text matching with vector similarity search—finding code that <em>means</em> the same thing, even when the words don&rsquo;t match. Available since Copilot v1.200 (March 2026), it reduces task completion time by 2% and delivers 40% better context recall than keyword search, with no configuration required.</p>
+<h2 id="what-is-semantic-code-search-in-github-copilot">What Is Semantic Code Search in GitHub Copilot?</h2>
+<p>Semantic code search in GitHub Copilot is a retrieval mechanism that represents code as high-dimensional vectors and finds matches by meaning rather than literal text. Introduced in GitHub Copilot v1.200 for VS Code in March 2026, it replaces the agent&rsquo;s prior reliance on tools like <code>grep</code> when searching for relevant context. When Copilot&rsquo;s coding agent needs to understand which parts of a codebase are relevant to a task, it now runs a vector similarity query rather than a keyword scan. According to the GitHub Changelog (March 17, 2026), this reduces task completion time by 2% without any quality degradation—a meaningful gain across thousands of daily requests. The core mechanism works by converting code snippets into embedding vectors (typically using OpenAI&rsquo;s <code>text-embedding-3-small</code> at 1536 dimensions), then indexing them in a vector database like Qdrant v1.12 with an HNSW index. At query time, the agent&rsquo;s intent gets embedded with the same model, and the store returns the top-k most semantically similar snippets. The practical result: you ask Copilot to &ldquo;fix the authentication error handling&rdquo; and it finds the right middleware even if the file is called <code>gatekeeper.ts</code> with no &ldquo;auth&rdquo; in sight.</p>
+<h2 id="how-does-semantic-search-differ-from-keyword-search">How Does Semantic Search Differ from Keyword Search?</h2>
+<p>Keyword search (BM25, grep, simple string matching) operates on lexical overlap—a query for &ldquo;user session&rdquo; finds files containing those words. Semantic search embeds both query and document into a shared vector space; similarity is measured by cosine distance, not word overlap.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Method</th>
+          <th>Mechanism</th>
+          <th>Latency</th>
+          <th>Context Recall</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>grep / BM25</td>
+          <td>Exact/fuzzy text match</td>
+          <td>&lt;5ms</td>
+          <td>Baseline</td>
+      </tr>
+      <tr>
+          <td>Semantic (vector)</td>
+          <td>Embedding + cosine similarity</td>
+          <td>~8ms p50 vector search</td>
+          <td>+40%</td>
+      </tr>
+      <tr>
+          <td>Hybrid</td>
+          <td>BM25 reranked by vector</td>
+          <td>~15ms</td>
+          <td>+45–55%</td>
+      </tr>
+  </tbody>
+</table>
+<p>The 40% improvement in relevant context recall (source: Markaicode production analysis) comes from the model&rsquo;s ability to understand synonyms, code patterns, and architectural intent. A query for &ldquo;rate limiting middleware&rdquo; will surface a file called <code>throttle.go</code> that implements the concept, even without shared vocabulary.</p>
+<p>The tradeoff: embedding generation is the expensive step. Using OpenAI&rsquo;s <code>text-embedding-3-small</code>, embedding API latency sits at 300ms p50—dominating total latency far more than the 8ms for the HNSW vector lookup itself. This makes caching the highest-ROI optimization.</p>
+<h2 id="how-does-github-copilots-semantic-search-architecture-work">How Does GitHub Copilot&rsquo;s Semantic Search Architecture Work?</h2>
+<p>GitHub Copilot&rsquo;s semantic code search infrastructure follows a pattern that production teams building similar systems can learn from directly. At index time, code chunks from the repository are converted into embeddings and stored in a vector database—Qdrant v1.12 with an HNSW (Hierarchical Navigable Small World) index being the current reference implementation. Qdrant v1.12 achieves p50 latency of 8ms and p99 of 45ms for collections under 10M vectors. At retrieval time, the agent&rsquo;s task description or query is embedded using the same model, and the vector store returns the top-k most similar code snippets by cosine similarity. Those snippets become part of the context window Copilot uses to generate its response. Critically, two tiers of caching handle the 300ms p50 embedding API cost: a local LRU cache (~1GB per node) and a Redis remote cache keyed by file hash. When code hasn&rsquo;t changed, the LRU hit rate is high enough that most queries never reach the embedding API. This architecture scales to monorepos without degrading response time—the vector index lookup stays fast even as the codebase grows.</p>
+<h3 id="what-vector-database-does-copilot-use">What Vector Database Does Copilot Use?</h3>
+<p>Qdrant v1.12 is the documented reference implementation for production semantic code search with Copilot. Its HNSW index delivers:</p>
+<ul>
+<li><strong>p50 latency</strong>: 8ms</li>
+<li><strong>p99 latency</strong>: 45ms</li>
+<li><strong>Capacity</strong>: up to 10M vectors before requiring sharding</li>
+</ul>
+<p>For teams building custom semantic search pipelines on top of Copilot&rsquo;s API, Qdrant is a strong choice. Alternatives like Pinecone or Weaviate work too—what matters more is the embedding model consistency and caching layer.</p>
+<h3 id="what-embedding-model-is-used">What Embedding Model Is Used?</h3>
+<p>OpenAI&rsquo;s <code>text-embedding-3-small</code> at 1536 dimensions is the current standard for Copilot&rsquo;s semantic search pipeline. It balances quality and cost: the smaller model costs 5x less than <code>text-embedding-3-large</code> while delivering comparable code retrieval performance.</p>
+<p>The embedding dimensions matter because they determine the vector database index size and lookup cost. At 1536 dimensions, a 10M-vector HNSW index fits comfortably in ~24GB RAM, which is within reach for production deployments.</p>
+<h2 id="does-semantic-search-require-any-configuration">Does Semantic Search Require Any Configuration?</h2>
+<p>No. GitHub Copilot&rsquo;s semantic search is automatically enabled in Copilot v1.200+ for VS Code with no configuration required. The agent decides when to use semantic search versus other retrieval methods based on the task type. For code-navigation-heavy tasks (refactoring, bug investigation, large codebase exploration), it defaults to semantic search. For simple edits where the agent already has the relevant file open, it skips the vector lookup entirely.</p>
+<p>This zero-config design is intentional. Copilot&rsquo;s agent runtime handles:</p>
+<ol>
+<li>Repository indexing on first use</li>
+<li>Incremental re-indexing on file changes</li>
+<li>Cache invalidation when embeddings go stale</li>
+<li>Fallback to keyword search when the vector store is warming up</li>
+</ol>
+<p>You update to Copilot v1.200+ in VS Code and the performance improvement kicks in automatically on the next agent task.</p>
+<h2 id="how-much-does-semantic-search-actually-improve-copilot">How Much Does Semantic Search Actually Improve Copilot?</h2>
+<p>The documented improvement is 2% faster task completion (GitHub Changelog, March 2026). That number sounds small, but it compounds:</p>
+<ul>
+<li>If Copilot runs 1,000 sub-tasks per developer per month, 2% is 20 fewer stalls</li>
+<li>The improvement scales with task complexity—longer, multi-file tasks benefit more because better context reduces the number of clarification rounds</li>
+<li>Quality stays constant: the 2% speed improvement comes from finding the right context faster, not from skipping accuracy steps</li>
+</ul>
+<p>The 40% better context recall figure (from Markaicode&rsquo;s production analysis) is the more revealing metric. When Copilot pulls context from the wrong files, it generates plausible-looking but wrong code. Semantic search reduces this class of error by surfacing architecturally related code even when naming conventions differ across the codebase.</p>
+<h2 id="semantic-search-vs-traditional-code-navigation-when-to-use-each">Semantic Search vs Traditional Code Navigation: When to Use Each</h2>
+<p>Semantic search is best for:</p>
+<ul>
+<li><strong>Cross-file exploration</strong> on codebases you don&rsquo;t know well</li>
+<li><strong>Refactoring tasks</strong> where you need to find all implementations of a pattern</li>
+<li><strong>Debugging</strong> where the error originates in code you haven&rsquo;t read</li>
+<li><strong>Onboarding</strong> to a new repo where naming conventions are unfamiliar</li>
+</ul>
+<p>Keyword search (grep, <code>@workspace</code> scope in Copilot Chat) remains useful for:</p>
+<ul>
+<li><strong>Known symbol names</strong> — searching for <code>UserAuthService</code> when you know that&rsquo;s what it&rsquo;s called</li>
+<li><strong>Exact string matching</strong> — finding a specific error message or config key</li>
+<li><strong>Regex patterns</strong> — finding all functions matching a signature pattern</li>
+</ul>
+<p>In practice, Copilot&rsquo;s agent uses both. The semantic search layer provides the initial candidate set; the agent then applies its own reasoning to filter and rank. The hybrid approach is why the end-to-end quality improvement exceeds what pure vector search benchmarks suggest.</p>
+<h2 id="how-does-this-compare-to-cursor-and-claude-code-context-retrieval">How Does This Compare to Cursor and Claude Code Context Retrieval?</h2>
+<p>Cursor&rsquo;s Tab and Agent modes also use semantic indexing of your codebase (the <code>@codebase</code> context). The implementation details differ, but the concept is the same: vector embeddings of code chunks, retrieved by semantic similarity at query time.</p>
+<p>Claude Code&rsquo;s context retrieval works differently—it reads files directly rather than maintaining a pre-built index, which means it always sees the current state but requires you to be more explicit about which files are relevant. See the <a href="/posts/claude-code-vs-github-copilot-2026/">full comparison of Claude Code vs GitHub Copilot</a> for a detailed breakdown of how each agent handles large codebases.</p>
+<p>For teams choosing between these tools, semantic search quality is now a baseline feature rather than a differentiator. The real differences lie in agent capability, pricing, and IDE integration. Check out the <a href="/posts/claude-code-enterprise-github-copilot-2026/">Claude Code enterprise vs GitHub Copilot analysis</a> if you&rsquo;re evaluating at org scale.</p>
+<h2 id="building-custom-semantic-search-pipelines-on-top-of-copilot">Building Custom Semantic Search Pipelines on Top of Copilot</h2>
+<p>If you want to extend Copilot&rsquo;s semantic search to your own data (documentation, internal APIs, private packages), the reference architecture is:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># Embedding pipeline using openai text-embedding-3-small</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> openai
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> qdrant_client <span style="color:#f92672">import</span> QdrantClient
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> qdrant_client.models <span style="color:#f92672">import</span> PointStruct, VectorParams, Distance
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>client <span style="color:#f92672">=</span> QdrantClient(<span style="color:#e6db74">&#34;localhost&#34;</span>, port<span style="color:#f92672">=</span><span style="color:#ae81ff">6333</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Create collection with 1536 dimensions (text-embedding-3-small)</span>
+</span></span><span style="display:flex;"><span>client<span style="color:#f92672">.</span>create_collection(
+</span></span><span style="display:flex;"><span>    collection_name<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;codebase&#34;</span>,
+</span></span><span style="display:flex;"><span>    vectors_config<span style="color:#f92672">=</span>VectorParams(size<span style="color:#f92672">=</span><span style="color:#ae81ff">1536</span>, distance<span style="color:#f92672">=</span>Distance<span style="color:#f92672">.</span>COSINE)
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">embed_code_chunk</span>(code: str) <span style="color:#f92672">-&gt;</span> list[float]:
+</span></span><span style="display:flex;"><span>    response <span style="color:#f92672">=</span> openai<span style="color:#f92672">.</span>embeddings<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>        input<span style="color:#f92672">=</span>code,
+</span></span><span style="display:flex;"><span>        model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;text-embedding-3-small&#34;</span>
+</span></span><span style="display:flex;"><span>    )
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> response<span style="color:#f92672">.</span>data[<span style="color:#ae81ff">0</span>]<span style="color:#f92672">.</span>embedding
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">index_file</span>(file_path: str, content: str, file_id: int):
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># Chunk by function/class boundaries, not arbitrary line count</span>
+</span></span><span style="display:flex;"><span>    chunks <span style="color:#f92672">=</span> split_by_scope(content)
+</span></span><span style="display:flex;"><span>    points <span style="color:#f92672">=</span> []
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> i, chunk <span style="color:#f92672">in</span> enumerate(chunks):
+</span></span><span style="display:flex;"><span>        embedding <span style="color:#f92672">=</span> embed_code_chunk(chunk)
+</span></span><span style="display:flex;"><span>        points<span style="color:#f92672">.</span>append(PointStruct(
+</span></span><span style="display:flex;"><span>            id<span style="color:#f92672">=</span>file_id <span style="color:#f92672">*</span> <span style="color:#ae81ff">1000</span> <span style="color:#f92672">+</span> i,
+</span></span><span style="display:flex;"><span>            vector<span style="color:#f92672">=</span>embedding,
+</span></span><span style="display:flex;"><span>            payload<span style="color:#f92672">=</span>{<span style="color:#e6db74">&#34;file&#34;</span>: file_path, <span style="color:#e6db74">&#34;chunk&#34;</span>: chunk}
+</span></span><span style="display:flex;"><span>        ))
+</span></span><span style="display:flex;"><span>    client<span style="color:#f92672">.</span>upsert(collection_name<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;codebase&#34;</span>, points<span style="color:#f92672">=</span>points)
+</span></span></code></pre></div><p>Key implementation decisions:</p>
+<ul>
+<li><strong>Chunk by scope</strong> (function/class boundaries) not by line count — semantic units produce better embeddings</li>
+<li><strong>Cache by file hash</strong> in Redis — reindex only changed files</li>
+<li><strong>Use the same model</strong> for indexing and querying — mixing models breaks the similarity space</li>
+<li><strong>Target p50 &lt; 50ms</strong> end-to-end — users notice latency above that threshold</li>
+</ul>
+<h2 id="frequently-asked-questions">Frequently Asked Questions</h2>
+<p><strong>Does GitHub Copilot semantic search index my private code?</strong></p>
+<p>For GitHub Copilot Business and Enterprise plans, code embeddings are processed in GitHub&rsquo;s infrastructure and not used to train models. Individual plan users should check GitHub&rsquo;s current privacy settings. The embeddings are stored ephemerally for session context, not in a persistent external index.</p>
+<p><strong>Which version of GitHub Copilot introduced semantic search?</strong></p>
+<p>Semantic code search shipped in GitHub Copilot v1.200 for the VS Code extension, announced March 17, 2026. JetBrains IDE support followed in subsequent versions.</p>
+<p><strong>Does semantic search work on private repositories?</strong></p>
+<p>Yes. Copilot indexes your local workspace files regardless of whether the repo is public or private. The embedding and retrieval happens within the Copilot runtime connected to your VS Code instance.</p>
+<p><strong>Why is the embedding API the main latency bottleneck, not the vector search?</strong></p>
+<p>Vector search on a well-indexed HNSW structure is extremely fast—8ms p50 on Qdrant v1.12 for 10M vectors. But generating the embedding for the query requires an API call to the embedding model, which adds 300ms p50. This is why caching is the dominant optimization: if you can avoid the embedding API call (cache hit), total latency drops to ~13ms. Cache hit rate depends on how often you ask semantically similar questions in the same session.</p>
+<p><strong>Can I use semantic code search without GitHub Copilot?</strong></p>
+<p>Yes. The underlying technology (embeddings + vector database) is open. You can build the same pipeline using open-source embedding models (e.g., <code>nomic-embed-code</code> or <code>codesage-large</code>) and Qdrant or ChromaDB. The advantage of Copilot&rsquo;s implementation is that it&rsquo;s built into the agent workflow—you don&rsquo;t have to manually trigger searches or wire up retrieval logic. Tools like <a href="/posts/continue-dev-vs-github-copilot-2026/">Continue.dev</a> offer a similar open-source approach if you want full control over the embedding pipeline.</p>
+]]></content:encoded></item></channel></rss>

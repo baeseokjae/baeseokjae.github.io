@@ -1,0 +1,472 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>AI Evaluation on RockB</title><link>https://baeseokjae.github.io/tags/ai-evaluation/</link><description>Recent content in AI Evaluation on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Mon, 13 Jul 2026 12:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/ai-evaluation/index.xml" rel="self" type="application/rss+xml"/><item><title>LLM Benchmark Variance 2026: Why Your Benchmark Scores Are Lying to You</title><link>https://baeseokjae.github.io/posts/llm-benchmark-variance-2026/</link><pubDate>Mon, 13 Jul 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/llm-benchmark-variance-2026/</guid><description>Why LLM benchmark scores vary wildly between runs, prompts, and templates — and six practical strategies to get reliable evaluations in 2026.</description><content:encoded><![CDATA[<p>You ran the same model on the same benchmark twice and got different scores. Then you changed one word in the prompt and got a different ranking. Then you realized the benchmark questions themselves have errors. Welcome to LLM benchmark variance — the problem that makes most published benchmark scores less reliable than they look.</p>
+<p>I&rsquo;ve been evaluating LLMs for production deployment over the past year, and I&rsquo;ve learned that benchmark scores are not the stable, objective measurements most people assume they are. A model that scores 87% on MMLU one week can score 82% the next week with a different instruction template. A 3-point lead on a micro-benchmark can flip entirely when you run the full evaluation. And 6.49% of MMLU questions — the most-cited benchmark in AI history — contain ground truth errors. This article breaks down every major source of benchmark variance I&rsquo;ve encountered, with the numbers and research to back it up, and what to do about it.</p>
+<h2 id="why-llm-benchmarks-are-not-as-reliable-as-they-seem">Why LLM Benchmarks Are Not as Reliable as They Seem</h2>
+<p>The core problem is that LLM evaluation looks like a science but has more uncontrolled variables than most practitioners realize. When you see a benchmark score in a model release, you&rsquo;re seeing one data point from a distribution that can be surprisingly wide. The variance comes from at least five independent sources, and they compound.</p>
+<h3 id="stochasticity-even-temperature0-isnt-deterministic">Stochasticity: Even Temperature=0 Isn&rsquo;t Deterministic</h3>
+<p>The first surprise most people hit: LLMs are not deterministic even at temperature=0 with a fixed seed. The <a href="https://arxiv.org/abs/2410.03492">October 2024 paper on quantifying LLM uncertainty</a> demonstrates this clearly — outputs vary across runs due to GPU nondeterminism, kernel scheduling, and floating-point accumulation order. The effect is small on simple tasks but compounds on multi-step reasoning where each step&rsquo;s variance propagates.</p>
+<p>In practice, I&rsquo;ve seen single-run MMLU scores vary by 1-2 percentage points on the same model, same hardware, same seed. That&rsquo;s enough to flip the ordering of two models that are within 3 points of each other — which is most of the frontier. If you&rsquo;re comparing Claude Opus 4.6 at 91.3% and GPT-5.3 Codex at 81% on GPQA Diamond, the gap is wide enough that stochasticity doesn&rsquo;t matter. But if you&rsquo;re comparing two fine-tuned 8B models that differ by 1.5 points on a 100-example micro-benchmark, the noise floor is higher than the signal.</p>
+<p>The fix is straightforward but rarely applied: run each evaluation at least 3-5 times and report the mean and standard deviation, not a single number. The <a href="https://github.com/EleutherAI/lm-evaluation-harness">LM Evaluation Harness</a> team documented this as one of their key lessons from three years of building the framework — single-run evaluations are not reproducible.</p>
+<h3 id="prompt-sensitivity-small-wording-changes-big-score-differences">Prompt Sensitivity: Small Wording Changes, Big Score Differences</h3>
+<p>This is the variance source that surprised me the most. A <a href="https://arxiv.org/abs/2408.12263">2024 study on instruction template variance</a> showed that score differences across different prompt templates are large enough to change model rankings. The authors proposed a &ldquo;Sharpe score&rdquo; metric that accounts for template variance — treating each template as a different evaluation condition and measuring the risk-adjusted return.</p>
+<p>I&rsquo;ve seen this firsthand. A model that scores 85% with &ldquo;Answer the following question:&rdquo; can score 78% with &ldquo;Q: [question]\nA:&rdquo; — and the ranking of two models can invert depending on which template you use. The effect is documented across both English and Japanese datasets, so it&rsquo;s not a language-specific artifact.</p>
+<p>The <a href="https://arxiv.org/abs/2509.04013">2025 paraphrased benchmark study</a> tested 34 state-of-the-art LLMs across 6 benchmarks with paraphrased question variants. The finding: absolute scores decline significantly when questions are rephrased, even though relative rankings remain more stable. This means benchmark scores overstate a model&rsquo;s ability to generalize — the model has learned to answer the specific wording of the benchmark, not the underlying concept.</p>
+<h3 id="ground-truth-errors-the-mmlu-problem">Ground Truth Errors: The MMLU Problem</h3>
+<p>MMLU is the most-cited benchmark in LLM history, and <a href="https://arxiv.org/abs/2406.04127">MMLU-Redux</a> found that 6.49% of its questions contain ground truth errors. The Virology subset is the worst offender at 57% error rate. Think about that: more than half the questions in one MMLU subset have the wrong answer marked as correct.</p>
+<p>This matters because MMLU scores are still quoted in model releases in 2026, even though the benchmark is <a href="/posts/llm-benchmarks-guide-2026/">saturated and retired for frontier comparison</a>. A model that scores 89% on MMLU might actually be at 83% or 95% if the errors were corrected — we don&rsquo;t know, because nobody re-runs the corrected version. The errors introduce systematic bias that affects some model families more than others, depending on which subsets they&rsquo;re strong on.</p>
+<h2 id="the-many-sources-of-benchmark-variance">The Many Sources of Benchmark Variance</h2>
+<p>Beyond the headline issues, there&rsquo;s a longer tail of variance sources that compound in practice.</p>
+<h3 id="run-to-run-variance-and-the-need-for-multiple-repeats">Run-to-Run Variance and the Need for Multiple Repeats</h3>
+<p>The <a href="https://arxiv.org/abs/2405.14782">LM Evaluation Harness team&rsquo;s retrospective</a> documents concrete cases where missing best practices led to misleading results. One example: a model&rsquo;s score on a 100-example subset can vary by 5+ points between runs due to sampling variance alone. The recommended practice is to run each evaluation at least 3 times and report confidence intervals.</p>
+<p>The problem is that running evaluations 3x costs 3x the compute and 3x the time. Most labs and independent evaluators don&rsquo;t do it. The <a href="https://arxiv.org/abs/2410.03492">October 2024 paper</a> proposes a cost-effective method using prediction intervals — you can estimate the uncertainty from a single run if you model the per-question variance structure. But this requires knowing the variance structure in advance, which you don&rsquo;t until you&rsquo;ve run the evaluation a few times.</p>
+<h3 id="instruction-template-variance-and-the-sharpe-score">Instruction Template Variance and the Sharpe Score</h3>
+<p>The Sharpe score approach from the <a href="https://arxiv.org/abs/2408.12263">2024 template variance paper</a> is worth understanding even if you don&rsquo;t implement it. The idea: instead of reporting a single score from a single prompt template, evaluate the model across N different templates, compute the mean and standard deviation of scores, and report the ratio (mean / std). A model that scores 85% with low variance across templates is more reliable than one that scores 87% but drops to 78% when you change the prompt format.</p>
+<p>This maps directly to production reality. Your application won&rsquo;t use the exact same prompt format as the benchmark. If a model&rsquo;s performance is brittle to prompt changes, it will underperform in production relative to its benchmark score. The Sharpe score captures this brittleness.</p>
+<h3 id="benchmark-contamination-and-data-leakage">Benchmark Contamination and Data Leakage</h3>
+<p>Data contamination is the elephant in the room for LLM evaluation in 2026. Training corpora for most modern models are only partially disclosed, making direct decontamination infeasible. The <a href="https://arxiv.org/abs/2607.07481">2025 contamination analysis</a> shows that benchmark performance is systematically inflated by training data overlap — and the effect is largest on the benchmarks that are most widely cited.</p>
+<p>The <a href="/posts/swe-bench-coding-benchmarks-guide-2026/">SWE-bench contamination scandal</a> is the most visible example. OpenAI stopped reporting SWE-bench Verified scores after discovering contamination across every frontier model. SWE-bench Pro was created specifically to address this, drawing tasks from repositories with post-training-cutoff commit histories. But the contamination isn&rsquo;t limited to SWE-bench — it affects every static, public benchmark that&rsquo;s been around for more than a year.</p>
+<p>The practical implication: any benchmark score from a dataset published before a model&rsquo;s training cutoff should be treated as an upper bound, not a reliable measurement. The true capability is likely lower, and we don&rsquo;t know by how much.</p>
+<h2 id="the-micro-benchmarking-trap">The Micro-Benchmarking Trap</h2>
+<p>One of the most dangerous trends in 2026 is micro-benchmarking — running small subsets of benchmarks to save cost and time. The <a href="https://arxiv.org/abs/2510.08730">October 2025 study on micro-benchmark reliability</a> is devastating on this point.</p>
+<h3 id="why-small-scale-evaluations-mislead">Why Small-Scale Evaluations Mislead</h3>
+<p>The study tested every practical micro-benchmarking method and found that no method can consistently rank model pairs that are 3.5 accuracy points apart on MMLU-Pro or 4 points apart on BIG-bench Hard. For 8B instruction-tuned models on MMLU-Pro, more than 50% of pairwise comparisons are lost with 25-example micro-benchmarks.</p>
+<p>This matches what I&rsquo;ve seen in practice. A team evaluates two models on a 50-example subset, model A scores 72% and model B scores 68%, they pick model A. But the full 14,000-example evaluation would have shown model B at 71% and model A at 69% — the ranking flips because the micro-benchmark sampled from an unrepresentative subset of the distribution.</p>
+<h3 id="how-many-samples-do-you-actually-need">How Many Samples Do You Actually Need?</h3>
+<p>The same study provides a concrete answer: at least 250 examples are needed for reliable ranking, and random sampling is competitive with more sophisticated selection methods. Below 250 examples, the noise from sampling variance exceeds the signal from model capability differences for any pair of models within 5 points of each other.</p>
+<p>For production evaluation, I&rsquo;d push that number higher. If you&rsquo;re building an internal benchmark from your own data, aim for 200-300 examples minimum, stratified across your task distribution. The <a href="/posts/lm-council-llm-benchmarks-guide-2026/">LM Council framework</a> recommends 100-200 for initial filtering and 500+ for final selection decisions.</p>
+<h2 id="do-benchmarks-even-agree-with-each-other">Do Benchmarks Even Agree With Each Other?</h2>
+<p>Here&rsquo;s a question that doesn&rsquo;t get asked enough: if two benchmarks claim to measure &ldquo;reasoning,&rdquo; do they rank models the same way?</p>
+<h3 id="benchmark-agreement-testing-bat">Benchmark Agreement Testing (BAT)</h3>
+<p>The <a href="https://arxiv.org/abs/2407.13696">Benchmark Agreement Testing paper</a> shows that different benchmarks often disagree on model rankings, even when they&rsquo;re designed to measure similar capabilities. The authors raise serious questions about construct validity — if MMLU-Pro and GPQA Diamond both claim to measure reasoning but rank models differently, what exactly are they measuring?</p>
+<h3 id="when-mmlu-arc-c-and-hellaswag-disagree">When MMLU, ARC-C, and HellaSwag Disagree</h3>
+<p>In practice, I&rsquo;ve seen models that rank #1 on MMLU but #5 on ARC-C and #3 on HellaSwag. The disagreement isn&rsquo;t noise — it&rsquo;s each benchmark measuring a different skill distribution. MMLU tests broad factual knowledge across 57 subjects. ARC-C tests scientific reasoning with a specific focus on grade-school science. HellaSwag tests commonsense narrative inference. A model that&rsquo;s strong on memorized facts but weak on inference will score well on MMLU and poorly on HellaSwag.</p>
+<p>The mistake is averaging these scores into a single &ldquo;overall&rdquo; number. A composite score hides the capability profile that matters for your use case. If you&rsquo;re building a scientific research assistant, GPQA Diamond and ARC-C matter more than MMLU. If you&rsquo;re building a customer support bot, instruction following and factual recall matter more than coding benchmarks.</p>
+<h2 id="best-practices-for-reliable-llm-evaluation-in-2026">Best Practices for Reliable LLM Evaluation in 2026</h2>
+<p>After a year of dealing with benchmark variance, here&rsquo;s what I&rsquo;ve settled on as a practical evaluation protocol.</p>
+<h3 id="quantifying-uncertainty-with-confidence-intervals">Quantifying Uncertainty with Confidence Intervals</h3>
+<p>Every benchmark score should be reported with a confidence interval. For a 100-question benchmark, the standard error of a 75% score is roughly sqrt(0.75 * 0.25 / 100) = 4.3%. That means the 95% confidence interval spans 66.5% to 83.5% — a 17-point range. A 3-point difference between two models is meaningless at this sample size.</p>
+<p>The <a href="https://arxiv.org/abs/2410.03492">prediction interval method</a> from the October 2024 paper is the most practical approach I&rsquo;ve found. It models per-question variance using a small calibration run (20-30 questions evaluated 3-5 times), then estimates the uncertainty for the full evaluation from a single pass. It&rsquo;s not as accurate as full repeated evaluation, but it&rsquo;s much better than reporting a single number with no uncertainty.</p>
+<h3 id="multiple-runs-and-statistical-significance">Multiple Runs and Statistical Significance</h3>
+<p>For any evaluation that will inform a production decision, run it at least 3 times. Report the mean and standard deviation. If two models&rsquo; means are within 2 standard deviations of each other, they&rsquo;re statistically indistinguishable on that benchmark — don&rsquo;t treat the higher score as meaningful.</p>
+<p>This is especially important for fine-tuning evaluations. I&rsquo;ve seen teams run a single evaluation after fine-tuning, see a 2-point improvement, and declare success. A 2-point improvement on a 100-example benchmark is within the noise floor. Run 3-5 evaluations before and after, and only trust improvements that are statistically significant at p &lt; 0.05.</p>
+<h3 id="contamination-aware-evaluation">Contamination-Aware Evaluation</h3>
+<p>When evaluating a model, check whether the benchmark dataset was published before the model&rsquo;s training cutoff. If it was, treat the score as potentially inflated. The safest approach is to use only benchmarks with continuous test-set rotation — <a href="https://arxiv.org/abs/2406.06604">LiveCodeBench</a> is the gold standard here, with problems drawn from competitive programming platforms after each model&rsquo;s training cutoff.</p>
+<p>For internal evaluations, use tasks drawn from your own production data that couldn&rsquo;t appear in any public training set. This is the only way to get a contamination-free measurement of a model&rsquo;s capability on your specific workload.</p>
+<h3 id="the-case-for-dynamic-and-fluid-benchmarks">The Case for Dynamic and Fluid Benchmarks</h3>
+<p>The <a href="https://arxiv.org/abs/2509.11106">Fluid Benchmarking approach</a>, inspired by psychometrics, addresses three problems at once: costly evaluations, capability misalignment, and benchmark saturation. Instead of running every model on every question, fluid benchmarking adapts the question set based on the model&rsquo;s demonstrated ability — harder questions for stronger models, easier questions for weaker ones. This reduces evaluation cost while maintaining discriminative power.</p>
+<p>The psychometric inspiration is important. Educational testing has dealt with these exact problems for decades: how do you measure ability when the test-taker population spans a wide range? How do you prevent test exposure from inflating scores? How do you ensure the test measures the intended construct? LLM evaluation is rediscovering these problems in 2026, and the solutions already exist in the psychometrics literature.</p>
+<h2 id="what-this-means-for-practitioners">What This Means for Practitioners</h2>
+<p>Here&rsquo;s the bottom line after a year of dealing with benchmark variance:</p>
+<ol>
+<li>
+<p><strong>Never trust a single-run benchmark score.</strong> Run at least 3 evaluations and report the mean and standard deviation. If the variance is high, run more.</p>
+</li>
+<li>
+<p><strong>Don&rsquo;t trust micro-benchmarks with fewer than 250 examples.</strong> Below that threshold, sampling variance dominates. You&rsquo;re measuring noise, not capability.</p>
+</li>
+<li>
+<p><strong>Check for contamination.</strong> If the benchmark dataset was published before the model&rsquo;s training cutoff, the score is an upper bound, not a reliable measurement.</p>
+</li>
+<li>
+<p><strong>Evaluate across multiple prompt templates.</strong> A model that&rsquo;s brittle to prompt changes will underperform in production. Use the Sharpe score approach if you can.</p>
+</li>
+<li>
+<p><strong>Build your own internal benchmark.</strong> 200-300 examples from your production data, stratified across your task distribution, will give you more reliable signal than any public benchmark for your specific use case.</p>
+</li>
+<li>
+<p><strong>Report confidence intervals.</strong> A score without an uncertainty estimate is not a scientific measurement. It&rsquo;s a marketing number.</p>
+</li>
+</ol>
+<p>The benchmarks that still provide genuine signal in 2026 — <a href="/posts/swe-bench-coding-benchmarks-guide-2026/">SWE-bench Verified and Pro</a>, GPQA Diamond, LiveCodeBench — are useful precisely because their designers have grappled with these variance sources. But even the best benchmark is only as reliable as the evaluation protocol around it. Run it once, and you&rsquo;re guessing. Run it five times with confidence intervals, and you have data.</p>
+<h2 id="faq">FAQ</h2>
+<h3 id="how-much-variance-is-normal-in-llm-benchmark-scores">How much variance is normal in LLM benchmark scores?</h3>
+<p>For a 100-question benchmark, a 75% score has a standard error of about 4.3%, meaning the 95% confidence interval spans roughly 17 percentage points. For frontier models within 3-5 points of each other, run-to-run variance alone can flip rankings. I&rsquo;ve seen 1-2 point swings on MMLU from GPU nondeterminism alone, and 5+ point swings on small subsets from sampling variance.</p>
+<h3 id="can-i-trust-benchmark-scores-from-model-release-blog-posts">Can I trust benchmark scores from model release blog posts?</h3>
+<p>Only as directional indicators, not as precise measurements. Most model releases report single-run scores without confidence intervals, and many use benchmarks that may be contaminated by training data overlap. Treat a published score as an upper bound — the model&rsquo;s real performance on your specific task is likely lower, and you won&rsquo;t know by how much until you evaluate it yourself.</p>
+<h3 id="whats-the-minimum-number-of-benchmark-questions-for-reliable-evaluation">What&rsquo;s the minimum number of benchmark questions for reliable evaluation?</h3>
+<p>At least 250 examples for reliable ranking between models within 5 points of each other, based on the October 2025 micro-benchmarking study. Below that threshold, sampling variance dominates. For production selection decisions, aim for 500+ examples stratified across your task distribution.</p>
+<h3 id="how-do-i-check-if-a-benchmark-is-contaminated">How do I check if a benchmark is contaminated?</h3>
+<p>Check whether the benchmark dataset was published before the model&rsquo;s training cutoff date. If it was, the score is potentially inflated. The safest approach is to use benchmarks with continuous test-set rotation like LiveCodeBench, or build your own evaluation set from production data that couldn&rsquo;t appear in any public training corpus.</p>
+<h3 id="whats-the-single-most-important-thing-i-can-do-to-improve-my-llm-evaluations">What&rsquo;s the single most important thing I can do to improve my LLM evaluations?</h3>
+<p>Run every evaluation at least 3 times and report the mean and standard deviation. This single practice eliminates the most common source of misleading results — treating a single noisy measurement as a reliable score. If two models&rsquo; means are within 2 standard deviations of each other, they&rsquo;re statistically indistinguishable on that benchmark.</p>
+]]></content:encoded></item><item><title>Microsoft ASSERT Agent Evaluation Framework: Turn Agent Policies Into Executable Evals</title><link>https://baeseokjae.github.io/posts/microsoft-assert-agent-policy-evaluation-2026/</link><pubDate>Sat, 13 Jun 2026 12:04:09 +0000</pubDate><guid>https://baeseokjae.github.io/posts/microsoft-assert-agent-policy-evaluation-2026/</guid><description>A practical guide to using Microsoft ASSERT to convert AI agent policies into executable evaluations and regression tests.</description><content:encoded><![CDATA[<p>Microsoft ASSERT is an open-source agent evaluation framework that turns written AI policies, product requirements, and safety rules into executable tests. For developers, the value is practical: instead of debating whether an agent &ldquo;mostly follows policy,&rdquo; ASSERT gives you repeatable scenarios, metrics, traces, and scorecards you can run before release.</p>
+<h2 id="what-is-the-microsoft-assert-agent-evaluation-framework">What Is the Microsoft ASSERT Agent Evaluation Framework?</h2>
+<p>Microsoft ASSERT is a requirement-driven evaluation harness for AI agents and LLM applications that converts natural-language specifications into executable evaluations. ASSERT stands for Adaptive Spec-driven Scoring for Evaluation and Regression Testing, and Microsoft describes it as open source and framework-agnostic for the estimated 6 million to 13 million generative AI developers working across today&rsquo;s agent ecosystem. The framework starts with written intent, such as a product requirement, policy document, system prompt, or launch checklist, then helps generate scenarios, datasets, metrics, and scorecards that can be run against hosted models, Python callables, or traced agent systems. The key idea is simple: agent behavior should be tested against your own requirements, not only against generic benchmarks. ASSERT is best understood as policy-as-evaluation for teams that need repeatable evidence before deploying autonomous workflows.</p>
+<p>ASSERT is not just another leaderboard wrapper. In a real agent project, the risky behavior is usually local to the product: refund rules, data-access boundaries, escalation policies, regulated terms, or tool-use limits. Those requirements rarely appear in public benchmarks. ASSERT gives developers a way to express that local intent and keep testing it as prompts, models, tools, and orchestration code change.</p>
+<h2 id="why-do-agent-policy-evaluations-need-more-than-generic-benchmarks">Why Do Agent Policy Evaluations Need More Than Generic Benchmarks?</h2>
+<p>Agent policy evaluation needs more than generic benchmarks because production agents fail in workflow-specific ways that broad model tests rarely capture. Databricks reported that multi-agent architectures grew by 327% in less than four months in its 2026 State of AI Agents research, while companies using evaluation tools got nearly 6x more AI projects into production. A benchmark can tell you whether a model answers math questions or follows simple instructions; it will not tell you whether your support agent respects a 30-day refund window, avoids exposing another customer&rsquo;s account data, logs the right escalation reason, and stops when a payment tool returns an ambiguous error. Agent evaluation has to inspect decisions, tool calls, intermediate state, and policy boundaries across multi-step execution. The takeaway: generic benchmarks are useful model signals, but requirement-driven evals are the production safety rail.</p>
+<p>For developers, this changes what &ldquo;done&rdquo; means. A prompt that works in five demos is not production-ready. A workflow is closer to ready when its important policies have positive cases, negative cases, edge cases, failure thresholds, and trace evidence. That is the gap ASSERT tries to close.</p>
+<h3 id="how-are-benchmarks-different-from-requirement-driven-evals">How Are Benchmarks Different From Requirement-Driven Evals?</h3>
+<p>Benchmarks are broad tests designed to compare models across shared tasks. Requirement-driven evals are local tests designed to verify a specific application promise. A benchmark might say Model A is better at instruction following; an ASSERT suite might show your deployed agent still violates the enterprise data-retention policy when a user asks for a CSV export after account closure.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Evaluation type</th>
+          <th>Best for</th>
+          <th>Weak spot</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Generic LLM benchmark</td>
+          <td>Model selection and broad capability checks</td>
+          <td>Misses product-specific policy behavior</td>
+      </tr>
+      <tr>
+          <td>Manual QA script</td>
+          <td>Early smoke testing</td>
+          <td>Hard to scale and easy to forget</td>
+      </tr>
+      <tr>
+          <td>Requirement-driven ASSERT suite</td>
+          <td>Repeatable agent policy and workflow testing</td>
+          <td>Depends on clear specs and reviewed test generation</td>
+      </tr>
+      <tr>
+          <td>Production observability</td>
+          <td>Finding live incidents and drift</td>
+          <td>Detects after traffic unless paired with pre-release evals</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="how-does-assert-turn-written-requirements-into-executable-evals">How Does ASSERT Turn Written Requirements Into Executable Evals?</h2>
+<p>ASSERT works by translating written requirements into structured behavior expectations, test scenarios, executable cases, judge criteria, and result artifacts. Microsoft positions the framework around a pipeline where human-readable intent becomes machine-runnable evaluation assets: requirements become acceptable and unacceptable behaviors, those behaviors become scenarios and datasets, and execution produces metrics and scorecards. A real example is a policy paragraph that says, &ldquo;The agent must not reveal customer personal data unless the authenticated user owns the account.&rdquo; ASSERT can turn that into positive tests for authorized requests, negative tests for cross-account requests, and edge cases involving partial identifiers or tool failures. Developers can run those tests against a hosted model, a callable wrapper, or an OpenTelemetry/OpenInference-traced agent. The takeaway: ASSERT makes policy text operational by converting it into repeatable test evidence.</p>
+<p>The practical benefit is traceability. When a test fails, the team can inspect not only the final response but also the intermediate actions, retrieved context, tool calls, and judge reasoning captured by the evaluation flow. That matters because many agent failures are not visible in the final message. The agent may call the wrong tool, pass too much data into a tool, skip an approval step, or recover from an error by inventing state.</p>
+<h3 id="what-should-a-good-assert-specification-include">What Should a Good ASSERT Specification Include?</h3>
+<p>A good ASSERT specification includes the policy, the intended behavior, disallowed behavior, context assumptions, examples, and measurable pass/fail criteria. I would start with one narrow requirement rather than a broad governance slogan. &ldquo;Do not leak private data&rdquo; is too vague. &ldquo;The agent must only return invoice details when the authenticated user ID matches the invoice owner ID&rdquo; is testable.</p>
+<p>Useful spec fields include:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Spec element</th>
+          <th>Example</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Policy statement</td>
+          <td>Only account owners can access invoice details</td>
+      </tr>
+      <tr>
+          <td>Positive behavior</td>
+          <td>Return invoice summary after ownership verification</td>
+      </tr>
+      <tr>
+          <td>Negative behavior</td>
+          <td>Refuse cross-account invoice requests</td>
+      </tr>
+      <tr>
+          <td>Edge case</td>
+          <td>User provides an invoice ID but no authenticated identity</td>
+      </tr>
+      <tr>
+          <td>Evidence</td>
+          <td>Trace must show ownership lookup before invoice retrieval</td>
+      </tr>
+      <tr>
+          <td>Threshold</td>
+          <td>100% pass for cross-account denial tests</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="where-does-assert-fit-with-acs-openinference-and-the-open-trust-stack">Where Does ASSERT Fit With ACS, OpenInference, and the Open Trust Stack?</h2>
+<p>ASSERT fits into Microsoft&rsquo;s open trust stack as the evaluation layer that finds behavior defects before and after runtime controls are applied. Microsoft Foundry describes ASSERT alongside Agent Control Specification, or ACS, where ASSERT handles requirements-driven evaluation and ACS handles runtime policy controls. Arize&rsquo;s OpenInference coverage adds the telemetry angle: ASSERT can consume agent traces as evidence, while ACS control decisions can also be emitted as spans. That means evaluation, enforcement, and observability can share the same trace substrate instead of living in disconnected reports. The loop is straightforward: run ASSERT to expose failures, add or tune ACS controls, observe the agent&rsquo;s OpenTelemetry or OpenInference spans, then re-run ASSERT to prove the failure rate improved. The takeaway: ASSERT is most valuable when it is connected to runtime controls and trace evidence, not treated as a one-off safety report.</p>
+<p>This architecture is close to how experienced teams already treat normal software. Unit tests catch expected behavior, runtime guards prevent invalid operations, and observability explains what happened when reality is messier than the test suite. Agents need the same layers, but the tests must account for probabilistic responses, tool choices, and context-dependent decisions.</p>
+<h3 id="what-role-does-openinference-play">What Role Does OpenInference Play?</h3>
+<p>OpenInference is useful because it gives agent evaluation a common trace format for prompts, retrieved documents, tool calls, model outputs, and control decisions. Without traces, an evaluation often sees only the final answer. With traces, ASSERT-style checks can ask sharper questions: did the agent retrieve the correct record, did it pass sensitive fields to a model, did a policy control block an unsafe action, and did the agent recover correctly?</p>
+<h2 id="which-frameworks-and-providers-can-use-assert">Which Frameworks and Providers Can Use ASSERT?</h2>
+<p>ASSERT is designed to be framework-independent, so it can evaluate agents built with LangGraph, CrewAI, OpenAI Agents SDK, DSPy, LlamaIndex, AutoGen, custom Python orchestration, hosted models, and callable application wrappers. The GitHub project emphasizes that it can test AI agents and LLM applications without forcing teams to standardize on one orchestration framework. LiteLLM&rsquo;s Microsoft ASSERT integration is also important because LiteLLM routes traffic across 100+ LLM providers, which means teams can introduce ASSERT while keeping their existing model gateway strategy. That matters in enterprise environments where one team may use LangGraph, another may run a custom service, and a platform team may centralize model access through a gateway. The takeaway: ASSERT is meant to sit beside your agent stack rather than replace it.</p>
+<p>The cleanest integration point depends on your system shape. If your agent is a Python callable, wrap the callable and run tests directly. If your agent is a distributed service, run tests against a stable API and capture traces. If your team already uses LiteLLM, keep provider routing there and make ASSERT focus on behavioral verification. The goal is not to rebuild the agent around the evaluator; the goal is to give the evaluator enough control and evidence to make reliable judgments.</p>
+<h3 id="how-should-teams-choose-the-first-integration-point">How Should Teams Choose the First Integration Point?</h3>
+<p>Teams should choose the first integration point where they can run stable, repeatable tests with useful evidence. For a small prototype, that may be a direct Python function. For a production assistant, it is usually the same API path users hit, with test identities and controlled fixtures. Avoid starting at the deepest internal function if the real risk lives in orchestration, retrieval, or tool authorization.</p>
+<h2 id="how-would-you-convert-a-refund-or-data-access-policy-into-assert-tests">How Would You Convert a Refund or Data-Access Policy Into ASSERT Tests?</h2>
+<p>Converting a refund or data-access policy into ASSERT tests means breaking a written rule into expected behaviors, prohibited behaviors, edge cases, and evidence requirements. Take a refund policy: &ldquo;The agent may issue refunds under $100 within 30 days for verified purchases, but must escalate higher-value refunds or fraud-risk cases.&rdquo; In ASSERT terms, that becomes positive scenarios for a $49 verified purchase on day 12, negative scenarios for a $250 refund attempt, edge cases for day 31, and trace checks that verify purchase lookup happened before the refund tool was called. For data access, the same pattern applies: authorized user, unauthorized user, ambiguous identity, stale session, and tool-call evidence. The takeaway: good agent evals turn each policy verb into an observable behavior or refusal.</p>
+<p>Here is how I would draft the first slice before handing it to an evaluation framework:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Policy rule</th>
+          <th>Positive test</th>
+          <th>Negative test</th>
+          <th>Trace evidence</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Refunds under $100 are allowed within 30 days</td>
+          <td>Verified $49 order from 12 days ago is refunded</td>
+          <td>$49 order from 45 days ago is refused or escalated</td>
+          <td>Order lookup before refund call</td>
+      </tr>
+      <tr>
+          <td>Refunds over $100 require escalation</td>
+          <td>$250 refund creates escalation ticket</td>
+          <td>$250 refund is not directly issued</td>
+          <td>No direct refund tool call</td>
+      </tr>
+      <tr>
+          <td>Fraud-risk cases require human review</td>
+          <td>Risk flag creates review task</td>
+          <td>Agent does not reassure user refund is complete</td>
+          <td>Risk signal appears before response</td>
+      </tr>
+      <tr>
+          <td>User data requires ownership match</td>
+          <td>Owner gets invoice summary</td>
+          <td>Different user gets refusal</td>
+          <td>Ownership check before invoice retrieval</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="what-makes-these-tests-better-than-prompt-spot-checks">What Makes These Tests Better Than Prompt Spot Checks?</h3>
+<p>These tests are better than prompt spot checks because they define the expected system behavior and the evidence needed to prove it. A spot check might only ask, &ldquo;Can I get a refund?&rdquo; A useful eval asserts the purchase age, amount, risk flag, authenticated identity, allowed tool path, forbidden tool path, and final response. That gives you a regression test instead of a memory of a good demo.</p>
+<h2 id="how-should-assert-run-in-ci-and-regression-testing">How Should ASSERT Run in CI and Regression Testing?</h2>
+<p>ASSERT should run in CI as a focused regression suite for high-risk agent policies, with slower or broader suites scheduled before release. In practice, I would not run every generated scenario on every commit; I would keep a small blocking suite for critical invariants, such as data isolation, payment authorization, legal disclaimers, and irreversible tool actions. The broader suite can run nightly, before model upgrades, before prompt changes, and before switching providers through a gateway such as LiteLLM. Databricks reported that companies using AI governance tools got over 12x more AI projects into production, which matches the engineering pattern: teams ship faster when the release gate is explicit. The takeaway: put ASSERT where regressions happen, especially around prompts, models, retrieval, tools, and policy controls.</p>
+<p>A practical CI setup has three tiers. First, smoke tests run on pull requests and block merges when a critical policy fails. Second, full policy suites run on scheduled jobs and before releases. Third, exploratory generated tests run outside the blocking path, then promoted into the regression suite after review. That prevents the evaluator from becoming a noisy gate while still capturing new failure modes.</p>
+<h3 id="what-should-fail-the-build">What Should Fail the Build?</h3>
+<p>The build should fail on deterministic, high-impact policy violations: cross-tenant data exposure, unauthorized payment actions, missing human escalation, unsafe medical or legal claims, and tool calls that bypass required approval. Softer quality signals can warn without blocking at first. Once a warning has a clear threshold and stable judge behavior, promote it to a blocking check.</p>
+<h2 id="what-should-developers-inspect-in-traces-tool-calls-and-failure-reports">What Should Developers Inspect in Traces, Tool Calls, and Failure Reports?</h2>
+<p>Developers should inspect traces, tool calls, retrieved context, policy-control decisions, judge explanations, and scorecard deltas when an ASSERT evaluation fails. The final answer is only one artifact; an agent can produce a compliant-looking response after making a dangerous intermediate call. Microsoft and ecosystem coverage both emphasize traceability because ASSERT can evaluate agents through recorded intermediate steps, especially when OpenTelemetry or OpenInference spans are available. In a data-access test, I want to see whether the identity check happened before retrieval, whether the retrieval query was scoped by tenant, whether the model saw sensitive fields, and whether a policy control blocked or allowed a tool call. Scorecards help show whether a fix improved the suite instead of only one case. The takeaway: evaluate the whole execution path, not just the text returned to the user.</p>
+<p>The most useful failure report answers four questions: what requirement failed, what scenario triggered it, what evidence proves the failure, and what code or configuration layer likely owns the fix. A prompt patch may solve a refusal wording issue, but a tool authorization bug belongs in deterministic code. A retrieval leak belongs in query scoping or access control. A missing escalation may belong in orchestration logic or ACS controls.</p>
+<h2 id="how-does-assert-compare-with-promptfoo-langsmith-openai-evals-and-observability-tools">How Does ASSERT Compare With Promptfoo, LangSmith, OpenAI Evals, and Observability Tools?</h2>
+<p>ASSERT differs from Promptfoo, LangSmith, OpenAI Evals, and observability tools by centering the evaluation workflow on written requirements and agent policy compliance. Promptfoo is strong for prompt and model comparison, LangSmith is strong for LangChain and LangGraph tracing plus dataset-based evals, OpenAI Evals is useful for model and task evaluation in OpenAI-centered workflows, and observability platforms are essential for production monitoring. ASSERT&rsquo;s distinctive angle is taking natural-language behavior specifications and turning them into test scenarios, datasets, metrics, and scorecards for agents and LLM apps across frameworks. The OWASP Top 10 for Agentic Applications 2026 was developed with more than 100 experts, which shows how many risks are agent-workflow risks rather than plain text-generation risks. The takeaway: ASSERT complements existing eval and observability tools when policy traceability is the main job.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Tool category</th>
+          <th>Primary strength</th>
+          <th>Where ASSERT is different</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>ASSERT</td>
+          <td>Requirement-driven agent policy evaluation</td>
+          <td>Starts from written intent and produces executable eval artifacts</td>
+      </tr>
+      <tr>
+          <td>Promptfoo</td>
+          <td>Prompt and provider comparison</td>
+          <td>Less focused on policy-to-test generation</td>
+      </tr>
+      <tr>
+          <td>LangSmith</td>
+          <td>Tracing, datasets, LangChain/LangGraph workflows</td>
+          <td>Strong observability, but tied closely to that ecosystem</td>
+      </tr>
+      <tr>
+          <td>OpenAI Evals</td>
+          <td>Custom model/task evals</td>
+          <td>Useful when the OpenAI stack is central</td>
+      </tr>
+      <tr>
+          <td>Observability platforms</td>
+          <td>Production traces and incident analysis</td>
+          <td>Detect live behavior; ASSERT can pre-test requirements</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="should-assert-replace-existing-eval-tools">Should ASSERT Replace Existing Eval Tools?</h3>
+<p>ASSERT should not automatically replace existing eval tools. Use it where written policy needs to become executable tests. Keep the tools that already provide model comparison, tracing, dashboarding, or production incident workflows. The better architecture is usually layered: ASSERT for policy suites, existing eval tools for model and prompt experiments, and observability for live drift.</p>
+<h2 id="what-are-the-limitations-and-human-review-requirements">What Are the Limitations and Human Review Requirements?</h2>
+<p>ASSERT has limitations because generated tests, judge-model scoring, and natural-language policies can all be incomplete or wrong. An evaluation framework can accelerate coverage, but it cannot decide your risk appetite, fix vague policy language, or prove the absence of failures. The June 2026 IBM survey summarized by ITPro found that only 11% of CIOs and CTOs felt fully prepared for large-scale AI deployment, and 77% said current governance frameworks were inadequate; that gap will not disappear just because a tool can generate tests. Human review is still required for policy interpretation, scenario quality, threshold setting, and post-failure remediation. Judge models can miss nuance, over-penalize acceptable behavior, or reward polished but unsafe answers. The takeaway: ASSERT is evaluation infrastructure, not a substitute for ownership.</p>
+<p>The biggest mistake is treating generated tests as automatically authoritative. Review the tests the way you would review security rules or migration scripts. Make sure the policy is specific, the test fixtures represent real workflows, the judge criteria are inspectable, and the pass/fail threshold matches impact. Pair ASSERT with deterministic runtime controls for actions that must never rely on model judgment, such as authorization, payments, deletion, and regulated disclosures.</p>
+<h2 id="what-implementation-checklist-should-production-agent-teams-follow">What Implementation Checklist Should Production Agent Teams Follow?</h2>
+<p>A production team implementing ASSERT should start with a small set of critical policies, build reviewed test specs, connect the agent through a stable execution path, capture traces, define blocking thresholds, and run the suite repeatedly in CI and release workflows. Microsoft says its open-source Agent Governance Toolkit addresses all 10 OWASP agentic AI risks with deterministic, sub-millisecond policy enforcement, which is a useful reminder that evaluations and controls should work together. For ASSERT specifically, begin with the risks that would cause customer harm or force a rollback: data leakage, unauthorized tool use, unsafe advice, missed escalation, and broken audit trails. Then expand coverage as failures teach you what matters. The takeaway: start narrow, make the tests reliable, and turn every serious incident into a regression case.</p>
+<p>Use this checklist as a practical starting point:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Step</th>
+          <th>Developer action</th>
+          <th>Output</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>1</td>
+          <td>Pick 3 to 5 critical policies</td>
+          <td>A scoped eval backlog</td>
+      </tr>
+      <tr>
+          <td>2</td>
+          <td>Rewrite each policy as testable behavior</td>
+          <td>Clear specs with positive and negative cases</td>
+      </tr>
+      <tr>
+          <td>3</td>
+          <td>Add fixtures and test identities</td>
+          <td>Repeatable scenarios</td>
+      </tr>
+      <tr>
+          <td>4</td>
+          <td>Connect the agent execution path</td>
+          <td>Callable, API, or traced agent target</td>
+      </tr>
+      <tr>
+          <td>5</td>
+          <td>Capture OpenTelemetry or OpenInference traces</td>
+          <td>Evidence beyond final text</td>
+      </tr>
+      <tr>
+          <td>6</td>
+          <td>Define pass thresholds</td>
+          <td>Blocking and warning rules</td>
+      </tr>
+      <tr>
+          <td>7</td>
+          <td>Run in CI and before releases</td>
+          <td>Regression protection</td>
+      </tr>
+      <tr>
+          <td>8</td>
+          <td>Review failures with owners</td>
+          <td>Prompt, tool, retrieval, control, or policy fixes</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="what-should-be-tested-first">What Should Be Tested First?</h3>
+<p>Test irreversible actions and confidentiality boundaries first. That usually means payment, refund, deletion, account changes, cross-tenant data access, regulated advice, and human escalation requirements. Do not start with tone or style unless your product risk is genuinely brand language. A polite unsafe agent is still unsafe.</p>
+<h2 id="what-is-the-bottom-line-for-microsoft-assert">What Is the Bottom Line for Microsoft ASSERT?</h2>
+<p>Microsoft ASSERT is best treated as a way to make agent policies executable, reviewable, and repeatable across the software delivery lifecycle. Its strongest use case is not proving that an AI model is generally smart; it is proving that your agent follows your organization&rsquo;s specific requirements under realistic scenarios. The enterprise pressure is clear: a June 2026 IBM survey summary said organizations averaged 54 AI-related incidents in the prior year, with 17% classified as severe, while Forrester research summarized by ITPro said about 75% of enterprise leaders report adopting agentic AI but many remain stuck in pilot mode because of governance, orchestration, and trust gaps. ASSERT gives developers a concrete mechanism for closing part of that gap: turn written intent into tests, inspect failures, apply controls, and re-run the suite. The takeaway: treat agent policies as software contracts, not launch-document prose.</p>
+<p>If you are already building agents, the next step is not to write a 40-page governance plan. Pick one policy that has real user impact, express it as observable behavior, generate and review test cases, run them against the actual agent path, and save the results as a regression suite. That is how evaluation becomes engineering practice.</p>
+<h2 id="faq-microsoft-assert-agent-evaluation-framework">FAQ: Microsoft ASSERT Agent Evaluation Framework</h2>
+<p>Microsoft ASSERT FAQs usually come down to scope, integration, reliability, and whether the framework replaces existing tools. ASSERT is an open-source framework for requirement-driven AI agent evaluation, not a universal governance platform or a magic safety switch. It is most useful when a team already has written policies or product rules that need to become executable tests. In practice, developers use ASSERT-style workflows to verify refusal boundaries, tool-use requirements, escalation paths, data-access rules, and regression behavior after prompt, model, retrieval, or orchestration changes. The framework can fit several stacks, including LangGraph, CrewAI, OpenAI Agents SDK, LlamaIndex, AutoGen, LiteLLM-backed providers, hosted models, and custom Python callables. The takeaway: use ASSERT when you need policy compliance evidence that can be run repeatedly and inspected through artifacts.</p>
+<h3 id="is-microsoft-assert-open-source">Is Microsoft ASSERT open source?</h3>
+<p>Microsoft ASSERT is open source, with its project available through the Responsible AI GitHub organization. The repository describes it as a requirement-driven evaluation harness for AI agents and LLM applications. As with any open-source infrastructure, check the current repository license, release notes, and issue activity before standardizing on it for production workflows.</p>
+<h3 id="does-assert-only-work-with-microsoft-foundry">Does ASSERT only work with Microsoft Foundry?</h3>
+<p>ASSERT does not only work with Microsoft Foundry. Microsoft describes it as framework-agnostic, and the research material highlights support patterns across LangGraph, CrewAI, OpenAI Agents SDK, DSPy, LlamaIndex, AutoGen, hosted models, Python callables, and LiteLLM-routed providers. Foundry may be a natural home for Microsoft users, but the evaluation concept is broader.</p>
+<h3 id="can-assert-evaluate-tool-calling-agents">Can ASSERT evaluate tool-calling agents?</h3>
+<p>ASSERT can evaluate tool-calling agents when the execution path exposes enough evidence, especially through wrappers or traces. For tool-calling systems, the final answer is not enough. The useful checks verify whether the agent called the right tool, avoided forbidden tools, passed scoped parameters, handled errors correctly, and respected escalation or approval requirements.</p>
+<h3 id="should-assert-tests-be-generated-automatically">Should ASSERT tests be generated automatically?</h3>
+<p>ASSERT can help generate tests from written requirements, but the generated tests should be reviewed before they become release gates. Human review is needed to catch vague policies, unrealistic scenarios, weak judge criteria, and missing edge cases. Treat generated evals as a draft test suite, then promote reviewed cases into CI.</p>
+<h3 id="what-is-the-fastest-useful-way-to-start-with-assert">What is the fastest useful way to start with ASSERT?</h3>
+<p>The fastest useful start is one high-risk policy with clear user impact. Choose a data-access, refund, payment, deletion, or escalation rule; write positive and negative scenarios; run them against the real agent path; inspect traces; and save failures as regression cases. Avoid starting with broad governance language that cannot produce measurable pass/fail behavior.</p>
+]]></content:encoded></item><item><title>LM Council Benchmarks: The Independent LLM Leaderboard Developers Should Trust</title><link>https://baeseokjae.github.io/posts/lm-council-llm-benchmarks-guide-2026/</link><pubDate>Sun, 10 May 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/lm-council-llm-benchmarks-guide-2026/</guid><description>LM Council benchmarks explained: SWE-bench, LiveCodeBench, GPQA Diamond, LMSYS Chatbot Arena, Artificial Analysis, and how to build your own LLM evaluat...</description><content:encoded><![CDATA[<p>Claude Opus 4.6 resolves 80.8% of real GitHub issues on SWE-bench Verified while GPT-5.5 leads Terminal-Bench 2.0 at 82.7% — numbers that mean something precisely because they come from independent evaluation pipelines, not vendor press releases. Choosing an LLM in 2026 without understanding how these benchmarks work is like buying a server based solely on manufacturer marketing sheets. This guide covers the LM Council evaluation framework, the top independent leaderboards developers actually rely on, and how to read benchmark results without getting misled.</p>
+<h2 id="lm-council-and-independent-llm-benchmarks-why-vendor-claims-arent-enough">LM Council and Independent LLM Benchmarks: Why Vendor Claims Aren&rsquo;t Enough</h2>
+<p>Every major AI lab publishes evaluation results alongside model releases, and nearly every one of those releases leads with a cherry-picked benchmark where the new model posts a state-of-the-art number. GPT-5.5&rsquo;s launch materials emphasize GPQA Diamond at 93.6%. Gemini Ultra comparisons highlight multilingual tasks where Google&rsquo;s training data has a natural advantage. Anthropic leads with coding and safety results for Claude models. None of these numbers are fabricated, but selective presentation creates a distorted picture of actual capability. The LM Council framework addresses this by evaluating models across 12 benchmark categories: coding, reasoning, math, safety, agentic, multimodal, retrieval, tool use, instruction following, multilingual, long-context, and world knowledge. A model that dominates two or three of these categories but performs poorly in others is not a general-purpose solution — and vendors have no financial incentive to tell you that. Independent evaluation bodies with no product stake in the outcome do. For developers choosing infrastructure that will persist for months or years, the difference between vendor-curated and independently verified benchmarks is the difference between a sales pitch and due diligence. The 12-category LM Council framework ensures you see the full picture before committing.</p>
+<h2 id="the-benchmark-inflation-problem-why-95-scores-mean-nothing">The Benchmark Inflation Problem: Why 95% Scores Mean Nothing</h2>
+<p>Models now routinely exceed 95% on benchmarks that were considered challenging just two years ago — scores that should trigger skepticism, not celebration. The HumanEval benchmark, which tests Python function completion from docstrings, is effectively saturated: most frontier models score above 90%, and that number has become meaningless as a differentiation signal. The same saturation is happening on MMLU (massive multitask language understanding), HellaSwag, and GSM8K. Benchmark inflation happens through three mechanisms. First, training data contamination: models trained on internet-scale corpora absorb benchmark questions and answers that leaked into public datasets. Second, overfitting to benchmark format: labs fine-tune on benchmark-adjacent data, boosting scores without improving real-world capability. Third, static benchmarks age poorly — once a benchmark is public long enough, the models trained after it was released have a systematic advantage over models that were frozen before it. The solution is continuous benchmark evolution with held-out test sets and dynamic problem generation. LiveCodeBench refreshes its competitive programming problem pool regularly. ARC-AGI-2 uses novel visual reasoning tasks that cannot be memorized. BrowseComp requires live internet retrieval, making contamination structurally impossible. The 95% threshold that would have indicated expert-level performance in 2022 is now a floor, not a ceiling — and any benchmark still being cited with 95%+ scores as a headline achievement deserves immediate scrutiny about when those questions were last rotated.</p>
+<h2 id="the-key-benchmarks-developers-should-track-in-2026">The Key Benchmarks Developers Should Track in 2026</h2>
+<p>The benchmark landscape in 2026 spans hundreds of evaluations, but a working developer needs a manageable shortlist of high-signal, contamination-resistant benchmarks with active maintenance. The shortlist that matters: SWE-bench Verified for real-world software engineering, LiveCodeBench for competitive programming ability, Terminal-Bench 2.0 for shell and DevOps automation, GPQA Diamond for deep reasoning in science domains, ARC-AGI-2 for novel generalization, and LMSYS Chatbot Arena for human preference on open-ended tasks. Each benchmark captures a meaningfully different capability axis. A model that leads on SWE-bench Verified may be mediocre on GPQA Diamond — they measure different skills, and treating any single benchmark as a proxy for overall capability is a category error. For agent use cases specifically, the agentic benchmarks under the LM Council framework — tool use, retrieval, and agentic categories — matter more than any single-shot QA result. The proliferation of benchmarks is itself a data quality problem: Artificial Analysis currently tracks 350+ models across 35+ benchmarks, and no single team can exhaustively evaluate across all of them. The benchmarks listed above represent the highest signal-to-noise ratio for software development and ML engineering workloads. When evaluating a model for production use, pick three benchmarks most aligned with your actual task distribution and weight them accordingly rather than treating aggregated leaderboard rankings as ground truth.</p>
+<h2 id="swe-bench-livecodebench-and-terminal-bench-the-coding-trifecta">SWE-bench, LiveCodeBench, and Terminal-Bench: The Coding Trifecta</h2>
+<p>SWE-bench Verified is the most credible single benchmark for software engineering capability as of 2026. It presents models with real GitHub issues from popular Python repositories and evaluates whether the model can write code that actually resolves the issue — passing the repository&rsquo;s existing test suite. Claude Opus 4.6 currently leads at 80.8%, meaning it successfully resolves more than four out of five real engineering issues sampled from production codebases. That number was 12% two years ago, which provides useful context for how rapidly agent coding capability is improving. LiveCodeBench sources problems from competitive programming platforms like Codeforces and LeetCode, with continuous problem rotation to prevent contamination from training data. The rotation mechanism is the key differentiator: a model that memorized last year&rsquo;s Codeforces problems gets no advantage because the test set has moved on. It tests algorithmic reasoning, data structure selection, and optimization under time constraints — skills that transfer to performance-critical production code. Terminal-Bench 2.0 addresses a gap that SWE-bench and LiveCodeBench both miss: shell scripting, system administration, and DevOps automation. GPT-5.5 leads at 82.7%, covering tasks like writing correct bash pipelines, configuring services, and debugging environment issues — the operational side of software engineering that LLMs are increasingly expected to handle in agent pipelines. Together, these three benchmarks cover the full coding capability surface: algorithmic problem solving (LiveCodeBench), repository-level software engineering (SWE-bench Verified), and operational automation (Terminal-Bench 2.0).</p>
+<h2 id="lmsys-chatbot-arena-human-preference-as-a-benchmark">LMSYS Chatbot Arena: Human Preference as a Benchmark</h2>
+<p>LMSYS Chatbot Arena has collected over 10 million human judgments across 200+ models and remains the most influential human-preference benchmark in the field. The methodology is deceptively simple: two anonymous models respond to the same user query, the user votes for the better response, and an Elo rating system aggregates votes into a global ranking. The anonymization prevents users from voting based on brand preference rather than response quality — when you don&rsquo;t know whether you&rsquo;re reading GPT or Claude or Gemini, your vote reflects actual output quality. The 10 million judgment scale matters because preference signals are noisy: individual votes are often influenced by response length, formatting, and confidence even when those factors don&rsquo;t correlate with correctness. At 10 million votes, statistical noise averages out and genuine capability differences emerge with high confidence. The Arena does have known biases. Longer responses tend to win preference votes even when shorter responses are more accurate. Users who submit prompts to the Arena are not representative of all LLM users — they skew toward English speakers with technical backgrounds. The Arena also updates daily, which means rankings can shift based on which user population happens to be active on a given day. Despite these limitations, the Arena Elo is the most reliable signal for &ldquo;which model do humans actually prefer for open-ended tasks&rdquo; because it is based on real human interaction, not a fixed test set that can be optimized against. For any application where human satisfaction is the ultimate metric — customer support, content generation, tutoring — the Arena ranking deserves significant weight alongside task-specific benchmarks.</p>
+<h2 id="how-artificial-analysis-and-lm-eval-track-350-models">How Artificial Analysis and LM-Eval Track 350+ Models</h2>
+<p>Artificial Analysis operates as an independent, vendor-neutral LLM benchmarking organization tracking 350+ models across 35+ benchmarks, updated weekly. The organization&rsquo;s value proposition is consistency: all models are evaluated using identical protocols, identical prompting formats, and identical infrastructure, eliminating the confounding variables that make cross-vendor comparisons from different sources unreliable. The benchmark suite includes LiveCodeBench, SWE-bench, HumanEval+, and ToolQA among others, giving developers a single source for cross-model comparison on the benchmarks that matter most. The weekly update cadence means new model releases appear in the leaderboard within days of launch, and updates to existing models are captured without requiring manual tracking. LM-Eval (from EleutherAI) is the most widely used open-source evaluation framework with over 10,000 GitHub stars, and has received contributions and validation from OpenAI, Anthropic, and Google. Its importance is not in hosting a leaderboard but in providing the standardized evaluation protocols that make benchmark results reproducible and comparable across research groups. When an independent researcher wants to verify a vendor&rsquo;s claimed score on a benchmark, LM-Eval is the tool they use to run the evaluation themselves. Standardized prompting templates, consistent few-shot example selection, and deterministic output parsing prevent the kind of subtle implementation differences that can shift benchmark scores by 5-10 points without any change in underlying capability. For teams building internal evaluation pipelines, LM-Eval&rsquo;s protocol documentation is the practical starting point — it encodes the community&rsquo;s accumulated knowledge about how to run evaluations that produce reliable, reproducible results.</p>
+<h2 id="reading-benchmark-results-what-the-numbers-actually-tell-you">Reading Benchmark Results: What the Numbers Actually Tell You</h2>
+<p>A benchmark score is only meaningful in context: what task type, what evaluation methodology, what comparison baseline, and what the score distribution looks like across the model population. A 75% score on SWE-bench Verified is excellent — the current leader is at 80.8% and the average frontier model is well below 70%. A 75% score on an older, saturated benchmark like HumanEval means almost nothing because the score distribution is clustered at 85-95% for all serious frontier models. The first thing to check when reading benchmark results is whether the benchmark is still discriminating. If the top 20 models all score within 5 points of each other, the benchmark has lost its ability to separate good from great — it&rsquo;s a baseline check, not a performance signal. The second check is task alignment: a benchmark testing PhD-level science reasoning (GPQA Diamond) is not a proxy for coding ability, and a coding benchmark is not a proxy for instruction following. Developers building coding agents should weight SWE-bench, LiveCodeBench, and HumanEval+ heavily and treat GPQA Diamond as a secondary signal about general reasoning depth. The third check is evaluation methodology: does the score come from a held-out test set or a static published dataset? Was the prompt format consistent with what you&rsquo;ll use in production? Were chain-of-thought prompting or tool use allowed? A model that scores 80% with chain-of-thought on a math benchmark but 55% without it is a different capability profile than one that scores 75% in both conditions. The fourth check is recency: benchmarks published more than 18 months ago should be treated as potentially contaminated unless there is explicit evidence of test set rotation or held-out validation data management.</p>
+<h2 id="building-your-own-llm-evaluation-framework">Building Your Own LLM Evaluation Framework</h2>
+<p>The most reliable benchmark for your production use case is one built on your own task distribution. Public benchmarks measure average capability across a broad task population; your application has a specific task population that may differ significantly. A model that ranks fifth on SWE-bench Verified might rank first on the specific type of React component generation or SQL query optimization that your application requires. The practical approach: start by collecting 100-200 representative examples of the tasks your application needs to handle, covering the edge cases and failure modes you&rsquo;ve already observed. Use LM-Eval&rsquo;s standardized evaluation infrastructure to run consistent comparisons, or build a simple evaluation harness that controls for prompt format and parsing. Define your success metric before running evaluations — accuracy on a held-out test set, human preference voting by your own users, or task completion rate in a real environment are all valid choices depending on what you&rsquo;re optimizing for. Implement contamination controls: use tasks drawn from your internal data that couldn&rsquo;t appear in public training sets, and rotate your test set regularly to prevent models from being specifically fine-tuned to your evaluation distribution. The LM Council framework&rsquo;s 12-category structure provides a useful template for coverage: even if you primarily care about coding, also evaluate instruction following and tool use because those capabilities interact with coding performance in agent workflows. Log evaluation results in a structured format that lets you track how model performance changes across versions and fine-tuning runs. The goal is not to build a benchmark that validates your current model choice but to build a measurement system that tells you when to switch.</p>
+<hr>
+<h2 id="faq">FAQ</h2>
+<p><strong>Q: What is LM Council and how does it differ from LMSYS Chatbot Arena?</strong></p>
+<p>LM Council is an evaluation framework that assesses models across 12 benchmark categories — coding, reasoning, math, safety, agentic, multimodal, retrieval, tool use, instruction following, multilingual, long-context, and world knowledge — using automated task-based evaluation. LMSYS Chatbot Arena uses human preference voting with an Elo rating system, collecting judgments from real users who compare model outputs side-by-side. The two approaches are complementary: automated benchmarks measure specific capabilities with high precision and reproducibility; human preference voting measures real-world satisfaction that may capture dimensions automated benchmarks miss, like response tone or practical usefulness in open-ended tasks.</p>
+<p><strong>Q: Why is SWE-bench Verified more reliable than HumanEval for evaluating coding models?</strong></p>
+<p>HumanEval is saturated — most frontier models score above 90%, making it unable to differentiate between strong and excellent coding models. SWE-bench Verified uses real GitHub issues from production repositories and validates solutions by running actual test suites, not just checking output format. It tests end-to-end software engineering skill including code comprehension, debugging, and repository navigation, rather than isolated function completion from docstrings. The score distribution on SWE-bench Verified still spans 30+ percentage points across frontier models, giving it genuine discriminating power.</p>
+<p><strong>Q: How often do the Artificial Analysis leaderboard rankings change?</strong></p>
+<p>Artificial Analysis updates rankings weekly, capturing new model releases and updates to existing models within days. Rankings can shift meaningfully with a major model release — GPT-5.5 and Claude Opus 4.6 both caused significant leaderboard reshuffling when they launched. For stable infrastructure decisions, it&rsquo;s more useful to track rank stability over 4-8 weeks than to react to weekly fluctuations, which can reflect evaluation noise or narrow benchmark-specific improvements that don&rsquo;t generalize.</p>
+<p><strong>Q: What is benchmark inflation and how do I detect it?</strong></p>
+<p>Benchmark inflation occurs when high benchmark scores no longer predict real-world performance due to training data contamination, benchmark-adjacent fine-tuning, or benchmark saturation. Detection signals: when the score distribution clusters above 90% for many models, when a model&rsquo;s benchmark score significantly exceeds its performance on task-adjacent evaluations in production, or when the benchmark hasn&rsquo;t rotated its test set in 18+ months. Counter-measures include using dynamic benchmarks like LiveCodeBench with continuous problem rotation, evaluating on held-out internal task distributions, and cross-referencing multiple benchmarks on the same capability axis.</p>
+<p><strong>Q: Should I use public benchmarks or build internal evaluations for production model selection?</strong></p>
+<p>Both, with different weights depending on your use case. Public benchmarks like those tracked by Artificial Analysis and LM-Eval provide fast, credible initial filtering — they rule out models that are clearly not competitive before you invest in internal evaluation infrastructure. Internal evaluations on your actual task distribution are essential for the final selection decision because public benchmarks measure average capability across broad populations, not capability on your specific workload. The LM Council 12-category framework is a useful template for ensuring your internal evaluation covers the full capability surface relevant to agent workflows, even when your primary use case is narrow.</p>
+]]></content:encoded></item><item><title>LLM Benchmarks Guide for Developers 2026: SWE-bench, GPQA, LiveCodeBench Explained</title><link>https://baeseokjae.github.io/posts/llm-benchmarks-guide-2026/</link><pubDate>Wed, 06 May 2026 21:05:06 +0000</pubDate><guid>https://baeseokjae.github.io/posts/llm-benchmarks-guide-2026/</guid><description>A practical 2026 guide to LLM benchmarks for developers: which ones still signal real performance and which to stop trusting.</description><content:encoded><![CDATA[<p>LLM benchmark scores flood every model release announcement — but as of 2026, most of those scores tell you almost nothing useful. This guide explains which benchmarks still matter for developers, which are saturated or compromised, and how to pick the right signal for your actual workload.</p>
+<h2 id="why-llm-benchmarks-matter-for-developers-and-why-most-are-now-useless">Why LLM Benchmarks Matter for Developers (And Why Most Are Now Useless)</h2>
+<p>LLM benchmarks are standardized test suites that measure model capabilities across defined tasks — coding, reasoning, math, or domain knowledge — so developers can compare models without running every candidate through their own production workload. Done right, they save weeks of internal evaluation. Done wrong, they create a false confidence loop where a model scores 92% on a benchmark and then fails on the first real customer ticket you throw at it. As of May 2026, the benchmark landscape has split sharply: a small set of hard, contamination-resistant evaluations still provide genuine signal, while the legacy suites — MMLU, HumanEval, GSM8K — have been effectively retired by the community because frontier models have saturated them. MMLU, once the canonical academic reasoning suite, now sees frontier models cluster at 85–90% with no meaningful spread between Claude, GPT, and Gemini variants. HumanEval similarly sees 93%+ scores across top-tier models as of April 2026. When every serious model aces the same test, the test stops being useful. The benchmarks worth tracking now are the ones that are still hard enough to differentiate — and that requires understanding why they&rsquo;re hard.</p>
+<p><strong>The key principle:</strong> a benchmark is only as good as its resistance to gaming. Any evaluation that stays static and public for years will eventually see training data that overlaps with it. The benchmarks that remain informative in 2026 are the ones that are either dynamically refreshed, curated to be genuinely novel, or built specifically to detect contamination.</p>
+<h2 id="swe-bench-verified-explained-real-github-issues-as-the-gold-standard">SWE-bench Verified Explained: Real GitHub Issues as the Gold Standard</h2>
+<p>SWE-bench Verified is a coding evaluation built from real GitHub issues and pull requests — the model receives a repository snapshot and a natural-language bug description, then must produce a working patch that passes the original test suite. Unlike synthetic coding puzzles, these are tasks that real engineers filed as actual bugs, which makes the evaluation naturalistic and difficult to memorize. As of May 2026, Claude Mythos Preview leads the SWE-bench Verified leaderboard at 93.9%, followed by Claude Opus 4.7 Adaptive at 87.6% and GPT-5.3 Codex at 85%; the average across 83 evaluated models sits at 63.4%. The &ldquo;Verified&rdquo; suffix matters: the original SWE-bench dataset had quality issues where patches could pass tests without actually fixing the underlying bug. Verified is a human-curated subset of 500 tasks where the acceptance criteria were manually confirmed — it&rsquo;s the version developers should reference when comparing models for coding assistant selection.</p>
+<p>The benchmark&rsquo;s primary weakness became its own popularity: OpenAI publicly acknowledged stopping SWE-bench Verified score reporting after discovering training data contamination on the dataset across every frontier model. That contamination concern is why SWE-bench Pro was introduced — 1,865 tasks across 41 actively maintained repositories spanning Python, Go, TypeScript, and JavaScript, with tasks drawn from repositories whose commit history postdates most training cutoffs. If you&rsquo;re evaluating models for agentic coding tasks — not just autocomplete — SWE-bench Verified scores are still the best published signal you have, but treat top-of-leaderboard numbers skeptically and weight SWE-bench Pro results where they&rsquo;re available.</p>
+<h3 id="swe-bench-pro-what-the-contamination-scandal-means-for-developers">SWE-bench Pro: What the Contamination Scandal Means for Developers</h3>
+<p>SWE-bench Pro was designed specifically to replace Verified as contamination spread across the original dataset. It selects issues from actively maintained repositories to reduce training overlap risk, spans multiple languages (Python, Go, TypeScript, JavaScript) rather than Python-only, and scales to 1,865 tasks compared to Verified&rsquo;s 500. For teams building coding agents or evaluating AI pair programmers, SWE-bench Pro scores will increasingly replace Verified as the industry standard through 2026. When a vendor quotes only SWE-bench Verified numbers in 2026 without mentioning Pro, treat it as a flag that they may be surfacing the more favorable score.</p>
+<h2 id="gpqa-diamond-the-phd-level-reasoning-test-no-model-can-easily-game">GPQA Diamond: The PhD-Level Reasoning Test No Model Can Easily Game</h2>
+<p>GPQA Diamond is a 198-question multiple-choice benchmark written by domain experts in biology, physics, and chemistry — and its design philosophy is adversarial difficulty. Questions were crafted specifically so that PhD-level domain experts achieve only 65% accuracy, while skilled non-experts with full web access score around 34%. The scoring gap between human experts and AI models is what makes it valuable: as of February 2026, Gemini 3.1 Pro leads at 94.3%, Claude Opus 4.6 at 91.3%, Qwen3.5-plus at 88.4%, and GPT-5.3 Codex at 81%. That 13-point spread between the top and fourth-place model is meaningful signal — compare this to MMLU where the same four models would cluster within 3-4 points of each other. The fact that frontier AI is now outperforming PhD-level human experts on these questions is itself a significant data point about where reasoning capability has landed in 2026.</p>
+<p>GPQA Diamond is most relevant for developers building applications in scientific domains — medical records analysis, chemistry workflow automation, research assistant tools, drug discovery pipelines. If your LLM needs to reason about pharmacokinetics or quantum mechanics, GPQA Diamond scores are a better proxy for that capability than any general-purpose coding or instruction-following benchmark. Its contamination resistance comes from the combination of expert authorship and deliberate difficulty: questions designed to fool non-experts are hard to reverse-engineer from training data even if the question appears in a dataset.</p>
+<h3 id="how-gpqa-questions-resist-contamination">How GPQA Questions Resist Contamination</h3>
+<p>GPQA Diamond&rsquo;s expert-authored questions are designed with plausible wrong answers that specifically target common misconceptions — not just random distractors. Even if a question appears in training data, a model that has only memorized the answer without understanding the underlying reasoning will still fail on reformulated variants. This makes GPQA Diamond significantly harder to game through data contamination than benchmarks built from structured formats like fill-in-the-blank or code completion.</p>
+<h2 id="livecodebench-the-only-coding-benchmark-built-to-resist-contamination">LiveCodeBench: The Only Coding Benchmark Built to Resist Contamination</h2>
+<p>LiveCodeBench is a continuously updated coding evaluation that draws problems from competitive programming platforms (LeetCode, Codeforces, AtCoder) after each model&rsquo;s training cutoff — meaning the test questions are genuinely novel relative to what the model was trained on. As of May 2026, Claude Mythos Preview leads with a 100% weighted score, Claude Opus 4.7 Adaptive at 95.2%, and Gemini 3.1 Pro at 93.9%. The continuous refresh mechanism is its core advantage: as training cutoffs advance, LiveCodeBench refreshes its pool, ensuring that test questions remain temporally out-of-distribution for the model being evaluated. This is the property every other coding benchmark lacks — HumanEval&rsquo;s problems have been public since 2021, and every model trained after that point has seen some form of them.</p>
+<p>For developers selecting coding assistants, LiveCodeBench provides the most trustworthy signal of a model&rsquo;s actual algorithmic reasoning ability — not its ability to recall solutions it was trained on. The tradeoff is that competitive programming problems skew toward algorithmic puzzles rather than real-world engineering tasks. A model can score 90% on LiveCodeBench and still struggle with large codebase navigation, test writing, or debugging legacy code. Treat LiveCodeBench and SWE-bench as complementary rather than interchangeable: LiveCodeBench measures pure algorithmic problem-solving, SWE-bench measures applied software engineering within real codebases.</p>
+<h3 id="livecodebench-vs-humaneval-which-should-you-trust">LiveCodeBench vs HumanEval: Which Should You Trust?</h3>
+<p>HumanEval was the default coding benchmark from 2021 through roughly 2024, but by April 2026 frontier models score 93%+ across the board, leaving no differentiation signal at the top. LiveCodeBench fills that gap by moving the goalposts continuously. For any model comparison you&rsquo;re doing today, discard HumanEval scores as a primary signal and use LiveCodeBench instead. The only scenario where HumanEval is still useful is comparing open-source models in the 7B–70B parameter range where scores still spread meaningfully below the saturation ceiling.</p>
+<h2 id="benchmarks-to-stop-trusting-in-2026-mmlu-humaneval-and-gsm8k">Benchmarks to Stop Trusting in 2026: MMLU, HumanEval, and GSM8K</h2>
+<p>MMLU (Massive Multitask Language Understanding), HumanEval, and GSM8K were the benchmark trifecta that defined LLM evaluation from 2020 to 2024 — and all three are now effectively retired as differentiating tools for frontier model comparison. MMLU is declared saturated as of April 2026: frontier models cluster at 85–90% with no meaningful spread, making it impossible to distinguish Claude from GPT from Gemini on this metric. HumanEval sees 93%+ scores across top-tier models, a ceiling effect driven partly by contamination (the problems have been public since 2021) and partly by genuine capability improvement. GSM8K, a grade-school math benchmark, has been similarly overwhelmed — models that can solve PhD-level physics problems on GPQA Diamond have no trouble with eight-year-old arithmetic.</p>
+<p>The danger isn&rsquo;t that these benchmarks were bad — they served a genuine purpose when models were weaker. The danger is that marketing teams continue to quote them because they produce favorable-looking numbers. A vendor quoting MMLU 89% in 2026 is performing the equivalent of citing SAT scores on a medical school application. Recognize the pattern: if a model release announcement leads with MMLU, HumanEval, or GSM8K without mentioning SWE-bench, GPQA Diamond, or LiveCodeBench, the vendor is likely cherry-picking the metrics where they look strongest. The replacement suite for 2026 is: GPQA Diamond for reasoning depth, SWE-bench Verified (or Pro) for software engineering, LiveCodeBench for coding, and Chatbot Arena ELO for general instruction-following.</p>
+<h2 id="the-developers-benchmark-selection-matrix-match-test-to-task">The Developer&rsquo;s Benchmark Selection Matrix: Match Test to Task</h2>
+<p>Picking the right benchmark for model selection depends on what your application actually does. Using a general-purpose reasoning benchmark to choose a code generation model, or a coding benchmark to evaluate a customer support chatbot, will produce unreliable results. The benchmark selection matrix below maps development use cases to the most predictive evaluations available as of 2026.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Use Case</th>
+          <th>Primary Benchmark</th>
+          <th>Secondary</th>
+          <th>Avoid</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Coding assistant / pair programmer</td>
+          <td>SWE-bench Verified</td>
+          <td>LiveCodeBench</td>
+          <td>HumanEval</td>
+      </tr>
+      <tr>
+          <td>Agentic code repair / PR automation</td>
+          <td>SWE-bench Pro</td>
+          <td>SWE-bench Verified</td>
+          <td>GSM8K</td>
+      </tr>
+      <tr>
+          <td>Scientific / research tools</td>
+          <td>GPQA Diamond</td>
+          <td>MMLU-Pro</td>
+          <td>MMLU standard</td>
+      </tr>
+      <tr>
+          <td>Math / quantitative reasoning</td>
+          <td>AIME 2025</td>
+          <td>GPQA Diamond</td>
+          <td>GSM8K</td>
+      </tr>
+      <tr>
+          <td>General instruction following</td>
+          <td>Chatbot Arena ELO</td>
+          <td>MMLU-Pro</td>
+          <td>MMLU standard</td>
+      </tr>
+      <tr>
+          <td>Algorithm / competitive programming</td>
+          <td>LiveCodeBench</td>
+          <td>SWE-bench Verified</td>
+          <td>HumanEval</td>
+      </tr>
+      <tr>
+          <td>Multi-step reasoning / agents</td>
+          <td>GPQA Diamond</td>
+          <td>MMLU-Pro</td>
+          <td>MMLU standard</td>
+      </tr>
+  </tbody>
+</table>
+<p>A few practical rules: never use a single benchmark as your decision signal. Pick 2–3 that map to your workload type, check that the scores you&rsquo;re citing are on the same benchmark version (Verified vs Pro matters for SWE-bench), and verify that the evaluation was run by an independent party rather than the model&rsquo;s own lab. Self-reported scores have systematic bias toward favorable evaluation conditions.</p>
+<h3 id="chatbot-arena-elo-as-a-complementary-signal">Chatbot Arena ELO as a Complementary Signal</h3>
+<p>Chatbot Arena (LMSYS) uses human preference voting across blind model comparisons to generate ELO ratings — a crowdsourced approach that captures real-world instruction-following quality in ways that automated benchmarks miss. The weakness is that Arena ELO reflects average human preferences, which can reward verbosity and confident-sounding answers over accuracy. Use Arena ELO alongside task-specific benchmarks: a model that scores well on GPQA Diamond and Arena ELO is a more defensible choice than one that excels at only one.</p>
+<h2 id="building-a-production-grade-mini-benchmark-for-your-use-case">Building a Production-Grade Mini-Benchmark for Your Use Case</h2>
+<p>The most reliable benchmark for your production workload is one built from your actual production data. A 100–200 case internal benchmark, drawn from real queries your system handles, will outperform any public evaluation for predicting model performance on your specific task. The investment is lower than it sounds: collect 100 representative input/output pairs from your production logs, strip any PII, define acceptance criteria that your team agrees on (correctness rubric, latency threshold, cost ceiling), then run every candidate model through the full set.</p>
+<p>Start by stratifying your sample: 40% typical cases, 40% edge cases or failure modes you&rsquo;ve already encountered, and 20% adversarial inputs designed to break the system. Typical cases tell you baseline performance; edge cases tell you where models diverge from each other; adversarial inputs tell you which models fail gracefully versus catastrophically. For coding applications, define what &ldquo;correct&rdquo; means precisely — does the patch need to pass a specific test suite, or just produce syntactically valid code? Ambiguous acceptance criteria will give you ambiguous results.</p>
+<p>The mini-benchmark also lets you measure dimensions that public benchmarks ignore: latency at your typical input length, cost per 1,000 successful completions, and failure mode characteristics (does the model silently produce wrong answers, or does it express uncertainty?). A model that scores 87% on SWE-bench Verified but completes your benchmark tasks in half the latency at 60% of the cost may be the better choice for your deployment constraints. Build the benchmark before committing to a provider, run it quarterly as models update, and version-lock your test set so score trends are comparable over time.</p>
+<h3 id="acceptance-criteria-design-the-overlooked-step">Acceptance Criteria Design: The Overlooked Step</h3>
+<p>The most common mistake in building internal benchmarks is defining acceptance criteria after seeing the model outputs — which introduces unconscious bias toward whatever the first model produced. Define what &ldquo;correct&rdquo; means before you run any models: write a scoring rubric, decide whether partial credit exists, and have two team members independently score the same 20 samples to establish inter-rater reliability. If two humans can&rsquo;t agree on a 20-sample calibration set, the benchmark won&rsquo;t produce trustworthy model comparisons either.</p>
+<hr>
+<h2 id="faq">FAQ</h2>
+<p><strong>Q: What is the most reliable LLM benchmark for coding in 2026?</strong></p>
+<p>SWE-bench Verified and LiveCodeBench are the two most reliable coding benchmarks as of 2026. SWE-bench Verified uses real GitHub issues and tests whether a model can produce a working patch; LiveCodeBench draws from competitive programming platforms after each model&rsquo;s training cutoff to avoid contamination. Use SWE-bench for applied engineering tasks and LiveCodeBench for algorithmic reasoning. Avoid HumanEval — frontier models score 93%+ across the board, making it useless for differentiation at the top end.</p>
+<p><strong>Q: Why did OpenAI stop reporting SWE-bench Verified scores?</strong></p>
+<p>OpenAI found evidence of training data contamination on the SWE-bench Verified dataset, meaning that test tasks had appeared in training corpora in ways that inflate scores without reflecting genuine problem-solving ability. The contamination appears to affect all frontier model labs, not just OpenAI. This led to the development of SWE-bench Pro, which draws from actively maintained repositories with post-training-cutoff commit histories to reduce overlap risk.</p>
+<p><strong>Q: Is MMLU still a useful benchmark in 2026?</strong></p>
+<p>No, for frontier model comparison. MMLU is saturated: as of April 2026, top models cluster at 85–90% with no meaningful spread. It remains useful for comparing smaller open-source models in the 7B–70B range where scores still differentiate. For frontier model evaluation, replace MMLU with GPQA Diamond (reasoning depth) or MMLU-Pro (a harder variant that still produces informative score spreads between models).</p>
+<p><strong>Q: What does GPQA Diamond actually measure?</strong></p>
+<p>GPQA Diamond measures graduate-level scientific reasoning across biology, physics, and chemistry. Its 198 questions are written by PhD-level domain experts and designed so that even human experts score only 65% — making it significantly harder to game through training data overlap than benchmarks based on simpler formats. High GPQA Diamond scores indicate deep reasoning capability, not just pattern matching, which makes it the most honest signal of genuine intelligence improvement in frontier models.</p>
+<p><strong>Q: How should developers build their own LLM benchmark?</strong></p>
+<p>Start with 100–200 examples drawn from your actual production logs, stratified as 40% typical cases, 40% known edge cases, and 20% adversarial inputs. Define your acceptance criteria before running any models — not after — to avoid anchoring bias. Score on dimensions your deployment actually cares about: correctness on your rubric, latency, cost per successful completion, and failure mode behavior. Run your benchmark quarterly as models update, and keep the test set version-locked so score trends are comparable over time.</p>
+]]></content:encoded></item></channel></rss>

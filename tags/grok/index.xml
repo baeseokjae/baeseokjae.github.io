@@ -1,0 +1,697 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Grok on RockB</title><link>https://baeseokjae.github.io/tags/grok/</link><description>Recent content in Grok on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Mon, 15 Jun 2026 18:04:45 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/grok/index.xml" rel="self" type="application/rss+xml"/><item><title>Grok 4 Multi-Agent API Developer Guide for xAI Parallel Reasoning</title><link>https://baeseokjae.github.io/posts/grok-4-multi-agent-api-guide-2026/</link><pubDate>Mon, 15 Jun 2026 18:04:45 +0000</pubDate><guid>https://baeseokjae.github.io/posts/grok-4-multi-agent-api-guide-2026/</guid><description>Developer guide to Grok 4.20 Multi-Agent architecture, API usage, pricing, limitations, and production patterns.</description><content:encoded><![CDATA[<p>Grok 4.20 Multi-Agent is xAI&rsquo;s beta API model for parallel research: a leader agent coordinates 4 or 16 sub-agents, uses server-side tools, and synthesizes one answer. Use it for source-heavy research workflows, not ordinary chat completion paths or low-latency product responses.</p>
+<h2 id="what-is-grok-420-multi-agent">What Is Grok 4.20 Multi-Agent?</h2>
+<p>Grok 4.20 Multi-Agent is xAI&rsquo;s beta Realtime Multi-agent Research model, exposed as <code>grok-4.20-multi-agent</code>, that runs several reasoning agents in parallel and returns a synthesized answer through a leader agent. xAI documents two configurations: 4 agents for <code>agent_count=4</code> or <code>reasoning.effort</code> set to low or medium, and 16 agents for <code>agent_count=16</code> or high/xhigh effort. The practical distinction is not &ldquo;a smarter chatbot&rdquo;; it is a research workflow where separate agents can search, analyze, compare evidence, and then have the leader resolve conflicts. That makes the API useful for due diligence, technical landscape scans, competitive analysis, and live-source summaries. The important takeaway for developers is that multi-agent mode trades latency and token volume for deeper coverage.</p>
+<p>If you have built against ordinary LLM APIs, the first adjustment is mental: this model behaves more like a managed research team than a single completion engine. The leader/sub-agent split also affects observability. By default, you see the leader&rsquo;s tool calls and final answer, not a full transcript of every sub-agent&rsquo;s reasoning path.</p>
+<h2 id="when-should-developers-use-multi-agent-instead-of-grok-43">When Should Developers Use Multi-Agent Instead of Grok 4.3?</h2>
+<p>Grok 4.20 Multi-Agent is best used when the task benefits from parallel evidence gathering, while Grok 4.3 or a standard reasoning model is usually better for fast coding help, deterministic transformations, short answers, and product UX flows. A concrete routing rule works well in production: send tasks needing 5 or more independent source checks, cross-domain synthesis, or live web/X research to <code>grok-4.20-multi-agent</code>; keep ordinary summarization, extraction, classification, and chat on a cheaper single-model path. xAI also states that Grok 3 and Grok 4 models have a November 2024 knowledge cutoff, so realtime questions need search tools regardless of model choice. The clear takeaway is to reserve multi-agent calls for research ambiguity, not every prompt.</p>
+<p>I would not put this model behind every &ldquo;Ask AI&rdquo; button. Multi-agent calls have more moving parts: agent count, tool usage, encrypted state, longer runtime, and billing across leader and sub-agents. Use a router before the model call. The router can inspect intent, required recency, expected source count, and acceptable latency.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Workload</th>
+          <th style="text-align: right">Better default</th>
+          <th>Why</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Explain one API error</td>
+          <td style="text-align: right">Grok 4.3 or Grok 4.20</td>
+          <td>Single-threaded, low ambiguity</td>
+      </tr>
+      <tr>
+          <td>Compare five vector databases using current docs</td>
+          <td style="text-align: right">Grok 4.20 Multi-Agent</td>
+          <td>Multiple sources and synthesis</td>
+      </tr>
+      <tr>
+          <td>Generate a JSON transform</td>
+          <td style="text-align: right">Standard model</td>
+          <td>Deterministic and cheap</td>
+      </tr>
+      <tr>
+          <td>Research vendor pricing changes</td>
+          <td style="text-align: right">Grok 4.20 Multi-Agent with search</td>
+          <td>Recency-sensitive</td>
+      </tr>
+      <tr>
+          <td>Interactive product chat</td>
+          <td style="text-align: right">Standard model</td>
+          <td>Latency matters more than depth</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="how-do-you-call-the-xai-multi-agent-api-correctly">How Do You Call the xAI Multi-Agent API Correctly?</h2>
+<p>The Grok 4 multi-agent API developer guide should start with one non-negotiable rule: use the xAI SDK or Responses API, because xAI documents that the multi-agent model does not support the Chat Completions API. The official model name is <code>grok-4.20-multi-agent</code>, and the request should be structured around Responses-style input, reasoning configuration, and server-side tools such as <code>web_search</code> or <code>x_search</code>. This matters because many unofficial examples show Chat Completions-style snippets or imaginary flags such as <code>mode: &quot;multi-agent&quot;</code>, which will age badly and can fail outright. Treat the Responses API as the integration surface and make model routing explicit in your code. The takeaway is simple: do not retrofit multi-agent research into old chat-completion abstractions.</p>
+<p>For a server application, wrap the API behind a small internal function rather than scattering model IDs across services. That gives you one place to enforce beta disclaimers, timeouts, usage logging, and fallback behavior. It also lets you swap direct xAI access for an aggregator later if procurement forces that choice.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> xai_sdk <span style="color:#f92672">import</span> Client
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>client <span style="color:#f92672">=</span> Client(api_key<span style="color:#f92672">=</span>os<span style="color:#f92672">.</span>environ[<span style="color:#e6db74">&#34;XAI_API_KEY&#34;</span>])
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>response <span style="color:#f92672">=</span> client<span style="color:#f92672">.</span>responses<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>    model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;grok-4.20-multi-agent&#34;</span>,
+</span></span><span style="display:flex;"><span>    input<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;Research whether Model Context Protocol adoption changed in the last 90 days. Cite primary sources.&#34;</span>,
+</span></span><span style="display:flex;"><span>    reasoning<span style="color:#f92672">=</span>{<span style="color:#e6db74">&#34;effort&#34;</span>: <span style="color:#e6db74">&#34;medium&#34;</span>},
+</span></span><span style="display:flex;"><span>    tools<span style="color:#f92672">=</span>[{<span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;web_search&#34;</span>}],
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>print(response<span style="color:#f92672">.</span>output_text)
+</span></span></code></pre></div><p>The exact SDK surface can change while the feature is beta, so pin the SDK version and keep this call isolated. I also recommend storing the normalized request payload and response usage metadata for cost debugging.</p>
+<h2 id="how-does-the-leadersub-agent-architecture-work">How Does the Leader/Sub-Agent Architecture Work?</h2>
+<p>The Grok 4.20 Multi-Agent architecture works by assigning a leader agent to coordinate several sub-agents, then synthesizing their research into a final response. In the documented 4-agent setup, that can mean one leader plus multiple specialized workers investigating different parts of a query; in the 16-agent setup, the system can fan out much wider across sources, hypotheses, or conflicting claims. xAI states that only the leader agent&rsquo;s tool calls and final response are exposed by default, while sub-agent state is encrypted and preserved only when encrypted content is enabled. This design is useful when you want broader coverage without writing your own orchestration framework. The key takeaway is that xAI manages the parallelism, but you still manage the product contract.</p>
+<p>That contract should include the answer format, source expectations, and acceptance criteria. For example, a market research request should ask for dated claims, primary-source preference, and uncertainty labels. A security research request should ask the model to separate confirmed vendor statements from community reports.</p>
+<h3 id="what-does-the-leader-agent-do">What Does the Leader Agent Do?</h3>
+<p>The leader agent is the coordinator and final editor: it decomposes the task, delegates research, observes tool results, and writes the answer the API returns. In practice, you should prompt the leader with your business rules. Tell it whether to prefer official documentation, how recent sources must be, what to do with conflicting evidence, and what output schema your application expects.</p>
+<h3 id="what-do-sub-agents-do">What Do Sub-Agents Do?</h3>
+<p>Sub-agents are parallel workers that can investigate different angles of the same problem, such as release notes, pricing pages, public X posts, and third-party deployment notes. You usually should not depend on seeing each sub-agent&rsquo;s private chain of work. Instead, design prompts that force the leader to expose final evidence, assumptions, and confidence in the user-visible answer.</p>
+<h2 id="how-should-you-configure-4-agents-vs-16-agents">How Should You Configure 4 Agents vs 16 Agents?</h2>
+<p>Four agents are the practical default for focused research, while 16 agents should be reserved for broad, ambiguous, or high-value investigations where additional coverage justifies higher latency and token usage. xAI documents that <code>agent_count=4</code> or low/medium <code>reasoning.effort</code> maps to 4 agents, while <code>agent_count=16</code> or high/xhigh effort maps to 16 agents. The cost implication is direct: more agents can generate more input, output, cached, and reasoning tokens, and xAI states that all leader and sub-agent tokens are billed. In production, I would route fewer than 20% of research requests to 16 agents unless the product is explicitly selling deep research. The takeaway is to use 16 agents as an escalation path, not a default.</p>
+<p>Here is a routing policy I have used successfully with other expensive model tiers: start with the cheapest configuration that can produce a useful answer, then escalate only when the request needs breadth. Avoid letting end users pick &ldquo;maximum reasoning&rdquo; without cost visibility.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Signal</th>
+          <th style="text-align: right">Use 4 agents</th>
+          <th style="text-align: right">Use 16 agents</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Number of independent topics</td>
+          <td style="text-align: right">1-2</td>
+          <td style="text-align: right">4+</td>
+      </tr>
+      <tr>
+          <td>Required source count</td>
+          <td style="text-align: right">2-6</td>
+          <td style="text-align: right">8+</td>
+      </tr>
+      <tr>
+          <td>Recency sensitivity</td>
+          <td style="text-align: right">Moderate</td>
+          <td style="text-align: right">High</td>
+      </tr>
+      <tr>
+          <td>Latency budget</td>
+          <td style="text-align: right">Tight</td>
+          <td style="text-align: right">Flexible</td>
+      </tr>
+      <tr>
+          <td>Business value per answer</td>
+          <td style="text-align: right">Normal</td>
+          <td style="text-align: right">High</td>
+      </tr>
+      <tr>
+          <td>Example</td>
+          <td style="text-align: right">&ldquo;Compare two API gateways&rdquo;</td>
+          <td style="text-align: right">&ldquo;Map the 2026 AI agent platform market&rdquo;</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="should-you-use-agent_count-or-reasoningeffort">Should You Use <code>agent_count</code> or <code>reasoning.effort</code>?</h3>
+<p><code>agent_count</code> is the clearest control when your application already has an explicit routing decision, while <code>reasoning.effort</code> is useful when you want a simpler abstraction that maps low/medium to 4 agents and high/xhigh to 16 agents. I prefer <code>agent_count</code> in backend services because it makes usage reports easier to interpret.</p>
+<h2 id="which-built-in-tools-matter-for-multi-agent-research">Which Built-In Tools Matter for Multi-Agent Research?</h2>
+<p>Built-in tools matter because Grok 4.20 Multi-Agent depends on server-side tool access for realtime and external evidence, with <code>web_search</code> and <code>x_search</code> being the most obvious developer-facing tools for current research. The research brief also highlights code execution and collections search as tool categories developers may encounter in xAI workflows, but the central rule is that multi-agent does not support client-side or custom tools in the documented limitations. That means you cannot hand each sub-agent your private internal function set the way you might with a custom agent framework. Use server-side tools for public or platform-supported retrieval, and put private data into approved context or retrieval paths. The takeaway is that tool choice defines what the agents can actually verify.</p>
+<p>Do not rely on the model&rsquo;s base knowledge for current claims. xAI&rsquo;s model documentation says Grok 3 and Grok 4 have a November 2024 knowledge cutoff, so a 2026 pricing, release, or governance answer needs search. Prompt for source dates and ask the final answer to distinguish current facts from background knowledge.</p>
+<h3 id="how-should-you-use-web-search">How Should You Use Web Search?</h3>
+<p><code>web_search</code> is the default tool for public documentation, pricing pages, release notes, and technical blog posts. Use it when the answer needs current evidence outside X. For developer research, ask the model to prioritize official docs, standards bodies, GitHub repositories, and vendor release notes before secondary commentary.</p>
+<h3 id="when-is-x-search-useful">When Is X Search Useful?</h3>
+<p><code>x_search</code> is useful for realtime ecosystem signals, vendor announcements, incident chatter, and public statements from maintainers or company accounts. Treat X results as leads, not final truth. For production answers, ask the model to corroborate important X claims with official docs, changelogs, or primary pages before presenting them as facts.</p>
+<h2 id="how-do-streaming-usage-tracking-and-multi-turn-conversations-work">How Do Streaming, Usage Tracking, and Multi-Turn Conversations Work?</h2>
+<p>Streaming, usage tracking, and multi-turn state are operational concerns that decide whether a multi-agent feature feels usable or expensive in production. xAI&rsquo;s documentation says the multi-agent feature is beta, that more agents increase token usage and latency, and that encrypted sub-agent state is preserved only when encrypted content is enabled. For a developer, that means a research request should be treated as a long-running job with progress updates, a timeout budget, usage capture, and a stored response ID or conversation state where supported. Do not assume the UX pattern of a fast chat bubble will survive a 16-agent research call. The takeaway is to design multi-agent research as an asynchronous workflow unless the request is small.</p>
+<p>In a web app, I would stream leader-visible progress to the client and persist the final answer separately from the raw provider response. If the provider call times out, return a clear partial state and let the user retry with a narrower prompt. Usage records should include model, agent count, tools requested, prompt size, response size, latency, and whether the answer was accepted or regenerated.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-ts" data-lang="ts"><span style="display:flex;"><span><span style="color:#66d9ef">type</span> <span style="color:#a6e22e">ResearchUsageLog</span> <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">model</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;grok-4.20-multi-agent&#34;</span>;
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">agentCount</span>: <span style="color:#66d9ef">4</span> <span style="color:#f92672">|</span> <span style="color:#ae81ff">16</span>;
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">tools</span>: <span style="color:#66d9ef">string</span>[];
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">inputTokens?</span>: <span style="color:#66d9ef">number</span>;
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">outputTokens?</span>: <span style="color:#66d9ef">number</span>;
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">reasoningTokens?</span>: <span style="color:#66d9ef">number</span>;
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">latencyMs</span>: <span style="color:#66d9ef">number</span>;
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">accepted</span>: <span style="color:#66d9ef">boolean</span>;
+</span></span><span style="display:flex;"><span>};
+</span></span></code></pre></div><p>This is not just finance hygiene. Once logs exist, you can find prompts that accidentally trigger broad web research, users who repeatedly request 16-agent jobs, and workflows where a cheaper single-model fallback would have been enough.</p>
+<h2 id="what-does-grok-420-multi-agent-cost">What Does Grok 4.20 Multi-Agent Cost?</h2>
+<p>Grok 4.20 Multi-Agent pricing should be modeled as parallel research billing, not single-response billing, because xAI says all leader-agent and sub-agent tokens are billed, including input, output, cached, and reasoning tokens, and server-side tool calls by any agent count toward tool usage. The xAI pricing page listed <code>grok-4.20-multi-agent-0309</code> at $1.25 per 1 million input tokens, $0.20 per 1 million cached input tokens, and $2.50 per 1 million output tokens in the research brief. Those unit prices look approachable until 16 agents each search, read, reason, and contribute to a synthesis. The takeaway is that agent count is a cost multiplier even when the final answer is short.</p>
+<p>Build a budget guardrail before launch. The API may not support <code>max_tokens</code> for this model, so cost control must come from prompt constraints, agent routing, tool limits where available, user quotas, and post-call monitoring. Ask for concise outputs. Require source caps. Avoid vague prompts such as &ldquo;research everything about this company.&rdquo;</p>
+<table>
+  <thead>
+      <tr>
+          <th>Cost lever</th>
+          <th>Practical control</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Agent count</td>
+          <td>Default to 4; escalate to 16 only by policy</td>
+      </tr>
+      <tr>
+          <td>Prompt size</td>
+          <td>Strip irrelevant chat history before request</td>
+      </tr>
+      <tr>
+          <td>Tool usage</td>
+          <td>Ask for targeted source categories and source count</td>
+      </tr>
+      <tr>
+          <td>Output length</td>
+          <td>Specify sections and maximum bullets</td>
+      </tr>
+      <tr>
+          <td>Retries</td>
+          <td>Retry with narrower scope, not identical prompts</td>
+      </tr>
+      <tr>
+          <td>User behavior</td>
+          <td>Add per-user monthly research budgets</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="how-can-you-estimate-cost-before-calling">How Can You Estimate Cost Before Calling?</h3>
+<p>A pre-call estimate should combine prompt token count, requested agent count, expected source count, and historical average output size for that route. It will be approximate, but approximate is still useful. For example, a 16-agent competitive analysis with web search should require a higher approval threshold than a 4-agent documentation comparison.</p>
+<h2 id="what-limitations-should-you-design-around">What Limitations Should You Design Around?</h2>
+<p>Grok 4.20 Multi-Agent has beta limitations that should shape architecture before the first production release: xAI documents no Chat Completions support, no <code>max_tokens</code> support, no client-side/custom tools, and beta behavior that may change. It also exposes only leader-agent tool calls and final output by default, which means you cannot debug it exactly like a fully instrumented custom agent swarm. These are not minor footnotes. They affect SDK wrappers, observability, budget enforcement, QA, and incident response. If your product requires strict deterministic tool execution against private systems, this hosted multi-agent model may need to sit behind a narrower research feature instead of becoming your core agent runtime. The takeaway is to treat the API as managed research, not a general agent framework.</p>
+<p>Production guardrails should be boring and explicit. Add provider timeouts. Add a fallback to a standard Grok model or another reasoning model. Store provider versions and model IDs. Keep prompts versioned. Alert on sudden cost or latency changes. Add an allowlist of workflows that can use 16 agents. For regulated or customer-facing domains, require citations and display uncertainty when sources conflict.</p>
+<h3 id="what-should-the-fallback-do">What Should the Fallback Do?</h3>
+<p>The fallback should preserve the user&rsquo;s task while reducing breadth. If a 16-agent request fails, retry once with 4 agents and a narrower source count. If that fails, use a standard reasoning model to explain that live research could not be completed and return a structured checklist of what the user should verify manually.</p>
+<h2 id="should-you-use-direct-xai-api-openrouter-puter-or-oci">Should You Use Direct xAI API, OpenRouter, Puter, or OCI?</h2>
+<p>Direct xAI API access is the cleanest default when you need the documented <code>grok-4.20-multi-agent</code> behavior, while OpenRouter, Puter, and OCI can make sense for procurement, deployment, or abstraction reasons. The research brief notes that OpenRouter lists a Grok 4.20 Multi-Agent model card with parallel agents and a 2 million context window, Puter targets browser-friendly JavaScript integration, and Oracle documents Grok 4.20 Multi-Agent availability through OCI Generative AI. The risk is feature parity drift: model IDs, pricing, context limits, tool access, streaming behavior, and beta capabilities can differ between direct and aggregator paths. The takeaway is to choose the provider path based on required features, not just convenience.</p>
+<p>For a developer guide, I would present aggregators as deployment options, not the canonical API. Build your internal interface around capabilities: multi-agent count, web search, X search, encrypted content, usage metadata, streaming, and persistence. Then test each provider against that matrix.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Path</th>
+          <th>Best fit</th>
+          <th>Watch for</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Direct xAI API</td>
+          <td>Latest documented xAI behavior</td>
+          <td>Beta changes and account setup</td>
+      </tr>
+      <tr>
+          <td>OpenRouter</td>
+          <td>Multi-provider routing</td>
+          <td>Pricing and feature parity drift</td>
+      </tr>
+      <tr>
+          <td>Puter</td>
+          <td>Client-side JavaScript experiments</td>
+          <td>Production security and control model</td>
+      </tr>
+      <tr>
+          <td>OCI</td>
+          <td>Enterprise cloud procurement</td>
+          <td>Regional availability and API differences</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="what-reference-implementation-pattern-works-best">What Reference Implementation Pattern Works Best?</h2>
+<p>A reliable Grok 4.20 Multi-Agent implementation uses a router, a narrow provider adapter, an async job runner, and durable usage logging instead of calling the model directly from UI code. The router decides whether a task needs multi-agent research, selects 4 or 16 agents, and chooses tools such as <code>web_search</code> or <code>x_search</code>. The provider adapter owns the xAI Responses API call and hides beta-specific request details from the rest of the application. The job runner handles streaming, retries, timeout states, and persistence. Usage logging captures model, agent count, token fields, tools, and latency. The takeaway is that a small amount of architecture prevents multi-agent research from becoming an expensive hidden side effect.</p>
+<p>Here is the shape I would ship first:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-ts" data-lang="ts"><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">function</span> <span style="color:#a6e22e">runResearchJob</span>(<span style="color:#a6e22e">job</span>: <span style="color:#66d9ef">ResearchJob</span>) {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">route</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">classifyResearchDepth</span>(<span style="color:#a6e22e">job</span>.<span style="color:#a6e22e">prompt</span>, <span style="color:#a6e22e">job</span>.<span style="color:#a6e22e">userPlan</span>);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">request</span> <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">model</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;grok-4.20-multi-agent&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">input</span>: <span style="color:#66d9ef">buildResearchPrompt</span>(<span style="color:#a6e22e">job</span>),
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">reasoning</span>: <span style="color:#66d9ef">route.agentCount</span> <span style="color:#f92672">===</span> <span style="color:#ae81ff">16</span> <span style="color:#f92672">?</span> { <span style="color:#a6e22e">effort</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;high&#34;</span> } <span style="color:#f92672">:</span> { <span style="color:#a6e22e">effort</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;medium&#34;</span> },
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">tools</span>: <span style="color:#66d9ef">route.needsRealtime</span> <span style="color:#f92672">?</span> [{ <span style="color:#66d9ef">type</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;web_search&#34;</span> }] <span style="color:#f92672">:</span> [],
+</span></span><span style="display:flex;"><span>  };
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">startedAt</span> <span style="color:#f92672">=</span> Date.<span style="color:#a6e22e">now</span>();
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">response</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">xaiResponsesCreate</span>(<span style="color:#a6e22e">request</span>);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">saveResearchResult</span>({
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">jobId</span>: <span style="color:#66d9ef">job.id</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">output</span>: <span style="color:#66d9ef">response.output_text</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">usage</span>: <span style="color:#66d9ef">response.usage</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">latencyMs</span>: <span style="color:#66d9ef">Date.now</span>() <span style="color:#f92672">-</span> <span style="color:#a6e22e">startedAt</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">route</span>,
+</span></span><span style="display:flex;"><span>  });
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>The most important engineering decision is to keep the prompt builder boring. It should include task, audience, source requirements, recency window, output format, and refusal rules for unverifiable claims. That lets you evaluate answers across model changes.</p>
+<h3 id="what-should-the-prompt-include">What Should the Prompt Include?</h3>
+<p>The prompt should include the research question, intended user, source hierarchy, recency requirement, maximum source count, answer structure, and uncertainty policy. For example: &ldquo;Use official docs first, then release notes, then reputable analysis. Mark unverified claims. Return a table plus implementation recommendation.&rdquo; This gives the leader agent a concrete synthesis target.</p>
+<h2 id="faq-what-do-developers-ask-about-grok-420-multi-agent">FAQ: What Do Developers Ask About Grok 4.20 Multi-Agent?</h2>
+<p>Grok 4.20 Multi-Agent questions usually cluster around model IDs, API compatibility, agent count, pricing, context windows, and whether the model can replace a custom agent framework. The short answer is that the official multi-agent model is <code>grok-4.20-multi-agent</code>, it is designed for the xAI SDK or Responses API, and it should be used for research-heavy workflows where 4 or 16 managed agents can improve evidence coverage. Developers should be careful with unofficial examples because many assume Chat Completions support or custom tool behavior that xAI&rsquo;s documented limitations do not provide. Treat this FAQ as implementation guidance for production teams evaluating the xAI parallel reasoning API in 2026, especially teams building source-heavy research features. The takeaway is that most mistakes come from treating multi-agent research like ordinary chat.</p>
+<h3 id="what-is-the-official-grok-420-multi-agent-model-id">What is the official Grok 4.20 Multi-Agent model ID?</h3>
+<p>The official model ID in xAI&rsquo;s multi-agent documentation is <code>grok-4.20-multi-agent</code>. The pricing brief also references a dated pricing variant, <code>grok-4.20-multi-agent-0309</code>, but application code should follow the model identifiers documented for the API path you are using. Keep model IDs centralized so provider changes do not require broad code edits.</p>
+<h3 id="does-grok-420-multi-agent-support-chat-completions">Does Grok 4.20 Multi-Agent support Chat Completions?</h3>
+<p>Grok 4.20 Multi-Agent does not support the Chat Completions API according to xAI&rsquo;s documented limitations. Use the xAI SDK or Responses API instead. This is the most common integration mistake because many LLM apps still have chat-completion wrappers baked into their provider layer.</p>
+<h3 id="does-reasoningeffort-mean-deeper-thinking-or-more-agents">Does <code>reasoning.effort</code> mean deeper thinking or more agents?</h3>
+<p>For Grok 4.20 Multi-Agent, <code>reasoning.effort</code> maps to agent count: low and medium use 4 agents, while high and xhigh use 16 agents. That makes it more operationally significant than a vague quality knob. Treat it as a budget and latency control in production.</p>
+<h3 id="can-i-use-custom-tools-with-each-sub-agent">Can I use custom tools with each sub-agent?</h3>
+<p>The documented multi-agent limitations say client-side and custom tools are not supported for the multi-agent variant. Use xAI-supported server-side tools such as web or X search where available, and design private-data workflows through approved context or retrieval mechanisms rather than arbitrary sub-agent function calls.</p>
+<h3 id="is-the-multi-agent-api-ready-for-production">Is the multi-agent API ready for production?</h3>
+<p>The API can be used in production-style systems only with beta guardrails: explicit timeouts, fallback models, usage monitoring, prompt versioning, and a narrow set of approved workflows. xAI states that Realtime Multi-agent Research is beta and behavior may change, so avoid making it an unbounded dependency in critical synchronous paths.</p>
+]]></content:encoded></item><item><title>xAI Grok API Pricing 2026: Every Model, Context Window, and Cost Compared</title><link>https://baeseokjae.github.io/posts/xai-grok-api-pricing-2026/</link><pubDate>Thu, 07 May 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/xai-grok-api-pricing-2026/</guid><description>Full xAI Grok API pricing breakdown for 2026: Grok 4.1 Fast, Grok 4.20, Grok Code Fast 1 — with context windows, cost tables, and competitor comparisons.</description><content:encoded><![CDATA[<p>xAI&rsquo;s Grok API in 2026 offers three distinct models priced from $0.20 to $6.00 per million tokens, with a 2M-token context window on the flagship tiers — undercutting Anthropic&rsquo;s Claude Opus 4.7 by 92% on input costs and GPT-5.5 by 60% on output costs at comparable capability levels. The API is fully OpenAI-compatible, ships with built-in real-time web search, and supports prompt caching to further reduce repeated-context costs. This guide covers every model, every price point, and how to calculate what you will actually spend in production.</p>
+<h2 id="xai-grok-api-pricing-overview-three-models-for-different-use-cases">xAI Grok API Pricing Overview: Three Models for Different Use Cases</h2>
+<p>xAI&rsquo;s Grok API lineup in 2026 is structured as a three-tier stack: a fast/cheap general-purpose model (Grok 4.1 Fast at $0.20/$0.50 per million tokens), a flagship reasoning model (Grok 4.20 at $2.00/$6.00 per million tokens), and a coding-optimized variant (Grok Code Fast 1 at $0.20/$1.50 per million tokens). All three use the same OpenAI-compatible REST API at <code>https://api.x.ai/v1</code>, meaning any codebase already integrated with the OpenAI Python SDK or TypeScript SDK can switch to Grok by changing the <code>base_url</code> parameter and swapping API keys — zero refactoring required. Grok 4.1 Fast and Grok 4.20 both carry a 2M-token context window, which is 10× larger than Anthropic&rsquo;s 200K limit and twice the size of GPT-5.5&rsquo;s 1M. Grok Code Fast 1 comes with a 256K context window, sized specifically for the large repository indexes that coding assistants need to maintain. Built-in real-time web search is available across all three models — a capability that competitors like GPT-5.5 and Claude charge extra for or require additional tooling to achieve. Prompt caching is supported on Grok 4.1 Fast and Grok 4.20, enabling significant cost reductions for applications that repeatedly send the same system prompt or document context across requests.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Model</th>
+          <th>Input ($/M tokens)</th>
+          <th>Output ($/M tokens)</th>
+          <th>Context Window</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Grok 4.1 Fast</td>
+          <td>$0.20</td>
+          <td>$0.50</td>
+          <td>2M tokens</td>
+      </tr>
+      <tr>
+          <td>Grok 4.20</td>
+          <td>$2.00</td>
+          <td>$6.00</td>
+          <td>2M tokens</td>
+      </tr>
+      <tr>
+          <td>Grok Code Fast 1</td>
+          <td>$0.20</td>
+          <td>$1.50</td>
+          <td>256K tokens</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="grok-41-fast-high-volume-applications-at-020-per-million-tokens">Grok 4.1 Fast: High-Volume Applications at $0.20 Per Million Tokens</h2>
+<p>Grok 4.1 Fast is xAI&rsquo;s lowest-cost production model, priced at $0.20 per million input tokens and $0.50 per million output tokens — making it the go-to choice for applications where volume is high, latency matters, and per-request cost must stay under control. At those numbers, processing one billion tokens costs $200 on input and $500 on output, which is roughly what you spend on a single day of a mid-scale customer-support pipeline. The 2M-token context window — the same ceiling as the more expensive Grok 4.20 — means high-volume applications do not need to compromise on context depth to hit their cost targets. Grok 4.1 Fast is designed for background processing, batch classification, document summarization queues, and any workload where requests run in parallel at scale. Prompt caching is available on this tier: if your application repeatedly sends the same system prompt (say, a 10K-token instruction block), the cached portion is priced at a fraction of standard input cost, pushing effective input costs below $0.10 per million tokens for cache-heavy workloads. For developers running tens of millions of API calls per month, the difference between $0.20 and $2.00 per million input tokens is the difference between a manageable variable cost and a budget-busting line item.</p>
+<p><strong>Grok 4.1 Fast: Cost calculation examples</strong></p>
+<table>
+  <thead>
+      <tr>
+          <th>Volume (tokens/month)</th>
+          <th>Input Cost</th>
+          <th>Output Cost</th>
+          <th>Total</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>10M input / 5M output</td>
+          <td>$2.00</td>
+          <td>$2.50</td>
+          <td>$4.50</td>
+      </tr>
+      <tr>
+          <td>100M input / 50M output</td>
+          <td>$20.00</td>
+          <td>$25.00</td>
+          <td>$45.00</td>
+      </tr>
+      <tr>
+          <td>1B input / 500M output</td>
+          <td>$200.00</td>
+          <td>$250.00</td>
+          <td>$450.00</td>
+      </tr>
+  </tbody>
+</table>
+<p>Assuming a 2:1 input-to-output ratio typical of classification and summarization tasks.</p>
+<h2 id="grok-420-flagship-reasoning-at-competitive-pricing">Grok 4.20: Flagship Reasoning at Competitive Pricing</h2>
+<p>Grok 4.20 is xAI&rsquo;s flagship model, priced at $2.00 per million input tokens and $6.00 per million output tokens, targeting complex reasoning, long-document analysis, and research-grade synthesis tasks that require the full capability of a frontier model. Despite sitting at the top of xAI&rsquo;s lineup, Grok 4.20 is priced 7.5× below Claude Opus 4.7 on input ($2.00 vs. $15.00) and 12.5× below it on output ($6.00 vs. $75.00) — a gap so large it restructures how teams think about deploying flagship-class intelligence. The 2M-token context window on Grok 4.20 enables use cases that are simply impossible on 200K-context models: ingesting an entire codebase for architecture review, loading a multi-year contract corpus for due-diligence analysis, or processing a full research dataset in a single prompt without chunking. Prompt caching is fully supported on Grok 4.20, which matters considerably at this tier — a repeated 100K-token system prompt costs $0.20 per uncached call; with caching, that same context might cost a fraction of that on subsequent requests. For reasoning-heavy pipelines that send the same long context repeatedly (legal review, compliance checking, codegen with a fixed spec), caching can cut monthly Grok 4.20 spend by 40–60%.</p>
+<p><strong>Grok 4.20: Cost calculation examples</strong></p>
+<table>
+  <thead>
+      <tr>
+          <th>Scenario</th>
+          <th>Input Tokens</th>
+          <th>Output Tokens</th>
+          <th>Cost per Request</th>
+          <th>Monthly Cost (1K req/day)</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Long-doc analysis</td>
+          <td>50K</td>
+          <td>2K</td>
+          <td>$0.11 + $0.012 = $0.122</td>
+          <td>$3,660</td>
+      </tr>
+      <tr>
+          <td>Research synthesis</td>
+          <td>200K</td>
+          <td>10K</td>
+          <td>$0.40 + $0.06 = $0.46</td>
+          <td>$13,800</td>
+      </tr>
+      <tr>
+          <td>Full-context reasoning</td>
+          <td>1M</td>
+          <td>20K</td>
+          <td>$2.00 + $0.12 = $2.12</td>
+          <td>$63,600</td>
+      </tr>
+  </tbody>
+</table>
+<p>For enterprise-scale reasoning workloads, compare to Claude Opus 4.7 at the same volumes: the 1M-token request above costs $15.00 + $1.50 = $16.50 with Opus 4.7 vs. $2.12 with Grok 4.20 — a 7.8× cost difference per request.</p>
+<h2 id="grok-code-fast-1-developer-optimized-coding-model">Grok Code Fast 1: Developer-Optimized Coding Model</h2>
+<p>Grok Code Fast 1 is priced at $0.20 per million input tokens and $1.50 per million output tokens, with a 256K context window tuned specifically for software development workloads: inline completions, code review, test generation, and coding-assistant backends where low latency and low cost-per-completion define success. The $0.20 input price matches Grok 4.1 Fast, but the $1.50 output price reflects the reality that code generation produces denser, higher-value tokens than general text — completions, function bodies, and test suites are consistently longer per request than summarization or classification outputs. The 256K context window is sufficient to hold a 50–100 file repository index, a full module with all its dependencies, or several hundred lines of accumulated conversation context from a coding session. For teams building IDE plugins, CI pipeline assistants, or autonomous coding agents, the combination of $0.20 input and $1.50 output makes Grok Code Fast 1 dramatically cheaper than GPT-5.5 ($5.00/$30.00) for the same coding throughput. A coding assistant generating 100M output tokens per month — roughly the volume of a mid-sized developer tool with several thousand active users — costs $150,000 per month with Grok Code Fast 1 vs. $3,000,000 per month with GPT-5.5 at full output pricing. That 20× cost advantage can be the deciding factor for early-stage developer tools trying to reach profitability before their next funding round.</p>
+<p><strong>Grok Code Fast 1: Cost calculation examples</strong></p>
+<table>
+  <thead>
+      <tr>
+          <th>Use Case</th>
+          <th>Input/Request</th>
+          <th>Output/Request</th>
+          <th>Cost/Request</th>
+          <th>Monthly (500K req)</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Inline completion</td>
+          <td>2K</td>
+          <td>200</td>
+          <td>$0.000700</td>
+          <td>$350</td>
+      </tr>
+      <tr>
+          <td>Function generation</td>
+          <td>10K</td>
+          <td>1K</td>
+          <td>$0.003500</td>
+          <td>$1,750</td>
+      </tr>
+      <tr>
+          <td>Code review</td>
+          <td>20K</td>
+          <td>3K</td>
+          <td>$0.008500</td>
+          <td>$4,250</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="the-2m-context-window-advantage-real-cost-implications">The 2M Context Window Advantage: Real Cost Implications</h2>
+<p>A 2M-token context window is not just a benchmark number — it eliminates entire categories of infrastructure complexity that teams currently pay for in engineering time, vector database costs, and chunking pipeline maintenance. At 2M tokens, Grok 4.1 Fast and Grok 4.20 can ingest approximately 1,500 pages of text, a 200K-line codebase, or a year&rsquo;s worth of customer support transcripts in a single API call, removing the need for retrieval-augmented generation (RAG) pipelines on most document-scale workloads. The direct cost implication: RAG pipelines require embedding models, vector stores, and retrieval logic that add $0.005–0.02 per query on top of LLM costs. For a pipeline running 1 million queries per month, eliminating RAG saves $5,000–$20,000 per month in infrastructure — partially or fully offsetting the LLM spend itself. Compare the 2M context ceiling to Anthropic&rsquo;s 200K and OpenAI&rsquo;s 1M (for GPT-5.5): a task that requires 800K tokens of context simply cannot run on Claude Opus 4.7 or Claude Sonnet 4.6 without chunking and multiple calls, which multiplies cost and introduces retrieval errors. Gemini 3.1 Pro matches Grok at 2M context but costs $3.50/$10.50 per million tokens — 75% more expensive on input and 75% more expensive on output than Grok 4.20. For teams whose bottleneck is context length rather than reasoning capability, Grok at the 2M tier is currently the most cost-efficient path to native long-context inference at scale.</p>
+<p><strong>Context window comparison across providers</strong></p>
+<table>
+  <thead>
+      <tr>
+          <th>Model</th>
+          <th>Context Window</th>
+          <th>Input ($/M)</th>
+          <th>Output ($/M)</th>
+          <th>Cost for 1M-token input</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Grok 4.1 Fast</td>
+          <td>2M</td>
+          <td>$0.20</td>
+          <td>$0.50</td>
+          <td>$0.20</td>
+      </tr>
+      <tr>
+          <td>Grok 4.20</td>
+          <td>2M</td>
+          <td>$2.00</td>
+          <td>$6.00</td>
+          <td>$2.00</td>
+      </tr>
+      <tr>
+          <td>Gemini 3.1 Pro</td>
+          <td>2M</td>
+          <td>$3.50</td>
+          <td>$10.50</td>
+          <td>$3.50</td>
+      </tr>
+      <tr>
+          <td>GPT-5.5</td>
+          <td>1M</td>
+          <td>$5.00</td>
+          <td>$30.00</td>
+          <td>$5.00</td>
+      </tr>
+      <tr>
+          <td>Claude Sonnet 4.6</td>
+          <td>200K</td>
+          <td>$3.00</td>
+          <td>$15.00</td>
+          <td>N/A (exceeds limit)</td>
+      </tr>
+      <tr>
+          <td>Claude Opus 4.7</td>
+          <td>200K</td>
+          <td>$15.00</td>
+          <td>$75.00</td>
+          <td>N/A (exceeds limit)</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="competitor-pricing-comparison-grok-vs-claude-vs-gpt-55-vs-gemini">Competitor Pricing Comparison: Grok vs Claude vs GPT-5.5 vs Gemini</h2>
+<p>The 2026 LLM API market has fractured into two pricing tiers: sub-$1 fast models and $2–15 flagship models — and Grok occupies an unusually strong position in both camps simultaneously. Grok 4.20, despite being xAI&rsquo;s top-tier flagship model, is priced at $2.00/$6.00 per million tokens, landing it squarely in what other vendors price as mid-tier: Claude Sonnet 4.6 ($3.00/$15.00), Gemini 3.1 Pro ($3.50/$10.50), and GPT-5.5 ($5.00/$30.00) all cost more while offering smaller context windows. Claude Opus 4.7 at $15.00/$75.00 is in a different pricing bracket entirely — 7.5× more expensive on input and 12.5× more expensive on output than Grok 4.20. Whether Opus 4.7&rsquo;s quality premium justifies that gap depends entirely on your task: for open-ended creative reasoning, instruction-following in complex multi-step pipelines, and tasks where subtle nuance matters, Opus 4.7 may produce measurably better outcomes. For bulk document analysis, long-context summarization, and structured data extraction, Grok 4.20 at 2M context will frequently match or exceed Opus 4.7 at 200K — at one-seventh the cost. Built-in real-time web search is a genuine differentiator for Grok: GPT-5.5 and Claude require separate tool-calling setups or subscriptions to access live web data, while Grok exposes it natively via the API with no additional per-search fee.</p>
+<p><strong>Full competitor pricing comparison</strong></p>
+<table>
+  <thead>
+      <tr>
+          <th>Model</th>
+          <th>Input ($/M)</th>
+          <th>Output ($/M)</th>
+          <th>Context</th>
+          <th>Web Search</th>
+          <th>Caching</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Grok 4.1 Fast</td>
+          <td>$0.20</td>
+          <td>$0.50</td>
+          <td>2M</td>
+          <td>Built-in</td>
+          <td>Yes</td>
+      </tr>
+      <tr>
+          <td>Grok 4.20</td>
+          <td>$2.00</td>
+          <td>$6.00</td>
+          <td>2M</td>
+          <td>Built-in</td>
+          <td>Yes</td>
+      </tr>
+      <tr>
+          <td>Grok Code Fast 1</td>
+          <td>$0.20</td>
+          <td>$1.50</td>
+          <td>256K</td>
+          <td>Built-in</td>
+          <td>No</td>
+      </tr>
+      <tr>
+          <td>Claude Sonnet 4.6</td>
+          <td>$3.00</td>
+          <td>$15.00</td>
+          <td>200K</td>
+          <td>Via tool</td>
+          <td>Yes</td>
+      </tr>
+      <tr>
+          <td>Claude Opus 4.7</td>
+          <td>$15.00</td>
+          <td>$75.00</td>
+          <td>200K</td>
+          <td>Via tool</td>
+          <td>Yes</td>
+      </tr>
+      <tr>
+          <td>GPT-5.5</td>
+          <td>$5.00</td>
+          <td>$30.00</td>
+          <td>1M</td>
+          <td>Via tool</td>
+          <td>Yes</td>
+      </tr>
+      <tr>
+          <td>Gemini 3.1 Pro</td>
+          <td>$3.50</td>
+          <td>$10.50</td>
+          <td>2M</td>
+          <td>Via tool</td>
+          <td>Yes</td>
+      </tr>
+  </tbody>
+</table>
+<p><strong>Cost to process 100M input + 50M output tokens:</strong></p>
+<table>
+  <thead>
+      <tr>
+          <th>Model</th>
+          <th>Input Cost</th>
+          <th>Output Cost</th>
+          <th>Total</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Grok 4.1 Fast</td>
+          <td>$20</td>
+          <td>$25</td>
+          <td><strong>$45</strong></td>
+      </tr>
+      <tr>
+          <td>Grok 4.20</td>
+          <td>$200</td>
+          <td>$300</td>
+          <td><strong>$500</strong></td>
+      </tr>
+      <tr>
+          <td>Gemini 3.1 Pro</td>
+          <td>$350</td>
+          <td>$525</td>
+          <td><strong>$875</strong></td>
+      </tr>
+      <tr>
+          <td>Claude Sonnet 4.6</td>
+          <td>$300</td>
+          <td>$750</td>
+          <td><strong>$1,050</strong></td>
+      </tr>
+      <tr>
+          <td>GPT-5.5</td>
+          <td>$500</td>
+          <td>$1,500</td>
+          <td><strong>$2,000</strong></td>
+      </tr>
+      <tr>
+          <td>Claude Opus 4.7</td>
+          <td>$1,500</td>
+          <td>$3,750</td>
+          <td><strong>$5,250</strong></td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="prompt-caching-how-to-cut-grok-api-costs-by-50">Prompt Caching: How to Cut Grok API Costs by 50%+</h2>
+<p>Prompt caching on Grok 4.20 and Grok 4.1 Fast allows the API to reuse the KV-cache from a previous request when the prefix of a new request matches, charging a reduced rate for the cached portion instead of the full input token price. For applications with stable, long system prompts — a legal-review agent with a 50K-token jurisdiction and precedent block, a coding assistant with a 30K-token style guide, or a customer-support bot with a 20K-token product manual — caching eliminates the marginal cost of re-sending identical context on every call. The practical math: a 50K-token system prompt sent to Grok 4.20 without caching costs $0.10 per request; at 1,000 requests per day, that is $100/day or $3,000/month just for the system prompt. With caching, subsequent requests that hit the cache pay a fraction of the standard input rate — a saving that compounds quickly at scale. To trigger caching on xAI&rsquo;s API, structure your requests so the stable, repeated content appears at the beginning of the prompt (system prompt, then static context, then dynamic content), as the cache key is prefix-based. Caching is not beneficial for fully dynamic requests where no prefix is shared across calls — only workloads with stable, repeated context above roughly 1,024 tokens see meaningful savings. When both factors align (long context + high request volume), caching can reduce effective Grok 4.20 input costs from $2.00 per million down to sub-$0.50 per million on the cached portion, cutting total API spend by 40–60%.</p>
+<p><strong>Caching savings example: Legal review agent</strong></p>
+<table>
+  <thead>
+      <tr>
+          <th>Scenario</th>
+          <th>Tokens</th>
+          <th>Requests/Day</th>
+          <th>Without Caching</th>
+          <th>With Caching (est. 70% hit rate)</th>
+          <th>Monthly Savings</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>System prompt (Grok 4.20)</td>
+          <td>50K</td>
+          <td>1,000</td>
+          <td>$3,000/mo</td>
+          <td>~$900/mo</td>
+          <td>$2,100</td>
+      </tr>
+      <tr>
+          <td>Document context (Grok 4.20)</td>
+          <td>200K</td>
+          <td>500</td>
+          <td>$6,000/mo</td>
+          <td>~$1,800/mo</td>
+          <td>$4,200</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="getting-started-api-setup-and-first-request">Getting Started: API Setup and First Request</h2>
+<p>The xAI API endpoint is <code>https://api.x.ai/v1</code> — OpenAI-compatible, which means you can authenticate and call it using the standard <code>openai</code> Python package or TypeScript SDK by overriding the <code>base_url</code> and passing your xAI API key. No separate SDK installation is required: if you already use <code>openai</code>, you are one configuration change away from running Grok in production. API keys are provisioned at <code>https://console.x.ai</code> after creating an xAI account. Billing is usage-based with no monthly minimum, and the same account covers all three Grok models. The model name strings for API calls are <code>grok-4-1-fast</code>, <code>grok-4-20</code>, and <code>grok-code-fast-1</code> — confirm the exact identifiers in the xAI console as naming conventions may evolve. Rate limits on new accounts default to conservative ceilings and can be raised by contacting xAI support with a description of your use case and projected monthly token volume. For teams moving from OpenAI or Anthropic, the most significant integration difference is that real-time web search does not require separate function-calling setup — it is available as a model capability flag in the request body rather than a tool definition. This simplifies the prompt design for search-augmented applications considerably compared to the tool-calling patterns required on GPT-5.5 or Claude.</p>
+<p><strong>Python quickstart using the openai SDK:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> openai <span style="color:#f92672">import</span> OpenAI
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>client <span style="color:#f92672">=</span> OpenAI(
+</span></span><span style="display:flex;"><span>    api_key<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;your-xai-api-key&#34;</span>,
+</span></span><span style="display:flex;"><span>    base_url<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;https://api.x.ai/v1&#34;</span>,
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>response <span style="color:#f92672">=</span> client<span style="color:#f92672">.</span>chat<span style="color:#f92672">.</span>completions<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>    model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;grok-4-20&#34;</span>,
+</span></span><span style="display:flex;"><span>    messages<span style="color:#f92672">=</span>[
+</span></span><span style="display:flex;"><span>        {<span style="color:#e6db74">&#34;role&#34;</span>: <span style="color:#e6db74">&#34;system&#34;</span>, <span style="color:#e6db74">&#34;content&#34;</span>: <span style="color:#e6db74">&#34;You are a helpful assistant.&#34;</span>},
+</span></span><span style="display:flex;"><span>        {<span style="color:#e6db74">&#34;role&#34;</span>: <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#e6db74">&#34;content&#34;</span>: <span style="color:#e6db74">&#34;Summarize the current state of LLM API pricing.&#34;</span>},
+</span></span><span style="display:flex;"><span>    ],
+</span></span><span style="display:flex;"><span>    max_tokens<span style="color:#f92672">=</span><span style="color:#ae81ff">1024</span>,
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>print(response<span style="color:#f92672">.</span>choices[<span style="color:#ae81ff">0</span>]<span style="color:#f92672">.</span>message<span style="color:#f92672">.</span>content)
+</span></span></code></pre></div><p><strong>Switching models is a one-line change:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># Fast, cheap: $0.20/$0.50 per million tokens</span>
+</span></span><span style="display:flex;"><span>model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;grok-4-1-fast&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Flagship reasoning: $2.00/$6.00 per million tokens</span>
+</span></span><span style="display:flex;"><span>model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;grok-4-20&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Coding workloads: $0.20/$1.50 per million tokens</span>
+</span></span><span style="display:flex;"><span>model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;grok-code-fast-1&#34;</span>
+</span></span></code></pre></div><h2 id="cost-optimization-strategies-for-production-grok-deployments">Cost Optimization Strategies for Production Grok Deployments</h2>
+<p>Production Grok deployments achieve the lowest effective cost-per-task by combining model routing, prompt caching, output token discipline, and workload batching — each strategy compounding the savings from the others. The single highest-leverage decision is model routing: not every request in your pipeline needs Grok 4.20&rsquo;s reasoning power, and sending every call to the flagship model when 60–70% of your workload is classification, extraction, or summarization is the most common source of inflated API bills. A routing layer that classifies incoming requests by complexity and directs simple tasks to Grok 4.1 Fast ($0.20/$0.50) and only genuinely complex reasoning to Grok 4.20 ($2.00/$6.00) typically reduces per-token blended cost by 50–70% at scale. Prompt caching addresses repeated context: audit your production system prompts and identify any prefix content that is stable across requests — instructions, policies, reference data, schema definitions — and ensure that content appears at the very start of the prompt to maximize cache hit rates. Output token discipline matters more than most teams realize: unnecessarily verbose completions are expensive at $6.00 per million on Grok 4.20; explicit <code>max_tokens</code> limits and prompt instructions to be concise on structured-output tasks (JSON extraction, classification labels, short summaries) can cut output spend by 20–40% with no quality loss. For batch workloads — document processing, data enrichment, nightly analysis jobs — use the largest feasible batch size to minimize API call overhead and maximize cache utilization across similar requests. Finally, monitor your token usage at the prompt component level (system prompt vs. user message vs. retrieved context) to identify which parts of your prompt are growing over time; unbounded context accumulation in multi-turn agents is one of the fastest ways to watch your Grok 4.20 bill climb unexpectedly.</p>
+<p><strong>Model routing decision framework:</strong></p>
+<table>
+  <thead>
+      <tr>
+          <th>Task Type</th>
+          <th>Recommended Model</th>
+          <th>Rationale</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Classification, tagging</td>
+          <td>Grok 4.1 Fast</td>
+          <td>Simple pattern match; $0.20 input is optimal</td>
+      </tr>
+      <tr>
+          <td>Summarization (&lt; 50K tokens)</td>
+          <td>Grok 4.1 Fast</td>
+          <td>Compression task; fast model sufficient</td>
+      </tr>
+      <tr>
+          <td>Long-doc analysis (&gt; 200K tokens)</td>
+          <td>Grok 4.20</td>
+          <td>Requires large context + quality</td>
+      </tr>
+      <tr>
+          <td>Complex reasoning, research</td>
+          <td>Grok 4.20</td>
+          <td>Full capability needed</td>
+      </tr>
+      <tr>
+          <td>Inline code completion</td>
+          <td>Grok Code Fast 1</td>
+          <td>Coding-optimized; $0.20 input</td>
+      </tr>
+      <tr>
+          <td>Code review, architecture</td>
+          <td>Grok Code Fast 1 or 4.20</td>
+          <td>Depends on codebase size</td>
+      </tr>
+      <tr>
+          <td>Search-augmented Q&amp;A</td>
+          <td>Any Grok model</td>
+          <td>Built-in web search, no extra cost</td>
+      </tr>
+  </tbody>
+</table>
+<p>A blended model routing strategy with 70% Grok 4.1 Fast and 30% Grok 4.20 (assuming a 2:1 input-to-output ratio) reduces effective blended input cost to $0.74/M and output cost to $2.15/M — a 63% reduction vs. using Grok 4.20 for all requests, and 85% cheaper than a GPT-5.5 equivalent deployment.</p>
+<hr>
+<h2 id="frequently-asked-questions">Frequently Asked Questions</h2>
+<p><strong>1. Can I use my existing OpenAI SDK code with the Grok API without rewriting it?</strong></p>
+<p>Yes. The xAI API is fully OpenAI-compatible. You only need to change two things: set <code>base_url=&quot;https://api.x.ai/v1&quot;</code> and replace your OpenAI API key with your xAI API key. Model name strings change (<code>grok-4-20</code> instead of <code>gpt-4o</code>, for example), but all request/response structures, streaming behavior, and tool-calling conventions follow the OpenAI API spec.</p>
+<p><strong>2. Is real-time web search included in the standard per-token pricing, or is it an additional charge?</strong></p>
+<p>Real-time web search is a built-in model capability on all three Grok models and does not carry a separate per-search fee beyond the token cost of the search results returned in the response. When search results are included in the model&rsquo;s context, they count toward your output token billing at the standard rate for that model.</p>
+<p><strong>3. Which Grok model should I use for a coding assistant with a large repository context?</strong></p>
+<p>Grok Code Fast 1 is the designed-for-purpose choice for most coding assistant workloads, offering a 256K context window at $0.20/$1.50 per million tokens. For tasks requiring analysis of extremely large codebases (over 256K tokens) — full monorepo architecture reviews or cross-repository impact analysis — Grok 4.20&rsquo;s 2M context window is the correct tool, at the higher $2.00/$6.00 price point.</p>
+<p><strong>4. Does prompt caching work automatically, or does it require specific API parameters?</strong></p>
+<p>Prompt caching on xAI&rsquo;s API is prefix-based: the API automatically reuses cached KV-state when a new request&rsquo;s prompt begins with a prefix that matches a recently processed request. To maximize cache hits, structure your prompts with stable, repeated content (system instructions, document context, schemas) at the top and dynamic content (user messages, query variables) at the end. No special API flag is required to enable caching — it activates automatically when the cache key matches.</p>
+<p><strong>5. How does Grok 4.20 compare to Claude Opus 4.7 for tasks that need both long context and strong reasoning?</strong></p>
+<p>Grok 4.20 is 7.5× cheaper on input ($2.00 vs. $15.00) and 12.5× cheaper on output ($6.00 vs. $75.00), while supporting a 10× larger context window (2M vs. 200K tokens). For tasks that require both long context and reasoning — large codebase analysis, full-document contract review, multi-source research synthesis — Grok 4.20 is the only model in its price tier that can handle them without chunking. Claude Opus 4.7 remains the benchmark for subtle instruction-following and nuanced creative reasoning on shorter contexts; for long-context reasoning at scale, Grok 4.20&rsquo;s cost and context advantages are decisive.</p>
+]]></content:encoded></item></channel></rss>

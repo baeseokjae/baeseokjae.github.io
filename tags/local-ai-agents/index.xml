@@ -1,0 +1,796 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Local AI Agents on RockB</title><link>https://baeseokjae.github.io/tags/local-ai-agents/</link><description>Recent content in Local AI Agents on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sun, 03 May 2026 21:05:18 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/local-ai-agents/index.xml" rel="self" type="application/rss+xml"/><item><title>Local AI Agents Guide 2026: Build Offline AI Agents with Ollama and Cline</title><link>https://baeseokjae.github.io/posts/local-ai-agents-guide-2026/</link><pubDate>Sun, 03 May 2026 21:05:18 +0000</pubDate><guid>https://baeseokjae.github.io/posts/local-ai-agents-guide-2026/</guid><description>Complete guide to building offline AI agents with Ollama and Cline in 2026 — privacy-first, zero API costs, works air-gapped.</description><content:encoded><![CDATA[<p>Local AI agents run entirely on your own hardware using open-weight models — no cloud API calls, no data leaving your machine, no per-token costs. With Ollama handling local inference and Cline providing the VS Code agent layer, you can build production-capable offline coding agents in under an hour using models like Devstral 24B or Gemma 4 27B.</p>
+<h2 id="why-local-ai-agents-in-2026-the-privacy-and-cost-case">Why Local AI Agents in 2026? The Privacy and Cost Case</h2>
+<p>Local AI agents are autonomous software systems that perceive a goal, plan multi-step actions, and execute them — but run their entire inference stack on your own hardware instead of cloud APIs. In 2026, this distinction matters more than ever: a recent survey found that 63% of employees who used AI tools in 2025 pasted sensitive company data including source code into personal chatbot accounts, creating undisclosed compliance risks. For organizations under HIPAA, SOC 2, or EU AI Act requirements, that statistic is a critical liability. Local agents eliminate the data exfiltration vector entirely — your source code, trade secrets, and internal architecture documents never leave your network.</p>
+<p>The cost argument is equally compelling. Cloud API usage for a developer running Cline heavily averages $80–$200 per month with frontier models like Claude Sonnet or GPT-4o. After initial hardware investment, local inference costs you electricity — roughly $0.10–$0.30 per day on a modern GPU. Over 12 months, a developer spending $150/month on cloud APIs accumulates $1,800 in spend; a local setup on a used RTX 3090 (street price ~$500) breaks even in four months. Gartner projects 40% of enterprise applications will include task-specific AI agents by end of 2026, up from less than 5% in 2025 — and a meaningful slice of that growth is being driven by organizations reclaiming control over their AI inference stack. The productivity numbers back the investment: knowledge workers using production AI agents recover a median 6.4 hours per week per seat.</p>
+<p>Beyond privacy and cost, local agents are the only option for air-gapped environments, development on flights, or regulated industries where internet-connected tooling requires security review. Once your Ollama server is running locally, your agent works identically whether you have network access or not.</p>
+<h2 id="prerequisites-hardware-requirements-and-what-to-realistically-expect">Prerequisites: Hardware Requirements and What to Realistically Expect</h2>
+<p>Before you install anything, map your hardware against the models you plan to run. The single most important variable is VRAM — specifically, can your GPU hold the entire model in VRAM? If not, Ollama splits inference between VRAM and system RAM, which works but is significantly slower.</p>
+<p>8B parameter models (Llama 3.1 8B, Qwen2.5 7B) require approximately 6–7 GB VRAM at Q4_K_M quantization — within reach of an RTX 3060 (12 GB) or Apple M2 (unified memory). These models handle boilerplate generation, simple refactors, and single-file tasks well. For multi-file agent workflows with larger context windows, 8B models show noticeable quality degradation. 32B models like Devstral 24B or Gemma 4 27B need 22–24 GB VRAM — an RTX 3090, RTX 4090, or M3 Max/Ultra (64–128 GB unified memory). This is the tier where local agents start to match cloud model quality for coding tasks. CPU inference is 5–10x slower than GPU inference; NVIDIA CUDA or Apple Silicon Metal is strongly recommended for responsive agent workflows.</p>
+<p><strong>Minimum viable setup:</strong> 16 GB RAM, 8 GB VRAM GPU (RTX 3060 or better), 50 GB SSD space for models. Expect reasonable quality on 7B models.</p>
+<p><strong>Recommended for serious agent work:</strong> 32 GB RAM, 24 GB VRAM (RTX 3090, RTX 4090, or A5000), 100 GB SSD. Runs 24B–32B models fully in VRAM.</p>
+<p><strong>Apple Silicon sweet spot:</strong> M2 Pro (18 GB) handles 13B models; M2 Max/M3 Max (48–96 GB) runs 30B–70B models at good speed. Unified memory architecture means no VRAM/RAM split penalty.</p>
+<h2 id="step-1--install-and-configure-ollama">Step 1 — Install and Configure Ollama</h2>
+<p>Ollama is a runtime that manages local LLM downloads, quantization, and serving. It exposes an OpenAI-compatible REST API at <code>http://localhost:11434</code>, which means any tool designed for OpenAI (including Cline, LangGraph, CrewAI, and AutoGen) works with Ollama by changing one endpoint URL. Installation takes under five minutes.</p>
+<p><strong>macOS / Linux:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>curl -fsSL https://ollama.com/install.sh | sh
+</span></span></code></pre></div><p><strong>Windows:</strong> Download the installer from ollama.com. Ollama runs as a system service automatically.</p>
+<p>After installation, verify Ollama is running:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ollama --version
+</span></span><span style="display:flex;"><span>curl http://localhost:11434/api/tags
+</span></span></code></pre></div><p>Pull your first model. Start with a smaller model to verify the pipeline works, then scale up:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Fast verification model (6 GB VRAM)</span>
+</span></span><span style="display:flex;"><span>ollama pull qwen2.5-coder:7b-instruct-q4_K_M
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Recommended for agent tasks (20 GB VRAM)</span>
+</span></span><span style="display:flex;"><span>ollama pull devstral:24b
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Strong generalist + function calling (22 GB VRAM)</span>
+</span></span><span style="display:flex;"><span>ollama pull gemma3:27b
+</span></span></code></pre></div><p>Test inference directly:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ollama run qwen2.5-coder:7b-instruct-q4_K_M <span style="color:#e6db74">&#34;Write a Python function to parse JWT tokens&#34;</span>
+</span></span></code></pre></div><p>Configure Ollama&rsquo;s environment for agent workloads. Add these to your shell profile or systemd service:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Allow external connections (needed if Cline is on a different machine)</span>
+</span></span><span style="display:flex;"><span>export OLLAMA_HOST<span style="color:#f92672">=</span>0.0.0.0:11434
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Increase context window for agent tasks (default 2048 is far too small)</span>
+</span></span><span style="display:flex;"><span>export OLLAMA_NUM_CTX<span style="color:#f92672">=</span><span style="color:#ae81ff">32768</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Keep model loaded between requests (default 5 minutes is too short for agent sessions)</span>
+</span></span><span style="display:flex;"><span>export OLLAMA_KEEP_ALIVE<span style="color:#f92672">=</span>60m
+</span></span></code></pre></div><h2 id="step-2--choose-the-right-local-model-for-agent-tasks">Step 2 — Choose the Right Local Model for Agent Tasks</h2>
+<p>Not all open-weight models are equally capable for agentic work. Coding agents need models that can follow multi-step instructions, maintain consistency across a long context window, and optionally support function calling for tool use. In 2026, three models stand out for Ollama-based agent workflows.</p>
+<p><strong>Devstral Small 24B</strong> ranked as the best Ollama model for coding in 2026, purpose-built for agentic multi-file edits. Mistral AI trained it specifically on coding agent benchmarks rather than general instruction following — it produces fewer hallucinated file paths, tracks state across long edits more reliably, and handles Cline&rsquo;s multi-file workflow better than generalist models at the same size. Requires ~20 GB VRAM at Q4_K_M. This is the model to use if coding agent quality is your primary goal.</p>
+<p><strong>Gemma 4 27B</strong> launched April 2, 2026, and immediately became the strongest open model for agent tasks in the sub-32B range with native function calling support. Its architecture improvements over Gemma 3 show clearly in tool-use tasks — function calls are more reliably formatted and it recovers from errors more gracefully. If you need a model that works well for both coding and general reasoning agent tasks, Gemma 4 27B is the better choice. Requires ~22 GB VRAM.</p>
+<p><strong>Qwen3-Coder 30B</strong> is the strongest option if you need deep context (supports up to 128K tokens) for very large codebases. At Q4_K_M it needs ~24 GB VRAM. Best for agents that need to hold entire project contexts in memory simultaneously.</p>
+<p>For machines with only 8 GB VRAM, Qwen2.5-Coder 7B-Instruct is the best choice for routine coding tasks. Expect it to struggle with complex multi-file reasoning but handle boilerplate, simple refactors, and file scaffolding well.</p>
+<h2 id="step-3--install-cline-in-vs-code-and-connect-to-ollama">Step 3 — Install Cline in VS Code and Connect to Ollama</h2>
+<p>Cline is an open-source VS Code extension that functions as a full AI coding agent — it can read files, edit code, run terminal commands, browse the web, and execute multi-step plans autonomously. Unlike GitHub Copilot, Cline is fully BYOM (bring your own model): you can point it at any OpenAI-compatible endpoint including your local Ollama server. Cline CLI 2.0 (released early 2026) added parallel and headless workflow support, making it viable for automated pipelines beyond interactive IDE use.</p>
+<p><strong>Install Cline:</strong></p>
+<ol>
+<li>Open VS Code Extensions panel (<code>Ctrl+Shift+X</code>)</li>
+<li>Search &ldquo;Cline&rdquo; and install the official extension by saoudrizwan</li>
+<li>Open Cline from the sidebar (robot icon) or <code>Ctrl+Shift+P</code> → &ldquo;Cline: Open&rdquo;</li>
+</ol>
+<p><strong>Configure Ollama as provider:</strong></p>
+<ol>
+<li>In Cline settings, set <strong>API Provider</strong> to <code>Ollama</code></li>
+<li>Set <strong>Base URL</strong> to <code>http://localhost:11434</code> (or your Ollama host IP)</li>
+<li>The model list auto-populates from your locally pulled models</li>
+<li>Select your model (e.g., <code>devstral:24b</code>)</li>
+</ol>
+<p>At this point, Cline is functional but will fail on complex tasks due to context length — see the next section for the critical fix.</p>
+<p><strong>Optional: Test with a simple task</strong></p>
+<p>Open any project folder in VS Code and ask Cline:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 536 25"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>F</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='144' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='152' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>P</text>
+<text text-anchor='middle' x='176' y='4' fill='currentColor' style='font-size:1em'>I</text>
+<text text-anchor='middle' x='192' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='200' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='208' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='216' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='224' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='232' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='248' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='256' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='264' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='272' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='280' y='4' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='296' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='304' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='312' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='320' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='328' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='336' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='344' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='352' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='368' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='376' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='392' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='400' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='408' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='416' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='424' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='432' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='440' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='448' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='456' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='464' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='472' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='480' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='488' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='496' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='504' y='4' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='512' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='520' y='4' fill='currentColor' style='font-size:1em'>y</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>If Cline reads your project structure, creates the file, and explains what it did, your basic pipeline is working.</p>
+<h2 id="step-4--fix-the-context-length-problem-critical-step-most-guides-skip">Step 4 — Fix the Context Length Problem (Critical Step Most Guides Skip)</h2>
+<p>This is the most common reason local agent setups fail silently. Ollama&rsquo;s default context length for most models is 2,048 tokens. Cline&rsquo;s system prompt alone is ~4,000 tokens before your conversation or code even begins. The result: Cline appears to work but produces inconsistent results, loses track of earlier files it read, or starts hallucinating file contents because the model&rsquo;s context window filled up and older tokens were evicted.</p>
+<p>The fix requires creating a custom Modelfile that overrides Ollama&rsquo;s context length parameter:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Create a Modelfile for Devstral with proper context</span>
+</span></span><span style="display:flex;"><span>cat &gt; ~/Modelfile.devstral-agent <span style="color:#e6db74">&lt;&lt; &#39;EOF&#39;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">FROM devstral:24b
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">PARAMETER num_ctx 32768
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">PARAMETER num_predict 4096
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">PARAMETER temperature 0.1
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">EOF</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Build the custom model</span>
+</span></span><span style="display:flex;"><span>ollama create devstral-agent -f ~/Modelfile.devstral-agent
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify the context parameter took effect</span>
+</span></span><span style="display:flex;"><span>ollama show devstral-agent --parameters | grep num_ctx
+</span></span></code></pre></div><p>Then update Cline to use <code>devstral-agent</code> instead of <code>devstral:24b</code>. You should see immediate improvement in multi-file task coherence.</p>
+<p><strong>Context length recommendations by task type:</strong></p>
+<table>
+  <thead>
+      <tr>
+          <th>Task</th>
+          <th>Recommended num_ctx</th>
+          <th>Why</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Simple single-file edits</td>
+          <td>8,192</td>
+          <td>Fast inference, Cline system prompt fits</td>
+      </tr>
+      <tr>
+          <td>Multi-file refactors</td>
+          <td>32,768</td>
+          <td>Holds file contents + history</td>
+      </tr>
+      <tr>
+          <td>Large codebase analysis</td>
+          <td>65,536</td>
+          <td>Full project context</td>
+      </tr>
+      <tr>
+          <td>Very large repos</td>
+          <td>131,072 (Qwen3 only)</td>
+          <td>Full project + conversation history</td>
+      </tr>
+  </tbody>
+</table>
+<p>Higher context length uses more VRAM at inference time. If your model starts failing to load after increasing <code>num_ctx</code>, reduce it until it fits. A 24B model at 32K context needs roughly 2–3 GB more VRAM than at 2K context.</p>
+<h2 id="step-5--build-your-first-local-agent-pipeline">Step 5 — Build Your First Local Agent Pipeline</h2>
+<p>With Ollama serving and Cline configured correctly, you&rsquo;re ready to run your first real agent task. A good first test is a multi-file project scaffold — it exercises file creation, directory awareness, and multi-step planning simultaneously.</p>
+<p><strong>Example: Scaffold a FastAPI project with local agent</strong></p>
+<p>In Cline&rsquo;s chat, enter:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 520 137"
+      >
+      <g transform='translate(8,16)'>
+<path d='M 48,80 L 64,48' fill='none' stroke='currentColor'></path>
+<circle cx='48' cy='80' r='6' stroke='currentColor' fill='#fff'></circle>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='0' y='20' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='0' y='36' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='0' y='52' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='0' y='68' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='0' y='84' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='0' y='116' fill='currentColor' style='font-size:1em'>D</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='8' y='116' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='16' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='16' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='16' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='16' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='16' y='84' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='24' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='24' y='36' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='24' y='52' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='24' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='24' y='84' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='24' y='116' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='32' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='32' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='32' y='52' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='32' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='32' y='84' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='32' y='116' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='40' y='20' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='40' y='36' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='40' y='52' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='40' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='40' y='84' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='40' y='116' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='48' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='48' y='36' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='48' y='52' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='48' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='56' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='56' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='56' y='52' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='56' y='84' fill='currentColor' style='font-size:1em'>j</text>
+<text text-anchor='middle' x='56' y='116' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='64' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='64' y='36' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='64' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='64' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='64' y='116' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>F</text>
+<text text-anchor='middle' x='72' y='20' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='72' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='72' y='52' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='72' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='72' y='84' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='72' y='116' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='80' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='80' y='36' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='80' y='52' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='80' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='80' y='84' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='88' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='88' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='88' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='88' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='88' y='84' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='88' y='116' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='96' y='20' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='96' y='36' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='96' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='96' y='68' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='96' y='84' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='96' y='116' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='104' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='104' y='36' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='104' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='104' y='68' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='104' y='84' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='104' y='116' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>P</text>
+<text text-anchor='middle' x='112' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='112' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='112' y='52' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='112' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='112' y='84' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='120' y='4' fill='currentColor' style='font-size:1em'>I</text>
+<text text-anchor='middle' x='120' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='120' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='120' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='120' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='120' y='84' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='120' y='116' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='128' y='20' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='128' y='36' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='128' y='52' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='128' y='68' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='128' y='116' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='136' y='36' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='136' y='52' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='136' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='136' y='84' fill='currentColor' style='font-size:1em'>w</text>
+<text text-anchor='middle' x='136' y='116' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='144' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='144' y='20' fill='currentColor' style='font-size:1em'>(</text>
+<text text-anchor='middle' x='144' y='36' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='144' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='144' y='68' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='144' y='84' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='144' y='116' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='152' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='152' y='20' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='152' y='36' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='152' y='52' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='152' y='68' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='152' y='84' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='152' y='116' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>j</text>
+<text text-anchor='middle' x='160' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='160' y='52' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='160' y='68' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='160' y='84' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='160' y='116' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='168' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='168' y='36' fill='currentColor' style='font-size:1em'>(</text>
+<text text-anchor='middle' x='168' y='52' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='168' y='68' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='168' y='116' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='176' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='176' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='176' y='36' fill='currentColor' style='font-size:1em'>P</text>
+<text text-anchor='middle' x='176' y='84' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='176' y='116' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='184' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='184' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='184' y='36' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='184' y='52' fill='currentColor' style='font-size:1em'>(</text>
+<text text-anchor='middle' x='184' y='68' fill='currentColor' style='font-size:1em'>(</text>
+<text text-anchor='middle' x='184' y='84' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='184' y='116' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='192' y='20' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='192' y='36' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='192' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='192' y='68' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='192' y='84' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='192' y='116' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='200' y='4' fill='currentColor' style='font-size:1em'>w</text>
+<text text-anchor='middle' x='200' y='20' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='200' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='200' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='200' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='200' y='84' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='200' y='116' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='208' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='208' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='208' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='208' y='52' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='208' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='208' y='84' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='208' y='116' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='216' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='216' y='20' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='216' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='216' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='216' y='68' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='216' y='84' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='216' y='116' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='224' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='224' y='20' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='224' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='224' y='52' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='224' y='68' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='224' y='84' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='224' y='116' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='232' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='232' y='84' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='240' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='240' y='20' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='240' y='52' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='240' y='68' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='240' y='116' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='248' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='248' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='248' y='36' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='248' y='52' fill='currentColor' style='font-size:1em'>Q</text>
+<text text-anchor='middle' x='248' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='248' y='84' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='248' y='116' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='256' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='256' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='256' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='256' y='52' fill='currentColor' style='font-size:1em'>L</text>
+<text text-anchor='middle' x='256' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='256' y='84' fill='currentColor' style='font-size:1em'>q</text>
+<text text-anchor='middle' x='256' y='116' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='264' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='264' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='264' y='36' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='264' y='52' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='264' y='68' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='264' y='84' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='264' y='116' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='272' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='272' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='272' y='52' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='272' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='272' y='84' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='272' y='116' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='280' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='280' y='20' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='280' y='36' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='280' y='52' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='280' y='68' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='280' y='84' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='280' y='116' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='288' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='288' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='288' y='52' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='288' y='84' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='296' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='296' y='20' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='296' y='36' fill='currentColor' style='font-size:1em'>w</text>
+<text text-anchor='middle' x='296' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='296' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='296' y='84' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='296' y='116' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='304' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='304' y='20' fill='currentColor' style='font-size:1em'>)</text>
+<text text-anchor='middle' x='304' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='304' y='52' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='304' y='68' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='304' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='304' y='116' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='312' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='312' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='312' y='52' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='312' y='68' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='312' y='84' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='312' y='116' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='320' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='320' y='36' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='320' y='68' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='320' y='84' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='328' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='328' y='52' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='328' y='68' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='328' y='84' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='328' y='116' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='336' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='336' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='336' y='52' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='336' y='68' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='336' y='116' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='344' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='344' y='36' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='344' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='344' y='68' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='344' y='84' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='344' y='116' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='352' y='4' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='352' y='36' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='352' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='352' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='352' y='84' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='352' y='116' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='360' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='360' y='84' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='360' y='116' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='368' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='368' y='52' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='368' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='368' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='376' y='36' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='376' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='376' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='376' y='84' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='376' y='116' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='384' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='384' y='52' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='384' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='384' y='84' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='384' y='116' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='392' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='392' y='52' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='392' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='392' y='116' fill='currentColor' style='font-size:1em'>w</text>
+<text text-anchor='middle' x='400' y='36' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='400' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='400' y='68' fill='currentColor' style='font-size:1em'>)</text>
+<text text-anchor='middle' x='400' y='84' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='400' y='116' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='408' y='36' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='408' y='52' fill='currentColor' style='font-size:1em'>)</text>
+<text text-anchor='middle' x='408' y='84' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='416' y='84' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='424' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='424' y='84' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='432' y='36' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='440' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='448' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='456' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='464' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='472' y='36' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='480' y='36' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='488' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='496' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='504' y='36' fill='currentColor' style='font-size:1em'>)</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>Watch Cline&rsquo;s output panel — it will read your current directory, plan the file structure, create each file, and report back. The &ldquo;Do not ask for clarification&rdquo; instruction is important: without it, less capable local models tend to ask unnecessary questions rather than acting.</p>
+<p><strong>Monitoring agent execution:</strong></p>
+<p>Cline shows its thinking and tool calls in the sidebar. You can see every file read, every terminal command run, and every file written. This transparency is a significant advantage of local setups — you have full visibility into what your agent is doing, unlike opaque cloud API calls.</p>
+<p><strong>Key Cline settings for local models:</strong></p>
+<ul>
+<li>Set <strong>Max Tokens</strong> to 4,096 (local models handle longer outputs poorly)</li>
+<li>Enable <strong>Auto-approve read operations</strong> for faster iteration</li>
+<li>Set <strong>Request delay</strong> to 0 (no need for rate limit protection with local inference)</li>
+<li>Disable <strong>Streaming</strong> if responses appear garbled (some Ollama builds have streaming bugs)</li>
+</ul>
+<h2 id="going-further-langgraph-and-crewai-with-ollama-for-multi-agent-systems">Going Further: LangGraph and CrewAI with Ollama for Multi-Agent Systems</h2>
+<p>Cline handles the interactive coding agent use case well, but for orchestrated multi-agent pipelines — research agents, QA agents, deployment agents working in parallel — you need a framework. LangGraph and CrewAI are the two dominant options in 2026, both fully compatible with Ollama&rsquo;s OpenAI-compatible API.</p>
+<p>LangGraph surpassed CrewAI in GitHub stars during early 2026 due to enterprise adoption, primarily because of its checkpointing and audit trail capabilities. A LangGraph agent can pause mid-task, save state to disk, and resume after a crash — essential for long-running agent workflows. It excels for production agents needing deterministic replay and debugging. The trade-off: LangGraph&rsquo;s graph-based API requires more upfront design work.</p>
+<p>CrewAI is best for rapid prototyping. You define agents with roles and goals in plain language, assign them tasks, and let the framework handle orchestration. A CrewAI research + write + review pipeline can be running in 50 lines of code. The trade-off: less fine-grained control over agent behavior and limited checkpointing.</p>
+<p><strong>Quick LangGraph + Ollama setup:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> langchain_ollama <span style="color:#f92672">import</span> ChatOllama
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> langgraph.graph <span style="color:#f92672">import</span> StateGraph, END
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>llm <span style="color:#f92672">=</span> ChatOllama(
+</span></span><span style="display:flex;"><span>    model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;devstral-agent&#34;</span>,
+</span></span><span style="display:flex;"><span>    base_url<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;http://localhost:11434&#34;</span>,
+</span></span><span style="display:flex;"><span>    temperature<span style="color:#f92672">=</span><span style="color:#ae81ff">0.1</span>,
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Define your graph nodes and edges</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># LangGraph handles state management and retries</span>
+</span></span></code></pre></div><p><strong>Quick CrewAI + Ollama setup:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> crewai <span style="color:#f92672">import</span> Agent, Task, Crew
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> langchain_ollama <span style="color:#f92672">import</span> ChatOllama
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>local_llm <span style="color:#f92672">=</span> ChatOllama(model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;devstral-agent&#34;</span>, base_url<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;http://localhost:11434&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>coder <span style="color:#f92672">=</span> Agent(
+</span></span><span style="display:flex;"><span>    role<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;Senior Python Developer&#34;</span>,
+</span></span><span style="display:flex;"><span>    goal<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;Write clean, tested Python code&#34;</span>,
+</span></span><span style="display:flex;"><span>    llm<span style="color:#f92672">=</span>local_llm,
+</span></span><span style="display:flex;"><span>    verbose<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>reviewer <span style="color:#f92672">=</span> Agent(
+</span></span><span style="display:flex;"><span>    role<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;Code Reviewer&#34;</span>,
+</span></span><span style="display:flex;"><span>    goal<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;Review code for bugs and style issues&#34;</span>,
+</span></span><span style="display:flex;"><span>    llm<span style="color:#f92672">=</span>local_llm,
+</span></span><span style="display:flex;"><span>    verbose<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre></div><p>For most teams starting with multi-agent local setups, CrewAI&rsquo;s faster iteration speed wins in the first month. Migrate to LangGraph when you need production reliability and audit trails.</p>
+<h2 id="local-vs-cloud-when-to-use-each-and-how-to-switch-seamlessly-with-cline">Local vs Cloud: When to Use Each and How to Switch Seamlessly with Cline</h2>
+<p>The binary &ldquo;local vs cloud&rdquo; framing is outdated in 2026. Cline&rsquo;s BYOM architecture lets you switch models per task or per session, making the practical question &ldquo;which model for which task&rdquo; rather than a permanent commitment.</p>
+<p>Local models win on: routine boilerplate, simple refactors, file scaffolding, anything touching sensitive IP, air-gapped environments, and high-frequency automation where API costs accumulate. A 24B local model handles 80% of day-to-day coding agent tasks at comparable quality to frontier cloud models, at zero marginal cost.</p>
+<p>Cloud models still lead on: complex multi-file architectural reasoning, novel algorithm design, tasks requiring broad world knowledge, and anything where a wrong answer has high consequences and you want the strongest possible model. Claude 3.7 Sonnet and GPT-4o remain ahead of any local model for these tasks in 2026.</p>
+<p><strong>Cline&rsquo;s switching workflow:</strong></p>
+<p>In Cline settings, you can configure multiple &ldquo;profiles&rdquo; — different model + endpoint combinations. Switch between them with a click:</p>
+<ul>
+<li>Profile &ldquo;Local-Fast&rdquo;: <code>qwen2.5-coder:7b</code> — for quick completions, low stakes</li>
+<li>Profile &ldquo;Local-Quality&rdquo;: <code>devstral-agent</code> — for serious multi-file work, no cloud</li>
+<li>Profile &ldquo;Cloud-Frontier&rdquo;: Claude Sonnet via Anthropic API — for architectural reviews</li>
+</ul>
+<p>A practical hybrid workflow: run 90% of tasks on local Devstral, switch to cloud Claude for the 10% that require frontier-level reasoning. This reduces cloud API spend by ~10x compared to cloud-only while maintaining quality on hard problems.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Task Type</th>
+          <th>Local Model</th>
+          <th>Cloud Model</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Boilerplate generation</td>
+          <td>✓ Best</td>
+          <td>Overkill</td>
+      </tr>
+      <tr>
+          <td>Simple refactors</td>
+          <td>✓ Best</td>
+          <td>Overkill</td>
+      </tr>
+      <tr>
+          <td>Unit test generation</td>
+          <td>✓ Good</td>
+          <td>Slightly better</td>
+      </tr>
+      <tr>
+          <td>Multi-file architecture</td>
+          <td>Adequate</td>
+          <td>✓ Better</td>
+      </tr>
+      <tr>
+          <td>Novel algorithm design</td>
+          <td>Struggles</td>
+          <td>✓ Best</td>
+      </tr>
+      <tr>
+          <td>Code review on complex PRs</td>
+          <td>Adequate</td>
+          <td>✓ Best</td>
+      </tr>
+      <tr>
+          <td>Sensitive code (IP, HIPAA)</td>
+          <td>✓ Required</td>
+          <td>Risk</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="troubleshooting-common-issues">Troubleshooting Common Issues</h2>
+<p>Most local agent failures fall into four categories: context overflow, model loading errors, slow inference, and API format mismatches. Here&rsquo;s how to diagnose and fix each.</p>
+<p><strong>Problem: Cline gives inconsistent results or forgets earlier files</strong></p>
+<p>Cause: Context overflow — the model&rsquo;s context window filled up.</p>
+<p>Fix: Create a custom Modelfile with <code>PARAMETER num_ctx 32768</code> as described in Step 4. Also check Ollama logs for &ldquo;context length exceeded&rdquo; warnings:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ollama logs | grep -i context
+</span></span></code></pre></div><p><strong>Problem: Ollama reports &ldquo;model too large for available VRAM&rdquo;</strong></p>
+<p>Cause: Model doesn&rsquo;t fit in VRAM. Ollama falls back to CPU+RAM hybrid.</p>
+<p>Fix options: (1) Use a more aggressively quantized version (<code>q3_K_M</code> instead of <code>q4_K_M</code> — reduces quality slightly), (2) Use a smaller model, (3) Add <code>OLLAMA_NUM_GPU=0</code> env var to force pure CPU if you prefer consistent (but slow) inference.</p>
+<p><strong>Problem: Inference is very slow (&gt;30 seconds per response)</strong></p>
+<p>Cause: Running on CPU only, or VRAM is shared with other processes.</p>
+<p>Fix: Verify Ollama is using your GPU:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ollama ps  <span style="color:#75715e"># Shows active models and hardware</span>
+</span></span><span style="display:flex;"><span>nvidia-smi  <span style="color:#75715e"># Check GPU memory usage</span>
+</span></span></code></pre></div><p>Close other GPU-intensive applications. On Linux, ensure the CUDA toolkit is installed and Ollama can detect it.</p>
+<p><strong>Problem: Cline shows API errors or garbled responses</strong></p>
+<p>Cause: Ollama API format mismatch, usually streaming-related.</p>
+<p>Fix: In Cline settings, disable streaming. Also verify your Ollama version supports the model you&rsquo;re running:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ollama --version  <span style="color:#75715e"># Should be 0.4.0+ for 2026 models</span>
+</span></span></code></pre></div><p><strong>Problem: Agent creates files in wrong locations or makes up paths</strong></p>
+<p>Cause: Model quality limitation — smaller models (7B) struggle with large directory trees.</p>
+<p>Fix: Provide explicit context in your Cline prompt:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 608 41"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='0' y='20' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='8' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='16' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='24' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='32' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='40' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='56' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='64' y='20' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='72' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>j</text>
+<text text-anchor='middle' x='88' y='20' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='96' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='104' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='112' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='120' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='128' y='20' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='144' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='144' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='152' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='152' y='20' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='160' y='20' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='168' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='176' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='176' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='184' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='184' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='192' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='192' y='20' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='200' y='4' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='200' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='216' y='4' fill='currentColor' style='font-size:1em'>[</text>
+<text text-anchor='middle' x='216' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='224' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='224' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='232' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='240' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='240' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='248' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='248' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='256' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='256' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='264' y='20' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='272' y='4' fill='currentColor' style='font-size:1em'>`</text>
+<text text-anchor='middle' x='272' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='280' y='4' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='280' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='288' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='288' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='296' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='296' y='20' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='304' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='304' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='312' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='320' y='4' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='320' y='20' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='328' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='336' y='4' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='336' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='344' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='344' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='352' y='4' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='352' y='20' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='360' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='360' y='20' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='368' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='368' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='376' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='384' y='4' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='384' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='392' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='400' y='4' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='400' y='20' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='408' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='408' y='20' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='416' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='416' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='424' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='424' y='20' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='432' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='448' y='4' fill='currentColor' style='font-size:1em'>"</text>
+<text text-anchor='middle' x='456' y='4' fill='currentColor' style='font-size:1em'>*</text>
+<text text-anchor='middle' x='464' y='4' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='472' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='480' y='4' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='488' y='4' fill='currentColor' style='font-size:1em'>"</text>
+<text text-anchor='middle' x='504' y='4' fill='currentColor' style='font-size:1em'>|</text>
+<text text-anchor='middle' x='520' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='528' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='536' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='544' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='560' y='4' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='568' y='4' fill='currentColor' style='font-size:1em'>3</text>
+<text text-anchor='middle' x='576' y='4' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='584' y='4' fill='currentColor' style='font-size:1em'>`</text>
+<text text-anchor='middle' x='592' y='4' fill='currentColor' style='font-size:1em'>]</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>Smaller models need more explicit scaffolding; 24B+ models can infer structure from reading the project.</p>
+<hr>
+<h2 id="faq">FAQ</h2>
+<p><strong>Can I run local AI agents without a GPU?</strong></p>
+<p>Yes — Ollama runs on CPU-only hardware, but inference is 5–10x slower. On a modern CPU (16-core Ryzen 9 or Apple M2 without GPU acceleration), a 7B model generates roughly 3–8 tokens per second. For interactive agent use, this is painfully slow. For overnight batch processing or low-latency-tolerant automation, CPU inference is usable. Apple Silicon Macs are the exception: their unified memory architecture gives Metal-accelerated inference that rivals dedicated GPU performance per dollar.</p>
+<p><strong>Which is better for local agents: Cline or Continue?</strong></p>
+<p>Cline is the stronger agent framework in 2026 for autonomous multi-step tasks — it has deeper tool use, better file management, and the BYOM model switching that makes hybrid local/cloud workflows practical. Continue is better for code completion and inline suggestions (Tab autocomplete). Many developers run both: Continue for autocomplete, Cline for agent tasks. If you&rsquo;re only going to install one, the choice depends on whether you want completion (Continue) or autonomous action (Cline).</p>
+<p><strong>How do I prevent my local agent from running dangerous terminal commands?</strong></p>
+<p>In Cline settings, disable &ldquo;Auto-approve terminal commands&rdquo; and enable &ldquo;Require approval for all shell executions.&rdquo; Cline will show you each command before running it and wait for your approval. For fully automated pipelines (no human in the loop), consider sandboxing with Docker: run your agent inside a container with limited filesystem access and no network egress. LangGraph&rsquo;s interrupt-before-action pattern also works well for command approval in programmatic pipelines.</p>
+<p><strong>What&rsquo;s the minimum RAM for a useful local agent setup?</strong></p>
+<p>16 GB RAM is the practical minimum for running a 7B model locally while VS Code and other dev tools are open. 32 GB RAM lets you run 13B–24B models without memory pressure. With 64 GB RAM you can run 70B models on CPU (slowly) or large context windows on 24B models. RAM matters most when the model exceeds VRAM and Ollama needs to page between VRAM and system RAM — in that case, fast RAM (DDR5 or Apple unified memory) meaningfully improves inference speed.</p>
+<p><strong>Does Ollama support multiple concurrent agent requests?</strong></p>
+<p>Yes, but with caveats. Ollama can serve multiple requests concurrently if the model fits in VRAM with room to spare for multiple KV caches. By default, Ollama queues requests to a single model instance. For high-concurrency multi-agent setups (multiple CrewAI agents calling Ollama simultaneously), set <code>OLLAMA_MAX_LOADED_MODELS=2</code> and run two instances of your model, or use a request queue in your orchestration layer. LangGraph handles this more cleanly than CrewAI out of the box with its built-in concurrency primitives.</p>
+]]></content:encoded></item></channel></rss>

@@ -1,0 +1,313 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Agent Cost Circuit Breaker on RockB</title><link>https://baeseokjae.github.io/tags/agent-cost-circuit-breaker/</link><description>Recent content in Agent Cost Circuit Breaker on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sat, 20 Jun 2026 12:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/agent-cost-circuit-breaker/index.xml" rel="self" type="application/rss+xml"/><item><title>Agent Cost Circuit Breaker Pattern Guide: How to Stop Runaway AI Spend Before It Starts</title><link>https://baeseokjae.github.io/posts/agent-cost-circuit-breaker-pattern-guide-2026/</link><pubDate>Sat, 20 Jun 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-cost-circuit-breaker-pattern-guide-2026/</guid><description>Implement agent cost circuit breakers to prevent runaway AI spend — covering four trigger dimensions, three-layer hierarchy, retry budgets, semantic loo...</description><content:encoded><![CDATA[<p>An agent cost circuit breaker is an architectural control layer that monitors cost velocity, iteration count, consecutive failures, and scope violations in real time — then terminates execution when thresholds are exceeded, preventing the kind of runaway spend that has produced documented single-incident bills of $437, $47,000, and $2,847 from agents running unsupervised loops. This guide covers the four trigger dimensions, how to implement them at the provider/tool/session level, and why enforcement must live outside agent code at the governance plane.</p>
+<hr>
+<h2 id="what-makes-agent-cost-circuit-breakers-different-from-traditional-circuit-breakers">What Makes Agent Cost Circuit Breakers Different From Traditional Circuit Breakers?</h2>
+<p>Traditional microservice circuit breakers guard against downstream service failure. They track error rates and open when a dependency is unhealthy. Agent cost circuit breakers track something fundamentally different: <em>behavioral signals</em> that indicate an agent is stuck in a pathological loop — even when every individual API call succeeds. A LangChain agent making 847 identical GPT-4 calls in under a minute isn&rsquo;t hitting errors; it&rsquo;s getting successful responses that confuse it into repeating itself. The $47,000 four-agent loop over 11 days (<a href="https://ravoid.com/blog/ai-agent-budget-enforcement">source</a>) involved four agents on the A2A protocol ping-ponging work back and forth, each call succeeding, each response looking legitimate in isolation. Only the aggregate pattern — cost velocity, repetitive tool signatures, zero progress — revealed the pathology.</p>
+<p>Standard circuit breaker state machines (CLOSED/OPEN/HALF_OPEN) also don&rsquo;t account for per-tool isolation. If your web scraping tool is looping but your CRM write tool is fine, a monolithic breaker kills everything. The agent-specific version needs per-tool, per-provider, and per-session breakers operating independently.</p>
+<h2 id="the-four-trigger-dimensions-every-agent-breaker-must-monitor">The Four Trigger Dimensions Every Agent Breaker Must Monitor</h2>
+<p>I&rsquo;ve found that teams implementing circuit breakers for agents consistently miss one or more of these dimensions, leaving blind spots that produce real damage. An effective breaker monitors all four simultaneously.</p>
+<h3 id="1-runaway-loop-detection-same-tool--same-args">1. Runaway Loop Detection (Same Tool + Same Args)</h3>
+<p>The simplest trigger: detect when an agent calls the same tool with the same arguments repeatedly. SHA-256 hash of <code>(tool_name, serialized_args)</code> with a sliding window of 3 identical calls is the baseline implementation. This catches the common failure mode where an agent receives an ambiguous response and retries the exact same call hoping for a different result.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> hashlib <span style="color:#f92672">import</span> sha256
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> collections <span style="color:#f92672">import</span> deque
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">LoopDetector</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> __init__(self, window_size<span style="color:#f92672">=</span><span style="color:#ae81ff">3</span>):
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>window <span style="color:#f92672">=</span> deque(maxlen<span style="color:#f92672">=</span>window_size)
+</span></span><span style="display:flex;"><span>    
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">check</span>(self, tool_name: str, args: dict) <span style="color:#f92672">-&gt;</span> bool:
+</span></span><span style="display:flex;"><span>        h <span style="color:#f92672">=</span> sha256(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">{</span>tool_name<span style="color:#e6db74">}</span><span style="color:#e6db74">:</span><span style="color:#e6db74">{</span>json<span style="color:#f92672">.</span>dumps(args, sort_keys<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>)<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span><span style="color:#f92672">.</span>encode())<span style="color:#f92672">.</span>hexdigest()
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>window<span style="color:#f92672">.</span>append(h)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> len(self<span style="color:#f92672">.</span>window) <span style="color:#f92672">==</span> self<span style="color:#f92672">.</span>window<span style="color:#f92672">.</span>maxlen <span style="color:#f92672">and</span> len(set(self<span style="color:#f92672">.</span>window)) <span style="color:#f92672">==</span> <span style="color:#ae81ff">1</span>
+</span></span></code></pre></div><h3 id="2-cost-velocity-tokenssec-min">2. Cost Velocity (Tokens/sec, $/min)</h3>
+<p>Cost velocity catches the fires that step-count caps miss. An agent making 8,000 tokens/min against a normal baseline of 500 tokens/min is clearly in trouble, but a static $100 run cap won&rsquo;t trip until significant damage is done. Velocity tracking uses a rolling window (last 60 seconds) compared against a trailing baseline (last 24 hours or 100 runs). A reasonable threshold is 3× standard deviation above the mean.</p>
+<p><a href="/posts/claude-code-task-budgets-guide-2026/">Claude Code task budgets</a> provide session-level advisory limits, but they run inside the agent process. Cost velocity enforcement at the gateway layer catches what session-level caps miss by acting on burn rate rather than total burn.</p>
+<h3 id="3-consecutive-failures-same-operation-n-times">3. Consecutive Failures (Same Operation, N Times)</h3>
+<p>This one is straightforward and maps most closely to traditional circuit breakers. If the same step fails 3 times consecutively — whether it&rsquo;s an API timeout, a malformed response, or a validation error — trip the breaker for that tool. The key difference from standard retry logic: a circuit breaker for agents should also classify the error type before tripping. A 4xx response should trip <em>immediately</em> (the request won&rsquo;t succeed no matter how many times you retry), while 5xx and 429 should count against the retry budget first.</p>
+<h3 id="4-scope-violations">4. Scope Violations</h3>
+<p>When an agent attempts an action outside its defined permission boundaries — writing to a database it shouldn&rsquo;t, calling an API it hasn&rsquo;t been authorized for — the breaker should trip on the first violation. Unlike the other three dimensions, this is an instant open, not a threshold-based decision. The scope allowlist must be enforced at the governance plane, not in the agent&rsquo;s system prompt (which agents can be instructed to ignore).</p>
+<h2 id="three-layer-circuit-breaker-hierarchy-provider-tool-and-session">Three-Layer Circuit Breaker Hierarchy: Provider, Tool, and Session</h2>
+<p>Based on the <a href="https://appscale.blog/en/blog/microservices-pattern-agent-level-circuit-breakers-2026">AppScale architecture</a> and my own production experience, the most robust approach is three independent breaker scopes:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Layer</th>
+          <th>Scope</th>
+          <th>Threshold Example</th>
+          <th>Cooldown</th>
+          <th>Half-Open Strategy</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Provider</td>
+          <td>All calls to a model endpoint</td>
+          <td>50% error rate over 20 requests or 60s</td>
+          <td>30s + exponential backoff</td>
+          <td>10% traffic with simplified prompts</td>
+      </tr>
+      <tr>
+          <td>Tool</td>
+          <td>Individual tool (web scraper, CRM write, DB query)</td>
+          <td>30% error rate over 10 failures</td>
+          <td>30s</td>
+          <td>Disable tool only, let agent use others</td>
+      </tr>
+      <tr>
+          <td>Session</td>
+          <td>Per-user/per-run cumulative state</td>
+          <td>$50 total spend or 3x velocity spike</td>
+          <td>Manual reset only</td>
+          <td>N/A — human review queue</td>
+      </tr>
+  </tbody>
+</table>
+<p>The provider-level breaker wraps every LLM call. When it opens, fall back to a cheaper model or return a degraded response. The tool-level breaker isolates blast radius — if your web scraper is looping, your CRM integration keeps working. The session-level breaker is the FinOps safety net: it tracks cumulative cost and trip when the total exceeds a configurable ceiling, regardless of per-call health.</p>
+<p>Implementation-wise, use Redis-backed state so breaker status survives process restarts. I recommend PyBreaker as a starting point for Python projects, or a simple custom class if you need Redis persistence:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> redis
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> time
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">RedisCircuitBreaker</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> __init__(self, name, failure_threshold<span style="color:#f92672">=</span><span style="color:#ae81ff">10</span>, cooldown<span style="color:#f92672">=</span><span style="color:#ae81ff">30</span>):
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>name <span style="color:#f92672">=</span> name
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>failure_threshold <span style="color:#f92672">=</span> failure_threshold
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>cooldown <span style="color:#f92672">=</span> cooldown
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>redis <span style="color:#f92672">=</span> redis<span style="color:#f92672">.</span>Redis()
+</span></span><span style="display:flex;"><span>    
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">call</span>(self, func, <span style="color:#f92672">*</span>args, <span style="color:#f92672">**</span>kwargs):
+</span></span><span style="display:flex;"><span>        state <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>redis<span style="color:#f92672">.</span>get(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;breaker:</span><span style="color:#e6db74">{</span>self<span style="color:#f92672">.</span>name<span style="color:#e6db74">}</span><span style="color:#e6db74">:state&#34;</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> state <span style="color:#f92672">==</span> <span style="color:#e6db74">b</span><span style="color:#e6db74">&#34;OPEN&#34;</span>:
+</span></span><span style="display:flex;"><span>            cooldown_until <span style="color:#f92672">=</span> float(self<span style="color:#f92672">.</span>redis<span style="color:#f92672">.</span>get(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;breaker:</span><span style="color:#e6db74">{</span>self<span style="color:#f92672">.</span>name<span style="color:#e6db74">}</span><span style="color:#e6db74">:cooldown_until&#34;</span>) <span style="color:#f92672">or</span> <span style="color:#ae81ff">0</span>)
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> time<span style="color:#f92672">.</span>time() <span style="color:#f92672">&lt;</span> cooldown_until:
+</span></span><span style="display:flex;"><span>                <span style="color:#66d9ef">raise</span> CircuitBreakerOpenError(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Breaker </span><span style="color:#e6db74">{</span>self<span style="color:#f92672">.</span>name<span style="color:#e6db74">}</span><span style="color:#e6db74"> is OPEN&#34;</span>)
+</span></span><span style="display:flex;"><span>            self<span style="color:#f92672">.</span>redis<span style="color:#f92672">.</span>set(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;breaker:</span><span style="color:#e6db74">{</span>self<span style="color:#f92672">.</span>name<span style="color:#e6db74">}</span><span style="color:#e6db74">:state&#34;</span>, <span style="color:#e6db74">&#34;HALF_OPEN&#34;</span>)
+</span></span><span style="display:flex;"><span>        
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">try</span>:
+</span></span><span style="display:flex;"><span>            result <span style="color:#f92672">=</span> func(<span style="color:#f92672">*</span>args, <span style="color:#f92672">**</span>kwargs)
+</span></span><span style="display:flex;"><span>            self<span style="color:#f92672">.</span>redis<span style="color:#f92672">.</span>set(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;breaker:</span><span style="color:#e6db74">{</span>self<span style="color:#f92672">.</span>name<span style="color:#e6db74">}</span><span style="color:#e6db74">:failures&#34;</span>, <span style="color:#ae81ff">0</span>)
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> state <span style="color:#f92672">==</span> <span style="color:#e6db74">b</span><span style="color:#e6db74">&#34;HALF_OPEN&#34;</span>:
+</span></span><span style="display:flex;"><span>                self<span style="color:#f92672">.</span>redis<span style="color:#f92672">.</span>set(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;breaker:</span><span style="color:#e6db74">{</span>self<span style="color:#f92672">.</span>name<span style="color:#e6db74">}</span><span style="color:#e6db74">:state&#34;</span>, <span style="color:#e6db74">&#34;CLOSED&#34;</span>)
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">return</span> result
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">except</span> <span style="color:#a6e22e">Exception</span> <span style="color:#66d9ef">as</span> e:
+</span></span><span style="display:flex;"><span>            failures <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>redis<span style="color:#f92672">.</span>incr(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;breaker:</span><span style="color:#e6db74">{</span>self<span style="color:#f92672">.</span>name<span style="color:#e6db74">}</span><span style="color:#e6db74">:failures&#34;</span>)
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> failures <span style="color:#f92672">&gt;=</span> self<span style="color:#f92672">.</span>failure_threshold:
+</span></span><span style="display:flex;"><span>                self<span style="color:#f92672">.</span>redis<span style="color:#f92672">.</span>set(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;breaker:</span><span style="color:#e6db74">{</span>self<span style="color:#f92672">.</span>name<span style="color:#e6db74">}</span><span style="color:#e6db74">:state&#34;</span>, <span style="color:#e6db74">&#34;OPEN&#34;</span>)
+</span></span><span style="display:flex;"><span>                self<span style="color:#f92672">.</span>redis<span style="color:#f92672">.</span>set(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;breaker:</span><span style="color:#e6db74">{</span>self<span style="color:#f92672">.</span>name<span style="color:#e6db74">}</span><span style="color:#e6db74">:cooldown_until&#34;</span>, time<span style="color:#f92672">.</span>time() <span style="color:#f92672">+</span> self<span style="color:#f92672">.</span>cooldown)
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">raise</span>
+</span></span></code></pre></div><h2 id="retry-budgets-the-overlooked-pattern-that-prevents-compound-cost-explosions">Retry Budgets: The Overlooked Pattern That Prevents Compound Cost Explosions</h2>
+<p>This is the single most underrated cost control pattern in the agent ecosystem. Standard per-call retry logic (3 retries with exponential backoff) is dangerously insufficient for multi-step agentic workflows. If each of 8 steps independently retries 3 times, the worst case is 24 calls. But if each of those retries triggers tool sub-calls, the number compounds unpredictably.</p>
+<p>A retry budget is a shared pool (e.g., 5 total retries) across the entire workflow run. Step 1 uses 2 retries; remaining steps share the other 3. Crucially, error classification is required — only retry 5xx and 429 (server errors and rate limits), never 4xx. A malformed request won&rsquo;t fix itself on retry 7.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">RetryBudget</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> __init__(self, max_retries<span style="color:#f92672">=</span><span style="color:#ae81ff">5</span>):
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>max_retries <span style="color:#f92672">=</span> max_retries
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>used <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>
+</span></span><span style="display:flex;"><span>    
+</span></span><span style="display:flex;"><span>    RETRIABLE <span style="color:#f92672">=</span> {<span style="color:#ae81ff">429</span>, <span style="color:#ae81ff">500</span>, <span style="color:#ae81ff">502</span>, <span style="color:#ae81ff">503</span>}
+</span></span><span style="display:flex;"><span>    
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">can_retry</span>(self, status_code: int) <span style="color:#f92672">-&gt;</span> bool:
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> status_code <span style="color:#f92672">not</span> <span style="color:#f92672">in</span> self<span style="color:#f92672">.</span>RETRIABLE:
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">False</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> self<span style="color:#f92672">.</span>used <span style="color:#f92672">&lt;</span> self<span style="color:#f92672">.</span>max_retries
+</span></span><span style="display:flex;"><span>    
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">consume</span>(self):
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>used <span style="color:#f92672">+=</span> <span style="color:#ae81ff">1</span>
+</span></span></code></pre></div><p>Compose retry budgets with circuit breakers: if the retry budget is exhausted on the same step across multiple consecutive runs, trip the tool-level circuit breaker. The three-pattern combo — retry budget + <a href="/posts/agent-token-cost-attribution-2026/">idempotency keys</a> + circuit breaker — is the resilience stack every production agent needs.</p>
+<h2 id="semantic-loop-detection-catching-reasoning-loops-step-counters-miss">Semantic Loop Detection: Catching Reasoning Loops Step Counters Miss</h2>
+<p>Step counters catch infinite loops but completely miss reasoning loops where the agent makes apparent &ldquo;progress&rdquo; each step — just not useful progress. It rephrases the same query, calls the same API with slightly different parameters, generates near-duplicate outputs. Hash-based detection (dimension 1 above) catches exact duplicates. Semantic similarity catches the rest.</p>
+<p>The implementation uses difflib&rsquo;s <code>SequenceMatcher</code> with a 0.85 threshold over a sliding window of 3 outputs — zero additional API cost, runs entirely on the text the agent has already produced. For coding agents, also track test-only loops: if the agent runs tests 3 times without changing any source code, assume stability and stop.</p>
+<p><a href="/posts/ai-agent-governance-guide-2026/">Agent governance frameworks</a> should incorporate semantic loop detection as a mandatory control for any agent operating in production with write-side effects, since reasoning loops are the most common failure mode that existing observability tooling completely misses.</p>
+<h2 id="governance-plane-enforcement-architecture-that-agents-cant-bypass">Governance Plane Enforcement: Architecture That Agents Can&rsquo;t Bypass</h2>
+<p>This is the most important architectural decision in the entire pattern. Circuit breaker enforcement must live outside the agent&rsquo;s code — at the AI gateway, governance plane, or infrastructure layer. Budget ceilings, velocity limits, and scope checks embedded in agent prompts or code can be bypassed by a compromised agent or a crashed script that keeps retrying.</p>
+<p>The <a href="https://www.waxell.ai/blog/ai-agent-circuit-breaker-pattern">Waxell approach</a> enforces 26 policy categories at the governance plane with no SDK and no agent rebuilds required. The architectural pattern is a middleware chain at the AI gateway:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 480 41"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>R</text>
+<text text-anchor='middle' x='0' y='20' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='8' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>q</text>
+<text text-anchor='middle' x='16' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='24' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='32' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='48' y='20' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='56' y='20' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>→</text>
+<text text-anchor='middle' x='64' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='72' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='80' y='20' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='96' y='20' fill='currentColor' style='font-size:1em'>→</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='112' y='20' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='120' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='120' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='128' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='136' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='144' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='144' y='20' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='152' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='152' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='160' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='176' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='176' y='20' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='184' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='184' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='192' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='200' y='4' fill='currentColor' style='font-size:1em'>→</text>
+<text text-anchor='middle' x='200' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='208' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='216' y='4' fill='currentColor' style='font-size:1em'>B</text>
+<text text-anchor='middle' x='224' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='224' y='20' fill='currentColor' style='font-size:1em'>→</text>
+<text text-anchor='middle' x='232' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='240' y='4' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='240' y='20' fill='currentColor' style='font-size:1em'>F</text>
+<text text-anchor='middle' x='248' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='248' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='256' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='256' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='264' y='20' fill='currentColor' style='font-size:1em'>w</text>
+<text text-anchor='middle' x='272' y='4' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='272' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='280' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='280' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='288' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='288' y='20' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='296' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='304' y='4' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='304' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='312' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='320' y='4' fill='currentColor' style='font-size:1em'>→</text>
+<text text-anchor='middle' x='328' y='20' fill='currentColor' style='font-size:1em'>P</text>
+<text text-anchor='middle' x='336' y='4' fill='currentColor' style='font-size:1em'>V</text>
+<text text-anchor='middle' x='336' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='344' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='344' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='352' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='352' y='20' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='360' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='360' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='368' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='368' y='20' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='376' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='376' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='384' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='384' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='392' y='4' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='408' y='4' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='416' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='424' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='432' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='440' y='4' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='456' y='4' fill='currentColor' style='font-size:1em'>→</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>Each middleware component runs outside the agent process. On violation, it returns a structured enforcement error (HTTP 402 Payment Required or equivalent), logs the full execution context (step count, cumulative cost, trigger metric), and writes a durable audit record that survives session termination. No agent code changes required because enforcement happens at the network layer.</p>
+<p>For teams using LiteLLM as their AI gateway, the middleware pattern is straightforward:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> litellm <span style="color:#f92672">import</span> Router
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">CircuitBreakerMiddleware</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> __init__(self, session_tracker):
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>session_tracker <span style="color:#f92672">=</span> session_tracker
+</span></span><span style="display:flex;"><span>    
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">pre_call_hook</span>(self, kwargs):
+</span></span><span style="display:flex;"><span>        session <span style="color:#f92672">=</span> kwargs<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;metadata&#34;</span>, {})<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;session_id&#34;</span>)
+</span></span><span style="display:flex;"><span>        cost_velocity <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> self<span style="color:#f92672">.</span>session_tracker<span style="color:#f92672">.</span>get_velocity(session)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> cost_velocity <span style="color:#f92672">&gt;</span> <span style="color:#ae81ff">10</span>:  <span style="color:#75715e"># $/min threshold</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">raise</span> CircuitBreakerError(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Cost velocity $</span><span style="color:#e6db74">{</span>cost_velocity<span style="color:#e6db74">}</span><span style="color:#e6db74">/min exceeded limit&#34;</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> kwargs
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>router <span style="color:#f92672">=</span> Router(
+</span></span><span style="display:flex;"><span>    model_list<span style="color:#f92672">=</span>[<span style="color:#f92672">...</span>],
+</span></span><span style="display:flex;"><span>    pre_call_hooks<span style="color:#f92672">=</span>[CircuitBreakerMiddleware(session_tracker)]
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre></div><h2 id="what-happens-after-a-trip-containment-before-diagnosis">What Happens After a Trip: Containment Before Diagnosis</h2>
+<p>When a circuit breaker trips, the response must prioritize containment over diagnosis. Here&rsquo;s the protocol I&rsquo;ve landed on after several incidents:</p>
+<ol>
+<li><strong>Stop new executions</strong> for the affected scope immediately</li>
+<li><strong>Let in-flight runs finish</strong> only if they&rsquo;re in a safe state (reads allowed, writes blocked)</li>
+<li><strong>Route new work</strong> to a human review queue or degraded fallback path</li>
+<li><strong>Log the exact signal</strong> that triggered the trip — which dimension, what threshold, the current value</li>
+<li><strong>Notify operators</strong> with the trip reason, not just a generic alert</li>
+<li><strong>Require intentional reset</strong> — auto-reset is dangerous for write-side or customer-facing failures</li>
+</ol>
+<p>Half-open state testing should use canary-style simplified prompts first, gradually increasing complexity. For an LLM provider breaker, send 10% normal traffic with simplified prompts and require 3 consecutive successes before closing. For a tool-level breaker, disable the tool and let the agent operate without it — if the agent succeeds, the breaker stays open until human review confirms the root cause is resolved.</p>
+<h2 id="real-world-cost-data-what-each-pattern-would-have-prevented">Real-World Cost Data: What Each Pattern Would Have Prevented</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Incident</th>
+          <th>Cost</th>
+          <th>Primary Cause</th>
+          <th>Which Pattern Would Have Prevented It</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Single-agent retry loop</td>
+          <td>$437 overnight</td>
+          <td>Identical tool calls repeating for 8 hours</td>
+          <td>Runaway loop detection (dimension 1) + retry budget</td>
+      </tr>
+      <tr>
+          <td>4-agent A2A ping-pong</td>
+          <td>$47,000 over 11 days</td>
+          <td>Cross-agent work passing without progress</td>
+          <td>Cost velocity + session-level breaker</td>
+      </tr>
+      <tr>
+          <td>Image gen runaway</td>
+          <td>$700 overnight</td>
+          <td>Flaky API + k8s restart replay loop</td>
+          <td>Consecutive failure breaker + retry budget</td>
+      </tr>
+      <tr>
+          <td>GPT-4 847-call loop</td>
+          <td>$63</td>
+          <td>Ambiguous tool response causing identical retries</td>
+          <td>Hash-based loop detection (dimension 1)</td>
+      </tr>
+      <tr>
+          <td>LangChain 10K iterations</td>
+          <td>Unknown (project destroyed)</td>
+          <td>8,000 iterations in under 10 minutes</td>
+          <td>Cost velocity + wall-clock timeout</td>
+      </tr>
+  </tbody>
+</table>
+<p>The $47,000 case is particularly instructive. The dashboards at the organization showed each agent&rsquo;s individual spend. A single $47K line item was visible <em>in retrospect</em>. No alert fired because no single run exceeded a static budget cap. The velocity was moderate — spread over 11 days — but cumulative. A session-level breaker with a $1,000 total ceiling would have stopped it on day 1.</p>
+<h2 id="faq">FAQ</h2>
+<h3 id="whats-the-difference-between-a-kill-switch-and-a-circuit-breaker-for-ai-agents">What&rsquo;s the difference between a kill switch and a circuit breaker for AI agents?</h3>
+<p>A kill switch is a manual or time-based stop — it terminates an agent after a fixed duration or when a human hits a button. A circuit breaker is threshold-driven and automatic, responding to behavioral signals (loop detection, cost velocity, consecutive failures). Kill switches are a fallback; circuit breakers are primary prevention. You need both, but don&rsquo;t confuse them.</p>
+<h3 id="how-do-i-choose-between-provider-level-tool-level-and-session-level-breakers">How do I choose between provider-level, tool-level, and session-level breakers?</h3>
+<p>Start with session-level breakers (they&rsquo;re the FinOps safety net), then add tool-level breakers for high-risk tools (write operations, payment APIs, email send), then provider-level breakers if you&rsquo;re running at scale with multiple model endpoints. Each layer catches failure modes the others miss.</p>
+<h3 id="can-i-implement-these-patterns-without-a-dedicated-ai-gateway">Can I implement these patterns without a dedicated AI gateway?</h3>
+<p>Yes. For small deployments, implement the middleware chain inside your agent framework&rsquo;s request pipeline. <a href="https://agentbudget.dev">AgentBudget</a> is a lightweight open-source SDK that adds per-session dollar-denominated caps without a gateway. For production at scale, the governance plane approach (Waxell, LiteLLM proxy) is more robust because enforcement survives agent crashes.</p>
+<h3 id="should-i-auto-reset-circuit-breakers-for-ai-agents">Should I auto-reset circuit breakers for AI agents?</h3>
+<p>For read-side operations, a half-open auto-reset with canary testing is fine. For write-side operations (DB writes, email, payments), require human reset. The cost of a false-positive breaker trip is far lower than the cost of a false-negative loop that writes duplicate data or charges customers twice.</p>
+<h3 id="how-do-i-tune-circuit-breaker-thresholds-for-my-specific-workload">How do I tune circuit breaker thresholds for my specific workload?</h3>
+<p>Start with the default thresholds in this guide, enable verbose logging, and review trip events weekly. After 100 runs, adjust based on your observed baseline: set cost velocity thresholds at 3× your mean burn rate, loop detection at a sliding window of 3, consecutive failures at 3. Review again at 1,000 runs. Threshold tuning is an ongoing operational process, not a one-time configuration.</p>
+]]></content:encoded></item></channel></rss>

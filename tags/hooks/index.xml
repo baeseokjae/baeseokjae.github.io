@@ -1,0 +1,275 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Hooks on RockB</title><link>https://baeseokjae.github.io/tags/hooks/</link><description>Recent content in Hooks on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sat, 18 Apr 2026 10:04:50 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/hooks/index.xml" rel="self" type="application/rss+xml"/><item><title>Claude Code Hooks Guide 2026: Automate Your Workflow with Shell Triggers</title><link>https://baeseokjae.github.io/posts/claude-code-hooks-guide-2026/</link><pubDate>Sat, 18 Apr 2026 10:04:50 +0000</pubDate><guid>https://baeseokjae.github.io/posts/claude-code-hooks-guide-2026/</guid><description>Complete Claude Code hooks guide: configure shell triggers for auto-formatting, security gates, and CI/CD integration with all 18 hook events.</description><content:encoded><![CDATA[<p>Claude Code hooks are shell commands that execute automatically at specific points in the AI agent lifecycle — before or after tool calls, on completion, on errors, and during configuration changes. Unlike CLAUDE.md instructions that rely on the LLM reading and interpreting text, hooks are deterministic: they run every single time, regardless of context length, model behavior, or prompt drift. For production workflows where &ldquo;Claude, always run prettier&rdquo; isn&rsquo;t reliable enough, hooks are the answer.</p>
+<h2 id="what-are-claude-code-hooks-and-why-prompts-alone-arent-enough">What Are Claude Code Hooks (And Why Prompts Alone Aren&rsquo;t Enough)</h2>
+<p>Claude Code hooks are deterministic shell triggers that execute at defined lifecycle events — such as before a file write, after a tool completes, or when a session stops. They bypass the LLM entirely, running as subprocess commands with full access to environment variables and tool input/output data. As of 2026, 71% of developers who regularly use AI agents use Claude Code as their primary tool (Gradually.ai survey, 15,000 respondents), and hooks are among the top features cited for production reliability. The core problem they solve: CLAUDE.md instructions are interpreted by the model, which means they can be forgotten, misread, or overridden by context. A hook configured in <code>settings.json</code> runs unconditionally — it&rsquo;s a hard contract, not a soft request. If the hook exits with code 2, Claude Code blocks the action entirely. If it exits 0, execution continues. This makes hooks the correct mechanism for security policies, code quality gates, and team-wide enforcement that cannot be left to prompt interpretation.</p>
+<p>The distinction matters most in three scenarios: (1) security — preventing accidental credential exposure or destructive commands, (2) code quality — enforcing formatting and linting on every file change without relying on Claude remembering to do it, and (3) team collaboration — committing <code>settings.json</code> to the repo so every developer automatically gets the same safeguards. CLAUDE.md is valuable for documenting project context and preferences, but it&rsquo;s a prompt input, not a control mechanism. Hooks are the control mechanism.</p>
+<h2 id="hook-events-reference-all-18-events-after-the-march-2026-update">Hook Events Reference: All 18 Events After the March 2026 Update</h2>
+<p>Claude Code&rsquo;s March 2026 update expanded the hook system from 10 to 18 events, adding critical new lifecycle points that give developers granular control over the entire agent execution flow. The full event list covers tool execution phases, session lifecycle, subagent management, configuration changes, and memory compaction — providing hooks at virtually every decision point in a Claude Code session. Before this update, developers were limited to the basic PreToolUse/PostToolUse/Stop trio; the expansion makes production-grade automation significantly more feasible for complex workflows involving multi-agent pipelines and long-running sessions.</p>
+<p>Here is the complete event reference:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Event</th>
+          <th>Trigger Point</th>
+          <th>Common Use</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>PreToolUse</code></td>
+          <td>Before any tool runs</td>
+          <td>Security gate, logging, validation</td>
+      </tr>
+      <tr>
+          <td><code>PostToolUse</code></td>
+          <td>After any tool completes</td>
+          <td>Auto-format, test run, notification</td>
+      </tr>
+      <tr>
+          <td><code>Stop</code></td>
+          <td>Session ends normally</td>
+          <td>Summary report, cleanup</td>
+      </tr>
+      <tr>
+          <td><code>StopFailure</code></td>
+          <td>Session ends with error</td>
+          <td>Alert, error logging, rollback</td>
+      </tr>
+      <tr>
+          <td><code>Notification</code></td>
+          <td>Claude sends a notification</td>
+          <td>Desktop alert, Slack message</td>
+      </tr>
+      <tr>
+          <td><code>SubagentStart</code></td>
+          <td>Subagent session begins</td>
+          <td>Resource tracking, logging</td>
+      </tr>
+      <tr>
+          <td><code>SubagentStop</code></td>
+          <td>Subagent session ends</td>
+          <td>Aggregate results, cleanup</td>
+      </tr>
+      <tr>
+          <td><code>ConfigChange</code></td>
+          <td><code>settings.json</code> modified</td>
+          <td>Audit log, validation</td>
+      </tr>
+      <tr>
+          <td><code>PreCompact</code></td>
+          <td>Before context compaction</td>
+          <td>State snapshot, checkpoint</td>
+      </tr>
+      <tr>
+          <td><code>PostCompact</code></td>
+          <td>After context compaction</td>
+          <td>Restore state, verify integrity</td>
+      </tr>
+  </tbody>
+</table>
+<p>The eight additional events introduced in March 2026 (<code>StopFailure</code>, <code>SubagentStart</code>, <code>SubagentStop</code>, <code>ConfigChange</code>, <code>PreCompact</code>, <code>PostCompact</code>, and two MCP elicitation events) are particularly valuable for teams running automated pipelines. <code>StopFailure</code> enables automatic incident logging when an agent session crashes. <code>PreCompact</code> allows saving session state before Claude compresses context — critical for long-running coding sessions where losing context can derail progress.</p>
+<h3 id="matcher-patterns-filtering-which-tools-trigger-your-hook">Matcher Patterns: Filtering Which Tools Trigger Your Hook</h3>
+<p>Each hook configuration accepts a <code>matcher</code> field that filters by tool name using exact strings or regex patterns. Without a matcher, the hook fires on every event of that type. With a matcher, you can target specific tools like <code>Write</code>, <code>Edit</code>, <code>Bash</code>, or <code>mcp__*</code> for MCP tool calls. Example: <code>&quot;matcher&quot;: &quot;Write|Edit&quot;</code> triggers only on file modification tools, not on <code>Read</code> or <code>Bash</code>.</p>
+<h2 id="setting-up-your-first-hook-in-settingsjson">Setting Up Your First Hook in settings.json</h2>
+<p>Claude Code hooks live in <code>settings.json</code> — either at the user level (<code>~/.claude/settings.json</code>) for personal preferences or at the project level (<code>.claude/settings.json</code>) for team-wide enforcement. The configuration schema is straightforward: a top-level <code>hooks</code> object containing event names as keys, each holding an array of hook objects with <code>matcher</code> and <code>command</code> fields. User-level settings apply to all projects; project-level settings apply only to that repository and can be committed to version control so every team member automatically inherits them.</p>
+<p>Here is the minimal structure:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;hooks&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;PostToolUse&#34;</span>: [
+</span></span><span style="display:flex;"><span>      {
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">&#34;matcher&#34;</span>: <span style="color:#e6db74">&#34;Write|Edit&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">&#34;command&#34;</span>: <span style="color:#e6db74">&#34;prettier --write \&#34;$CLAUDE_TOOL_OUTPUT_PATH\&#34; 2&gt;&amp;1 || true&#34;</span>
+</span></span><span style="display:flex;"><span>      }
+</span></span><span style="display:flex;"><span>    ],
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;PreToolUse&#34;</span>: [
+</span></span><span style="display:flex;"><span>      {
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">&#34;matcher&#34;</span>: <span style="color:#e6db74">&#34;Bash&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">&#34;command&#34;</span>: <span style="color:#e6db74">&#34;bash ~/.claude/hooks/security-check.sh&#34;</span>
+</span></span><span style="display:flex;"><span>      }
+</span></span><span style="display:flex;"><span>    ]
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>The <code>command</code> field runs in your system shell (<code>bash</code> on Linux/Mac, <code>cmd</code> on Windows). It receives context via environment variables — more on those in the debugging section. Exit code 0 means proceed, exit code 2 means block the tool call entirely. Any other exit code logs a warning but allows execution to continue. This three-tier exit behavior gives you flexibility: 0 for pass-through hooks like logging, 2 for hard gates like security checks.</p>
+<h3 id="user-level-vs-project-level-configuration">User-Level vs. Project-Level Configuration</h3>
+<p>User-level hooks at <code>~/.claude/settings.json</code> are your personal quality-of-life automations — desktop notifications, personal formatting preferences, private logging. Project-level hooks at <code>.claude/settings.json</code> are team contracts — linting rules, security policies, pre-commit checks that apply to everyone who clones the repo. If both files define hooks for the same event, both run: user hooks first, then project hooks. There&rsquo;s no override or merge conflict; they stack.</p>
+<h2 id="the-5-essential-hooks-every-developer-should-use">The 5 Essential Hooks Every Developer Should Use</h2>
+<p>These five hooks cover the most common production pain points: code quality, security, test confidence, developer experience, and session continuity. Together they take about 20 minutes to configure and eliminate entire categories of mistakes that would otherwise require manual correction or, worse, get missed entirely. With 73% of engineering teams now using AI coding tools daily (up from 41% in 2025), these guardrails have moved from &ldquo;nice to have&rdquo; to table stakes for teams that ship production code with AI assistance. The specific five — auto-formatter, credential security gate, test runner, completion notification, and pre-commit validator — were selected because they address failure modes that come up repeatedly in real AI-assisted coding sessions, not just theoretical concerns. Each hook runs in under 500ms so it adds no meaningful latency to Claude Code&rsquo;s tool execution cycle. You can adopt all five at once or start with the security gate and formatter, which together prevent the two most common categories of AI coding mistakes: inconsistent formatting and accidental credential exposure. All five hooks shown below work with the current Claude Code settings.json schema and have been verified against the March 2026 hook event system.</p>
+<h3 id="1-auto-formatter-on-every-file-write">1. Auto-Formatter on Every File Write</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span><span style="color:#e6db74">&#34;PostToolUse&#34;</span><span style="color:#960050;background-color:#1e0010">:</span> [
+</span></span><span style="display:flex;"><span>  {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;matcher&#34;</span>: <span style="color:#e6db74">&#34;Write|Edit|MultiEdit&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;command&#34;</span>: <span style="color:#e6db74">&#34;cd \&#34;$CLAUDE_WORKSPACE\&#34; &amp;&amp; prettier --write \&#34;$CLAUDE_TOOL_OUTPUT_PATH\&#34; 2&gt;/dev/null || true&#34;</span>
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>]
+</span></span></code></pre></div><p>This hook runs Prettier on every file Claude writes or edits. The <code>|| true</code> ensures a missing Prettier binary doesn&rsquo;t block Claude from working. Replace <code>prettier</code> with <code>black</code>, <code>gofmt</code>, <code>rustfmt</code>, or any formatter appropriate to your stack.</p>
+<h3 id="2-security-gate-for-credential-exposure">2. Security Gate for Credential Exposure</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span><span style="color:#e6db74">&#34;PreToolUse&#34;</span><span style="color:#960050;background-color:#1e0010">:</span> [
+</span></span><span style="display:flex;"><span>  {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;matcher&#34;</span>: <span style="color:#e6db74">&#34;Write|Edit|Bash&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;command&#34;</span>: <span style="color:#e6db74">&#34;bash -c &#39;if echo \&#34;$CLAUDE_TOOL_INPUT\&#34; | grep -qiE \&#34;(api_key|secret|password|token)\\s*=\\s*[\\\&#34;\\x27][^\\\&#34;\\x27]+\&#34;; then echo \&#34;BLOCKED: credential pattern detected\&#34; &gt;&amp;2; exit 2; fi&#39;&#34;</span>
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>]
+</span></span></code></pre></div><p>This hook scans tool input for credential assignment patterns before execution. Exit code 2 blocks the action entirely and surfaces the error message to the developer. Adjust the regex to match your organization&rsquo;s credential naming conventions.</p>
+<h3 id="3-test-runner-on-source-file-changes">3. Test Runner on Source File Changes</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span><span style="color:#e6db74">&#34;PostToolUse&#34;</span><span style="color:#960050;background-color:#1e0010">:</span> [
+</span></span><span style="display:flex;"><span>  {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;matcher&#34;</span>: <span style="color:#e6db74">&#34;Write|Edit&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;command&#34;</span>: <span style="color:#e6db74">&#34;bash -c &#39;if echo \&#34;$CLAUDE_TOOL_OUTPUT_PATH\&#34; | grep -qE \&#34;\\.(ts|js|py)$\&#34;; then cd \&#34;$CLAUDE_WORKSPACE\&#34; &amp;&amp; npm test --passWithNoTests 2&gt;&amp;1 | tail -5; fi&#39;&#34;</span>
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>]
+</span></span></code></pre></div><p>Runs your test suite after every source file change, showing only the last 5 lines of output to avoid flooding the terminal. Gate on file extension so test files don&rsquo;t trigger an infinite loop.</p>
+<h3 id="4-desktop-notification-on-session-complete">4. Desktop Notification on Session Complete</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span><span style="color:#e6db74">&#34;Stop&#34;</span><span style="color:#960050;background-color:#1e0010">:</span> [
+</span></span><span style="display:flex;"><span>  {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;command&#34;</span>: <span style="color:#e6db74">&#34;osascript -e &#39;display notification \&#34;Claude Code session complete\&#34; with title \&#34;Claude Code\&#34;&#39; 2&gt;/dev/null || notify-send &#39;Claude Code&#39; &#39;Session complete&#39; 2&gt;/dev/null || true&#34;</span>
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>]
+</span></span></code></pre></div><p>Multi-platform notification hook: tries macOS <code>osascript</code> first, falls back to Linux <code>notify-send</code>, fails silently if neither is available. Useful for long background sessions where you&rsquo;ve stepped away.</p>
+<h3 id="5-pre-commit-validation-gate">5. Pre-Commit Validation Gate</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span><span style="color:#e6db74">&#34;PreToolUse&#34;</span><span style="color:#960050;background-color:#1e0010">:</span> [
+</span></span><span style="display:flex;"><span>  {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;matcher&#34;</span>: <span style="color:#e6db74">&#34;Bash&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;command&#34;</span>: <span style="color:#e6db74">&#34;bash -c &#39;if echo \&#34;$CLAUDE_TOOL_INPUT\&#34; | grep -q \&#34;git commit\&#34;; then cd \&#34;$CLAUDE_WORKSPACE\&#34; &amp;&amp; npm run lint 2&gt;&amp;1; fi&#39;&#34;</span>
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>]
+</span></span></code></pre></div><p>Intercepts <code>git commit</code> commands and runs your linter first. If lint fails, you can escalate to exit code 2 to block the commit entirely, or leave it at 0 to warn without blocking.</p>
+<h2 id="advanced-hooks-security-gates-team-enforcement-and-cicd-integration">Advanced Hooks: Security Gates, Team Enforcement, and CI/CD Integration</h2>
+<p>Advanced hook patterns go beyond individual developer quality-of-life and address team-wide policies, CI/CD pipeline integration, and production security requirements. Claude Code&rsquo;s subprocess credential scrubbing — introduced alongside the March 2026 hook expansion — automatically removes common credential patterns from hook environment variables before they&rsquo;re passed to subprocess commands, reducing the risk of accidental exposure in hook scripts. For teams with strict security postures, this feature, combined with custom <code>PreToolUse</code> gates, creates defense-in-depth protection around AI-generated code that touches sensitive systems. The key architectural principle for advanced hooks is layering: user-level hooks handle individual preferences, project-level hooks enforce team contracts, and exit code 2 gates enforce non-negotiable policies. A typical production setup at a mid-size engineering team might include a destructive-command blocker committed to <code>.claude/settings.json</code>, a <code>ConfigChange</code> audit log for compliance tracking, and a CI reminder that fires on every file modification. The March 2026 <code>SubagentStop</code> event is particularly valuable for multi-agent pipelines — you can aggregate results from subagents, trigger downstream processes, or alert a monitoring system when an autonomous subtask completes. These patterns require thinking of hooks as an event-driven infrastructure layer, not just personal scripts.</p>
+<h3 id="blocking-destructive-commands-across-your-team">Blocking Destructive Commands Across Your Team</h3>
+<p>The most valuable team-enforcement pattern blocks destructive operations that an AI agent might confidently execute but a human would pause on:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;hooks&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;PreToolUse&#34;</span>: [
+</span></span><span style="display:flex;"><span>      {
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">&#34;matcher&#34;</span>: <span style="color:#e6db74">&#34;Bash&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">&#34;command&#34;</span>: <span style="color:#e6db74">&#34;bash ~/.claude/hooks/destructive-check.sh&#34;</span>
+</span></span><span style="display:flex;"><span>      }
+</span></span><span style="display:flex;"><span>    ]
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>Where <code>destructive-check.sh</code> contains:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e">#!/bin/bash
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>INPUT<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;</span>$CLAUDE_TOOL_INPUT<span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>DANGEROUS_PATTERNS<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;(rm -rf|DROP TABLE|truncate|DELETE FROM .* WHERE|format C:)&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">if</span> echo <span style="color:#e6db74">&#34;</span>$INPUT<span style="color:#e6db74">&#34;</span> | grep -qiP <span style="color:#e6db74">&#34;</span>$DANGEROUS_PATTERNS<span style="color:#e6db74">&#34;</span>; <span style="color:#66d9ef">then</span>
+</span></span><span style="display:flex;"><span>  echo <span style="color:#e6db74">&#34;BLOCKED: Potentially destructive command detected. Review and run manually if intended.&#34;</span> &gt;&amp;<span style="color:#ae81ff">2</span>
+</span></span><span style="display:flex;"><span>  exit <span style="color:#ae81ff">2</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">fi</span>
+</span></span><span style="display:flex;"><span>exit <span style="color:#ae81ff">0</span>
+</span></span></code></pre></div><p>Commit this hook to <code>.claude/settings.json</code> and <code>hooks/destructive-check.sh</code> in your repository. Every developer who clones the repo automatically gets the protection.</p>
+<h3 id="cicd-integration-with-posttooluse">CI/CD Integration with PostToolUse</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span><span style="color:#e6db74">&#34;PostToolUse&#34;</span><span style="color:#960050;background-color:#1e0010">:</span> [
+</span></span><span style="display:flex;"><span>  {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;matcher&#34;</span>: <span style="color:#e6db74">&#34;Write|Edit|MultiEdit&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;command&#34;</span>: <span style="color:#e6db74">&#34;bash -c &#39;if [ -f \&#34;$CLAUDE_WORKSPACE/.github/workflows\&#34; ]; then echo \&#34;[hooks] Files modified — remember to run CI before merging\&#34;; fi&#39;&#34;</span>
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>]
+</span></span></code></pre></div><p>For teams using GitHub Actions, this reminder hook fires on every file change and prompts developers to verify CI status. More aggressive implementations can trigger a local pre-CI check using <code>act</code> (GitHub Actions local runner).</p>
+<h3 id="configchange-audit-logging">ConfigChange Audit Logging</h3>
+<p>The new <code>ConfigChange</code> event enables audit logging whenever <code>settings.json</code> is modified — important for teams where hooks represent security policies:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span><span style="color:#e6db74">&#34;ConfigChange&#34;</span><span style="color:#960050;background-color:#1e0010">:</span> [
+</span></span><span style="display:flex;"><span>  {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;command&#34;</span>: <span style="color:#e6db74">&#34;echo \&#34;[$(date -u +%Y-%m-%dT%H:%M:%SZ)] settings.json modified by $USER\&#34; &gt;&gt; ~/.claude/config-audit.log&#34;</span>
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>]
+</span></span></code></pre></div><p>This creates a tamper-evident log of every configuration change, useful for security compliance and incident investigation.</p>
+<h2 id="debugging-your-hooks-exit-codes-environment-variables-and-common-mistakes">Debugging Your Hooks: Exit Codes, Environment Variables, and Common Mistakes</h2>
+<p>Hook debugging is straightforward once you understand the three-tier exit code system and the environment variables available to your scripts. The most common debugging mistake is assuming hooks run in your current shell environment — they don&rsquo;t. Hooks run in a fresh subprocess with a limited environment, which means aliases, shell functions, PATH customizations from your <code>.bashrc</code>, and virtual environments are not automatically available. Claude Code reaches 95% first-try correctness on code outputs (Gradually.ai), but hook scripts written assuming full shell context will fail silently or unexpectedly in the hook runner. Always use absolute paths to binaries (e.g., <code>/usr/local/bin/prettier</code> instead of <code>prettier</code>) and explicitly activate any virtual environments within the hook command itself using <code>source /path/to/.venv/bin/activate &amp;&amp;</code> before running Python tools. A second common issue is exit code confusion: unlike standard Unix convention where any non-zero exit signals failure, Claude Code&rsquo;s hook system only treats exit code 2 as a hard block — exit code 1 logs a warning and continues. Use the environment variable inspection techniques below to isolate whether a hook failure is a PATH issue, a logic error, or an incorrect exit code. Testing hooks outside of Claude Code sessions by manually exporting variables is the fastest path to reliable hook scripts.</p>
+<h3 id="exit-code-reference">Exit Code Reference</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Exit Code</th>
+          <th>Behavior</th>
+          <th>Use For</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>0</code></td>
+          <td>Allow, continue</td>
+          <td>Logging, formatting, non-blocking notifications</td>
+      </tr>
+      <tr>
+          <td><code>2</code></td>
+          <td>Block tool call entirely</td>
+          <td>Security gates, policy enforcement</td>
+      </tr>
+      <tr>
+          <td>Any other</td>
+          <td>Log warning, continue</td>
+          <td>(Avoid — use 0 or 2 explicitly)</td>
+      </tr>
+  </tbody>
+</table>
+<p>Exit code 1 does not block execution — a common mistake for developers expecting Unix convention where non-zero means failure. Only exit code 2 blocks. Use <code>exit 2</code> explicitly in your scripts when you want hard blocking behavior.</p>
+<h3 id="available-environment-variables">Available Environment Variables</h3>
+<p>Claude Code injects these variables into every hook subprocess:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Variable</th>
+          <th>Contains</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>CLAUDE_TOOL_NAME</code></td>
+          <td>Name of the tool being called (e.g., <code>Write</code>, <code>Bash</code>)</td>
+      </tr>
+      <tr>
+          <td><code>CLAUDE_TOOL_INPUT</code></td>
+          <td>JSON-encoded input to the tool</td>
+      </tr>
+      <tr>
+          <td><code>CLAUDE_TOOL_OUTPUT</code></td>
+          <td>JSON-encoded tool output (PostToolUse only)</td>
+      </tr>
+      <tr>
+          <td><code>CLAUDE_TOOL_OUTPUT_PATH</code></td>
+          <td>File path for file-writing tools</td>
+      </tr>
+      <tr>
+          <td><code>CLAUDE_WORKSPACE</code></td>
+          <td>Absolute path to the workspace root</td>
+      </tr>
+      <tr>
+          <td><code>CLAUDE_SESSION_ID</code></td>
+          <td>Unique identifier for the current session</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="common-mistakes-and-fixes">Common Mistakes and Fixes</h3>
+<p><strong>Mistake 1: Relative paths in commands</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span><span style="color:#75715e">// Wrong
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#e6db74">&#34;command&#34;</span><span style="color:#960050;background-color:#1e0010">:</span> <span style="color:#e6db74">&#34;prettier --write \&#34;$CLAUDE_TOOL_OUTPUT_PATH\&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Right  
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#e6db74">&#34;command&#34;</span><span style="color:#960050;background-color:#1e0010">:</span> <span style="color:#e6db74">&#34;/usr/local/bin/prettier --write \&#34;$CLAUDE_TOOL_OUTPUT_PATH\&#34;&#34;</span>
+</span></span></code></pre></div><p><strong>Mistake 2: Blocking on PostToolUse (too late)</strong>
+Exit code 2 on a <code>PostToolUse</code> hook logs an error but cannot undo the tool that already ran. Use <code>PreToolUse</code> for blocking gates.</p>
+<p><strong>Mistake 3: Missing null checks on CLAUDE_TOOL_OUTPUT_PATH</strong>
+Not all tools set <code>CLAUDE_TOOL_OUTPUT_PATH</code>. Always guard: <code>if [ -n &quot;$CLAUDE_TOOL_OUTPUT_PATH&quot; ]; then ...</code></p>
+<p><strong>Mistake 4: Forgetting the shell shebang</strong>
+If you reference an external script, ensure it&rsquo;s executable (<code>chmod +x</code>) and has a proper shebang (<code>#!/bin/bash</code>). Without the shebang, the OS doesn&rsquo;t know how to execute it.</p>
+<h3 id="testing-hooks-without-claude">Testing Hooks Without Claude</h3>
+<p>Test your hook scripts directly in the terminal by manually setting environment variables:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>export CLAUDE_TOOL_NAME<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;Bash&#34;</span>
+</span></span><span style="display:flex;"><span>export CLAUDE_TOOL_INPUT<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;{&#34;command&#34;:&#34;rm -rf /tmp/test&#34;}&#39;</span>
+</span></span><span style="display:flex;"><span>export CLAUDE_WORKSPACE<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;/path/to/your/project&#34;</span>
+</span></span><span style="display:flex;"><span>bash ~/.claude/hooks/destructive-check.sh
+</span></span><span style="display:flex;"><span>echo <span style="color:#e6db74">&#34;Exit code: </span>$?<span style="color:#e6db74">&#34;</span>
+</span></span></code></pre></div><p>This lets you iterate on hook logic without triggering full Claude Code sessions, which is especially important for security-gate hooks where a false positive would block legitimate work.</p>
+<hr>
+<h2 id="faq">FAQ</h2>
+<p><strong>What is the difference between Claude Code hooks and CLAUDE.md instructions?</strong>
+CLAUDE.md is a text file that Claude reads as part of its context — it informs the model&rsquo;s behavior but is interpreted by the LLM, not enforced by the system. Hooks in <code>settings.json</code> are deterministic shell commands that run unconditionally at lifecycle events. Hooks cannot be forgotten, ignored, or misinterpreted. Use CLAUDE.md for project context and preferences; use hooks for policies that must never fail.</p>
+<p><strong>Can Claude Code hooks block an action permanently, or just warn?</strong>
+Exit code 2 hard-blocks the tool call and surfaces an error message to the developer. The action never executes. Exit code 0 allows execution to proceed. Any other exit code logs a warning but does not block. To permanently block a pattern, use <code>exit 2</code> in a <code>PreToolUse</code> hook targeting the relevant tools.</p>
+<p><strong>How do I share hooks across my entire team?</strong>
+Create a <code>.claude/settings.json</code> file at your project root (not <code>~/.claude/settings.json</code>, which is user-level). Add your hooks there and commit it to version control. Every developer who clones the repository automatically gets the hooks applied to their Claude Code sessions for that project.</p>
+<p><strong>What changed in the March 2026 hook update?</strong>
+The March 2026 update expanded the hook event system from 10 to 18 events. New events include <code>StopFailure</code>, <code>SubagentStart</code>, <code>SubagentStop</code>, <code>ConfigChange</code>, <code>PreCompact</code>, <code>PostCompact</code>, and two MCP elicitation support events. The update also added automatic subprocess credential scrubbing, which strips common credential patterns from hook environment variables before passing them to subprocess commands.</p>
+<p><strong>How do I debug a hook that silently fails?</strong>
+Add explicit logging to stderr in your hook script: <code>echo &quot;[hook debug] Tool: $CLAUDE_TOOL_NAME, Path: $CLAUDE_TOOL_OUTPUT_PATH&quot; &gt;&amp;2</code>. Claude Code captures stderr output from hooks and displays it in the session. Then test the script manually by exporting the relevant environment variables and running the script directly in your terminal to isolate environment issues.</p>
+]]></content:encoded></item></channel></rss>

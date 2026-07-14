@@ -1,0 +1,1281 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Authentication on RockB</title><link>https://baeseokjae.github.io/tags/authentication/</link><description>Recent content in Authentication on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 09 Jun 2026 05:50:34 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/authentication/index.xml" rel="self" type="application/rss+xml"/><item><title>NextAuth.js v5 / Auth.js: Authentication for Next.js AI Applications 2026</title><link>https://baeseokjae.github.io/posts/next-auth-v5-auth-js-nextjs-guide-2026/</link><pubDate>Tue, 09 Jun 2026 05:50:34 +0000</pubDate><guid>https://baeseokjae.github.io/posts/next-auth-v5-auth-js-nextjs-guide-2026/</guid><description>Complete guide to Auth.js v5 for Next.js AI apps — setup, JWT vs database sessions, RBAC, MCP authentication, and migrating from v4.</description><content:encoded><![CDATA[<p>Auth.js v5 (next-auth@beta) is the current production standard for Next.js authentication in 2026, offering native App Router support, Edge runtime compatibility, and a dramatically simplified API that replaces the v4 <code>getServerSession()</code> pattern with a single <code>auth()</code> function. For AI applications specifically, Auth.js v5 provides the foundation layer upon which token-aware rate limiting, MCP server authorization, and agent delegation chains can be built.</p>
+<h2 id="why-authentication-for-nextjs-ai-apps-is-different-in-2026">Why Authentication for Next.js AI Apps Is Different in 2026</h2>
+<p>Authentication for Next.js AI applications in 2026 fundamentally differs from traditional web apps because AI systems introduce three new attack surfaces and cost vectors that standard session management was never designed to handle. First, stateful context management: AI chat applications maintain multi-turn conversation state that must be tied to authenticated sessions — without this, attackers can hijack context windows. Second, token-aware rate limiting: a single unauthorized GPT-4 API call consuming 2,000 tokens costs roughly 100x more than a simple database read, meaning unauthorized access can cost thousands of dollars per hour (AIMultiple Research, 2025). Third, agent delegation chains: modern AI systems spawn child agents that must inherit authentication scope without re-prompting users. The average cost per AI-specific breach reached $4.80 million in 2025 (IBM Report), and 90% of organizations implementing AI report feeling unprepared for security risks. Traditional auth libraries like NextAuth v4 were designed for human-to-server interactions; Auth.js v5 bridges the gap by providing Web Standard APIs, Edge runtime compatibility, and enough extensibility to build the additional AI-specific layers on top.</p>
+<h2 id="the-evolution-of-nextauthjs-from-pages-router-library-to-authjs-framework">The Evolution of NextAuth.js: From Pages Router Library to Auth.js Framework</h2>
+<p>NextAuth.js v5 represents a complete architectural rewrite of the library, now renamed Auth.js to reflect its framework-agnostic design that extends to SvelteKit, SolidStart, Express, and Qwik — not just Next.js. The original NextAuth was built Pages Router-first, with configuration living in <code>pages/api/auth/[...nextauth].ts</code> and session retrieval requiring <code>getServerSession()</code> with explicit imports from <code>next-auth/next</code>. This worked well for 2021-era Next.js apps but broke down under App Router&rsquo;s server-component model where every component can independently access session data.</p>
+<p>Auth.js v5 (next-auth@beta) currently has 22K+ GitHub stars and 111K+ weekly npm downloads, making it the de facto standard for Next.js authentication. The rewrite adopts Web Standard APIs (Request/Response instead of Node.js-specific objects), which is what enables Edge runtime compatibility — critical for middleware that runs on Vercel&rsquo;s edge network before your server-side code executes. The v5 design philosophy is: one <code>auth()</code> function that works everywhere, zero arguments needed in most cases, auto-detection of environment from request context.</p>
+<p>The key architectural changes from v4:</p>
+<ul>
+<li>Configuration moves from <code>pages/api/auth/[...nextauth].ts</code> → root-level <code>auth.ts</code></li>
+<li><code>getServerSession()</code> replaced by <code>auth()</code> everywhere</li>
+<li>Environment variables: <code>NEXTAUTH_SECRET</code> → <code>AUTH_SECRET</code>, <code>NEXTAUTH_URL</code> → auto-detected</li>
+<li>Adapter packages: <code>@next-auth/*</code> → <code>@auth/*</code> namespace (e.g., <code>@auth/prisma-adapter</code>)</li>
+<li>OAuth 1.0 support dropped entirely in v5</li>
+</ul>
+<h2 id="nextauthjs-v5-core-architecture-the-auth-function">NextAuth.js v5 Core Architecture: The <code>auth()</code> Function</h2>
+<p>The <code>auth()</code> function is the cornerstone of Auth.js v5, replacing <code>getServerSession()</code> across all execution contexts — Server Components, Route Handlers, API Routes, middleware, and Server Actions. Auth.js v5&rsquo;s architecture centers on a single exported <code>auth</code> function that auto-detects its execution context and returns the current session without requiring arguments in server-side contexts. In middleware, it wraps your handler function. In Server Components, it returns a <code>Session | null</code> directly. In Route Handlers, it also returns <code>Session | null</code> after parsing the incoming request. This unified API reduces cognitive overhead dramatically: you no longer need to remember whether you&rsquo;re calling <code>getServerSession(authOptions)</code> or <code>getToken({ req })</code> depending on context.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#75715e">// auth.ts (root level) — the single source of truth
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">import</span> <span style="color:#a6e22e">NextAuth</span> <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;next-auth&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> <span style="color:#a6e22e">GitHub</span> <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;next-auth/providers/github&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> <span style="color:#a6e22e">Google</span> <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;next-auth/providers/google&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">const</span> { <span style="color:#a6e22e">handlers</span>, <span style="color:#a6e22e">signIn</span>, <span style="color:#a6e22e">signOut</span>, <span style="color:#a6e22e">auth</span> } <span style="color:#f92672">=</span> <span style="color:#a6e22e">NextAuth</span>({
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">providers</span><span style="color:#f92672">:</span> [<span style="color:#a6e22e">GitHub</span>, <span style="color:#a6e22e">Google</span>],
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">secret</span>: <span style="color:#66d9ef">process.env.AUTH_SECRET</span>,
+</span></span><span style="display:flex;"><span>})
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#75715e">// app/api/auth/[...nextauth]/route.ts — just 2 lines
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">handlers</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@/auth&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">const</span> { <span style="color:#a6e22e">GET</span>, <span style="color:#a6e22e">POST</span> } <span style="color:#f92672">=</span> <span style="color:#a6e22e">handlers</span>
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#75715e">// Server Component usage
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">auth</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@/auth&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">default</span> <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">function</span> <span style="color:#a6e22e">Dashboard() {</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">session</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">auth</span>()
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span><span style="color:#a6e22e">session</span><span style="color:#f92672">?</span>.<span style="color:#a6e22e">user</span>) <span style="color:#a6e22e">redirect</span>(<span style="color:#e6db74">&#39;/login&#39;</span>)
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">return</span> &lt;<span style="color:#f92672">div</span>&gt;<span style="color:#a6e22e">Welcome</span> {<span style="color:#a6e22e">session</span>.<span style="color:#a6e22e">user</span>.<span style="color:#a6e22e">name</span>}&lt;/<span style="color:#f92672">div</span>&gt;
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>Environment variable auto-detection means <code>AUTH_URL</code> is inferred from request headers in most deployment environments, so you typically only need <code>AUTH_SECRET</code> and your provider secrets (e.g., <code>AUTH_GITHUB_ID</code>, <code>AUTH_GITHUB_SECRET</code>).</p>
+<h2 id="quick-start-setting-up-authjs-v5-with-nextjs-app-router">Quick Start: Setting Up Auth.js v5 with Next.js App Router</h2>
+<p>Setting up Auth.js v5 in a new Next.js 15/16 App Router project requires installing three packages (next-auth@beta, your adapter if using database sessions, and bcryptjs for credentials), creating <code>auth.ts</code> at the project root, and wiring up the route handler. The complete setup takes under an hour for OAuth-only apps. For Credentials provider with database sessions, add two to four hours for schema setup and testing.</p>
+<p><strong>Step 1: Install dependencies</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>npm install next-auth@beta
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># For database sessions (optional):</span>
+</span></span><span style="display:flex;"><span>npm install @auth/prisma-adapter @prisma/client
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># For Credentials provider (optional):</span>
+</span></span><span style="display:flex;"><span>npm install bcryptjs
+</span></span><span style="display:flex;"><span>npm install -D @types/bcryptjs
+</span></span></code></pre></div><p><strong>Step 2: Create <code>auth.ts</code> at project root</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#66d9ef">import</span> <span style="color:#a6e22e">NextAuth</span> <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;next-auth&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> <span style="color:#a6e22e">GitHub</span> <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;next-auth/providers/github&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> <span style="color:#a6e22e">Google</span> <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;next-auth/providers/google&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> <span style="color:#a6e22e">Credentials</span> <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;next-auth/providers/credentials&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">PrismaAdapter</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@auth/prisma-adapter&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">prisma</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@/lib/prisma&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> <span style="color:#a6e22e">bcrypt</span> <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;bcryptjs&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">z</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;zod&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">credentialsSchema</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">z</span>.<span style="color:#66d9ef">object</span>({
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">email</span>: <span style="color:#66d9ef">z.string</span>().<span style="color:#a6e22e">email</span>(),
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">password</span>: <span style="color:#66d9ef">z.string</span>().<span style="color:#a6e22e">min</span>(<span style="color:#ae81ff">8</span>),
+</span></span><span style="display:flex;"><span>})
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">const</span> { <span style="color:#a6e22e">handlers</span>, <span style="color:#a6e22e">signIn</span>, <span style="color:#a6e22e">signOut</span>, <span style="color:#a6e22e">auth</span> } <span style="color:#f92672">=</span> <span style="color:#a6e22e">NextAuth</span>({
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">adapter</span>: <span style="color:#66d9ef">PrismaAdapter</span>(<span style="color:#a6e22e">prisma</span>),
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">session</span><span style="color:#f92672">:</span> { <span style="color:#a6e22e">strategy</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;jwt&#34;</span> }, <span style="color:#75715e">// or &#34;database&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#a6e22e">providers</span><span style="color:#f92672">:</span> [
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">GitHub</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">Google</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">Credentials</span>({
+</span></span><span style="display:flex;"><span>      <span style="color:#a6e22e">credentials</span><span style="color:#f92672">:</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">email</span><span style="color:#f92672">:</span> { <span style="color:#a6e22e">label</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;Email&#34;</span>, <span style="color:#66d9ef">type</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;email&#34;</span> },
+</span></span><span style="display:flex;"><span>        <span style="color:#a6e22e">password</span><span style="color:#f92672">:</span> { <span style="color:#a6e22e">label</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;Password&#34;</span>, <span style="color:#66d9ef">type</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;password&#34;</span> },
+</span></span><span style="display:flex;"><span>      },
+</span></span><span style="display:flex;"><span>      <span style="color:#a6e22e">authorize</span>: <span style="color:#66d9ef">async</span> (<span style="color:#a6e22e">credentials</span>) <span style="color:#f92672">=&gt;</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">parsed</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">credentialsSchema</span>.<span style="color:#a6e22e">safeParse</span>(<span style="color:#a6e22e">credentials</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span><span style="color:#a6e22e">parsed</span>.<span style="color:#a6e22e">success</span>) <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">null</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">user</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">prisma</span>.<span style="color:#a6e22e">user</span>.<span style="color:#a6e22e">findUnique</span>({
+</span></span><span style="display:flex;"><span>          <span style="color:#a6e22e">where</span><span style="color:#f92672">:</span> { <span style="color:#a6e22e">email</span>: <span style="color:#66d9ef">parsed.data.email</span> }
+</span></span><span style="display:flex;"><span>        })
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span><span style="color:#a6e22e">user</span><span style="color:#f92672">?</span>.<span style="color:#a6e22e">password</span>) <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">null</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">valid</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">bcrypt</span>.<span style="color:#a6e22e">compare</span>(<span style="color:#a6e22e">parsed</span>.<span style="color:#a6e22e">data</span>.<span style="color:#a6e22e">password</span>, <span style="color:#a6e22e">user</span>.<span style="color:#a6e22e">password</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">valid</span> <span style="color:#f92672">?</span> <span style="color:#a6e22e">user</span> : <span style="color:#66d9ef">null</span>
+</span></span><span style="display:flex;"><span>      }
+</span></span><span style="display:flex;"><span>    })
+</span></span><span style="display:flex;"><span>  ],
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">callbacks</span><span style="color:#f92672">:</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">jwt</span>({ <span style="color:#a6e22e">token</span>, <span style="color:#a6e22e">user</span> }) {
+</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">if</span> (<span style="color:#a6e22e">user</span>) <span style="color:#a6e22e">token</span>.<span style="color:#a6e22e">role</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">user</span>.<span style="color:#a6e22e">role</span> <span style="color:#75715e">// persist role on sign-in
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>      <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">token</span>
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">session</span>({ <span style="color:#a6e22e">session</span>, <span style="color:#a6e22e">token</span> }) {
+</span></span><span style="display:flex;"><span>      <span style="color:#a6e22e">session</span>.<span style="color:#a6e22e">user</span>.<span style="color:#a6e22e">role</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">token</span>.<span style="color:#a6e22e">role</span> <span style="color:#66d9ef">as</span> <span style="color:#66d9ef">string</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">session</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>})
+</span></span></code></pre></div><p><strong>Step 3: Create route handler</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#75715e">// app/api/auth/[...nextauth]/route.ts
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">handlers</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@/auth&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">const</span> { <span style="color:#a6e22e">GET</span>, <span style="color:#a6e22e">POST</span> } <span style="color:#f92672">=</span> <span style="color:#a6e22e">handlers</span>
+</span></span></code></pre></div><p><strong>Step 4: Add environment variables</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>AUTH_SECRET<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;your-secret-here&#34;</span> <span style="color:#75715e"># openssl rand -base64 32</span>
+</span></span><span style="display:flex;"><span>AUTH_GITHUB_ID<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;your-github-app-id&#34;</span>
+</span></span><span style="display:flex;"><span>AUTH_GITHUB_SECRET<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;your-github-app-secret&#34;</span>
+</span></span><span style="display:flex;"><span>AUTH_GOOGLE_ID<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;your-google-client-id&#34;</span>
+</span></span><span style="display:flex;"><span>AUTH_GOOGLE_SECRET<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;your-google-client-secret&#34;</span>
+</span></span></code></pre></div><h2 id="jwt-vs-database-sessions-choosing-the-right-strategy-for-ai-applications">JWT vs Database Sessions: Choosing the Right Strategy for AI Applications</h2>
+<p>Auth.js v5 supports two session strategies, and the choice between them has significant implications for AI application security and performance. JWT sessions store encrypted session data in a browser cookie — each request is self-contained, no database round-trip required, making them faster but impossible to invalidate until cookie expiry. Database sessions store a reference token in the cookie and look up session data on every authenticated request — one extra DB query per request but immediate revocability. For AI applications, this tradeoff becomes critical because compromised AI agent sessions can incur massive costs before the expiry window closes.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Strategy</th>
+          <th>Request Latency</th>
+          <th>Session Revocation</th>
+          <th>Best For</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>JWT</td>
+          <td>~0ms extra</td>
+          <td>Only at expiry</td>
+          <td>Consumer AI apps, stateless APIs</td>
+      </tr>
+      <tr>
+          <td>Database</td>
+          <td>+5–15ms DB query</td>
+          <td>Immediate</td>
+          <td>B2B/enterprise, agent delegation chains</td>
+      </tr>
+  </tbody>
+</table>
+<p><strong>When to use JWT sessions:</strong></p>
+<ul>
+<li>Consumer-facing AI chat apps where instant revocation is not required</li>
+<li>Edge-deployed API routes where no database connection is available</li>
+<li>High-traffic AI endpoints where per-request DB queries would bottleneck</li>
+</ul>
+<p><strong>When to use Database sessions:</strong></p>
+<ul>
+<li>B2B/enterprise AI applications where admins must be able to force-logout compromised accounts</li>
+<li>AI agent systems where parent agents spawn child agents (delegation chains require traceable session lineage)</li>
+<li>Any AI app processing sensitive enterprise data where compliance mandates immediate revocation capability</li>
+</ul>
+<p>For most AI applications in 2026, the recommended approach is JWT for the user-facing web app layer, combined with short-lived API keys or database-backed tokens for AI agent-to-service communication.</p>
+<h2 id="protecting-routes-middlewarets-server-components-api-routes-and-server-actions">Protecting Routes: middleware.ts, Server Components, API Routes, and Server Actions</h2>
+<p>Auth.js v5 provides four distinct protection patterns corresponding to Next.js&rsquo;s four execution contexts. Route protection in Auth.js v5 works through the <code>auth()</code> function in all four execution contexts — middleware wraps the handler function to intercept unauthenticated requests before they reach your code, Server Components call <code>auth()</code> directly and redirect, Route Handlers call <code>auth()</code> at the top of the handler, and Server Actions call <code>auth()</code> before performing mutations. The middleware pattern is the most efficient for protecting large groups of routes because it runs at the CDN edge before any server code executes.</p>
+<p><strong>Middleware protection (most efficient for grouped routes):</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#75715e">// middleware.ts — auth.config.ts split required for Edge compatibility
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">auth</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;./auth&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">default</span> <span style="color:#a6e22e">auth</span>((<span style="color:#a6e22e">req</span>) <span style="color:#f92672">=&gt;</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">isLoggedIn</span> <span style="color:#f92672">=</span> <span style="color:#f92672">!!</span><span style="color:#a6e22e">req</span>.<span style="color:#a6e22e">auth</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">isApiRoute</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">req</span>.<span style="color:#a6e22e">nextUrl</span>.<span style="color:#a6e22e">pathname</span>.<span style="color:#a6e22e">startsWith</span>(<span style="color:#e6db74">&#39;/api&#39;</span>)
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">isAuthPage</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">req</span>.<span style="color:#a6e22e">nextUrl</span>.<span style="color:#a6e22e">pathname</span>.<span style="color:#a6e22e">startsWith</span>(<span style="color:#e6db74">&#39;/auth&#39;</span>)
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span><span style="color:#a6e22e">isLoggedIn</span> <span style="color:#f92672">&amp;&amp;</span> <span style="color:#f92672">!</span><span style="color:#a6e22e">isAuthPage</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">Response</span>.<span style="color:#a6e22e">redirect</span>(<span style="color:#66d9ef">new</span> <span style="color:#a6e22e">URL</span>(<span style="color:#e6db74">&#39;/auth/login&#39;</span>, <span style="color:#a6e22e">req</span>.<span style="color:#a6e22e">nextUrl</span>))
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> (<span style="color:#a6e22e">isApiRoute</span> <span style="color:#f92672">&amp;&amp;</span> <span style="color:#f92672">!</span><span style="color:#a6e22e">isLoggedIn</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">Response</span>(<span style="color:#a6e22e">JSON</span>.<span style="color:#a6e22e">stringify</span>({ <span style="color:#a6e22e">error</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;Unauthorized&#39;</span> }), { 
+</span></span><span style="display:flex;"><span>      <span style="color:#a6e22e">status</span>: <span style="color:#66d9ef">401</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#a6e22e">headers</span><span style="color:#f92672">:</span> { <span style="color:#e6db74">&#39;Content-Type&#39;</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;application/json&#39;</span> }
+</span></span><span style="display:flex;"><span>    })
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>})
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">config</span> <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">matcher</span><span style="color:#f92672">:</span> [<span style="color:#e6db74">&#39;/((?!_next/static|_next/image|favicon.ico|.*\\.png$).*)&#39;</span>]
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>The matcher pattern is critical — failing to exclude <code>_next/static</code>, <code>_next/image</code>, and static assets causes the middleware to run on every static file request, significantly degrading performance.</p>
+<p><strong>Server Component protection:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">auth</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@/auth&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">redirect</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;next/navigation&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">default</span> <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">function</span> <span style="color:#a6e22e">AIChat() {</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">session</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">auth</span>()
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span><span style="color:#a6e22e">session</span><span style="color:#f92672">?</span>.<span style="color:#a6e22e">user</span>) <span style="color:#a6e22e">redirect</span>(<span style="color:#e6db74">&#39;/auth/login&#39;</span>)
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e">// session.user.role available if RBAC is configured
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#66d9ef">return</span> &lt;<span style="color:#f92672">ChatInterface</span> <span style="color:#a6e22e">userId</span><span style="color:#f92672">=</span>{<span style="color:#a6e22e">session</span>.<span style="color:#a6e22e">user</span>.<span style="color:#a6e22e">id</span>} /&gt;
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p><strong>API Route protection:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">auth</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@/auth&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">NextResponse</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;next/server&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">function</span> <span style="color:#a6e22e">POST</span>(<span style="color:#a6e22e">req</span>: <span style="color:#66d9ef">Request</span>) {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">session</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">auth</span>()
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span><span style="color:#a6e22e">session</span><span style="color:#f92672">?</span>.<span style="color:#a6e22e">user</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">NextResponse</span>.<span style="color:#a6e22e">json</span>({ <span style="color:#a6e22e">error</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;Unauthorized&#39;</span> }, { <span style="color:#a6e22e">status</span>: <span style="color:#66d9ef">401</span> })
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e">// AI API call logic here
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>}
+</span></span></code></pre></div><p><strong>Server Action protection:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#e6db74">&#34;use server&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">auth</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@/auth&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">function</span> <span style="color:#a6e22e">generateAIResponse</span>(<span style="color:#a6e22e">prompt</span>: <span style="color:#66d9ef">string</span>) {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">session</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">auth</span>()
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span><span style="color:#a6e22e">session</span><span style="color:#f92672">?</span>.<span style="color:#a6e22e">user</span>) <span style="color:#66d9ef">throw</span> <span style="color:#66d9ef">new</span> Error(<span style="color:#e6db74">&#39;Unauthorized&#39;</span>)
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e">// Server-side AI API call
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>}
+</span></span></code></pre></div><h2 id="role-based-access-control-rbac-with-authjs">Role-Based Access Control (RBAC) with Auth.js</h2>
+<p>Auth.js v5 implements RBAC through JWT callbacks that persist custom fields to the session token, combined with TypeScript module augmentation that extends the default Session and User types. RBAC with Auth.js v5 uses the <code>jwt()</code> callback to attach role data to the encrypted token on sign-in, the <code>session()</code> callback to expose that role on the client-accessible session object, and TypeScript module augmentation in <code>next-auth.d.ts</code> to add type safety throughout the app. The Prisma schema requires a <code>role</code> field on the User model, which Auth.js reads via the adapter on sign-in and persists to the JWT.</p>
+<p><strong>Prisma schema for RBAC:</strong></p>
+<pre tabindex="0"><code class="language-prisma" data-lang="prisma">enum Role {
+  USER
+  ADMIN
+  AI_OPERATOR
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  role          Role      @default(USER)
+  accounts      Account[]
+  sessions      Session[]
+}
+</code></pre><p><strong>TypeScript module augmentation:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#75715e">// next-auth.d.ts
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">import</span> <span style="color:#e6db74">&#34;next-auth&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">Role</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@prisma/client&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">declare</span> <span style="color:#a6e22e">module</span> <span style="color:#e6db74">&#34;next-auth&#34;</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">interface</span> <span style="color:#a6e22e">User</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">role?</span>: <span style="color:#66d9ef">Role</span>
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">interface</span> <span style="color:#a6e22e">Session</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">user</span><span style="color:#f92672">:</span> {
+</span></span><span style="display:flex;"><span>      <span style="color:#a6e22e">role?</span>: <span style="color:#66d9ef">Role</span>
+</span></span><span style="display:flex;"><span>    } <span style="color:#f92672">&amp;</span> <span style="color:#a6e22e">DefaultSession</span>[<span style="color:#e6db74">&#34;user&#34;</span>]
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">declare</span> <span style="color:#a6e22e">module</span> <span style="color:#e6db74">&#34;next-auth/jwt&#34;</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">interface</span> <span style="color:#a6e22e">JWT</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">role?</span>: <span style="color:#66d9ef">Role</span>
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p><strong>RBAC middleware for AI admin routes:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">default</span> <span style="color:#a6e22e">auth</span>((<span style="color:#a6e22e">req</span>) <span style="color:#f92672">=&gt;</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">session</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">req</span>.<span style="color:#a6e22e">auth</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">isAdminRoute</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">req</span>.<span style="color:#a6e22e">nextUrl</span>.<span style="color:#a6e22e">pathname</span>.<span style="color:#a6e22e">startsWith</span>(<span style="color:#e6db74">&#39;/admin&#39;</span>)
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">isAIOperatorRoute</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">req</span>.<span style="color:#a6e22e">nextUrl</span>.<span style="color:#a6e22e">pathname</span>.<span style="color:#a6e22e">startsWith</span>(<span style="color:#e6db74">&#39;/api/ai&#39;</span>)
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> (<span style="color:#a6e22e">isAdminRoute</span> <span style="color:#f92672">&amp;&amp;</span> <span style="color:#a6e22e">session</span><span style="color:#f92672">?</span>.<span style="color:#a6e22e">user</span><span style="color:#f92672">?</span>.<span style="color:#a6e22e">role</span> <span style="color:#f92672">!==</span> <span style="color:#e6db74">&#39;ADMIN&#39;</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">Response</span>.<span style="color:#a6e22e">redirect</span>(<span style="color:#66d9ef">new</span> <span style="color:#a6e22e">URL</span>(<span style="color:#e6db74">&#39;/unauthorized&#39;</span>, <span style="color:#a6e22e">req</span>.<span style="color:#a6e22e">nextUrl</span>))
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> (<span style="color:#a6e22e">isAIOperatorRoute</span> <span style="color:#f92672">&amp;&amp;</span> <span style="color:#f92672">!</span>[<span style="color:#e6db74">&#39;ADMIN&#39;</span>, <span style="color:#e6db74">&#39;AI_OPERATOR&#39;</span>].<span style="color:#a6e22e">includes</span>(<span style="color:#a6e22e">session</span><span style="color:#f92672">?</span>.<span style="color:#a6e22e">user</span><span style="color:#f92672">?</span>.<span style="color:#a6e22e">role</span> <span style="color:#f92672">??</span> <span style="color:#e6db74">&#39;&#39;</span>)) {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">Response</span>(<span style="color:#a6e22e">JSON</span>.<span style="color:#a6e22e">stringify</span>({ <span style="color:#a6e22e">error</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;Insufficient permissions&#39;</span> }), { <span style="color:#a6e22e">status</span>: <span style="color:#66d9ef">403</span> })
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>})
+</span></span></code></pre></div><h2 id="ai-specific-authentication-challenges">AI-Specific Authentication Challenges</h2>
+<p>AI applications require authentication patterns that traditional web frameworks never anticipated, including stateful context management across multi-turn conversations, session persistence through streaming responses, and agent delegation chains where parent AI agents spawn child agents that must operate within a bounded authorization scope. Stateful context management means tying conversation history to an authenticated session identifier so that prompt injection attacks cannot hijack another user&rsquo;s context window. Streaming response session persistence is a technical challenge unique to AI: HTTP streaming keeps connections open for 30–120 seconds, during which the session must remain valid and checked continuously. Agent delegation chains require that when an AI orchestrator agent spawns a tool-calling sub-agent, that sub-agent inherits a scoped, non-escalatable token — not the full user session.</p>
+<p><strong>Stateful AI context session management:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#75715e">// lib/ai-session.ts
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">auth</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@/auth&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">function</span> <span style="color:#a6e22e">getAISessionContext() {</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">session</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">auth</span>()
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span><span style="color:#a6e22e">session</span><span style="color:#f92672">?</span>.<span style="color:#a6e22e">user</span><span style="color:#f92672">?</span>.<span style="color:#a6e22e">id</span>) <span style="color:#66d9ef">throw</span> <span style="color:#66d9ef">new</span> Error(<span style="color:#e6db74">&#39;Unauthenticated&#39;</span>)
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e">// Fetch conversation context tied to this session
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">context</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">prisma</span>.<span style="color:#a6e22e">aiConversation</span>.<span style="color:#a6e22e">findFirst</span>({
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">where</span><span style="color:#f92672">:</span> { <span style="color:#a6e22e">userId</span>: <span style="color:#66d9ef">session.user.id</span>, <span style="color:#a6e22e">active</span>: <span style="color:#66d9ef">true</span> },
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">include</span><span style="color:#f92672">:</span> { <span style="color:#a6e22e">messages</span><span style="color:#f92672">:</span> { <span style="color:#a6e22e">orderBy</span><span style="color:#f92672">:</span> { <span style="color:#a6e22e">createdAt</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;asc&#39;</span> }, <span style="color:#a6e22e">take</span>: <span style="color:#66d9ef">20</span> } }
+</span></span><span style="display:flex;"><span>  })
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">return</span> { <span style="color:#a6e22e">session</span>, <span style="color:#a6e22e">context</span> }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p><strong>Scoped agent tokens for AI delegation chains:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#75715e">// Generate a time-limited, scoped token for child agent operations
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">function</span> <span style="color:#a6e22e">createAgentDelegationToken</span>(
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">parentSession</span>: <span style="color:#66d9ef">Session</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">scope</span>: <span style="color:#66d9ef">string</span>[],
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">ttlSeconds</span>: <span style="color:#66d9ef">number</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">300</span>
+</span></span><span style="display:flex;"><span>) {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">token</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">encrypt</span>({
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">sub</span>: <span style="color:#66d9ef">parentSession.user.id</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">parentSessionId</span>: <span style="color:#66d9ef">parentSession.id</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">scope</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">exp</span>: <span style="color:#66d9ef">Math.floor</span>(Date.<span style="color:#a6e22e">now</span>() <span style="color:#f92672">/</span> <span style="color:#ae81ff">1000</span>) <span style="color:#f92672">+</span> <span style="color:#a6e22e">ttlSeconds</span>,
+</span></span><span style="display:flex;"><span>  })
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">token</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><h2 id="security-in-the-ai-era-cve-2025-29927-and-owasp-top-10-for-llms">Security in the AI Era: CVE-2025-29927 and OWASP Top 10 for LLMs</h2>
+<p>CVE-2025-29927 (CVSS 9.1) is one of the most critical authentication vulnerabilities in Next.js history — a complete middleware authentication bypass achieved by injecting a <code>x-middleware-subrequest</code> header into HTTP requests, affecting versions 15.x below 15.2.3 and 14.x below 14.2.25. The vulnerability allows an attacker to skip all middleware execution, including auth checks, by setting this single header — no credentials required. If your Next.js middleware is the only authentication layer (a common pattern), this means complete authentication bypass for any unauthenticated request. The fix: update to Next.js 15.2.3+ or 14.2.25+, and never rely solely on middleware for authentication — always validate sessions in Server Components and API Routes as well.</p>
+<p><strong>Defense-in-depth authentication checklist for AI apps:</strong></p>
+<table>
+  <thead>
+      <tr>
+          <th>Layer</th>
+          <th>Vulnerability</th>
+          <th>Mitigation</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Middleware</td>
+          <td>CVE-2025-29927 header injection</td>
+          <td>Update Next.js, add redundant auth checks</td>
+      </tr>
+      <tr>
+          <td>Server Components</td>
+          <td>Missing <code>auth()</code> call</td>
+          <td>Always call <code>auth()</code> before rendering sensitive content</td>
+      </tr>
+      <tr>
+          <td>API Routes</td>
+          <td>Skipped auth check</td>
+          <td>Call <code>auth()</code> at top of every handler</td>
+      </tr>
+      <tr>
+          <td>AI API calls</td>
+          <td>Prompt injection</td>
+          <td>Sanitize user input, system prompt isolation</td>
+      </tr>
+      <tr>
+          <td>Streaming responses</td>
+          <td>Session expiry during stream</td>
+          <td>Re-validate session before each chunk</td>
+      </tr>
+  </tbody>
+</table>
+<p><strong>OWASP Top 10 for LLMs — authentication-relevant items:</strong></p>
+<ul>
+<li><strong>LLM01: Prompt Injection</strong> — success rates exceed 50% on unprotected models; multi-language attacks succeed at 70%+ (Lakera Research, 2025). Mitigation: authenticated session context should be injected via system prompt before user input, not concatenated with it.</li>
+<li><strong>LLM06: Sensitive Information Disclosure</strong> — AI models can leak data from other users&rsquo; contexts if session isolation is not enforced at the database query layer.</li>
+<li><strong>LLM09: Overreliance</strong> — Systems that trust AI outputs without verifying the authenticated user authorized the resulting actions.</li>
+</ul>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#75715e">// Secure AI API route with defense-in-depth
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">function</span> <span style="color:#a6e22e">POST</span>(<span style="color:#a6e22e">req</span>: <span style="color:#66d9ef">Request</span>) {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">session</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">auth</span>() <span style="color:#75715e">// Layer 2 auth check (middleware is Layer 1)
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span><span style="color:#a6e22e">session</span><span style="color:#f92672">?</span>.<span style="color:#a6e22e">user</span>) <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">Response</span>(<span style="color:#e6db74">&#39;Unauthorized&#39;</span>, { <span style="color:#a6e22e">status</span>: <span style="color:#66d9ef">401</span> })
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> { <span style="color:#a6e22e">prompt</span> } <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">req</span>.<span style="color:#a6e22e">json</span>()
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">sanitizedPrompt</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">sanitizePromptInput</span>(<span style="color:#a6e22e">prompt</span>) <span style="color:#75715e">// Remove injection attempts
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">systemPrompt</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">`You are assisting </span><span style="color:#e6db74">${</span><span style="color:#a6e22e">session</span>.<span style="color:#a6e22e">user</span>.<span style="color:#a6e22e">name</span><span style="color:#e6db74">}</span><span style="color:#e6db74"> (ID: </span><span style="color:#e6db74">${</span><span style="color:#a6e22e">session</span>.<span style="color:#a6e22e">user</span>.<span style="color:#a6e22e">id</span><span style="color:#e6db74">}</span><span style="color:#e6db74">).
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">Only access data belonging to this user. Never reveal data from other users.
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">User&#39;s permissions: </span><span style="color:#e6db74">${</span><span style="color:#a6e22e">session</span>.<span style="color:#a6e22e">user</span>.<span style="color:#a6e22e">role</span><span style="color:#e6db74">}</span><span style="color:#e6db74">`</span>
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e">// AI call with isolated context
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>}
+</span></span></code></pre></div><h2 id="token-aware-rate-limiting-protecting-against-runaway-ai-api-costs">Token-Aware Rate Limiting: Protecting Against Runaway AI API Costs</h2>
+<p>Token-aware rate limiting is a security control unique to AI applications — unlike traditional rate limiting that counts requests per minute (RPM), token-aware limiting tracks the cumulative token cost of AI API calls per authenticated user session, because a single 2,000-token GPT-4 Turbo request costs roughly 100x more than a 20-token prompt, making RPM limits alone economically inadequate. Unauthorized AI API usage can cost thousands of dollars per hour (AIMultiple Research, 2025). Implementing token-aware rate limiting requires storing token usage per user in Redis or your database, checking remaining budget before each AI call, and returning a 429 with a <code>Retry-After</code> header when the budget is exhausted.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#75715e">// lib/rate-limit.ts — token-aware rate limiting for AI endpoints
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">auth</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@/auth&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">interface</span> <span style="color:#a6e22e">RateLimitConfig</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">maxTokensPerHour</span>: <span style="color:#66d9ef">number</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">maxRequestsPerMinute</span>: <span style="color:#66d9ef">number</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">DEFAULT_LIMITS</span>: <span style="color:#66d9ef">Record</span>&lt;<span style="color:#f92672">string</span>, <span style="color:#a6e22e">RateLimitConfig</span>&gt; <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">USER</span><span style="color:#f92672">:</span> { <span style="color:#a6e22e">maxTokensPerHour</span>: <span style="color:#66d9ef">50_000</span>, <span style="color:#a6e22e">maxRequestsPerMinute</span>: <span style="color:#66d9ef">10</span> },
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">AI_OPERATOR</span><span style="color:#f92672">:</span> { <span style="color:#a6e22e">maxTokensPerHour</span>: <span style="color:#66d9ef">500_000</span>, <span style="color:#a6e22e">maxRequestsPerMinute</span>: <span style="color:#66d9ef">60</span> },
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">ADMIN</span><span style="color:#f92672">:</span> { <span style="color:#a6e22e">maxTokensPerHour</span>: <span style="color:#66d9ef">2_000_000</span>, <span style="color:#a6e22e">maxRequestsPerMinute</span>: <span style="color:#66d9ef">200</span> },
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">function</span> <span style="color:#a6e22e">checkAIRateLimit</span>(<span style="color:#a6e22e">userId</span>: <span style="color:#66d9ef">string</span>, <span style="color:#a6e22e">role</span>: <span style="color:#66d9ef">string</span>) {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">limits</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">DEFAULT_LIMITS</span>[<span style="color:#a6e22e">role</span>] <span style="color:#f92672">??</span> <span style="color:#a6e22e">DEFAULT_LIMITS</span>.<span style="color:#a6e22e">USER</span>
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> [<span style="color:#a6e22e">hourlyUsage</span>, <span style="color:#a6e22e">minuteRequests</span>] <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">Promise</span>.<span style="color:#a6e22e">all</span>([
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">redis</span>.<span style="color:#66d9ef">get</span>(<span style="color:#e6db74">`ai:tokens:</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">userId</span><span style="color:#e6db74">}</span><span style="color:#e6db74">:</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">hourKey</span>()<span style="color:#e6db74">}</span><span style="color:#e6db74">`</span>),
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">redis</span>.<span style="color:#66d9ef">get</span>(<span style="color:#e6db74">`ai:requests:</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">userId</span><span style="color:#e6db74">}</span><span style="color:#e6db74">:</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">minuteKey</span>()<span style="color:#e6db74">}</span><span style="color:#e6db74">`</span>),
+</span></span><span style="display:flex;"><span>  ])
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> (parseInt(<span style="color:#a6e22e">hourlyUsage</span> <span style="color:#f92672">??</span> <span style="color:#e6db74">&#39;0&#39;</span>) <span style="color:#f92672">&gt;=</span> <span style="color:#a6e22e">limits</span>.<span style="color:#a6e22e">maxTokensPerHour</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">throw</span> <span style="color:#66d9ef">new</span> Error(<span style="color:#e6db74">`Hourly token limit exceeded (</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">limits</span>.<span style="color:#a6e22e">maxTokensPerHour</span><span style="color:#e6db74">}</span><span style="color:#e6db74"> tokens/hour)`</span>)
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> (parseInt(<span style="color:#a6e22e">minuteRequests</span> <span style="color:#f92672">??</span> <span style="color:#e6db74">&#39;0&#39;</span>) <span style="color:#f92672">&gt;=</span> <span style="color:#a6e22e">limits</span>.<span style="color:#a6e22e">maxRequestsPerMinute</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">throw</span> <span style="color:#66d9ef">new</span> Error(<span style="color:#e6db74">`Rate limit exceeded (</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">limits</span>.<span style="color:#a6e22e">maxRequestsPerMinute</span><span style="color:#e6db74">}</span><span style="color:#e6db74"> req/min)`</span>)
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">function</span> <span style="color:#a6e22e">trackAITokenUsage</span>(<span style="color:#a6e22e">userId</span>: <span style="color:#66d9ef">string</span>, <span style="color:#a6e22e">tokensUsed</span>: <span style="color:#66d9ef">number</span>) {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">pipeline</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">redis</span>.<span style="color:#a6e22e">pipeline</span>()
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">pipeline</span>.<span style="color:#a6e22e">incrby</span>(<span style="color:#e6db74">`ai:tokens:</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">userId</span><span style="color:#e6db74">}</span><span style="color:#e6db74">:</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">hourKey</span>()<span style="color:#e6db74">}</span><span style="color:#e6db74">`</span>, <span style="color:#a6e22e">tokensUsed</span>)
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">pipeline</span>.<span style="color:#a6e22e">expire</span>(<span style="color:#e6db74">`ai:tokens:</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">userId</span><span style="color:#e6db74">}</span><span style="color:#e6db74">:</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">hourKey</span>()<span style="color:#e6db74">}</span><span style="color:#e6db74">`</span>, <span style="color:#ae81ff">3600</span>)
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">pipeline</span>.<span style="color:#a6e22e">incr</span>(<span style="color:#e6db74">`ai:requests:</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">userId</span><span style="color:#e6db74">}</span><span style="color:#e6db74">:</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">minuteKey</span>()<span style="color:#e6db74">}</span><span style="color:#e6db74">`</span>)
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">pipeline</span>.<span style="color:#a6e22e">expire</span>(<span style="color:#e6db74">`ai:requests:</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">userId</span><span style="color:#e6db74">}</span><span style="color:#e6db74">:</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">minuteKey</span>()<span style="color:#e6db74">}</span><span style="color:#e6db74">`</span>, <span style="color:#ae81ff">60</span>)
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">pipeline</span>.<span style="color:#a6e22e">exec</span>()
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><h2 id="model-context-protocol-mcp-authentication-a-new-paradigm-for-ai-agent-authorization">Model Context Protocol (MCP) Authentication: A New Paradigm for AI Agent Authorization</h2>
+<p>Model Context Protocol (MCP) represents a new authentication paradigm for AI agent communication with external tools — standardizing how AI assistants like Claude authenticate to external services (databases, APIs, file systems) without exposing full user credentials. MCP authentication sits above Auth.js user authentication: Auth.js proves who the human user is, while MCP authentication controls what tools an AI agent can access on behalf of that user. An authenticated user session does not automatically grant AI agents access to MCP servers — that authorization must be explicitly granted and scoped.</p>
+<p><strong>MCP authorization flow with Auth.js:</strong></p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 472 153"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>U</text>
+<text text-anchor='middle' x='0' y='20' fill='currentColor' style='font-size:1em'>↓</text>
+<text text-anchor='middle' x='0' y='36' fill='currentColor' style='font-size:1em'>U</text>
+<text text-anchor='middle' x='0' y='52' fill='currentColor' style='font-size:1em'>↓</text>
+<text text-anchor='middle' x='0' y='68' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='0' y='84' fill='currentColor' style='font-size:1em'>↓</text>
+<text text-anchor='middle' x='0' y='100' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='0' y='116' fill='currentColor' style='font-size:1em'>↓</text>
+<text text-anchor='middle' x='0' y='132' fill='currentColor' style='font-size:1em'>M</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='8' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='8' y='68' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='8' y='100' fill='currentColor' style='font-size:1em'>I</text>
+<text text-anchor='middle' x='8' y='132' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='16' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='16' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='16' y='132' fill='currentColor' style='font-size:1em'>P</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='24' y='36' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='24' y='68' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='24' y='100' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='32' y='68' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='32' y='100' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='32' y='132' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='40' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='40' y='68' fill='currentColor' style='font-size:1em'>j</text>
+<text text-anchor='middle' x='40' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='40' y='132' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='48' y='36' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='48' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='48' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='48' y='132' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='56' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='56' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='56' y='132' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='64' y='36' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='64' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='64' y='132' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='72' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='72' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='72' y='100' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='72' y='132' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='80' y='36' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='80' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='80' y='100' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='88' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='88' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='88' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='88' y='132' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='96' y='36' fill='currentColor' style='font-size:1em'>z</text>
+<text text-anchor='middle' x='96' y='68' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='96' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='96' y='132' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='104' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='104' y='68' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='104' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='104' y='132' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='112' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='112' y='68' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='112' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='112' y='132' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='120' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='120' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='120' y='132' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='128' y='36' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='128' y='68' fill='currentColor' style='font-size:1em'>→</text>
+<text text-anchor='middle' x='128' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='128' y='132' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='136' y='36' fill='currentColor' style='font-size:1em'>I</text>
+<text text-anchor='middle' x='136' y='132' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='144' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='144' y='100' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='144' y='132' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='152' y='4' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='152' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='152' y='68' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='152' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='152' y='132' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='160' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='160' y='68' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='160' y='100' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='168' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='168' y='68' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='168' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='168' y='132' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='176' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='176' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='176' y='100' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='176' y='132' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='184' y='4' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='184' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='184' y='68' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='184' y='100' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='184' y='132' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='192' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='192' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='192' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='192' y='132' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='200' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='200' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='200' y='68' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='200' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='200' y='132' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='208' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='208' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='208' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='208' y='100' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='208' y='132' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='216' y='4' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='216' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='216' y='68' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='216' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='224' y='4' fill='currentColor' style='font-size:1em'>j</text>
+<text text-anchor='middle' x='224' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='224' y='132' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='232' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='232' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='232' y='68' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='232' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='232' y='132' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='240' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='240' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='240' y='100' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='240' y='132' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='248' y='4' fill='currentColor' style='font-size:1em'>→</text>
+<text text-anchor='middle' x='248' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='248' y='100' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='248' y='132' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='256' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='256' y='68' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='256' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='256' y='132' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='264' y='4' fill='currentColor' style='font-size:1em'>U</text>
+<text text-anchor='middle' x='264' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='264' y='68' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='264' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='264' y='132' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='272' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='272' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='272' y='68' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='280' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='280' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='280' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='280' y='132' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='288' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='288' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='288' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='288' y='100' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='288' y='132' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='296' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='296' y='68' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='296' y='132' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='304' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='304' y='68' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='304' y='100' fill='currentColor' style='font-size:1em'>M</text>
+<text text-anchor='middle' x='304' y='132' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='312' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='312' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='312' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='312' y='100' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='312' y='132' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='320' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='320' y='36' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='320' y='68' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='320' y='100' fill='currentColor' style='font-size:1em'>P</text>
+<text text-anchor='middle' x='320' y='132' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='328' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='328' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='336' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='336' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='336' y='68' fill='currentColor' style='font-size:1em'>w</text>
+<text text-anchor='middle' x='336' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='336' y='132' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='344' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='344' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='344' y='68' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='344' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='344' y='132' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='352' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='352' y='36' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='352' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='352' y='100' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='352' y='132' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='360' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='360' y='68' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='360' y='100' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='360' y='132' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='368' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='368' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='368' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='376' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='376' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='376' y='100' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='376' y='132' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='384' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='384' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='384' y='68' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='384' y='132' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='392' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='392' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='392' y='68' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='392' y='132' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='400' y='4' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='400' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='400' y='68' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='400' y='132' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='408' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='408' y='36' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='408' y='132' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='416' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='416' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='416' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='416' y='132' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='424' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='424' y='68' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='432' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='432' y='68' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='440' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='440' y='68' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='448' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='448' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='456' y='68' fill='currentColor' style='font-size:1em'>s</text>
+</g>
+
+    </svg>
+  
+</div>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#75715e">// lib/mcp-auth.ts — MCP server authorization using Auth.js session
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">auth</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@/auth&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">function</span> <span style="color:#a6e22e">createMCPDelegationToken</span>(
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">toolScopes</span>: <span style="color:#66d9ef">string</span>[],  <span style="color:#75715e">// e.g., [&#39;read:database&#39;, &#39;write:files&#39;]
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#a6e22e">expiresInSeconds</span>: <span style="color:#66d9ef">number</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">300</span>
+</span></span><span style="display:flex;"><span>) {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">session</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">auth</span>()
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span><span style="color:#a6e22e">session</span><span style="color:#f92672">?</span>.<span style="color:#a6e22e">user</span>) <span style="color:#66d9ef">throw</span> <span style="color:#66d9ef">new</span> Error(<span style="color:#e6db74">&#39;Unauthenticated&#39;</span>)
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">signMCPToken</span>({
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">sub</span>: <span style="color:#66d9ef">session.user.id</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">scopes</span>: <span style="color:#66d9ef">toolScopes</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">iss</span>: <span style="color:#66d9ef">process.env.NEXTAUTH_URL</span> <span style="color:#f92672">??</span> <span style="color:#a6e22e">process</span>.<span style="color:#a6e22e">env</span>.<span style="color:#a6e22e">AUTH_URL</span><span style="color:#f92672">!</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">aud</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;mcp-server&#39;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">exp</span>: <span style="color:#66d9ef">Math.floor</span>(Date.<span style="color:#a6e22e">now</span>() <span style="color:#f92672">/</span> <span style="color:#ae81ff">1000</span>) <span style="color:#f92672">+</span> <span style="color:#a6e22e">expiresInSeconds</span>,
+</span></span><span style="display:flex;"><span>  })
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>78% of enterprises have adopted AI, yet 71% regularly use generative AI in production (G2 Research, 2025), making MCP authentication a near-term production requirement rather than a future consideration.</p>
+<h2 id="v4--v5-migration-breaking-changes-and-testing-strategy">v4 → v5 Migration: Breaking Changes and Testing Strategy</h2>
+<p>Migrating from NextAuth v4 to Auth.js v5 takes approximately half a day of mechanical edits plus one day of testing — two days if your app has custom database adapter logic (Web3 AI Blog). The migration is almost entirely mechanical: file moves, package renames, and environment variable renames. No database schema changes are required. OAuth 1.0 providers (Twitter API v1) need replacement. The two-file split for Edge compatibility is the only structural change that requires genuine architectural thinking.</p>
+<p><strong>Complete breaking changes checklist:</strong></p>
+<table>
+  <thead>
+      <tr>
+          <th>v4 Pattern</th>
+          <th>v5 Replacement</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>pages/api/auth/[...nextauth].ts</code></td>
+          <td><code>auth.ts</code> at root + <code>app/api/auth/[...nextauth]/route.ts</code></td>
+      </tr>
+      <tr>
+          <td><code>getServerSession(authOptions)</code></td>
+          <td><code>auth()</code></td>
+      </tr>
+      <tr>
+          <td><code>useSession()</code> from <code>next-auth/react</code></td>
+          <td>Same (unchanged)</td>
+      </tr>
+      <tr>
+          <td><code>NEXTAUTH_SECRET</code></td>
+          <td><code>AUTH_SECRET</code></td>
+      </tr>
+      <tr>
+          <td><code>NEXTAUTH_URL</code></td>
+          <td><code>AUTH_URL</code> (auto-detected, often not needed)</td>
+      </tr>
+      <tr>
+          <td><code>@next-auth/prisma-adapter</code></td>
+          <td><code>@auth/prisma-adapter</code></td>
+      </tr>
+      <tr>
+          <td><code>NextAuthOptions</code> type</td>
+          <td><code>NextAuthConfig</code> type</td>
+      </tr>
+      <tr>
+          <td><code>withAuth</code> middleware wrapper</td>
+          <td><code>auth()</code> wrapper function</td>
+      </tr>
+      <tr>
+          <td><code>getToken({ req })</code> in API routes</td>
+          <td><code>auth()</code></td>
+      </tr>
+  </tbody>
+</table>
+<p><strong>Migration testing strategy:</strong></p>
+<ol>
+<li>Run both v4 and v5 auth configurations in parallel using feature flags during testing</li>
+<li>Test OAuth flows for each provider (Google requires explicit <code>scope: 'openid email profile'</code> in v5)</li>
+<li>Verify JWT token shape if you rely on custom JWT fields</li>
+<li>Test middleware matcher patterns — v5 middleware matcher syntax may need updates</li>
+<li>Verify Drizzle adapter users: v5 has the largest schema delta, check reference schema</li>
+</ol>
+<p><strong>Edge runtime two-file split (required if using adapters):</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#75715e">// auth.config.ts — edge-safe, NO adapter, NO Node.js-only imports
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">import</span> <span style="color:#66d9ef">type</span> { <span style="color:#a6e22e">NextAuthConfig</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;next-auth&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> <span style="color:#a6e22e">GitHub</span> <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;next-auth/providers/github&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> <span style="color:#a6e22e">Google</span> <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;next-auth/providers/google&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">authConfig</span>: <span style="color:#66d9ef">NextAuthConfig</span> <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">providers</span><span style="color:#f92672">:</span> [<span style="color:#a6e22e">GitHub</span>, <span style="color:#a6e22e">Google</span>],
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">pages</span><span style="color:#f92672">:</span> { <span style="color:#a6e22e">signIn</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;/auth/login&#39;</span> },
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">callbacks</span><span style="color:#f92672">:</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">authorized</span>({ <span style="color:#a6e22e">auth</span>, <span style="color:#a6e22e">request</span><span style="color:#f92672">:</span> { <span style="color:#a6e22e">nextUrl</span> } }) {
+</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">isLoggedIn</span> <span style="color:#f92672">=</span> <span style="color:#f92672">!!</span><span style="color:#a6e22e">auth</span><span style="color:#f92672">?</span>.<span style="color:#a6e22e">user</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">isProtected</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">nextUrl</span>.<span style="color:#a6e22e">pathname</span>.<span style="color:#a6e22e">startsWith</span>(<span style="color:#e6db74">&#39;/dashboard&#39;</span>)
+</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">if</span> (<span style="color:#a6e22e">isProtected</span>) <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">isLoggedIn</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#75715e">// auth.ts — full config with adapter (Node.js runtime only)
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">import</span> <span style="color:#a6e22e">NextAuth</span> <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;next-auth&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">PrismaAdapter</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@auth/prisma-adapter&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">prisma</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;@/lib/prisma&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">authConfig</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;./auth.config&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">const</span> { <span style="color:#a6e22e">handlers</span>, <span style="color:#a6e22e">signIn</span>, <span style="color:#a6e22e">signOut</span>, <span style="color:#a6e22e">auth</span> } <span style="color:#f92672">=</span> <span style="color:#a6e22e">NextAuth</span>({
+</span></span><span style="display:flex;"><span>  ...<span style="color:#a6e22e">authConfig</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">adapter</span>: <span style="color:#66d9ef">PrismaAdapter</span>(<span style="color:#a6e22e">prisma</span>),
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">session</span><span style="color:#f92672">:</span> { <span style="color:#a6e22e">strategy</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;jwt&#34;</span> },
+</span></span><span style="display:flex;"><span>})
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#75715e">// middleware.ts — imports from auth.config.ts, NOT auth.ts
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">import</span> <span style="color:#a6e22e">NextAuth</span> <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;next-auth&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">authConfig</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;./auth.config&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">default</span> <span style="color:#a6e22e">NextAuth</span>(<span style="color:#a6e22e">authConfig</span>).<span style="color:#a6e22e">auth</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">config</span> <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">matcher</span><span style="color:#f92672">:</span> [<span style="color:#e6db74">&#39;/((?!api/auth|_next/static|_next/image|.*\\.png$).*)&#39;</span>]
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><h2 id="provider-comparison-diy-vs-authjs-vs-clerk-vs-authgear-for-ai-apps">Provider Comparison: DIY vs Auth.js vs Clerk vs Authgear for AI Apps</h2>
+<p>Choosing the right authentication approach for a Next.js AI application involves three realistic options in 2026: DIY implementation (weeks to months, full control), Auth.js v5 (hours, free OSS, good for consumer apps), or managed platforms like Clerk or Authgear (minutes, production-ready features, monthly cost). DIY authentication&rsquo;s hidden cost is that every new auth method — passkeys, SAML SSO, MFA, WebAuthn — is a fresh engineering project, and every CVE is yours to patch. Auth.js v5 is the sweet spot for bootstrapped AI apps and consumer products, covering OAuth, credentials, magic links, and basic RBAC out of the box. Managed platforms become necessary when B2B multi-tenant isolation, SOC 2 compliance, built-in fraud protection, or enterprise SSO are requirements.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Feature</th>
+          <th>DIY</th>
+          <th>Auth.js v5</th>
+          <th>Clerk</th>
+          <th>Authgear</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Setup time</td>
+          <td>Weeks</td>
+          <td>Hours</td>
+          <td>Minutes</td>
+          <td>Minutes</td>
+      </tr>
+      <tr>
+          <td>Cost</td>
+          <td>Dev time only</td>
+          <td>Free OSS</td>
+          <td>$25–$100+/mo</td>
+          <td>$49+/mo</td>
+      </tr>
+      <tr>
+          <td>OAuth providers</td>
+          <td>Manual</td>
+          <td>80+ built-in</td>
+          <td>30+ built-in</td>
+          <td>20+ built-in</td>
+      </tr>
+      <tr>
+          <td>Passkeys/WebAuthn</td>
+          <td>Weeks of work</td>
+          <td>Experimental</td>
+          <td>✅ Production</td>
+          <td>✅ Production</td>
+      </tr>
+      <tr>
+          <td>SAML/SSO</td>
+          <td>Significant work</td>
+          <td>Custom only</td>
+          <td>✅</td>
+          <td>✅</td>
+      </tr>
+      <tr>
+          <td>AI agent toolkit</td>
+          <td>Build yourself</td>
+          <td>Build yourself</td>
+          <td>✅ @clerk/agent-toolkit</td>
+          <td>Limited</td>
+      </tr>
+      <tr>
+          <td>MCP authentication</td>
+          <td>Build yourself</td>
+          <td>Build yourself</td>
+          <td>Via agent toolkit</td>
+          <td>Limited</td>
+      </tr>
+      <tr>
+          <td>Fraud protection</td>
+          <td>Build yourself</td>
+          <td>None</td>
+          <td>✅</td>
+          <td>✅</td>
+      </tr>
+      <tr>
+          <td>Edge runtime</td>
+          <td>Manual</td>
+          <td>✅ (two-file split)</td>
+          <td>✅</td>
+          <td>✅</td>
+      </tr>
+      <tr>
+          <td>CVE responsibility</td>
+          <td>Yours</td>
+          <td>Auth.js team</td>
+          <td>Provider</td>
+          <td>Provider</td>
+      </tr>
+  </tbody>
+</table>
+<p>Auth.js v5 is explicitly the right choice for: early-stage AI apps, consumer products without SSO requirements, and teams where open-source extensibility outweighs managed convenience. Clerk&rsquo;s <code>@clerk/agent-toolkit</code> provides automatic session context injection into AI system prompts, making it purpose-built for AI applications when budget allows.</p>
+<h2 id="enterprise-requirements-multi-tenant-isolation-and-compliance">Enterprise Requirements: Multi-Tenant Isolation and Compliance</h2>
+<p>Enterprise Next.js AI applications require authentication infrastructure that goes significantly beyond what Auth.js v5 provides out of the box — specifically multi-tenant data isolation, SAML/SSO integration, SOC 2 audit logging, and forced session revocation at the organization level. Auth.js v5 can serve as the foundation for multi-tenant apps, but tenant isolation must be implemented at the data access layer (Prisma query middleware or RLS in PostgreSQL), not at the authentication layer. Each authenticated session should carry a <code>tenantId</code> claim in the JWT, and every database query must be scoped to that tenant.</p>
+<p><strong>Multi-tenant JWT with Auth.js:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#75715e">// auth.ts callbacks for multi-tenant
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#a6e22e">callbacks</span><span style="color:#f92672">:</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">jwt</span>({ <span style="color:#a6e22e">token</span>, <span style="color:#a6e22e">user</span>, <span style="color:#a6e22e">account</span> }) {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> (<span style="color:#a6e22e">user</span><span style="color:#f92672">?</span>.<span style="color:#a6e22e">tenantId</span>) {
+</span></span><span style="display:flex;"><span>      <span style="color:#a6e22e">token</span>.<span style="color:#a6e22e">tenantId</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">user</span>.<span style="color:#a6e22e">tenantId</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#a6e22e">token</span>.<span style="color:#a6e22e">role</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">user</span>.<span style="color:#a6e22e">role</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">token</span>
+</span></span><span style="display:flex;"><span>  },
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">session</span>({ <span style="color:#a6e22e">session</span>, <span style="color:#a6e22e">token</span> }) {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">session</span>.<span style="color:#a6e22e">user</span>.<span style="color:#a6e22e">tenantId</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">token</span>.<span style="color:#a6e22e">tenantId</span> <span style="color:#66d9ef">as</span> <span style="color:#66d9ef">string</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">session</span>.<span style="color:#a6e22e">user</span>.<span style="color:#a6e22e">role</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">token</span>.<span style="color:#a6e22e">role</span> <span style="color:#66d9ef">as</span> <span style="color:#66d9ef">string</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">session</span>
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p><strong>Prisma middleware for tenant isolation:</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-typescript" data-lang="typescript"><span style="display:flex;"><span><span style="color:#a6e22e">prisma</span>.<span style="color:#a6e22e">$use</span>(<span style="color:#66d9ef">async</span> (<span style="color:#a6e22e">params</span>, <span style="color:#a6e22e">next</span>) <span style="color:#f92672">=&gt;</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">session</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">auth</span>()
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span><span style="color:#a6e22e">session</span><span style="color:#f92672">?</span>.<span style="color:#a6e22e">user</span><span style="color:#f92672">?</span>.<span style="color:#a6e22e">tenantId</span>) <span style="color:#66d9ef">throw</span> <span style="color:#66d9ef">new</span> Error(<span style="color:#e6db74">&#39;Missing tenant context&#39;</span>)
+</span></span><span style="display:flex;"><span>  
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> (<span style="color:#a6e22e">params</span>.<span style="color:#a6e22e">action</span> <span style="color:#f92672">===</span> <span style="color:#e6db74">&#39;findMany&#39;</span> <span style="color:#f92672">||</span> <span style="color:#a6e22e">params</span>.<span style="color:#a6e22e">action</span> <span style="color:#f92672">===</span> <span style="color:#e6db74">&#39;findFirst&#39;</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">params</span>.<span style="color:#a6e22e">args</span>.<span style="color:#a6e22e">where</span> <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>      ...<span style="color:#a6e22e">params</span>.<span style="color:#a6e22e">args</span>.<span style="color:#a6e22e">where</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#a6e22e">tenantId</span>: <span style="color:#66d9ef">session.user.tenantId</span>,
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">next</span>(<span style="color:#a6e22e">params</span>)
+</span></span><span style="display:flex;"><span>})
+</span></span></code></pre></div><h2 id="frequently-asked-questions">Frequently Asked Questions</h2>
+<p><strong>Q: What is the difference between NextAuth.js and Auth.js?</strong></p>
+<p>Auth.js is the new name for NextAuth.js v5. The rename reflects the library&rsquo;s expansion beyond Next.js — Auth.js v5 supports SvelteKit, SolidStart, Express, Qwik, and Next.js. For Next.js, you still install <code>next-auth@beta</code> and import from <code>next-auth</code>. The two names refer to the same library at v5+; &ldquo;NextAuth.js&rdquo; typically refers to v4 and earlier.</p>
+<p><strong>Q: Is Auth.js v5 production-ready in 2026?</strong></p>
+<p>Yes. Auth.js v5 (next-auth@beta) is production-ready and widely deployed — it has 22K+ GitHub stars and 111K+ weekly npm downloads. The &ldquo;beta&rdquo; label reflects API stability guarantees, not production readiness. The Auth.js team has indicated a stable v5 release is pending. For new projects starting in 2026, v5 is the recommended choice.</p>
+<p><strong>Q: Should I use JWT or database sessions for an AI chatbot?</strong></p>
+<p>For consumer AI chatbots: JWT sessions are usually sufficient — they&rsquo;re faster (no DB query per request) and the risk of an un-revocable compromised session is low for consumer apps. For B2B AI products: use database sessions so admins can force-logout compromised accounts immediately. The extra 5–15ms per request is worth the security guarantee when enterprise data is involved.</p>
+<p><strong>Q: How do I handle authentication with streaming AI responses?</strong></p>
+<p>Validate the session before initiating the stream, not during. Once the stream starts, you cannot easily interrupt it for auth re-validation without breaking the streaming connection. The pattern: <code>const session = await auth()</code> → validate → start <code>ai.streamText()</code> → pipe to <code>Response</code>. Set stream TTL shorter than session expiry (e.g., max 60-second streams if session expires in 30 minutes).</p>
+<p><strong>Q: How do I fix the CVE-2025-29927 middleware bypass vulnerability?</strong></p>
+<p>Update Next.js to 15.2.3+ (for Next.js 15) or 14.2.25+ (for Next.js 14). Verify with <code>npm list next</code>. Also add defense-in-depth by calling <code>auth()</code> inside Server Components and API Routes, not just relying on middleware. Never treat middleware as the sole authentication layer.</p>
+]]></content:encoded></item><item><title>MCP OAuth 2.1 Authentication: Complete Developer Guide 2026</title><link>https://baeseokjae.github.io/posts/mcp-oauth-authentication-guide-2026/</link><pubDate>Tue, 05 May 2026 15:03:56 +0000</pubDate><guid>https://baeseokjae.github.io/posts/mcp-oauth-authentication-guide-2026/</guid><description>Step-by-step guide to implementing OAuth 2.1 authentication for MCP servers in 2026, covering PKCE, Protected Resource Metadata, and enterprise gateway ...</description><content:encoded><![CDATA[<p>Only 8.5% of MCP servers currently implement OAuth 2.1 authentication — despite it being the protocol&rsquo;s mandatory security standard for remote deployments. If your server handles sensitive data or enterprise workloads, that gap is your attack surface. This guide walks you through the complete implementation, from metadata discovery to token introspection, with working Python code.</p>
+<h2 id="what-is-mcp-oauth-21-and-why-it-matters-in-2026">What Is MCP OAuth 2.1 and Why It Matters in 2026</h2>
+<p>MCP OAuth 2.1 authentication is the authorization framework mandated by the Model Context Protocol specification for all remote HTTP-based servers that expose tools or resources to AI agents. As of the November 2025 spec revision, any MCP server accessible over the internet must implement OAuth 2.1 with PKCE (Proof Key for Code Exchange using the S256 method) — no exceptions. The spec explicitly bans the implicit grant and the plain PKCE method that OAuth 2.0 permitted.</p>
+<p>The stakes are real: a 2026 security audit found that 25% of public MCP servers have no authentication at all, and 53% rely on long-lived static API keys or Personal Access Tokens — credentials that, once leaked, provide indefinite access. The public MCP server registry grew from roughly 1,200 entries in Q1 2025 to over 9,400 servers by mid-April 2026, which means the attack surface has grown more than 7× in fourteen months. Meanwhile, 38% of organizations say security concerns are actively blocking their MCP adoption, and 50% of MCP builders cite access control as their top challenge.</p>
+<p>OAuth 2.1 solves the core problem: it separates the token issuer (your identity provider) from the resource server (your MCP server), ensuring that AI agents prove their identity with short-lived, scoped credentials rather than permanent secrets. For enterprise teams, this is the difference between an auditable access-control system and a credential sprawl nightmare.</p>
+<h2 id="the-mcp-authorization-spec-timeline-marchnovember-2025">The MCP Authorization Spec Timeline (March–November 2025)</h2>
+<p>The MCP authorization spec evolved rapidly through three major revisions in nine months, and understanding what changed helps you avoid implementing an outdated pattern. The March 2025 revision introduced OAuth 2.1 as the baseline for remote MCP servers, replacing the earlier ad-hoc API key recommendations. Authorization server metadata discovery (RFC 8414) was included, letting clients auto-discover token endpoints without hardcoded URLs.</p>
+<p>The June 2025 revision added two critical requirements. First, RFC 9728 Protected Resource Metadata became mandatory — remote servers must now expose a <code>/.well-known/oauth-protected-resource</code> endpoint that tells clients which authorization server to use. Second, dynamic client registration (RFC 7591) became a SHOULD (effectively required for clients like Claude Desktop and ChatGPT that need to self-register). Servers that skip dynamic registration must maintain a static allowlist of client IDs, which breaks compatibility with off-the-shelf AI clients.</p>
+<p>The November 2025 revision — the one currently in force — made three additional changes: it explicitly banned the <code>plain</code> PKCE method in favor of S256 only, required resource parameters (RFC 8707) in all token requests to prevent token reuse across servers, and mandated that 401 responses include a properly formatted <code>WWW-Authenticate</code> header pointing to the authorization server. Servers built against the March 2025 spec are likely missing at least two of these requirements. The clearest signal that a server is outdated: it accepts PKCE <code>plain</code> method or returns 401 without a <code>WWW-Authenticate</code> header.</p>
+<h2 id="core-concepts-oauth-21--pkce-for-mcp">Core Concepts: OAuth 2.1 + PKCE for MCP</h2>
+<p>OAuth 2.1 with PKCE is the grant type used by every MCP client authenticating to a remote server. It works by having the client generate a cryptographic secret (the <code>code_verifier</code>) before the authorization request, derive a challenge from it (the <code>code_challenge</code>), and send only the challenge to the authorization server during the redirect. The server stores the challenge and demands the original verifier during token exchange — preventing an attacker who intercepts the authorization code from redeeming it without also having the verifier, which never travels over the network.</p>
+<p>For MCP specifically, PKCE matters because AI agent clients often run in environments where storing client secrets is impractical or insecure — a desktop application, a CI runner, or a serverless function. PKCE lets these &ldquo;public clients&rdquo; authenticate securely without embedding long-lived secrets. The MCP spec mandates the S256 method: <code>code_challenge = BASE64URL(SHA-256(ASCII(code_verifier)))</code>. The verifier must be a cryptographically random string of 43–128 characters from the unreserved character set.</p>
+<p>The five actors in an MCP OAuth 2.1 flow are: (1) the <strong>AI agent / MCP client</strong>, which initiates the flow; (2) the <strong>authorization server</strong> (Auth0, Keycloak, Okta, Cognito), which issues tokens; (3) the <strong>MCP server</strong>, which acts as a resource server that validates tokens; (4) the <strong>user</strong>, who grants consent; and (5) the <strong>Protected Resource Metadata endpoint</strong>, a <code>/.well-known</code> URL on the MCP server that auto-routes clients to the correct authorization server. Without understanding all five, you&rsquo;ll end up with a flow that works in tests but breaks with real clients.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Concept</th>
+          <th>OAuth 2.0</th>
+          <th>OAuth 2.1 (MCP)</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>PKCE</td>
+          <td>Optional</td>
+          <td>Mandatory (S256 only)</td>
+      </tr>
+      <tr>
+          <td>Implicit grant</td>
+          <td>Allowed</td>
+          <td>Banned</td>
+      </tr>
+      <tr>
+          <td>Resource owner password grant</td>
+          <td>Allowed</td>
+          <td>Banned</td>
+      </tr>
+      <tr>
+          <td>Client secrets for public clients</td>
+          <td>Common</td>
+          <td>Discouraged</td>
+      </tr>
+      <tr>
+          <td>Token endpoint auth</td>
+          <td>Various methods</td>
+          <td><code>client_secret_post</code> or PKCE</td>
+      </tr>
+      <tr>
+          <td><code>WWW-Authenticate</code> on 401</td>
+          <td>Optional</td>
+          <td>Mandatory</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="how-the-mcp-authorization-flow-works-step-by-step">How the MCP Authorization Flow Works Step by Step</h2>
+<p>The MCP authorization flow follows a seven-step sequence that every client implementing the spec must execute. Understanding each step tells you where failures occur and where to add logging. The sequence begins when an MCP client discovers your server&rsquo;s metadata, generates its PKCE credentials, redirects the user to consent, receives an authorization code, exchanges it for tokens, and then attaches those tokens to subsequent MCP requests.</p>
+<p><strong>Step 1 — Protected Resource Metadata discovery.</strong> The client fetches <code>GET /.well-known/oauth-protected-resource</code> on your MCP server. The response is a JSON document (RFC 9728) that includes the <code>authorization_servers</code> field — a list of authorization server URLs the client should use.</p>
+<p><strong>Step 2 — Authorization server metadata discovery.</strong> The client fetches <code>GET {authorization_server}/.well-known/oauth-authorization-server</code>. This RFC 8414 document provides the <code>authorization_endpoint</code>, <code>token_endpoint</code>, <code>registration_endpoint</code> (for dynamic registration), and supported scopes.</p>
+<p><strong>Step 3 — Dynamic client registration (if needed).</strong> If the client has no pre-registered <code>client_id</code>, it POSTs to the <code>registration_endpoint</code> with its metadata (name, redirect URIs, grant types). The server responds with a <code>client_id</code> and optional <code>client_secret</code>.</p>
+<p><strong>Step 4 — PKCE credential generation.</strong> The client generates a cryptographically random <code>code_verifier</code> (minimum 43 characters) and computes <code>code_challenge = BASE64URL(SHA-256(code_verifier))</code>.</p>
+<p><strong>Step 5 — Authorization redirect.</strong> The client redirects the user to the <code>authorization_endpoint</code> with query parameters: <code>response_type=code</code>, <code>client_id</code>, <code>redirect_uri</code>, <code>scope</code>, <code>state</code> (CSRF token), <code>code_challenge</code>, and <code>code_challenge_method=S256</code>. The user authenticates and consents.</p>
+<p><strong>Step 6 — Token exchange.</strong> The client POSTs to the <code>token_endpoint</code> with <code>grant_type=authorization_code</code>, the received <code>code</code>, <code>redirect_uri</code>, <code>code_verifier</code>, and — critically — the <code>resource</code> parameter (RFC 8707) set to your MCP server&rsquo;s URL. The authorization server validates the PKCE challenge and issues an <code>access_token</code> and optionally a <code>refresh_token</code>.</p>
+<p><strong>Step 7 — Bearer token usage.</strong> The client attaches the access token to every MCP request as <code>Authorization: Bearer {token}</code>. Your MCP server validates the token on each request, checks the <code>aud</code> (audience) claim against its own URL, and verifies the required scopes.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> secrets
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> hashlib
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> base64
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> urllib.parse
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Step 4: Generate PKCE credentials</span>
+</span></span><span style="display:flex;"><span>code_verifier <span style="color:#f92672">=</span> secrets<span style="color:#f92672">.</span>token_urlsafe(<span style="color:#ae81ff">64</span>)
+</span></span><span style="display:flex;"><span>code_challenge_bytes <span style="color:#f92672">=</span> hashlib<span style="color:#f92672">.</span>sha256(code_verifier<span style="color:#f92672">.</span>encode())<span style="color:#f92672">.</span>digest()
+</span></span><span style="display:flex;"><span>code_challenge <span style="color:#f92672">=</span> base64<span style="color:#f92672">.</span>urlsafe_b64encode(code_challenge_bytes)<span style="color:#f92672">.</span>rstrip(<span style="color:#e6db74">b</span><span style="color:#e6db74">&#39;=&#39;</span>)<span style="color:#f92672">.</span>decode()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Step 5: Build authorization URL</span>
+</span></span><span style="display:flex;"><span>params <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;response_type&#34;</span>: <span style="color:#e6db74">&#34;code&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;client_id&#34;</span>: <span style="color:#e6db74">&#34;your-client-id&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;redirect_uri&#34;</span>: <span style="color:#e6db74">&#34;https://yourapp.com/callback&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;scope&#34;</span>: <span style="color:#e6db74">&#34;mcp:read mcp:write&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;state&#34;</span>: secrets<span style="color:#f92672">.</span>token_urlsafe(<span style="color:#ae81ff">16</span>),
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;code_challenge&#34;</span>: code_challenge,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;code_challenge_method&#34;</span>: <span style="color:#e6db74">&#34;S256&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;resource&#34;</span>: <span style="color:#e6db74">&#34;https://your-mcp-server.com&#34;</span>,  <span style="color:#75715e"># RFC 8707</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>auth_url <span style="color:#f92672">=</span> <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;https://auth.example.com/authorize?</span><span style="color:#e6db74">{</span>urllib<span style="color:#f92672">.</span>parse<span style="color:#f92672">.</span>urlencode(params)<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>
+</span></span></code></pre></div><h2 id="implementing-protected-resource-metadata-rfc-9728">Implementing Protected Resource Metadata (RFC 9728)</h2>
+<p>RFC 9728 Protected Resource Metadata is the hidden requirement that most MCP OAuth guides skip — and its absence breaks compatibility with Claude Desktop, ChatGPT plugins, and any spec-compliant MCP client. A remote MCP server that returns a 404 on <code>/.well-known/oauth-protected-resource</code> will fail the auto-discovery step, causing clients to either fail silently or prompt users for manual configuration. The RFC requires this endpoint to be served without authentication, over HTTPS in production, and to return a JSON document with a minimum set of fields.</p>
+<p>The required fields are <code>resource</code> (the canonical URL of your MCP server) and <code>authorization_servers</code> (an array of authorization server URLs). Optional but recommended fields include <code>scopes_supported</code> (the scopes your server understands), <code>bearer_methods_supported</code> (always <code>[&quot;header&quot;]</code> for MCP), and <code>resource_documentation</code> (a URL to your server&rsquo;s documentation).</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> fastapi <span style="color:#f92672">import</span> FastAPI
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> fastapi.responses <span style="color:#f92672">import</span> JSONResponse
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>app <span style="color:#f92672">=</span> FastAPI()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>MCP_SERVER_URL <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;https://your-mcp-server.com&#34;</span>
+</span></span><span style="display:flex;"><span>AUTHORIZATION_SERVER <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;https://auth.example.com&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">@app.get</span>(<span style="color:#e6db74">&#34;/.well-known/oauth-protected-resource&#34;</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">protected_resource_metadata</span>():
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> JSONResponse({
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;resource&#34;</span>: MCP_SERVER_URL,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;authorization_servers&#34;</span>: [AUTHORIZATION_SERVER],
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;scopes_supported&#34;</span>: [<span style="color:#e6db74">&#34;mcp:read&#34;</span>, <span style="color:#e6db74">&#34;mcp:write&#34;</span>, <span style="color:#e6db74">&#34;mcp:admin&#34;</span>],
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;bearer_methods_supported&#34;</span>: [<span style="color:#e6db74">&#34;header&#34;</span>],
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;resource_documentation&#34;</span>: <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">{</span>MCP_SERVER_URL<span style="color:#e6db74">}</span><span style="color:#e6db74">/docs&#34;</span>,
+</span></span><span style="display:flex;"><span>    })
+</span></span></code></pre></div><p>One subtle requirement: the <code>resource</code> field in this document must exactly match the <code>resource</code> parameter clients send in token requests. If your server URL has a trailing slash in the metadata but clients omit it in the token request, the authorization server&rsquo;s audience validation will fail. Use a canonical form (no trailing slash, lowercase hostname) and document it clearly for client implementors.</p>
+<p>For servers deployed behind a reverse proxy (nginx, Cloudflare), ensure the <code>Host</code> header is forwarded correctly so that dynamically generated URLs in responses reflect the public URL, not the internal container address. This is a common source of auth failures in Docker-based deployments.</p>
+<h2 id="dynamic-client-registration-rfc-7591-in-practice">Dynamic Client Registration (RFC 7591) in Practice</h2>
+<p>Dynamic client registration (RFC 7591) allows MCP clients — including Claude Desktop, ChatGPT integrations, and custom agents — to self-register with your authorization server without requiring manual pre-provisioning. Without it, every new AI tool that wants to use your MCP server requires you to create a client ID and share it out-of-band, which creates administrative overhead and breaks the ecosystem-scale interoperability that MCP is designed for.</p>
+<p>The registration endpoint (<code>registration_endpoint</code> in your authorization server metadata) accepts a POST with a JSON body describing the client. The authorization server responds with a <code>client_id</code> (and optionally a <code>client_secret</code> for confidential clients, though public MCP clients should not receive one). The fields that matter most for MCP compatibility are <code>grant_types</code> (must include <code>authorization_code</code>), <code>token_endpoint_auth_method</code> (<code>none</code> for public clients using PKCE), <code>redirect_uris</code> (must be pre-validated against an allowlist in production), and <code>response_types</code> (<code>[&quot;code&quot;]</code> only — <code>token</code> is banned in OAuth 2.1).</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> httpx
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">register_client</span>(registration_endpoint: str, redirect_uri: str) <span style="color:#f92672">-&gt;</span> dict:
+</span></span><span style="display:flex;"><span>    payload <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;client_name&#34;</span>: <span style="color:#e6db74">&#34;My MCP Agent&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;redirect_uris&#34;</span>: [redirect_uri],
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;grant_types&#34;</span>: [<span style="color:#e6db74">&#34;authorization_code&#34;</span>, <span style="color:#e6db74">&#34;refresh_token&#34;</span>],
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;response_types&#34;</span>: [<span style="color:#e6db74">&#34;code&#34;</span>],
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;token_endpoint_auth_method&#34;</span>: <span style="color:#e6db74">&#34;none&#34;</span>,  <span style="color:#75715e"># public client, uses PKCE</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;scope&#34;</span>: <span style="color:#e6db74">&#34;mcp:read mcp:write&#34;</span>,
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">with</span> httpx<span style="color:#f92672">.</span>AsyncClient() <span style="color:#66d9ef">as</span> client:
+</span></span><span style="display:flex;"><span>        resp <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> client<span style="color:#f92672">.</span>post(registration_endpoint, json<span style="color:#f92672">=</span>payload)
+</span></span><span style="display:flex;"><span>        resp<span style="color:#f92672">.</span>raise_for_status()
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> resp<span style="color:#f92672">.</span>json()  <span style="color:#75715e"># contains client_id</span>
+</span></span></code></pre></div><p>In production, you should rate-limit the registration endpoint and implement an approval workflow or IP allowlist, because open dynamic registration is an abuse vector: a malicious actor could register thousands of clients to enumerate your authorization server&rsquo;s behavior. Auth0 and Okta offer fine-grained controls for this; Keycloak&rsquo;s dynamic registration is disabled by default and must be explicitly enabled per realm.</p>
+<h2 id="building-an-oauth-21-mcp-server-with-fastmcp-python">Building an OAuth 2.1 MCP Server with FastMCP (Python)</h2>
+<p>FastMCP is the fastest path to a production-ready OAuth-authenticated MCP server in Python. It handles the JSON-RPC transport, tool registration, and middleware integration, so you only need to implement the OAuth validation layer. The key design principle is that your MCP server is a resource server only — it never shows login pages, never issues tokens, and never stores credentials. Token issuance is the authorization server&rsquo;s job.</p>
+<p>The minimal implementation requires four components: the Protected Resource Metadata endpoint, a Bearer token validator middleware, tool definitions, and an ASGI app that wires them together.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> fastmcp <span style="color:#f92672">import</span> FastMCP
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> fastapi <span style="color:#f92672">import</span> FastAPI, Request, HTTPException
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> fastapi.responses <span style="color:#f92672">import</span> JSONResponse
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> httpx
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> jwt  <span style="color:#75715e"># PyJWT</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>MCP_SERVER_URL <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;https://your-mcp-server.com&#34;</span>
+</span></span><span style="display:flex;"><span>AUTHORIZATION_SERVER <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;https://auth.example.com&#34;</span>
+</span></span><span style="display:flex;"><span>JWKS_URI <span style="color:#f92672">=</span> <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">{</span>AUTHORIZATION_SERVER<span style="color:#e6db74">}</span><span style="color:#e6db74">/.well-known/jwks.json&#34;</span>
+</span></span><span style="display:flex;"><span>REQUIRED_SCOPE <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;mcp:read&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>mcp <span style="color:#f92672">=</span> FastMCP(<span style="color:#e6db74">&#34;Secure MCP Server&#34;</span>)
+</span></span><span style="display:flex;"><span>app <span style="color:#f92672">=</span> FastAPI()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Protected Resource Metadata (RFC 9728)</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">@app.get</span>(<span style="color:#e6db74">&#34;/.well-known/oauth-protected-resource&#34;</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">protected_resource_metadata</span>():
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> JSONResponse({
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;resource&#34;</span>: MCP_SERVER_URL,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;authorization_servers&#34;</span>: [AUTHORIZATION_SERVER],
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;scopes_supported&#34;</span>: [<span style="color:#e6db74">&#34;mcp:read&#34;</span>, <span style="color:#e6db74">&#34;mcp:write&#34;</span>],
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;bearer_methods_supported&#34;</span>: [<span style="color:#e6db74">&#34;header&#34;</span>],
+</span></span><span style="display:flex;"><span>    })
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Token validation middleware</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">@app.middleware</span>(<span style="color:#e6db74">&#34;http&#34;</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">validate_bearer_token</span>(request: Request, call_next):
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># Skip auth for metadata endpoint</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> request<span style="color:#f92672">.</span>url<span style="color:#f92672">.</span>path <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;/.well-known/oauth-protected-resource&#34;</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">await</span> call_next(request)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    auth_header <span style="color:#f92672">=</span> request<span style="color:#f92672">.</span>headers<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;Authorization&#34;</span>, <span style="color:#e6db74">&#34;&#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> <span style="color:#f92672">not</span> auth_header<span style="color:#f92672">.</span>startswith(<span style="color:#e6db74">&#34;Bearer &#34;</span>):
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> JSONResponse(
+</span></span><span style="display:flex;"><span>            status_code<span style="color:#f92672">=</span><span style="color:#ae81ff">401</span>,
+</span></span><span style="display:flex;"><span>            headers<span style="color:#f92672">=</span>{
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;WWW-Authenticate&#34;</span>: (
+</span></span><span style="display:flex;"><span>                    <span style="color:#e6db74">f</span><span style="color:#e6db74">&#39;Bearer realm=&#34;</span><span style="color:#e6db74">{</span>MCP_SERVER_URL<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;, &#39;</span>
+</span></span><span style="display:flex;"><span>                    <span style="color:#e6db74">f</span><span style="color:#e6db74">&#39;resource_metadata=&#34;</span><span style="color:#e6db74">{</span>MCP_SERVER_URL<span style="color:#e6db74">}</span><span style="color:#e6db74">/.well-known/oauth-protected-resource&#34;&#39;</span>
+</span></span><span style="display:flex;"><span>                )
+</span></span><span style="display:flex;"><span>            },
+</span></span><span style="display:flex;"><span>            content<span style="color:#f92672">=</span>{<span style="color:#e6db74">&#34;error&#34;</span>: <span style="color:#e6db74">&#34;unauthorized&#34;</span>},
+</span></span><span style="display:flex;"><span>        )
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    token <span style="color:#f92672">=</span> auth_header<span style="color:#f92672">.</span>removeprefix(<span style="color:#e6db74">&#34;Bearer &#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">try</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Fetch JWKS and validate JWT</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">with</span> httpx<span style="color:#f92672">.</span>AsyncClient() <span style="color:#66d9ef">as</span> client:
+</span></span><span style="display:flex;"><span>            jwks_resp <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> client<span style="color:#f92672">.</span>get(JWKS_URI)
+</span></span><span style="display:flex;"><span>            jwks <span style="color:#f92672">=</span> jwks_resp<span style="color:#f92672">.</span>json()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        jwks_client <span style="color:#f92672">=</span> jwt<span style="color:#f92672">.</span>PyJWKClient(JWKS_URI)
+</span></span><span style="display:flex;"><span>        signing_key <span style="color:#f92672">=</span> jwks_client<span style="color:#f92672">.</span>get_signing_key_from_jwt(token)
+</span></span><span style="display:flex;"><span>        payload <span style="color:#f92672">=</span> jwt<span style="color:#f92672">.</span>decode(
+</span></span><span style="display:flex;"><span>            token,
+</span></span><span style="display:flex;"><span>            signing_key<span style="color:#f92672">.</span>key,
+</span></span><span style="display:flex;"><span>            algorithms<span style="color:#f92672">=</span>[<span style="color:#e6db74">&#34;RS256&#34;</span>],
+</span></span><span style="display:flex;"><span>            audience<span style="color:#f92672">=</span>MCP_SERVER_URL,  <span style="color:#75715e"># validate aud claim</span>
+</span></span><span style="display:flex;"><span>        )
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Check required scope</span>
+</span></span><span style="display:flex;"><span>        scopes <span style="color:#f92672">=</span> payload<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;scope&#34;</span>, <span style="color:#e6db74">&#34;&#34;</span>)<span style="color:#f92672">.</span>split()
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> REQUIRED_SCOPE <span style="color:#f92672">not</span> <span style="color:#f92672">in</span> scopes:
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">raise</span> HTTPException(status_code<span style="color:#f92672">=</span><span style="color:#ae81ff">403</span>, detail<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;insufficient_scope&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        request<span style="color:#f92672">.</span>state<span style="color:#f92672">.</span>user_id <span style="color:#f92672">=</span> payload<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;sub&#34;</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">await</span> call_next(request)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">except</span> jwt<span style="color:#f92672">.</span>InvalidTokenError <span style="color:#66d9ef">as</span> e:
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> JSONResponse(
+</span></span><span style="display:flex;"><span>            status_code<span style="color:#f92672">=</span><span style="color:#ae81ff">401</span>,
+</span></span><span style="display:flex;"><span>            headers<span style="color:#f92672">=</span>{<span style="color:#e6db74">&#34;WWW-Authenticate&#34;</span>: <span style="color:#e6db74">f</span><span style="color:#e6db74">&#39;Bearer error=&#34;invalid_token&#34; error_description=&#34;</span><span style="color:#e6db74">{</span>e<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;&#39;</span>},
+</span></span><span style="display:flex;"><span>            content<span style="color:#f92672">=</span>{<span style="color:#e6db74">&#34;error&#34;</span>: <span style="color:#e6db74">&#34;invalid_token&#34;</span>},
+</span></span><span style="display:flex;"><span>        )
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Tool definition</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">@mcp.tool</span>()
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">get_data</span>(query: str) <span style="color:#f92672">-&gt;</span> str:
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;&#34;&#34;Fetch data based on a query string.&#34;&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Data for: </span><span style="color:#e6db74">{</span>query<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Mount MCP under FastAPI</span>
+</span></span><span style="display:flex;"><span>app<span style="color:#f92672">.</span>mount(<span style="color:#e6db74">&#34;/mcp&#34;</span>, mcp<span style="color:#f92672">.</span>get_asgi_app())
+</span></span></code></pre></div><p>This structure gives you a single ASGI application that handles both the OAuth metadata discovery and the MCP protocol. The <code>audience</code> validation in <code>jwt.decode</code> is non-negotiable: without it, a token issued for a different resource server can be replayed against yours. Always validate <code>aud</code> against your server&rsquo;s canonical URL.</p>
+<h2 id="token-management-access-tokens-refresh-tokens-and-introspection">Token Management: Access Tokens, Refresh Tokens, and Introspection</h2>
+<p>Token management for MCP deployments follows a short-lived access token + refresh token pattern, because AI agents may run for hours or days without user interaction. The MCP spec recommends access token lifetimes of 5–30 minutes — short enough to limit the blast radius of a leaked token, long enough to avoid excessive token refresh overhead during a typical tool-calling session. Refresh tokens should have lifetimes of 24 hours to 30 days depending on your security posture, with rotation on each use (a leaked refresh token can only be used once before the original is invalidated).</p>
+<p>Token introspection (RFC 7662) is the alternative to local JWT validation when you need real-time validity checks — for example, to immediately revoke access after a security incident without waiting for the token&rsquo;s expiry. The introspection endpoint accepts a <code>token</code> POST parameter and returns a JSON object with <code>active</code> (boolean), <code>scope</code>, <code>exp</code>, <code>sub</code>, and other claims. The tradeoff is latency: every MCP request triggers an HTTP round-trip to the authorization server.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">introspect_token</span>(token: str, auth_server: str, client_id: str, client_secret: str) <span style="color:#f92672">-&gt;</span> dict:
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;&#34;&#34;Validate token via introspection endpoint (use when revocation is critical).&#34;&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">with</span> httpx<span style="color:#f92672">.</span>AsyncClient() <span style="color:#66d9ef">as</span> client:
+</span></span><span style="display:flex;"><span>        resp <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> client<span style="color:#f92672">.</span>post(
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">{</span>auth_server<span style="color:#e6db74">}</span><span style="color:#e6db74">/oauth/introspect&#34;</span>,
+</span></span><span style="display:flex;"><span>            data<span style="color:#f92672">=</span>{<span style="color:#e6db74">&#34;token&#34;</span>: token},
+</span></span><span style="display:flex;"><span>            auth<span style="color:#f92672">=</span>(client_id, client_secret),
+</span></span><span style="display:flex;"><span>        )
+</span></span><span style="display:flex;"><span>        payload <span style="color:#f92672">=</span> resp<span style="color:#f92672">.</span>json()
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> <span style="color:#f92672">not</span> payload<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;active&#34;</span>):
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">raise</span> HTTPException(status_code<span style="color:#f92672">=</span><span style="color:#ae81ff">401</span>, detail<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;token_revoked&#34;</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> payload
+</span></span></code></pre></div><p>For most MCP servers, local JWT validation (verifying the signature and <code>exp</code> claim) is the right default, with a cached JWKS response (5-minute TTL) to avoid hitting the authorization server on every request. Reserve introspection for high-security tools — those that execute write operations, access PII, or trigger financial transactions — where the cost of a revoked token still being accepted for 30 minutes is unacceptable.</p>
+<p>Refresh token handling in agent workflows requires careful design: agents often run in background tasks without a user session, so the refresh flow must be non-interactive. Store refresh tokens in an encrypted secret store (AWS Secrets Manager, HashiCorp Vault, or environment variables in development), never in application logs or error messages. Implement a token refresh with 60-second overlap before expiry to avoid race conditions on concurrent tool calls.</p>
+<h2 id="enterprise-patterns-the-mcp-gateway-architecture">Enterprise Patterns: The MCP Gateway Architecture</h2>
+<p>The MCP gateway pattern has emerged as the dominant enterprise architecture for OAuth-authenticated MCP deployments in 2026. Rather than implementing OAuth validation in every individual MCP server, a centralized gateway proxy sits in front of all servers, handles token validation, enforces scope-based routing, and provides a unified audit log. Individual MCP servers behind the gateway can run without OAuth code entirely, accepting connections only from the trusted gateway IP range.</p>
+<p>The gateway architecture solves three enterprise problems that per-server OAuth implementation cannot. First, it centralizes credential policy: rotate the signing keys once at the gateway, and all downstream servers benefit immediately. Second, it solves the confused deputy problem — a vulnerability where a malicious MCP server uses its own token to call another MCP server on behalf of the original caller. The gateway enforces token isolation by reissuing downstream tokens with narrowed scopes. Third, it enables centralized rate limiting, request logging, and anomaly detection without modifying individual server code.</p>
+<p>A production MCP gateway handles several key functions:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Gateway Function</th>
+          <th>Implementation</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Protected Resource Metadata</td>
+          <td>Serves unified <code>/.well-known</code> endpoints for all upstream servers</td>
+      </tr>
+      <tr>
+          <td>Token validation</td>
+          <td>Validates Bearer tokens from clients; caches JWKS with 5-min TTL</td>
+      </tr>
+      <tr>
+          <td>Scope routing</td>
+          <td>Routes <code>mcp:crm:read</code> to CRM server, <code>mcp:db:write</code> to DB server</td>
+      </tr>
+      <tr>
+          <td>Downstream token</td>
+          <td>Issues scoped downstream tokens or passes validated claims as headers</td>
+      </tr>
+      <tr>
+          <td>Audit logging</td>
+          <td>Logs every tool call with <code>sub</code>, <code>scope</code>, timestamp, and response code</td>
+      </tr>
+      <tr>
+          <td>Rate limiting</td>
+          <td>Per-client-ID rate limits to prevent token abuse by compromised agents</td>
+      </tr>
+  </tbody>
+</table>
+<p>Popular open-source options for building an MCP gateway include Kong (with JWT and OAuth 2.0 plugins), Traefik with ForwardAuth middleware, and custom FastAPI proxies using the HTTPX streaming client. For teams already using Cloudflare, Cloudflare&rsquo;s Workers-based OAuth validation can serve as a lightweight gateway layer with near-zero latency overhead.</p>
+<p>The main tradeoff of the gateway pattern is that it introduces a single point of failure. Mitigate this with multiple gateway instances behind a load balancer, active health checks on upstream MCP servers, and circuit breakers that fail open (return 503 rather than silent data loss) when an upstream is unavailable.</p>
+<h2 id="security-best-practices-and-common-pitfalls">Security Best Practices and Common Pitfalls</h2>
+<p>Securing MCP OAuth 2.1 implementations requires addressing a set of attack patterns specific to AI agent deployments. The most critical pitfall is missing audience validation: if your MCP server validates the token signature and expiry but doesn&rsquo;t check the <code>aud</code> claim, any valid token issued for <em>any</em> resource on your authorization server can access your tools. This is a concrete attack vector, not a theoretical one — a token issued to access a user&rsquo;s calendar can be replayed against your MCP server if audience validation is absent.</p>
+<p><strong>Seven rules for production MCP OAuth security:</strong></p>
+<ol>
+<li><strong>Always validate <code>aud</code></strong> — check that the token&rsquo;s audience matches your server&rsquo;s canonical URL exactly (including scheme and no trailing slash).</li>
+<li><strong>Use S256 PKCE exclusively</strong> — reject any authorization request with <code>code_challenge_method=plain</code> at the authorization endpoint.</li>
+<li><strong>Enforce HTTPS everywhere</strong> — never accept Bearer tokens over HTTP in production; HTTPS ensures the token is not intercepted in transit.</li>
+<li><strong>Set short access token lifetimes</strong> — 5–15 minutes for tools that access sensitive data; 15–30 minutes for read-only tools.</li>
+<li><strong>Rotate refresh tokens on use</strong> — configure your authorization server for refresh token rotation; a rotated token that&rsquo;s used twice indicates a theft.</li>
+<li><strong>Scope your tokens narrowly</strong> — issue <code>mcp:read</code> for read operations and <code>mcp:write</code> for write operations; never issue a single broad scope that covers everything.</li>
+<li><strong>Log and alert on 401/403 spikes</strong> — a sudden increase in authentication failures often indicates a compromised client or a misconfigured agent retrying with an expired token.</li>
+</ol>
+<p>Common pitfalls to avoid:</p>
+<ul>
+<li><strong>Returning 403 without <code>WWW-Authenticate</code></strong> — clients expect this header to discover your authorization server; without it, they cannot initiate the flow automatically.</li>
+<li><strong>Storing tokens in logs</strong> — structured logging libraries often serialize full request objects; explicitly mask the <code>Authorization</code> header before logging.</li>
+<li><strong>Ignoring clock skew</strong> — JWT validators with zero tolerance for <code>nbf</code> and <code>exp</code> clock drift will fail intermittently; allow 30–60 seconds of leeway.</li>
+<li><strong>Using symmetric keys (HMAC)</strong> — HS256 requires sharing the secret with both the issuer and the validator; RS256 or ES256 asymmetric keys eliminate this risk.</li>
+</ul>
+<h2 id="testing-and-debugging-your-oauth-mcp-flow">Testing and Debugging Your OAuth MCP Flow</h2>
+<p>Testing an OAuth 2.1 MCP flow end-to-end requires a local authorization server, a test MCP client, and instrumented middleware that logs every step of the token lifecycle. The fastest local setup uses Keycloak in Docker, which supports all required OAuth 2.1 features including dynamic client registration, PKCE, token introspection, and RFC 8414 metadata discovery.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Start Keycloak for local MCP OAuth testing</span>
+</span></span><span style="display:flex;"><span>docker run -d <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -p 8080:8080 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -e KEYCLOAK_ADMIN<span style="color:#f92672">=</span>admin <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -e KEYCLOAK_ADMIN_PASSWORD<span style="color:#f92672">=</span>admin <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  quay.io/keycloak/keycloak:24.0.1 start-dev
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># After startup, configure realm at http://localhost:8080</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Create: realm &#34;mcp-test&#34;, client &#34;mcp-server&#34; (resource server), </span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># client &#34;mcp-client&#34; (public, PKCE only)</span>
+</span></span></code></pre></div><p>A minimal test script that validates your full OAuth flow:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> httpx
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> secrets
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> hashlib
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> base64
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>MCP_SERVER <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;http://localhost:8000&#34;</span>
+</span></span><span style="display:flex;"><span>AUTH_SERVER <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;http://localhost:8080/realms/mcp-test&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">run_flow_test</span>():
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># 1. Fetch Protected Resource Metadata</span>
+</span></span><span style="display:flex;"><span>    meta <span style="color:#f92672">=</span> httpx<span style="color:#f92672">.</span>get(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">{</span>MCP_SERVER<span style="color:#e6db74">}</span><span style="color:#e6db74">/.well-known/oauth-protected-resource&#34;</span>)<span style="color:#f92672">.</span>json()
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">assert</span> meta[<span style="color:#e6db74">&#34;authorization_servers&#34;</span>], <span style="color:#e6db74">&#34;Missing authorization_servers&#34;</span>
+</span></span><span style="display:flex;"><span>    print(<span style="color:#e6db74">&#34;✓ Protected Resource Metadata OK&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># 2. Fetch Authorization Server Metadata  </span>
+</span></span><span style="display:flex;"><span>    as_url <span style="color:#f92672">=</span> meta[<span style="color:#e6db74">&#34;authorization_servers&#34;</span>][<span style="color:#ae81ff">0</span>]
+</span></span><span style="display:flex;"><span>    as_meta <span style="color:#f92672">=</span> httpx<span style="color:#f92672">.</span>get(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">{</span>as_url<span style="color:#e6db74">}</span><span style="color:#e6db74">/.well-known/oauth-authorization-server&#34;</span>)<span style="color:#f92672">.</span>json()
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">assert</span> as_meta[<span style="color:#e6db74">&#34;token_endpoint&#34;</span>], <span style="color:#e6db74">&#34;Missing token_endpoint&#34;</span>
+</span></span><span style="display:flex;"><span>    print(<span style="color:#e6db74">&#34;✓ Authorization Server Metadata OK&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># 3. Validate PKCE S256 enforcement (plain should be rejected)</span>
+</span></span><span style="display:flex;"><span>    verifier <span style="color:#f92672">=</span> secrets<span style="color:#f92672">.</span>token_urlsafe(<span style="color:#ae81ff">64</span>)
+</span></span><span style="display:flex;"><span>    challenge_bytes <span style="color:#f92672">=</span> hashlib<span style="color:#f92672">.</span>sha256(verifier<span style="color:#f92672">.</span>encode())<span style="color:#f92672">.</span>digest()
+</span></span><span style="display:flex;"><span>    challenge <span style="color:#f92672">=</span> base64<span style="color:#f92672">.</span>urlsafe_b64encode(challenge_bytes)<span style="color:#f92672">.</span>rstrip(<span style="color:#e6db74">b</span><span style="color:#e6db74">&#34;=&#34;</span>)<span style="color:#f92672">.</span>decode()
+</span></span><span style="display:flex;"><span>    print(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;✓ PKCE credentials generated (verifier length: </span><span style="color:#e6db74">{</span>len(verifier)<span style="color:#e6db74">}</span><span style="color:#e6db74">)&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    print(<span style="color:#e6db74">&#34;All pre-flight checks passed. Proceed with browser-based auth flow.&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>run_flow_test()
+</span></span></code></pre></div><p>For debugging token validation failures, the most common root causes and their signals:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Error</th>
+          <th>Status</th>
+          <th><code>error</code> field</th>
+          <th>Root cause</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Missing <code>Authorization</code> header</td>
+          <td>401</td>
+          <td><code>unauthorized</code></td>
+          <td>Client not attaching Bearer token</td>
+      </tr>
+      <tr>
+          <td>Expired token</td>
+          <td>401</td>
+          <td><code>invalid_token</code></td>
+          <td><code>exp</code> claim in the past; check client refresh logic</td>
+      </tr>
+      <tr>
+          <td>Wrong audience</td>
+          <td>401</td>
+          <td><code>invalid_token</code></td>
+          <td><code>aud</code> claim doesn&rsquo;t match server URL</td>
+      </tr>
+      <tr>
+          <td>Insufficient scope</td>
+          <td>403</td>
+          <td><code>insufficient_scope</code></td>
+          <td>Token missing required scope; check client&rsquo;s <code>scope</code> parameter</td>
+      </tr>
+      <tr>
+          <td>Signature validation failure</td>
+          <td>401</td>
+          <td><code>invalid_token</code></td>
+          <td>JWKS cache stale after key rotation; force refresh</td>
+      </tr>
+      <tr>
+          <td>Missing <code>WWW-Authenticate</code></td>
+          <td>—</td>
+          <td>—</td>
+          <td>Server bug; add header to all 401 responses</td>
+      </tr>
+  </tbody>
+</table>
+<p>Use structured logging at the middleware level with a correlation ID per request, and emit a log line for every token validation outcome — success and failure. This makes tracing a multi-step agent workflow across tool calls tractable when things go wrong in production.</p>
+<h2 id="frequently-asked-questions">Frequently Asked Questions</h2>
+<p><strong>Do stdio-based MCP servers need OAuth?</strong>
+No. The MCP spec explicitly exempts stdio-based servers (those launched as subprocesses by the MCP client) from the OAuth requirement. Stdio servers run with the same trust level as the host process, so environment variable-based credentials (API keys, secrets) are sufficient and appropriate. OAuth 2.1 is only mandatory for remote HTTP/SSE-based servers that multiple agents or users access over a network.</p>
+<p><strong>Can I use API keys instead of OAuth for a remote MCP server?</strong>
+Technically possible but not compliant with the MCP spec for remote servers, and increasingly rejected by major MCP clients (Claude Desktop, ChatGPT plugins) that follow the spec. API keys are long-lived static secrets that don&rsquo;t support scope-based access control, token revocation, or multi-user consent flows. If you control both the client and server and security requirements are low, API keys are pragmatic. For any public or enterprise deployment, OAuth 2.1 is required.</p>
+<p><strong>What authorization server should I use in production?</strong>
+Auth0 and Okta are the lowest-friction options for teams without existing identity infrastructure — both support PKCE, dynamic client registration, JWKS, and token introspection out of the box. For self-hosted requirements, Keycloak (open source) and Zitadel (open source, OIDC-native) are the two strongest choices. Avoid building a custom authorization server: the surface area for security mistakes in token issuance, PKCE validation, and key management is enormous.</p>
+<p><strong>How do I handle token refresh in a long-running AI agent?</strong>
+Implement a token refresh 60 seconds before the access token expires, using the <code>expires_in</code> value from the initial token response. Store the refresh token in an encrypted secret store and implement single-consumer locking if multiple tool calls can run concurrently — two simultaneous refresh attempts will consume the refresh token, causing one to fail. After rotation, update the stored refresh token immediately before returning the new access token to the caller.</p>
+<p><strong>What&rsquo;s the confused deputy problem in MCP and how does OAuth solve it?</strong>
+The confused deputy problem occurs when a compromised or malicious MCP server uses its own access token to make requests to other MCP servers or downstream APIs on behalf of the original user, escalating its privileges beyond what the user intended. OAuth 2.1 addresses this by binding tokens to specific audiences (<code>aud</code> claim) and scopes: a token issued for <code>mcp-server-a</code> with <code>mcp:read</code> scope is cryptographically rejected by <code>mcp-server-b</code>. The enterprise MCP gateway pattern provides an additional layer by reissuing narrow downstream tokens for each hop, so no single token can be replayed across service boundaries.</p>
+]]></content:encoded></item></channel></rss>
