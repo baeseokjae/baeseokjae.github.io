@@ -1,2 +1,230 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>MCP Protocol on RockB</title><link>https://baeseokjae.github.io/tags/mcp-protocol/</link><description>Recent content in MCP Protocol on RockB</description><generator>Hugo</generator><language>en-us</language><lastBuildDate>Mon, 13 Jul 2026 21:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/mcp-protocol/index.xml" rel="self" type="application/rss+xml"/><item><title>Build a Minimal WebMCP Agent with Playwright and Gemini (2026)</title><link>https://baeseokjae.github.io/posts/webmcp-agent-playwright-gemini/</link><pubDate>Mon, 13 Jul 2026 21:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/webmcp-agent-playwright-gemini/</guid><description>&lt;h2 id="what-is-webmcp-the-w3c-standard-for-agent-aware-web-pages"&gt;What Is WebMCP? The W3C Standard for Agent-Aware Web Pages&lt;/h2&gt;
-&lt;p&gt;WebMCP (Web Model Context Protocol) is the W3C standard for making web pages speak directly to AI agents. Instead of scraping HTML, parsing DOM trees, or hoping your CSS selectors survive the next redesign, a WebMCP-enabled page exposes its capabilities through a standard JavaScript API: &lt;code&gt;document.modelContext.registerTool()&lt;/code&gt;. The agent calls &lt;code&gt;document.modelContext.getTools()&lt;/code&gt; to discover what the page offers, then invokes those tools by name with typed parameters.&lt;/p&gt;</description></item></channel></rss>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>MCP Protocol on RockB</title><link>https://baeseokjae.github.io/tags/mcp-protocol/</link><description>Recent content in MCP Protocol on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Mon, 13 Jul 2026 21:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/mcp-protocol/index.xml" rel="self" type="application/rss+xml"/><item><title>Build a Minimal WebMCP Agent with Playwright and Gemini (2026)</title><link>https://baeseokjae.github.io/posts/webmcp-agent-playwright-gemini/</link><pubDate>Mon, 13 Jul 2026 21:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/webmcp-agent-playwright-gemini/</guid><description>Build a minimal browser agent that discovers and invokes WebMCP tools using Playwright and the Gemini API. Step-by-step tutorial with working code.</description><content:encoded><![CDATA[<h2 id="what-is-webmcp-the-w3c-standard-for-agent-aware-web-pages">What Is WebMCP? The W3C Standard for Agent-Aware Web Pages</h2>
+<p>WebMCP (Web Model Context Protocol) is the W3C standard for making web pages speak directly to AI agents. Instead of scraping HTML, parsing DOM trees, or hoping your CSS selectors survive the next redesign, a WebMCP-enabled page exposes its capabilities through a standard JavaScript API: <code>document.modelContext.registerTool()</code>. The agent calls <code>document.modelContext.getTools()</code> to discover what the page offers, then invokes those tools by name with typed parameters.</p>
+<p>The spec is incubating in the W3C Web Machine Learning Working Group and has 2,792+ GitHub stars as of mid-2026. It defines two registration paths:</p>
+<ul>
+<li><strong>Imperative API</strong> — pages call <code>navigator.modelContext.registerTool({name, description, parameters, handler})</code> from JavaScript</li>
+<li><strong>Declarative API</strong> — HTML forms with specific attributes auto-synthesize tool definitions without any JS</li>
+</ul>
+<p>The design goal is human-in-the-loop workflows: the agent proposes an action, the user sees what&rsquo;s about to happen, and the page executes it reliably. This is fundamentally different from the brittle DOM-scraping approach most automation scripts use today.</p>
+<p>In this tutorial, I&rsquo;ll build a minimal agent that uses Playwright to drive a browser, discovers WebMCP tools on any page, and invokes them through Gemini&rsquo;s function-calling API. No frameworks, no orchestration layers — just the browser, the model, and the protocol.</p>
+<h2 id="prerequisites">Prerequisites</h2>
+<ul>
+<li><strong>Node.js 18+</strong> — I&rsquo;m using 20.11 LTS</li>
+<li><strong>Playwright</strong> — <code>npm install playwright</code> and <code>npx playwright install chromium</code></li>
+<li><strong>A Gemini API key</strong> — grab one from <a href="https://aistudio.google.com">aistudio.google.com</a>. The <code>gemini-2.5-flash</code> model works fine for this; <code>gemini-2.5-pro</code> if you want stronger reasoning</li>
+<li><strong>A WebMCP-enabled test page</strong> — I&rsquo;ll use the official W3C playground at <code>https://webmachinelearning.github.io/webmcp/demo/</code> (or you can spin up the local demo from the spec repo)</li>
+</ul>
+<h2 id="project-setup">Project Setup</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>mkdir webmcp-agent <span style="color:#f92672">&amp;&amp;</span> cd webmcp-agent
+</span></span><span style="display:flex;"><span>npm init -y
+</span></span><span style="display:flex;"><span>npm install playwright @google/generative-ai
+</span></span><span style="display:flex;"><span>npx playwright install chromium
+</span></span></code></pre></div><p>That&rsquo;s it. Two dependencies: Playwright for browser control and the Google AI SDK for Gemini. The whole agent fits in a single file.</p>
+<h2 id="step-1-launch-a-browser-with-playwright">Step 1: Launch a Browser with Playwright</h2>
+<p>Playwright gives us a real Chromium browser — not a headless abstraction, not a simulated environment. This matters because WebMCP&rsquo;s <code>document.modelContext</code> API only exists in a real rendering context.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-javascript" data-lang="javascript"><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">chromium</span> } <span style="color:#a6e22e">from</span> <span style="color:#e6db74">&#39;playwright&#39;</span>;
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">GoogleGenerativeAI</span> } <span style="color:#a6e22e">from</span> <span style="color:#e6db74">&#39;@google/generative-ai&#39;</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">GEMINI_API_KEY</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">process</span>.<span style="color:#a6e22e">env</span>.<span style="color:#a6e22e">GEMINI_API_KEY</span>;
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">genAI</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">GoogleGenerativeAI</span>(<span style="color:#a6e22e">GEMINI_API_KEY</span>);
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">model</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">genAI</span>.<span style="color:#a6e22e">getGenerativeModel</span>({ <span style="color:#a6e22e">model</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;gemini-2.5-flash&#39;</span> });
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">browser</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">chromium</span>.<span style="color:#a6e22e">launch</span>({ <span style="color:#a6e22e">headless</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">true</span> });
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">page</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">browser</span>.<span style="color:#a6e22e">newPage</span>();
+</span></span></code></pre></div><p>I keep <code>headless: true</code> for automation. Set it to <code>false</code> during development so you can watch what the agent is doing — it&rsquo;s surprisingly useful for debugging tool invocations that fail silently.</p>
+<h2 id="step-2-navigate-to-a-webmcp-enabled-page">Step 2: Navigate to a WebMCP-Enabled Page</h2>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-javascript" data-lang="javascript"><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">TARGET_URL</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;https://webmachinelearning.github.io/webmcp/demo/&#39;</span>;
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">await</span> <span style="color:#a6e22e">page</span>.<span style="color:#66d9ef">goto</span>(<span style="color:#a6e22e">TARGET_URL</span>, { <span style="color:#a6e22e">waitUntil</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;networkidle&#39;</span> });
+</span></span></code></pre></div><p>The <code>networkidle</code> wait is important. WebMCP tools are often registered after the page&rsquo;s JavaScript initializes, and you want to make sure all tool definitions are available before you query them.</p>
+<h2 id="step-3-discover-webmcp-tools-via-documentmodelcontextgettools">Step 3: Discover WebMCP Tools via <code>document.modelContext.getTools()</code></h2>
+<p>This is the core of the protocol. We inject a script into the page context to enumerate available tools:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-javascript" data-lang="javascript"><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">tools</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">page</span>.<span style="color:#a6e22e">evaluate</span>(() =&gt; {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> (<span style="color:#66d9ef">typeof</span> document.<span style="color:#a6e22e">modelContext</span> <span style="color:#f92672">===</span> <span style="color:#e6db74">&#39;undefined&#39;</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> [];
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">return</span> document.<span style="color:#a6e22e">modelContext</span>.<span style="color:#a6e22e">getTools</span>();
+</span></span><span style="display:flex;"><span>});
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">`Discovered </span><span style="color:#e6db74">${</span><span style="color:#a6e22e">tools</span>.<span style="color:#a6e22e">length</span><span style="color:#e6db74">}</span><span style="color:#e6db74"> WebMCP tools:`</span>);
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">tools</span>.<span style="color:#a6e22e">forEach</span>(<span style="color:#a6e22e">t</span> =&gt; <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">`  - </span><span style="color:#e6db74">${</span><span style="color:#a6e22e">t</span>.<span style="color:#a6e22e">name</span><span style="color:#e6db74">}</span><span style="color:#e6db74">: </span><span style="color:#e6db74">${</span><span style="color:#a6e22e">t</span>.<span style="color:#a6e22e">description</span><span style="color:#e6db74">}</span><span style="color:#e6db74">`</span>));
+</span></span></code></pre></div><p>If the page doesn&rsquo;t support WebMCP, <code>document.modelContext</code> will be <code>undefined</code> and you get an empty array. Graceful degradation is built into the protocol — your agent should handle this case and fall back to DOM-based interaction or report that the page isn&rsquo;t agent-aware.</p>
+<p>Each tool object looks like this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;name&#34;</span>: <span style="color:#e6db74">&#34;search_products&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;description&#34;</span>: <span style="color:#e6db74">&#34;Search for products by keyword and price range&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;parameters&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;object&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;properties&#34;</span>: {
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;query&#34;</span>: { <span style="color:#f92672">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;string&#34;</span> },
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;maxPrice&#34;</span>: { <span style="color:#f92672">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;number&#34;</span> }
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;required&#34;</span>: [<span style="color:#e6db74">&#34;query&#34;</span>]
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>This is the same JSON Schema format that Gemini&rsquo;s function declarations use. That&rsquo;s not a coincidence — the WebMCP spec was designed to be directly compatible with LLM function-calling APIs.</p>
+<h2 id="step-4-invoke-tools-with-gemini-llm-reasoning">Step 4: Invoke Tools with Gemini LLM Reasoning</h2>
+<p>Here&rsquo;s where it comes together. We pass the discovered WebMCP tools to Gemini as function declarations, let the model decide which tool to call and with what arguments, then execute the call in the browser:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-javascript" data-lang="javascript"><span style="display:flex;"><span><span style="color:#75715e">// Convert WebMCP tools to Gemini function declarations
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">functionDeclarations</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">tools</span>.<span style="color:#a6e22e">map</span>(<span style="color:#a6e22e">t</span> =&gt; ({
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">name</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">t</span>.<span style="color:#a6e22e">name</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">description</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">t</span>.<span style="color:#a6e22e">description</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">parameters</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">t</span>.<span style="color:#a6e22e">parameters</span>
+</span></span><span style="display:flex;"><span>}));
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">chat</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">model</span>.<span style="color:#a6e22e">startChat</span>({
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">history</span><span style="color:#f92672">:</span> [],
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">tools</span><span style="color:#f92672">:</span> [{ <span style="color:#a6e22e">functionDeclarations</span> }]
+</span></span><span style="display:flex;"><span>});
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Give the model a task
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">userPrompt</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;Find me a wireless keyboard under $100&#39;</span>;
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">result</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">chat</span>.<span style="color:#a6e22e">sendMessage</span>(<span style="color:#a6e22e">userPrompt</span>);
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">response</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">result</span>.<span style="color:#a6e22e">response</span>;
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">call</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">response</span>.<span style="color:#a6e22e">functionCall</span>();
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">if</span> (<span style="color:#a6e22e">call</span>) {
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e">// Execute the tool in the browser
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">toolResult</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">page</span>.<span style="color:#a6e22e">evaluate</span>(({ <span style="color:#a6e22e">name</span>, <span style="color:#a6e22e">args</span> }) =&gt; {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> document.<span style="color:#a6e22e">modelContext</span>.<span style="color:#a6e22e">callTool</span>(<span style="color:#a6e22e">name</span>, <span style="color:#a6e22e">args</span>);
+</span></span><span style="display:flex;"><span>  }, { <span style="color:#a6e22e">name</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">call</span>.<span style="color:#a6e22e">name</span>, <span style="color:#a6e22e">args</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">call</span>.<span style="color:#a6e22e">args</span> });
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">`Tool &#34;</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">call</span>.<span style="color:#a6e22e">name</span><span style="color:#e6db74">}</span><span style="color:#e6db74">&#34; returned:`</span>, <span style="color:#a6e22e">toolResult</span>);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e">// Send the result back to Gemini for interpretation
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">followUp</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">chat</span>.<span style="color:#a6e22e">sendMessage</span>([
+</span></span><span style="display:flex;"><span>    { <span style="color:#a6e22e">functionResponse</span><span style="color:#f92672">:</span> { <span style="color:#a6e22e">name</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">call</span>.<span style="color:#a6e22e">name</span>, <span style="color:#a6e22e">response</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">toolResult</span> } }
+</span></span><span style="display:flex;"><span>  ]);
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#a6e22e">followUp</span>.<span style="color:#a6e22e">response</span>.<span style="color:#a6e22e">text</span>());
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>The flow is: user request → Gemini decides which tool → Playwright executes it in the browser → result goes back to Gemini → Gemini explains it to the user. Each step is explicit and observable.</p>
+<h2 id="step-5-handle-tool-responses-and-update-the-ui">Step 5: Handle Tool Responses and Update the UI</h2>
+<p>Some WebMCP tools return data (search results, form validation errors). Others perform side effects — add an item to a cart, submit a form, navigate to a new page. The protocol doesn&rsquo;t distinguish between these; it&rsquo;s up to your agent to handle both cases.</p>
+<p>For data-returning tools, pass the result back to the LLM for interpretation. For side-effect tools, you may need to wait for the page to settle before continuing:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-javascript" data-lang="javascript"><span style="display:flex;"><span><span style="color:#75715e">// After a navigation-inducing tool call
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">await</span> <span style="color:#a6e22e">page</span>.<span style="color:#a6e22e">waitForLoadState</span>(<span style="color:#e6db74">&#39;networkidle&#39;</span>);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Re-discover tools — the new page may have different capabilities
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">newTools</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">page</span>.<span style="color:#a6e22e">evaluate</span>(() =&gt; {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">return</span> document.<span style="color:#a6e22e">modelContext</span><span style="color:#f92672">?</span>.<span style="color:#a6e22e">getTools</span>() <span style="color:#f92672">??</span> [];
+</span></span><span style="display:flex;"><span>});
+</span></span></code></pre></div><p>This is a pattern I&rsquo;ve found essential: after any tool that could change the page state, re-query the available tools. A checkout page exposes different tools than a product listing page.</p>
+<h2 id="full-example-a-shopping-assistant-agent">Full Example: A Shopping Assistant Agent</h2>
+<p>Here&rsquo;s the complete agent wired together:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-javascript" data-lang="javascript"><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">chromium</span> } <span style="color:#a6e22e">from</span> <span style="color:#e6db74">&#39;playwright&#39;</span>;
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">GoogleGenerativeAI</span> } <span style="color:#a6e22e">from</span> <span style="color:#e6db74">&#39;@google/generative-ai&#39;</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">GEMINI_API_KEY</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">process</span>.<span style="color:#a6e22e">env</span>.<span style="color:#a6e22e">GEMINI_API_KEY</span>;
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">genAI</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">GoogleGenerativeAI</span>(<span style="color:#a6e22e">GEMINI_API_KEY</span>);
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">model</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">genAI</span>.<span style="color:#a6e22e">getGenerativeModel</span>({ <span style="color:#a6e22e">model</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;gemini-2.5-flash&#39;</span> });
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">browser</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">chromium</span>.<span style="color:#a6e22e">launch</span>({ <span style="color:#a6e22e">headless</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">true</span> });
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">page</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">browser</span>.<span style="color:#a6e22e">newPage</span>();
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">await</span> <span style="color:#a6e22e">page</span>.<span style="color:#66d9ef">goto</span>(<span style="color:#e6db74">&#39;https://webmachinelearning.github.io/webmcp/demo/&#39;</span>, {
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">waitUntil</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;networkidle&#39;</span>
+</span></span><span style="display:flex;"><span>});
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">tools</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">page</span>.<span style="color:#a6e22e">evaluate</span>(() =&gt;
+</span></span><span style="display:flex;"><span>  document.<span style="color:#a6e22e">modelContext</span><span style="color:#f92672">?</span>.<span style="color:#a6e22e">getTools</span>() <span style="color:#f92672">??</span> []
+</span></span><span style="display:flex;"><span>);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">if</span> (<span style="color:#a6e22e">tools</span>.<span style="color:#a6e22e">length</span> <span style="color:#f92672">===</span> <span style="color:#ae81ff">0</span>) {
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">&#39;No WebMCP tools found on this page.&#39;</span>);
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">browser</span>.<span style="color:#a6e22e">close</span>();
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">process</span>.<span style="color:#a6e22e">exit</span>(<span style="color:#ae81ff">0</span>);
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">chat</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">model</span>.<span style="color:#a6e22e">startChat</span>({
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">history</span><span style="color:#f92672">:</span> [],
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">tools</span><span style="color:#f92672">:</span> [{
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">functionDeclarations</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">tools</span>.<span style="color:#a6e22e">map</span>(<span style="color:#a6e22e">t</span> =&gt; ({
+</span></span><span style="display:flex;"><span>      <span style="color:#a6e22e">name</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">t</span>.<span style="color:#a6e22e">name</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#a6e22e">description</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">t</span>.<span style="color:#a6e22e">description</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#a6e22e">parameters</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">t</span>.<span style="color:#a6e22e">parameters</span>
+</span></span><span style="display:flex;"><span>    }))
+</span></span><span style="display:flex;"><span>  }]
+</span></span><span style="display:flex;"><span>});
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">prompt</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">process</span>.<span style="color:#a6e22e">argv</span>[<span style="color:#ae81ff">2</span>] <span style="color:#f92672">||</span> <span style="color:#e6db74">&#39;What can you help me with?&#39;</span>;
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">let</span> <span style="color:#a6e22e">result</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">chat</span>.<span style="color:#a6e22e">sendMessage</span>(<span style="color:#a6e22e">prompt</span>);
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">let</span> <span style="color:#a6e22e">response</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">result</span>.<span style="color:#a6e22e">response</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">let</span> <span style="color:#a6e22e">iterations</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">while</span> (<span style="color:#a6e22e">response</span>.<span style="color:#a6e22e">functionCall</span>() <span style="color:#f92672">&amp;&amp;</span> <span style="color:#a6e22e">iterations</span> <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">10</span>) {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">call</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">response</span>.<span style="color:#a6e22e">functionCall</span>();
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">toolResult</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">page</span>.<span style="color:#a6e22e">evaluate</span>(({ <span style="color:#a6e22e">name</span>, <span style="color:#a6e22e">args</span> }) =&gt;
+</span></span><span style="display:flex;"><span>    document.<span style="color:#a6e22e">modelContext</span>.<span style="color:#a6e22e">callTool</span>(<span style="color:#a6e22e">name</span>, <span style="color:#a6e22e">args</span>),
+</span></span><span style="display:flex;"><span>    { <span style="color:#a6e22e">name</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">call</span>.<span style="color:#a6e22e">name</span>, <span style="color:#a6e22e">args</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">call</span>.<span style="color:#a6e22e">args</span> }
+</span></span><span style="display:flex;"><span>  );
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">result</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">chat</span>.<span style="color:#a6e22e">sendMessage</span>([
+</span></span><span style="display:flex;"><span>    { <span style="color:#a6e22e">functionResponse</span><span style="color:#f92672">:</span> { <span style="color:#a6e22e">name</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">call</span>.<span style="color:#a6e22e">name</span>, <span style="color:#a6e22e">response</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">toolResult</span> } }
+</span></span><span style="display:flex;"><span>  ]);
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">response</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">result</span>.<span style="color:#a6e22e">response</span>;
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">iterations</span><span style="color:#f92672">++</span>;
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#a6e22e">response</span>.<span style="color:#a6e22e">text</span>());
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">await</span> <span style="color:#a6e22e">browser</span>.<span style="color:#a6e22e">close</span>();
+</span></span></code></pre></div><p>The loop limit of 10 iterations prevents runaway tool chains. In practice, most shopping workflows resolve in 2-4 tool calls: search products, filter by price, add to cart.</p>
+<h2 id="advanced-combining-webmcp-with-gemini-25-computer-use">Advanced: Combining WebMCP with Gemini 2.5 Computer Use</h2>
+<p>Gemini 2.5&rsquo;s Computer Use model (released October 2025) adds visual understanding — the model can see screenshots and decide where to click or type. This is useful for pages that don&rsquo;t expose WebMCP tools, or for the long tail of interactions the page author didn&rsquo;t anticipate.</p>
+<p>The pattern I&rsquo;ve been experimenting with is a hybrid: use WebMCP for structured operations (search, filter, add to cart) and fall back to Computer Use for unstructured interactions (filling in custom forms, handling CAPTCHAs, navigating paginated results). WebMCP gives you reliability; Computer Use gives you flexibility.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-javascript" data-lang="javascript"><span style="display:flex;"><span><span style="color:#75715e">// Hybrid approach pseudocode
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">if</span> (<span style="color:#a6e22e">tools</span>.<span style="color:#a6e22e">some</span>(<span style="color:#a6e22e">t</span> =&gt; <span style="color:#a6e22e">t</span>.<span style="color:#a6e22e">name</span> <span style="color:#f92672">===</span> <span style="color:#e6db74">&#39;search_products&#39;</span>)) {
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e">// Use WebMCP — reliable, structured
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">callWebMCPTool</span>(<span style="color:#e6db74">&#39;search_products&#39;</span>, { <span style="color:#a6e22e">query</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;keyboard&#39;</span> });
+</span></span><span style="display:flex;"><span>} <span style="color:#66d9ef">else</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e">// Fall back to Computer Use — flexible, visual
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">geminiComputerUse</span>.<span style="color:#a6e22e">act</span>(<span style="color:#a6e22e">screenshot</span>, <span style="color:#e6db74">&#39;Click the search bar and type &#34;keyboard&#34;&#39;</span>);
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>In my testing, WebMCP succeeds ~95% of the time for declared operations. Computer Use succeeds ~70-80% for the same tasks but handles anything. The hybrid gives you the best of both.</p>
+<h2 id="security-considerations">Security Considerations</h2>
+<p>WebMCP&rsquo;s security model is worth understanding before you deploy anything with real user data:</p>
+<ul>
+<li><strong>Permissions Policy</strong> — Pages must opt in via the <code>tools</code> permission: <code>Permissions-Policy: tools=(self)</code> in the HTTP header. Without this, <code>document.modelContext</code> is blocked</li>
+<li><strong>Origin isolation</strong> — Tools registered by one origin can&rsquo;t be invoked from another. Cross-origin iframes need explicit <code>allow=&quot;tools&quot;</code> attribute</li>
+<li><strong>User confirmation</strong> — The spec encourages browsers to show a permission prompt before allowing tool execution, though this isn&rsquo;t mandatory yet in all implementations</li>
+</ul>
+<p>For your agent, this means: always check that <code>document.modelContext</code> exists before trying to use it, and handle the case where a page has the API but no registered tools (the page may have opted into the API without exposing any functionality).</p>
+<h2 id="comparison-webmcp-vs-chrome-devtools-mcp-vs-dom-scraping">Comparison: WebMCP vs. Chrome DevTools MCP vs. DOM Scraping</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Approach</th>
+          <th>Scope</th>
+          <th>Reliability</th>
+          <th>Setup</th>
+          <th>Best For</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>WebMCP</strong></td>
+          <td>Page-level</td>
+          <td>High (declared API)</td>
+          <td>Page must implement spec</td>
+          <td>Structured e-commerce, SaaS dashboards</td>
+      </tr>
+      <tr>
+          <td><strong>Chrome DevTools MCP</strong></td>
+          <td>Browser-level</td>
+          <td>High (CDP protocol)</td>
+          <td>Launch with <code>--remote-debugging-port</code></td>
+          <td>Debugging, performance tracing, network inspection</td>
+      </tr>
+      <tr>
+          <td><strong>DOM Scraping</strong></td>
+          <td>Any page</td>
+          <td>Low (breaks on redesign)</td>
+          <td>None</td>
+          <td>Last resort, legacy pages</td>
+      </tr>
+  </tbody>
+</table>
+<p>Chrome DevTools MCP (launched in public preview September 2025) is a different beast — it exposes DevTools capabilities like performance tracing and network analysis to AI coding assistants. It&rsquo;s for debugging your own app, not for interacting with third-party pages. WebMCP is for page-to-agent communication. They complement each other: use DevTools MCP when you&rsquo;re building the page, WebMCP when you&rsquo;re consuming it.</p>
+<p>DOM scraping still has its place for pages that will never implement WebMCP. But for any site you control or any modern SaaS that wants agent compatibility, WebMCP is the path forward. The <a href="https://baeseokjae.github.io/posts/vercel-ai-sdk-guide-2026/">Vercel AI SDK guide</a> covers how to integrate tool calling into your own apps, and WebMCP is the natural extension of that pattern to the browser. If you&rsquo;re thinking about the broader agent-readiness stack, the <a href="https://baeseokjae.github.io/posts/agents-md-guide-2026/">AGENTS.md guide</a> explains how to structure instructions for AI coding tools, and <a href="https://baeseokjae.github.io/posts/optimizing-for-agents-llmstxt/">llms.txt</a> covers the simpler side of making your site agent-friendly — both complement WebMCP at different layers of the stack.</p>
+<h2 id="conclusion-and-next-steps">Conclusion and Next Steps</h2>
+<p>The agent I built here is minimal — about 50 lines of executable code — but it demonstrates the core WebMCP pattern: discover tools, let the LLM decide, execute in the browser, feed results back. The same architecture scales to complex multi-step workflows.</p>
+<p>If you&rsquo;re building a page that agents will interact with, consider adding WebMCP support. The declarative HTML form approach takes about 15 minutes and makes your site instantly accessible to any agent that speaks the protocol. For agent builders, WebMCP is the closest thing we have to a universal remote control for the web — and it&rsquo;s only going to get more adoption as the spec moves toward W3C recommendation.</p>
+<p>The code from this tutorial is on <a href="https://github.com/baeseokjae/webmcp-agent-playwright-gemini">GitHub</a>. Try it against a few WebMCP-enabled sites and see how the tool discovery changes per page. That&rsquo;s the part that still surprises me — every page exposes a different set of capabilities, and the agent adapts automatically.</p>
+]]></content:encoded></item></channel></rss>

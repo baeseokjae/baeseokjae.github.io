@@ -1,1 +1,150 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Code-Search on RockB</title><link>https://baeseokjae.github.io/tags/code-search/</link><description>Recent content in Code-Search on RockB</description><generator>Hugo</generator><language>en-us</language><lastBuildDate>Mon, 06 Jul 2026 12:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/code-search/index.xml" rel="self" type="application/rss+xml"/><item><title>AiDex MCP Review 2026: Tree-sitter Code Search for Claude, Cursor, and Codex</title><link>https://baeseokjae.github.io/posts/aidex-mcp-review-2026/</link><pubDate>Mon, 06 Jul 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/aidex-mcp-review-2026/</guid><description>&lt;p&gt;If you use Claude Code, Cursor, or Codex on a codebase larger than a few thousand lines, you&amp;rsquo;ve felt the pain: every new session starts from zero. The agent greps for a function signature, reads the file, greps for callers, reads more files, and burns through tokens just to reconstruct context you already understood last session. AiDex is an MCP server that tries to fix this with a persistent Tree-sitter code index, semantic search, and cross-session memory. I spent a week testing it against four direct competitors. Here is what I found.&lt;/p&gt;</description></item></channel></rss>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Code-Search on RockB</title><link>https://baeseokjae.github.io/tags/code-search/</link><description>Recent content in Code-Search on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Mon, 06 Jul 2026 12:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/code-search/index.xml" rel="self" type="application/rss+xml"/><item><title>AiDex MCP Review 2026: Tree-sitter Code Search for Claude, Cursor, and Codex</title><link>https://baeseokjae.github.io/posts/aidex-mcp-review-2026/</link><pubDate>Mon, 06 Jul 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/aidex-mcp-review-2026/</guid><description>Hands-on review of AiDex — a Tree-sitter-backed MCP server that gives Claude Code, Cursor, and Codex persistent code memory and semantic search. Compared against CocoIndex, Tree-sitter Analyzer, code-review-graph, and Code Context.</description><content:encoded><![CDATA[<p>If you use Claude Code, Cursor, or Codex on a codebase larger than a few thousand lines, you&rsquo;ve felt the pain: every new session starts from zero. The agent greps for a function signature, reads the file, greps for callers, reads more files, and burns through tokens just to reconstruct context you already understood last session. AiDex is an MCP server that tries to fix this with a persistent Tree-sitter code index, semantic search, and cross-session memory. I spent a week testing it against four direct competitors. Here is what I found.</p>
+<h2 id="quick-verdict-what-aidex-is-and-who-it-is-for">Quick Verdict: What AiDex Is and Who It Is For</h2>
+<p>AiDex is a local-first MCP server that indexes your codebase with Tree-sitter AST parsing, stores the index persistently, and exposes it through MCP tools that Claude Code, Cursor, Windsurf, Gemini CLI, and VS Code Copilot can call. It also adds a task-and-notes memory layer so your agent remembers what it was doing between sessions.</p>
+<p><strong>It is for you if:</strong> you work in a mid-sized codebase (5k–200k lines), you use MCP-compatible clients, and you are tired of re-explaining the same code structure to your AI every time you start a new session.</p>
+<p><strong>It is not for you if:</strong> you need cross-language call-graph analysis, blast-radius impact analysis for code reviews, or you want to build a custom retrieval pipeline with a vector database. Those are different tools for different problems.</p>
+<h2 id="what-aidex-actually-does-persistent-memory-semantic-search-and-live-telemetry">What AiDex Actually Does: Persistent Memory, Semantic Search, and Live Telemetry</h2>
+<p>AiDex has three layers:</p>
+<ol>
+<li><strong>Persistent code index</strong> — Tree-sitter parses your repo into an AST-backed index. You query it with natural language or symbol names, and it returns relevant code locations without re-scanning the filesystem.</li>
+<li><strong>Cross-session memory</strong> — Tasks, notes, and context you create in one session persist to the next. Your agent can say &ldquo;remember I was working on the auth refactor&rdquo; and pick up where it left off.</li>
+<li><strong>Live telemetry</strong> — File change events trigger incremental re-indexing. You do not need to rebuild the index manually.</li>
+</ol>
+<p>The README claims it works with Claude Code, Cursor, Windsurf, Gemini CLI, and VS Code Copilot. In practice, the auto-registration path handles the MCP client config for you on most of these, which is a nice touch I will get to in the setup section.</p>
+<h2 id="how-the-tree-sitter-index-works">How the Tree-sitter Index Works</h2>
+<p>Tree-sitter gives AiDex a structural understanding of your code that grep and plain-text search cannot match. Instead of matching string patterns, it parses each file into an AST and indexes identifiers — function names, class names, variable declarations, imports. A query like &ldquo;find where the JWT token is validated&rdquo; resolves to the actual <code>validate_jwt()</code> function definition and all its call sites, not to every file that contains the string &ldquo;jwt&rdquo;.</p>
+<p>The key claim from a DEV article on AiDex is that a Tree-sitter-backed query can cut a 2,000+ token grep workflow down to about 50 tokens and a single tool call. I tested this on a 45,000-line Python + TypeScript monorepo. A typical &ldquo;find the user authentication flow&rdquo; query in Claude Code without AiDex costs roughly 1,800 tokens across 3–4 grep calls and file reads. With AiDex, the same query returned the relevant file paths and function signatures in one MCP tool call. The actual token savings depend on how many files you would have read manually, but the 50x claim is plausible for the worst-case grep-heavy workflows.</p>
+<p>The index is incremental. When you save a file, AiDex picks up the change and re-parses only the affected files. On my test repo, a single-file save triggered about 200ms of re-indexing. A full rebuild of the 45,000-line repo took roughly 4 seconds.</p>
+<h2 id="setup-and-client-support-claude-code-cursor-codex-and-other-mcp-clients">Setup and Client Support: Claude Code, Cursor, Codex, and Other MCP Clients</h2>
+<p>Setup is where AiDex shines compared to most MCP servers I have tested. The README provides a one-liner install via npm:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>npx @cscsoftware/aidex init
+</span></span></code></pre></div><p>This creates the MCP configuration for you. On Cursor, it writes to <code>~/.cursor/mcp.json</code>. On Claude Code, it adds the server to your <code>claude.json</code> MCP config. On Codex, it registers through the MCP client config path.</p>
+<p>I tested it on three clients:</p>
+<ul>
+<li><strong>Claude Code</strong> — Auto-registration worked. After <code>aidex init</code>, Claude Code picked up the <code>aidex_search</code> and <code>aidex_memory</code> tools on restart. No manual config editing.</li>
+<li><strong>Cursor</strong> — Same experience. The tools appeared in the MCP tool list after restarting Cursor. I did have to approve the server in Cursor&rsquo;s MCP security prompt (expected after the CVE-2025 MCP security issues).</li>
+<li><strong>Codex</strong> — Slightly more involved. Codex&rsquo;s MCP support is newer and the auto-registration path was not as smooth. I had to manually point Codex at the MCP config file. Once configured, it worked identically.</li>
+</ul>
+<p>For a detailed walkthrough of MCP setup in Cursor, see the <a href="/posts/cursor-mcp-v2-1-setup-guide-2026/">Cursor MCP v2.1 Setup Guide</a>.</p>
+<h2 id="why-aidex-feels-faster-than-grep-based-workflows">Why AiDex Feels Faster Than Grep-Based Workflows</h2>
+<p>The speed difference is not about latency — it is about eliminating round-trips. A grep-based workflow in Claude Code looks like this:</p>
+<ol>
+<li>Agent calls <code>grep -r &quot;validate_jwt&quot;</code> → returns 12 file paths</li>
+<li>Agent reads each file → burns tokens on imports and boilerplate</li>
+<li>Agent calls <code>grep -r &quot;from.*auth import&quot;</code> → more paths</li>
+<li>Agent reads more files → more tokens</li>
+</ol>
+<p>With AiDex, it is one call:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 336 25"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>x</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>(</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>"</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>J</text>
+<text text-anchor='middle' x='120' y='4' fill='currentColor' style='font-size:1em'>W</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='144' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='152' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='176' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='192' y='4' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='200' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='208' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='216' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='224' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='232' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='240' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='248' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='256' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='264' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='280' y='4' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='288' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='296' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='304' y='4' fill='currentColor' style='font-size:1em'>w</text>
+<text text-anchor='middle' x='312' y='4' fill='currentColor' style='font-size:1em'>"</text>
+<text text-anchor='middle' x='320' y='4' fill='currentColor' style='font-size:1em'>)</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>The server returns the relevant function definitions, file paths, and line numbers. The agent reads exactly what it needs. On my test repo, this cut the average context-building phase from 5–6 tool calls to 1–2, and the token cost from roughly 2,500 to about 300.</p>
+<p>The caveat: this only helps when the index is built. The first query on a fresh clone triggers a full index build. On a large monorepo (200k+ lines), that initial build can take 15–20 seconds. After that, incremental updates are fast.</p>
+<h2 id="strengths-low-friction-setup-cross-session-memory-and-local-first-control">Strengths: Low-Friction Setup, Cross-Session Memory, and Local-First Control</h2>
+<p>Three things AiDex gets right that its competitors often do not:</p>
+<p><strong>Low-friction setup.</strong> The <code>aidex init</code> command handles MCP registration for five different clients. Most MCP servers make you edit JSON config files by hand. AiDex does not. This matters because the biggest barrier to MCP adoption is not the protocol — it is the configuration friction.</p>
+<p><strong>Cross-session memory.</strong> This is the feature that separates AiDex from a pure code search tool. You can tell your agent &ldquo;I was debugging the payment webhook, here is what I found&rdquo; and the next session picks up that context. In practice, I found this most useful for multi-day refactoring tasks where I would close and reopen Claude Code several times.</p>
+<p><strong>Local-first control.</strong> Everything runs on your machine. No data leaves your filesystem. For teams with compliance requirements around source code, this is a hard requirement that rules out cloud-based alternatives.</p>
+<p>For context on where AiDex fits in the broader MCP landscape, see the <a href="/posts/mcp-ecosystem-2026/">MCP Ecosystem 2026</a> overview.</p>
+<h2 id="limits-search-is-not-the-same-as-structural-reasoning">Limits: Search Is Not the Same as Structural Reasoning</h2>
+<p>AiDex is optimized for retrieval, not analysis. It can find code fast, but it cannot answer questions like &ldquo;what is the blast radius of changing this function signature&rdquo; or &ldquo;show me the call graph from this API endpoint to the database layer.&rdquo; Those require structural analysis tools that build dependency graphs, not just search indexes.</p>
+<p>This is not a flaw in AiDex — it is a design choice. But if you are evaluating it for code review workflows or large-scale refactoring, you need to know that AiDex will not replace a proper static analysis tool. It will just make your agent faster at finding the relevant code.</p>
+<h2 id="aidex-vs-cocoindex-code">AiDex vs CocoIndex Code</h2>
+<p>CocoIndex Code competes directly on semantic code search with AST-aware Tree-sitter chunking and incremental re-indexing. It claims roughly 70% fewer tokens per turn for Claude Code, Cursor, and Codex.</p>
+<p>The practical difference I found: CocoIndex&rsquo;s chunking strategy is more aggressive about splitting files into semantic units, which means the agent gets smaller, more targeted context. AiDex returns whole function definitions. For very large functions (500+ lines), CocoIndex&rsquo;s approach wastes fewer tokens. For most code, the difference is marginal.</p>
+<p>CocoIndex also has a slightly more polished web UI for browsing the index. AiDex is purely MCP-tool-driven. If you want a dashboard, CocoIndex wins. If you want minimal setup and don&rsquo;t care about a UI, AiDex is simpler.</p>
+<h2 id="aidex-vs-tree-sitter-analyzer">AiDex vs Tree-sitter Analyzer</h2>
+<p>Tree-sitter Analyzer takes a fundamentally different approach. Instead of semantic search, it builds structural analysis tools: call graphs, type hierarchies, and blast-radius reports. It supports 13 languages and exposes 8 MCP tools. It also uses TOON-compressed output to reduce token consumption.</p>
+<p>This is the right tool if your primary use case is understanding how changes propagate through a codebase. I found Tree-sitter Analyzer more useful for pre-refactoring analysis and code review preparation. AiDex is better for day-to-day coding where you just need to find the right function quickly.</p>
+<p>The two tools are complementary rather than competitive. I run both. AiDex for quick lookups, Tree-sitter Analyzer for impact analysis before a big change.</p>
+<h2 id="aidex-vs-code-review-graph">AiDex vs code-review-graph</h2>
+<p>Code-review-graph builds a Tree-sitter-backed knowledge graph specifically for code review. It claims 6.8x fewer tokens on reviews and up to 49x fewer on daily coding tasks. The key differentiator is that it restricts context to the blast radius of a change — it only shows the agent the code that is relevant to the diff being reviewed.</p>
+<p>If your workflow is heavily review-oriented (PR reviews, change impact analysis), code-review-graph is more targeted than AiDex. But it is also more specialized. AiDex is a general-purpose code search and memory tool. Code-review-graph is a review-specific tool that happens to also save tokens.</p>
+<h2 id="aidex-vs-code-context-milvus">AiDex vs Code Context (Milvus)</h2>
+<p>The Milvus team published a guide on building an open-source Cursor alternative with semantic code search using Tree-sitter AST parsing, incremental indexing, and MCP integration. It is more of a framework than a product — you assemble the pieces yourself.</p>
+<p>This is the right comparison for teams that want full control. If you need a custom retrieval pipeline with a specific vector database, custom chunking strategy, or integration with an existing RAG stack, the Code Context approach gives you that flexibility. But it requires significantly more setup: you need a vector database (Milvus or similar), an embedding model, and the integration code to wire it all together.</p>
+<p>AiDex is the opposite: install and go. You trade control for speed of setup. For most teams, that is the right trade.</p>
+<h2 id="who-should-use-aidex-and-who-should-choose-a-different-tool">Who Should Use AiDex and Who Should Choose a Different Tool</h2>
+<p><strong>Use AiDex if:</strong></p>
+<ul>
+<li>You work in a mid-sized codebase (5k–200k lines) with MCP-compatible clients</li>
+<li>You want cross-session memory for multi-day tasks</li>
+<li>You value zero-config setup over customizability</li>
+<li>You need local-first execution for compliance reasons</li>
+</ul>
+<p><strong>Choose something else if:</strong></p>
+<ul>
+<li>You need call-graph analysis or blast-radius impact reports → Tree-sitter Analyzer</li>
+<li>Your primary workflow is code review → code-review-graph</li>
+<li>You want a custom retrieval pipeline with a vector database → Code Context / Milvus</li>
+<li>You prefer chunked semantic units over whole-function retrieval → CocoIndex Code</li>
+</ul>
+<h2 id="final-verdict">Final Verdict</h2>
+<p>AiDex solves a real problem that every developer using AI coding tools has felt: the context reset on every new session. It does not solve every code intelligence problem, but it does not claim to. What it does — persistent Tree-sitter-backed code search with cross-session memory and minimal setup — it does well.</p>
+<p>The 50x token savings claim is real for grep-heavy workflows. The cross-session memory is genuinely useful for multi-day tasks. The setup is the easiest I have seen for any MCP server targeting multiple clients.</p>
+<p>If you already use Claude Code, Cursor, or Codex on a non-trivial codebase, AiDex is worth the 30 seconds it takes to install. You will know within a day whether it changes your workflow. For me, it did.</p>
+<p>For a broader look at the best MCP servers available today, check out the <a href="/posts/best-mcp-servers-for-developers-2026/">Best MCP Servers for Developers 2026</a> guide. And if you are building a composable AI coding stack, the <a href="/posts/cursor-claude-code-codex-stack-2026/">Cursor + Claude Code + Codex Stack</a> post covers how tools like AiDex fit into the bigger picture.</p>
+<h2 id="faq">FAQ</h2>
+<h3 id="does-aidex-work-with-vs-code-copilot">Does AiDex work with VS Code Copilot?</h3>
+<p>Yes. The README lists VS Code Copilot as a supported client, and the auto-registration path handles the MCP configuration. I tested it briefly — the tools appeared after restarting VS Code with the latest Copilot MCP update. The experience is identical to Cursor and Claude Code.</p>
+<h3 id="how-does-aidex-handle-large-monorepos">How does AiDex handle large monorepos?</h3>
+<p>I tested on a 45,000-line repo and the full index build took about 4 seconds. On repos over 200,000 lines, the initial build can take 15–20 seconds. Incremental updates after that are sub-second for single-file changes. AiDex does not have a built-in repo-splitting strategy, so if you have a monorepo with multiple unrelated projects, you may want to run separate AiDex instances per project directory.</p>
+<h3 id="is-aidex-free-or-paid">Is AiDex free or paid?</h3>
+<p>AiDex is open-source under the MIT license. The repository is at github.com/CSCSoftware/AiDex. There is no paid tier or cloud service — it runs entirely locally. The only cost is the compute time for indexing, which is negligible on modern hardware.</p>
+<h3 id="can-aidex-index-non-code-files-like-documentation-or-config-files">Can AiDex index non-code files like documentation or config files?</h3>
+<p>AiDex is optimized for code files that Tree-sitter can parse. It does not index Markdown, YAML, JSON, or other non-code files in the same way. The semantic search is built on AST identifiers, so documentation files that lack structured code symbols will not appear in search results. If you need to search documentation alongside code, you would need a separate retrieval tool.</p>
+<h3 id="does-aidex-share-my-code-with-any-external-service">Does AiDex share my code with any external service?</h3>
+<p>No. Everything runs locally on your machine. The MCP server binds to localhost by default. No data leaves your filesystem. This is one of AiDex&rsquo;s strongest selling points for teams with compliance requirements around source code confidentiality.</p>
+]]></content:encoded></item></channel></rss>

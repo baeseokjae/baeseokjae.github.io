@@ -1,1 +1,433 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Bedrock on RockB</title><link>https://baeseokjae.github.io/tags/bedrock/</link><description>Recent content in Bedrock on RockB</description><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sat, 20 Jun 2026 12:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/bedrock/index.xml" rel="self" type="application/rss+xml"/><item><title>AWS Agent-EvalKit: Open-Source AI Agent Evaluation for Developers — Tutorial &amp; Deep Dive</title><link>https://baeseokjae.github.io/posts/aws-agent-evalkit-developer-tutorial-2026/</link><pubDate>Sat, 20 Jun 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/aws-agent-evalkit-developer-tutorial-2026/</guid><description>&lt;p&gt;AWS Agent-EvalKit is an open-source toolkit (Apache 2.0, released June 11, 2026) that runs AI agent evaluation directly inside your coding assistant via slash commands. Instead of treating agent evaluation as a post-deployment activity, it brings a six-phase workflow — Plan, Data, Trace, Run Agent, Eval, Report — into Claude Code, Kiro CLI, or Kilo Code, combining code-based evaluators with LLM-as-judge scoring through Amazon Bedrock. I&amp;rsquo;ve been running evaluations against AI agents for the last two years, and the pattern I kept seeing was: teams either buy a managed eval platform or cobble together Python scripts and a prompt template. Agent-EvalKit splits the difference — it&amp;rsquo;s a CLI that reads your agent source code, generates test cases, instruments tracing, runs the trials, and recommends fixes with file-level accuracy. In this tutorial, I&amp;rsquo;ll walk through installing it, running your first evaluation, and the real-world case study where it caught a hallucination problem that output-level testing missed entirely.&lt;/p&gt;</description></item></channel></rss>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Bedrock on RockB</title><link>https://baeseokjae.github.io/tags/bedrock/</link><description>Recent content in Bedrock on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sat, 20 Jun 2026 12:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/bedrock/index.xml" rel="self" type="application/rss+xml"/><item><title>AWS Agent-EvalKit: Open-Source AI Agent Evaluation for Developers — Tutorial &amp; Deep Dive</title><link>https://baeseokjae.github.io/posts/aws-agent-evalkit-developer-tutorial-2026/</link><pubDate>Sat, 20 Jun 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/aws-agent-evalkit-developer-tutorial-2026/</guid><description>A hands-on tutorial for AWS Agent-EvalKit (released June 11, 2026): install, run the 6-phase eval workflow, combine code-based and LLM-judge scoring, an...</description><content:encoded><![CDATA[<p>AWS Agent-EvalKit is an open-source toolkit (Apache 2.0, released June 11, 2026) that runs AI agent evaluation directly inside your coding assistant via slash commands. Instead of treating agent evaluation as a post-deployment activity, it brings a six-phase workflow — Plan, Data, Trace, Run Agent, Eval, Report — into Claude Code, Kiro CLI, or Kilo Code, combining code-based evaluators with LLM-as-judge scoring through Amazon Bedrock. I&rsquo;ve been running evaluations against AI agents for the last two years, and the pattern I kept seeing was: teams either buy a managed eval platform or cobble together Python scripts and a prompt template. Agent-EvalKit splits the difference — it&rsquo;s a CLI that reads your agent source code, generates test cases, instruments tracing, runs the trials, and recommends fixes with file-level accuracy. In this tutorial, I&rsquo;ll walk through installing it, running your first evaluation, and the real-world case study where it caught a hallucination problem that output-level testing missed entirely.</p>
+<h2 id="what-agent-evalkit-actually-does">What Agent-EvalKit Actually Does</h2>
+<p>Agent-EvalKit is not another eval framework you import as a library. It&rsquo;s an AI assistant that operates through your existing coding assistant. You install it once with <code>uv tool install</code>, initialize a project, then issue slash commands like <code>/evalkit.plan</code> and <code>/evalkit.eval</code> in your Claude Code or Kiro CLI session. The assistant reads your agent&rsquo;s source code from disk, designs an evaluation strategy, generates test cases, adds OpenTelemetry tracing to instrument your agent, runs it against the test cases, scores the traces, and writes a report with specific code-level fix recommendations.</p>
+<p>The key architectural decision is that the evaluation pipeline lives in your dev environment, not in a separate platform. This means it reads your actual agent code, runs against real tool endpoints (with the safety caveat that you should use staging credentials), and produces recommendations that reference specific lines in your codebase. The trade-off vs. a managed platform like AgentCore Evaluations: you get deeper code awareness and lower setup friction, but you don&rsquo;t get the managed dataset versioning, cross-team dashboards, or release gating that a platform provides.</p>
+<h2 id="installation">Installation</h2>
+<p>Agent-EvalKit requires Python 3.11+, <code>uv</code>, Git, and a supported AI coding assistant. I&rsquo;m using Claude Code 0.3.14 and it works cleanly.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>uv tool install evalkit --from git+https://github.com/awslabs/Agent-EvalKit.git
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Verify</span>
+</span></span><span style="display:flex;"><span>evalkit check
+</span></span></code></pre></div><p>This installs the <code>evalkit</code> CLI globally. The actual eval workflow runs through your coding assistant&rsquo;s slash commands, but <code>evalkit init</code> scaffolds the project structure.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>evalkit init my-search-agent-eval
+</span></span><span style="display:flex;"><span>cd my-search-agent-eval
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Copy your agent source into the eval project</span>
+</span></span><span style="display:flex;"><span>cp -r /path/to/your/search-agent .
+</span></span></code></pre></div><p>The project structure created by <code>evalkit init</code> includes a <code>commands/</code> directory where the slash-command handlers live, a <code>templates/</code> directory for evaluation test case templates, and a <code>tracing/</code> directory with OpenTelemetry instrumentation helpers.</p>
+<h2 id="the-six-phase-workflow">The Six-Phase Workflow</h2>
+<p>Once the project is initialized, you open the <code>my-search-agent-eval</code> directory with your coding assistant and start the workflow.</p>
+<h3 id="phase-1-plan-evalkitplan">Phase 1: Plan (<code>/evalkit.plan</code>)</h3>
+<p>This is the only phase that requires user input. You tell the assistant what kind of agent you&rsquo;re evaluating and what you care about.</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 736 25"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>E</text>
+<text text-anchor='middle' x='120' y='4' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='144' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='152' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='184' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='192' y='4' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='208' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='216' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='224' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='232' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='240' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='248' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='264' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='272' y='4' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='280' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='288' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='296' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='312' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='320' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='344' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='352' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='360' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='368' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='376' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='384' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='392' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='400' y='4' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='408' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='416' y='4' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='424' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='432' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='440' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='456' y='4' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='464' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='472' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='488' y='4' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='496' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='504' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='512' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='520' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='528' y='4' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='536' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='544' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='552' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='560' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='568' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='576' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='592' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='600' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='608' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='624' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='632' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='640' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='648' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='664' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='672' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='680' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='688' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='696' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='704' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='712' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='720' y='4' fill='currentColor' style='font-size:1em'>y</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>The assistant reads every Python file in <code>./search-agent</code>, identifies the tool-calling patterns, the LLM provider configuration, and the response formatting logic. It returns an evaluation strategy document that specifies:</p>
+<ul>
+<li>Which metrics to compute (faithfulness, tool-selection accuracy, response quality)</li>
+<li>What evaluator style to use for each (LLM-as-judge for faithfulness, code-based for tool accuracy)</li>
+<li>How many test cases to generate and what categories they should cover</li>
+</ul>
+<p>I found the plan output thorough but verbose — it runs the full agent code through the assistant&rsquo;s context window, which costs 8,000–15,000 tokens per <code>plan</code> invocation depending on agent size. You can constrain it with a focused description if your agent is large.</p>
+<h3 id="phase-2-data-evalkitdata">Phase 2: Data (<code>/evalkit.data</code>)</h3>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 752 25"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>F</text>
+<text text-anchor='middle' x='120' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='144' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='184' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='192' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='200' y='4' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='208' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='224' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='232' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='240' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='248' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='256' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='264' y='4' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='280' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='288' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='296' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='304' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='312' y='4' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='328' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='336' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='344' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='352' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='360' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='368' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='384' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='392' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='400' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='408' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='416' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='424' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='432' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='440' y='4' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='456' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='464' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='472' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='480' y='4' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='488' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='496' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='504' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='512' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='520' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='536' y='4' fill='currentColor' style='font-size:1em'>q</text>
+<text text-anchor='middle' x='544' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='552' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='560' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='568' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='576' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='584' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='592' y='4' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='608' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='616' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='624' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='632' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='640' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='648' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='656' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='672' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='680' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='688' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='696' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='704' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='712' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='720' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='728' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='736' y='4' fill='currentColor' style='font-size:1em'>s</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>The assistant generates test cases with ground-truth annotations and writes them to <code>eval/test_cases.json</code>. Each test case includes:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;id&#34;</span>: <span style="color:#e6db74">&#34;tc_003&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;input&#34;</span>: <span style="color:#e6db74">&#34;search for non-existent product &#39;XYZ-999&#39;&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;ground_truth&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;expected_tool&#34;</span>: <span style="color:#e6db74">&#34;search_products&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;expected_params&#34;</span>: {<span style="color:#f92672">&#34;query&#34;</span>: <span style="color:#e6db74">&#34;XYZ-999&#34;</span>},
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;expected_response_contains&#34;</span>: [<span style="color:#e6db74">&#34;no results found&#34;</span>, <span style="color:#e6db74">&#34;try different search terms&#34;</span>],
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;faithfulness_check&#34;</span>: <span style="color:#e6db74">&#34;response must not fabricate product details&#34;</span>
+</span></span><span style="display:flex;"><span>  },
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;category&#34;</span>: <span style="color:#e6db74">&#34;empty_results&#34;</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>The ground truth structure matters because it enables both code-based checks (did the agent call the right tool with the right params?) and LLM-judge checks (is the response faithful to the tool output?).</p>
+<h3 id="phase-3-trace-evalkittrace">Phase 3: Trace (<code>/evalkit.trace</code>)</h3>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 120 25"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>e</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>This phase instruments your agent with OpenTelemetry tracing. The assistant reads your agent code and inserts tracer spans around each tool call. For a Python agent using the Strands Agents SDK, the instrumentation wraps the <code>agent.run()</code> call with span context that captures:</p>
+<ul>
+<li>Tool name and input parameters</li>
+<li>Timestamps and duration</li>
+<li>Tool output (truncated to configurable max chars)</li>
+<li>Error states and retry attempts</li>
+</ul>
+<p>The tracing is optional — you can run the eval against raw agent outputs if you already have logging in place. But without traces, you can only score the final response, not the tool-call path, which is where Agent-EvalKit&rsquo;s best value lives.</p>
+<h3 id="phase-4-run-agent-evalkitrun_agent">Phase 4: Run Agent (<code>/evalkit.run_agent</code>)</h3>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 152 25"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='120' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>t</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>The assistant executes your agent against each test case, collects the traces, and writes the results to <code>eval/traces/</code>. Each trace file captures the full execution path:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;test_case_id&#34;</span>: <span style="color:#e6db74">&#34;tc_003&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;agent_response&#34;</span>: <span style="color:#e6db74">&#34;I couldn&#39;t find any products matching &#39;XYZ-999&#39;. Please try different search terms or check the product catalog.&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;tools_called&#34;</span>: [
+</span></span><span style="display:flex;"><span>    {
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;tool&#34;</span>: <span style="color:#e6db74">&#34;search_products&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;params&#34;</span>: {<span style="color:#f92672">&#34;query&#34;</span>: <span style="color:#e6db74">&#34;XYZ-999&#34;</span>},
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;result&#34;</span>: {<span style="color:#f92672">&#34;products&#34;</span>: [], <span style="color:#f92672">&#34;total_count&#34;</span>: <span style="color:#ae81ff">0</span>, <span style="color:#f92672">&#34;suggestions&#34;</span>: []}
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  ],
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;latency_ms&#34;</span>: <span style="color:#ae81ff">2340</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;token_usage&#34;</span>: {<span style="color:#f92672">&#34;input&#34;</span>: <span style="color:#ae81ff">1450</span>, <span style="color:#f92672">&#34;output&#34;</span>: <span style="color:#ae81ff">320</span>}
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><h3 id="phase-5-eval-evalkiteval">Phase 5: Eval (<code>/evalkit.eval</code>)</h3>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 112 25"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>l</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>This is where the actual scoring happens. The assistant writes evaluation code that reads the traces and computes metrics. For the travel agent case study AWS published, the eval pipeline used two evaluators in parallel:</p>
+<p><strong>Code-based evaluator</strong> — checks tool-selection correctness deterministically. Did the agent call the expected tool? Were the parameters correct? This runs fast (milliseconds per trace) and produces binary pass/fail scores.</p>
+<p><strong>LLM-as-judge evaluator</strong> — scores response faithfulness on a 0–100 scale. The LLM judge (Amazon Nova Pro through Bedrock in the published case study) receives the tool trace alongside the agent&rsquo;s response and answers: &ldquo;Does the response faithfully reflect what the tools returned, without adding information not present in the tool output?&rdquo;</p>
+<p>The assistant writes the evaluation code at <code>eval/evaluator.py</code> so you can review and customize it. I found the generated evaluator templates reasonable but simplistic — the faithfulness judge prompt needed tuning for my domain-specific vocabulary.</p>
+<h3 id="phase-6-report-evalkitreport">Phase 6: Report (<code>/evalkit.report</code>)</h3>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 128 25"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>t</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>The final output is a markdown report covering:</p>
+<ul>
+<li>Aggregate scores per metric</li>
+<li>Per-test-case breakdown with pass/fail details</li>
+<li>A ranked list of improvement recommendations referencing specific code locations</li>
+<li>Expected impact estimate for each recommendation</li>
+</ul>
+<h2 id="the-travel-agent-case-study-why-output-level-testing-lies-to-you">The Travel Agent Case Study: Why Output-Level Testing Lies to You</h2>
+<p>The AWS Machine Learning Blog published Agent-EvalKit using a travel research agent built with Strands Agents SDK and Amazon Bedrock. The agent&rsquo;s job: given a destination and preferences, research flights, hotels, and attractions, then write a travel brief.</p>
+<p>The standard eval — ask the agent 20 questions, have a human rate the answers — gave it a response quality score of 83.9%. That looks solid. But Agent-EvalKit&rsquo;s trace-level evaluation told a different story. The faithfulness score was 32.3%.</p>
+<p>Here&rsquo;s what happened. When the agent&rsquo;s <code>search_hotels</code> tool returned empty results (no vacancies matching the criteria), the agent didn&rsquo;t say &ldquo;no hotels found.&rdquo; It fabricated hotel names, prices, and descriptions that sounded plausible but came entirely from the model&rsquo;s training data. The final response was well-structured and actionable — every human rater gave it high marks because the hallucinations matched the destination&rsquo;s real hotel landscape. The agent looked competent while being completely wrong.</p>
+<p>The trace caught it because the eval compared the tool output (empty list) against the agent response (hallucinated hotel names). An output-only eval never sees the tool output.</p>
+<p>After applying Agent-EvalKit&rsquo;s report recommendations — adding an explicit &ldquo;disclose empty results&rdquo; instruction to the system prompt and a post-processing check that flags responses containing information not present in tool outputs — the faithfulness score went from 32.3% to 78.1% in one iteration.</p>
+<p>This pattern is why I now run trace-level evaluation on every agent I ship. If you only check final outputs, you&rsquo;re measuring presentation quality, not factual reliability.</p>
+<h2 id="cicd-integration">CI/CD Integration</h2>
+<p>Agent-EvalKit generates standalone evaluation code at <code>eval/</code> that you can run outside the coding assistant. After the initial <code>evalkit init</code> and a full workflow run to set up the pipeline, subsequent runs work as a shell command:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Run the evaluation pipeline without the slash-command assistant</span>
+</span></span><span style="display:flex;"><span>python eval/run_pipeline.py --config eval/config.yaml --output eval/report.json
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Check against threshold</span>
+</span></span><span style="display:flex;"><span>python -c <span style="color:#e6db74">&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">import json
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">r = json.load(open(&#39;eval/report.json&#39;))
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">assert r[&#39;faithfulness&#39;] &gt; 0.70, f&#39;Faithfulness {r[\&#34;faithfulness\&#34;]} below threshold&#39;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">assert r[&#39;tool_accuracy&#39;] &gt; 0.85, f&#39;Tool accuracy {r[\&#34;tool_accuracy\&#34;]} below threshold&#39;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">&#34;</span>
+</span></span></code></pre></div><p>This runs in any CI runner that has Python and network access to Bedrock. For a full CI/CD setup with gating, cost controls, and shadow deployment, see the <a href="/posts/agent-ci-cd-eval-pipeline-integration-guide-2026/">Agent CI/CD Eval Pipeline Integration Guide</a>. The interaction between Agent-EvalKit&rsquo;s trace-level scoring and broader CI gates (regression detection, cost budgets, canary rollouts) is where it gets production-relevant.</p>
+<h2 id="honest-trade-offs">Honest Trade-offs</h2>
+<p>After running Agent-EvalKit against three different agents over the past week, here are the limitations you&rsquo;ll hit:</p>
+<p><strong>No cross-run versioning.</strong> Each <code>evalkit init</code> creates a fresh project. There&rsquo;s no built-in way to compare scores across agent versions or track regression over time. You have to build that yourself by archiving <code>eval/report.json</code> files and comparing them externally. The <a href="/posts/open-source-agent-eval-harness-comparison-2026/">Open Source Agent Eval Harness Comparison</a> covers tools that handle versioning natively if that&rsquo;s a priority.</p>
+<p><strong>LLM-judge cost adds up.</strong> Each eval run pays for both the agent under test (API calls to its tools + LLM) and the judge LLM (Amazon Bedrock inference for faithfulness scoring). On the travel agent eval with 50 test cases, the judge cost was roughly $0.80 per run. At 20 CI runs per day, that&rsquo;s $16/day just for the judge — before the agent&rsquo;s own inference cost.</p>
+<p><strong>Narrow framework support for tracing.</strong> The auto-instrumentation currently generates OpenTelemetry traces for Strands Agents SDK, LangGraph, and CrewAI. If your agent uses a custom framework (many production agents do), you need to write the OTel instrumentation yourself. The generated trace templates at <code>tracing/</code> are a decent starting point but not plug-and-play.</p>
+<p><strong>Single-project scope.</strong> Agent-EvalKit is designed for evaluating one agent at a time in one project directory. It doesn&rsquo;t help with cross-agent comparison, A/B testing of prompt variants, or multi-agent system evaluation. For those use cases, tools like MASEval (covered in the eval harness comparison) are a better fit.</p>
+<h2 id="when-to-use-agent-evalkit-vs-when-to-skip">When to Use Agent-EvalKit vs. When to Skip</h2>
+<p>Use Agent-EvalKit when: you&rsquo;re actively developing an agent and want to catch trace-level failures before they hit production; you need code-level fix recommendations, not just pass/fail scores; you&rsquo;re already in a Claude Code, Kiro CLI, or Kilo Code workflow and want evaluation to feel like an extension of your coding session.</p>
+<p>Skip it when: your agent does no tool calling (pure chat — a manual checklist is sufficient); you need managed dataset versioning and regression dashboards across a team; you&rsquo;re evaluating multi-agent systems where coordination topology matters more than individual agent traces.</p>
+<p>The toolkit is fresh (v0.1.2 at time of writing) and the community is small — 25 GitHub stars, 5 forks. The Apache 2.0 license and AWS backing suggest it will grow, but today you should expect to customize the generated eval code and trace instrumentation rather than use everything out of the box. For most teams building production agents in 2026, that&rsquo;s still a net positive: the 80% of scaffolding that Agent-EvalKit generates is the boring, error-prone part of setting up trace-level evaluation, and the 20% you customize is the part that makes your agent&rsquo;s specific failure modes visible.</p>
+]]></content:encoded></item></channel></rss>

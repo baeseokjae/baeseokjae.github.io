@@ -1,3 +1,372 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>LLM Costs on RockB</title><link>https://baeseokjae.github.io/tags/llm-costs/</link><description>Recent content in LLM Costs on RockB</description><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 09 Jul 2026 12:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/llm-costs/index.xml" rel="self" type="application/rss+xml"/><item><title>AI Agent Overspend Model Line Mistake 2026: How One Missing Config Burned Half My Budget</title><link>https://baeseokjae.github.io/posts/ai-agent-overspend-model-line-mistake-2026/</link><pubDate>Thu, 09 Jul 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/ai-agent-overspend-model-line-mistake-2026/</guid><description>&lt;p&gt;An AI agent overspend model line mistake is a configuration bug with a billing blast radius. In my case, a missing &lt;code&gt;model&lt;/code&gt; value silently routed routine agent steps to a pro-tier model, and the fastest fix was not prompt tuning. It was tracing &lt;code&gt;requested_model&lt;/code&gt;, &lt;code&gt;response_model&lt;/code&gt;, tokens, tools, retries, and config diffs in one place.&lt;/p&gt;
-&lt;h2 id="what-actually-happened-when-the-model-line-was-missing"&gt;What actually happened when the model line was missing?&lt;/h2&gt;
-&lt;p&gt;The failure was boring, which is why it was expensive.&lt;/p&gt;</description></item></channel></rss>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>LLM Costs on RockB</title><link>https://baeseokjae.github.io/tags/llm-costs/</link><description>Recent content in LLM Costs on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 09 Jul 2026 12:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/llm-costs/index.xml" rel="self" type="application/rss+xml"/><item><title>AI Agent Overspend Model Line Mistake 2026: How One Missing Config Burned Half My Budget</title><link>https://baeseokjae.github.io/posts/ai-agent-overspend-model-line-mistake-2026/</link><pubDate>Thu, 09 Jul 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/ai-agent-overspend-model-line-mistake-2026/</guid><description>Debug AI agent overspend from a missing model config with traces, token budgets, and guardrails that catch the next bill spike early.</description><content:encoded><![CDATA[<p>An AI agent overspend model line mistake is a configuration bug with a billing blast radius. In my case, a missing <code>model</code> value silently routed routine agent steps to a pro-tier model, and the fastest fix was not prompt tuning. It was tracing <code>requested_model</code>, <code>response_model</code>, tokens, tools, retries, and config diffs in one place.</p>
+<h2 id="what-actually-happened-when-the-model-line-was-missing">What actually happened when the model line was missing?</h2>
+<p>The failure was boring, which is why it was expensive.</p>
+<p>I had a background agent that summarized customer notes, called a retrieval tool, drafted a follow-up, and wrote the result into a CRM queue. The intended default was a cheap model for the first three steps and a stronger model only for final customer-facing copy. The code had a route policy, the route policy had tests, and the dashboard showed normal request volume.</p>
+<p>The missing line was in the deployment config:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">agent</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">name</span>: <span style="color:#ae81ff">crm_followup_agent</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">workflow</span>: <span style="color:#ae81ff">note_to_followup</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e"># model: openai:gpt-5.4-nano</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">max_steps</span>: <span style="color:#ae81ff">8</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">max_tool_calls</span>: <span style="color:#ae81ff">12</span>
+</span></span></code></pre></div><p>The SDK wrapper treated a missing model as &ldquo;use provider default.&rdquo; The provider default had changed during a dependency upgrade from the nano-class model I expected to a pro-class model that was configured elsewhere for escalations. Nothing crashed. The agent produced good answers. The bill moved first.</p>
+<p>I&rsquo;ve found that this is the worst kind of AI cost bug: output quality improves just enough that nobody notices the mistake from the product surface. The invoice is the regression test.</p>
+<p>The price spread makes this concrete. As of July 9, 2026, <a href="https://developers.openai.com/api/docs/pricing">OpenAI&rsquo;s API pricing page</a> listed <code>gpt-5.4-nano</code> standard pricing at $0.20 per 1M input tokens and $1.25 per 1M output tokens, while <code>gpt-5.4-pro</code> was $30 per 1M input tokens and $180 per 1M output tokens. That is not a small tuning error. That is a different cost class.</p>
+<h2 id="why-do-agent-bills-spike-faster-than-chatbot-bills">Why do agent bills spike faster than chatbot bills?</h2>
+<p>A chatbot request is usually one model call. An agent task is a graph.</p>
+<p>One user-visible action can include planning, retrieval, tool selection, tool arguments, tool results, validation, retries, summarization, and final response generation. Each step resends some amount of history. Tool definitions add tokens. Tool results add tokens. If the agent loops, every loop can carry the growing context forward.</p>
+<p>That is why I now treat &ldquo;cost per completed task&rdquo; as the primary metric, not &ldquo;cost per model call.&rdquo; A single call can look acceptable while the task-level run is broken.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Failure shape</th>
+          <th style="text-align: right">What the invoice shows</th>
+          <th>What the trace shows</th>
+          <th>Usual fix</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Wrong default model</td>
+          <td style="text-align: right">Cost per call jumps</td>
+          <td><code>response_model</code> is more expensive than expected</td>
+          <td>Fail closed on missing model, alert on model mismatch</td>
+      </tr>
+      <tr>
+          <td>Runaway loop</td>
+          <td style="text-align: right">Call count jumps</td>
+          <td>Repeated tool calls or repeated agent steps</td>
+          <td>Step budgets, loop detection, per-run circuit breaker</td>
+      </tr>
+      <tr>
+          <td>Context/tool bloat</td>
+          <td style="text-align: right">Input tokens climb</td>
+          <td>Tool schemas, snapshots, retrieval results, or chat history dominate</td>
+          <td>Context pruning, tool allowlists, smaller snapshots</td>
+      </tr>
+      <tr>
+          <td>Reasoning token surprise</td>
+          <td style="text-align: right">Output cost jumps</td>
+          <td>Hidden or reasoning tokens dominate billed output</td>
+          <td>Provider-side reasoning caps and per-call budgets</td>
+      </tr>
+  </tbody>
+</table>
+<p>This is also why the related <a href="/posts/ai-agent-api-cost-horror-story-2026/">AI Agent API Cost Horror Story 2026</a> is not really about one bad prompt. The core pattern is uncontrolled repetition under usage-based billing. My incident was narrower, but the debugging discipline is the same: trace the run, not just the request.</p>
+<h2 id="what-should-you-check-in-the-first-15-minutes">What should you check in the first 15 minutes?</h2>
+<p>Start with the smallest path that proves whether the wrong model actually ran.</p>
+<p>Do not begin by rewriting prompts. Do not begin by debating whether the agent &ldquo;needed&rdquo; the stronger model. The first 15 minutes should answer five questions:</p>
+<ol>
+<li>Which project, API key, environment, or tenant created the spike?</li>
+<li>Which workflow or agent name contributed the most spend?</li>
+<li>Which trace or session IDs are the top offenders?</li>
+<li>What model did the code request?</li>
+<li>What model did the provider actually return?</li>
+</ol>
+<p>In practice, I want a trace table that looks like this:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Field</th>
+          <th>Example</th>
+          <th>Why it matters</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>trace_id</code></td>
+          <td><code>tr_20260709_1841_02</code></td>
+          <td>Groups all agent steps into one billable task</td>
+      </tr>
+      <tr>
+          <td><code>workflow_name</code></td>
+          <td><code>crm_followup_agent</code></td>
+          <td>Lets you compare spend by product feature</td>
+      </tr>
+      <tr>
+          <td><code>step_name</code></td>
+          <td><code>draft_followup</code></td>
+          <td>Finds the expensive step, not just the expensive user</td>
+      </tr>
+      <tr>
+          <td><code>provider</code></td>
+          <td><code>openai</code></td>
+          <td>Separates provider routing from model routing</td>
+      </tr>
+      <tr>
+          <td><code>requested_model</code></td>
+          <td><code>gpt-5.4-nano</code></td>
+          <td>What your app intended</td>
+      </tr>
+      <tr>
+          <td><code>response_model</code></td>
+          <td><code>gpt-5.4-pro</code></td>
+          <td>What actually generated tokens</td>
+      </tr>
+      <tr>
+          <td><code>input_tokens</code></td>
+          <td><code>48_120</code></td>
+          <td>Detects context bloat</td>
+      </tr>
+      <tr>
+          <td><code>output_tokens</code></td>
+          <td><code>2_840</code></td>
+          <td>Detects verbose or reasoning-heavy responses</td>
+      </tr>
+      <tr>
+          <td><code>tool_calls</code></td>
+          <td><code>7</code></td>
+          <td>Detects loops and tool-heavy paths</td>
+      </tr>
+      <tr>
+          <td><code>estimated_cost_usd</code></td>
+          <td><code>0.91</code></td>
+          <td>Makes budget checks possible before invoice close</td>
+      </tr>
+  </tbody>
+</table>
+<p>The key field pair is <code>requested_model</code> versus <code>response_model</code>. If you only log <code>model</code>, you will eventually lie to yourself. The application often knows what it asked for, but gateways, SDK defaults, provider aliases, region-specific endpoints, and fallback routing can change what runs.</p>
+<p><a href="https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/">OpenTelemetry&rsquo;s GenAI semantic conventions</a> are useful here because they already distinguish fields such as <code>gen_ai.request.model</code>, <code>gen_ai.response.model</code>, provider identity, input tokens, output tokens, reasoning output tokens, tool data, and workflow name. I do not treat the convention as a magic observability product. I use it as a boring schema that keeps every service from inventing a different spelling for the same billing fact.</p>
+<h2 id="how-do-you-separate-a-wrong-model-from-a-runaway-loop">How do you separate a wrong model from a runaway loop?</h2>
+<p>These two incidents look similar on a monthly invoice and completely different in traces.</p>
+<p>A wrong model incident increases cost per step. A runaway loop increases step count. Context bloat increases input tokens per step. Reasoning token surprises increase billed output even when visible text is short.</p>
+<p>Here is the quick distinction I use:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-sql" data-lang="sql"><span style="display:flex;"><span><span style="color:#66d9ef">select</span>
+</span></span><span style="display:flex;"><span>  workflow_name,
+</span></span><span style="display:flex;"><span>  response_model,
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">count</span>(<span style="color:#f92672">*</span>) <span style="color:#66d9ef">as</span> calls,
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">sum</span>(input_tokens) <span style="color:#66d9ef">as</span> input_tokens,
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">sum</span>(output_tokens) <span style="color:#66d9ef">as</span> output_tokens,
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">sum</span>(estimated_cost_usd) <span style="color:#66d9ef">as</span> cost_usd,
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">sum</span>(estimated_cost_usd) <span style="color:#f92672">/</span> <span style="color:#66d9ef">nullif</span>(<span style="color:#66d9ef">count</span>(<span style="color:#66d9ef">distinct</span> trace_id), <span style="color:#ae81ff">0</span>) <span style="color:#66d9ef">as</span> cost_per_task
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">from</span> genai_calls
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">where</span> <span style="color:#66d9ef">timestamp</span> <span style="color:#f92672">&gt;=</span> now() <span style="color:#f92672">-</span> interval <span style="color:#e6db74">&#39;24 hours&#39;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">group</span> <span style="color:#66d9ef">by</span> workflow_name, response_model
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">order</span> <span style="color:#66d9ef">by</span> cost_usd <span style="color:#66d9ef">desc</span>;
+</span></span></code></pre></div><p>If <code>cost_per_task</code> jumps but <code>calls</code> are normal, model routing or token volume is likely. If <code>calls</code> jumps, inspect loops and retries. If <code>input_tokens</code> grows step by step inside the same trace, inspect context assembly, tool definitions, browser snapshots, and retrieval results.</p>
+<p>I ran into the snapshot version of this while working with browser automation agents. A browser tool can hand the model a large accessibility tree or page snapshot before the model has done any useful work. The post on <a href="/posts/browser-mcp-snapshot-token-cost-2026/">Browser MCP Snapshot Token Cost 2026</a> covers that pattern in more depth. The important lesson for this incident was the same: the expensive thing may be invisible in the UI.</p>
+<h2 id="what-did-the-config-diff-reveal">What did the config diff reveal?</h2>
+<p>The config diff showed two mistakes, not one.</p>
+<p>First, the workflow config omitted the model. Second, the model resolver had an unsafe fallback:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-ts" data-lang="ts"><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">model</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">workflow</span>.<span style="color:#a6e22e">model</span> <span style="color:#f92672">??</span> <span style="color:#a6e22e">process</span>.<span style="color:#a6e22e">env</span>.<span style="color:#a6e22e">DEFAULT_AGENT_MODEL</span> <span style="color:#f92672">??</span> <span style="color:#e6db74">&#34;gpt-5.4-pro&#34;</span>;
+</span></span></code></pre></div><p>That line was convenient during development because local experiments &ldquo;just worked.&rdquo; In production, it meant an omitted low-cost model silently became a high-cost model. The fallback optimized for availability over cost control.</p>
+<p>I changed the resolver to fail closed:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-ts" data-lang="ts"><span style="display:flex;"><span><span style="color:#66d9ef">type</span> <span style="color:#a6e22e">AgentModel</span> <span style="color:#f92672">=</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">|</span> <span style="color:#e6db74">&#34;openai:gpt-5.4-nano&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">|</span> <span style="color:#e6db74">&#34;openai:gpt-5.4-mini&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">|</span> <span style="color:#e6db74">&#34;openai:gpt-5.4&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">|</span> <span style="color:#e6db74">&#34;anthropic:claude-haiku-4.5&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">|</span> <span style="color:#e6db74">&#34;anthropic:claude-sonnet-4.6&#34;</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">interface</span> <span style="color:#a6e22e">WorkflowConfig</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">name</span>: <span style="color:#66d9ef">string</span>;
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">model</span>: <span style="color:#66d9ef">AgentModel</span>;
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">maxSteps</span>: <span style="color:#66d9ef">number</span>;
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">maxToolCalls</span>: <span style="color:#66d9ef">number</span>;
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">budgetUsd</span>: <span style="color:#66d9ef">number</span>;
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">export</span> <span style="color:#66d9ef">function</span> <span style="color:#a6e22e">resolveModel</span>(<span style="color:#a6e22e">config</span>: <span style="color:#66d9ef">Partial</span>&lt;<span style="color:#f92672">WorkflowConfig</span>&gt;)<span style="color:#f92672">:</span> <span style="color:#a6e22e">AgentModel</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span><span style="color:#a6e22e">config</span>.<span style="color:#a6e22e">model</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">throw</span> <span style="color:#66d9ef">new</span> Error(<span style="color:#e6db74">`Missing required model for workflow </span><span style="color:#e6db74">${</span><span style="color:#a6e22e">config</span>.<span style="color:#a6e22e">name</span> <span style="color:#f92672">??</span> <span style="color:#e6db74">&#34;unknown&#34;</span><span style="color:#e6db74">}</span><span style="color:#e6db74">`</span>);
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">config</span>.<span style="color:#a6e22e">model</span>;
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>I also added a CI check that rejects workflow configs without explicit models:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-ts" data-lang="ts"><span style="display:flex;"><span><span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">workflow</span> <span style="color:#66d9ef">of</span> <span style="color:#a6e22e">workflows</span>) {
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">assert</span>(<span style="color:#a6e22e">workflow</span>.<span style="color:#a6e22e">model</span>, <span style="color:#e6db74">`</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">workflow</span>.<span style="color:#a6e22e">name</span><span style="color:#e6db74">}</span><span style="color:#e6db74"> is missing model`</span>);
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">assert</span>(<span style="color:#a6e22e">allowedModels</span>.<span style="color:#a6e22e">includes</span>(<span style="color:#a6e22e">workflow</span>.<span style="color:#a6e22e">model</span>), <span style="color:#e6db74">`</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">workflow</span>.<span style="color:#a6e22e">name</span><span style="color:#e6db74">}</span><span style="color:#e6db74"> uses disallowed model </span><span style="color:#e6db74">${</span><span style="color:#a6e22e">workflow</span>.<span style="color:#a6e22e">model</span><span style="color:#e6db74">}</span><span style="color:#e6db74">`</span>);
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">assert</span>(<span style="color:#a6e22e">workflow</span>.<span style="color:#a6e22e">budgetUsd</span> <span style="color:#f92672">&gt;</span> <span style="color:#ae81ff">0</span>, <span style="color:#e6db74">`</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">workflow</span>.<span style="color:#a6e22e">name</span><span style="color:#e6db74">}</span><span style="color:#e6db74"> is missing budgetUsd`</span>);
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>There is a trade-off here. Failing closed can break a workflow that would otherwise complete. I prefer that failure mode for production agents. A visible 500, a dead-lettered job, or a skipped automation is easier to explain than a silent spend spike that succeeds all night.</p>
+<h2 id="which-guardrails-would-have-caught-this-before-the-invoice">Which guardrails would have caught this before the invoice?</h2>
+<p>One guardrail would not have been enough. The useful setup is layered.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Layer</th>
+          <th>Guardrail</th>
+          <th>What it catches</th>
+          <th>What it misses</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Config</td>
+          <td>Required model line and allowlist</td>
+          <td>Missing model, typo, forbidden pro model</td>
+          <td>Dynamic provider-side alias changes</td>
+      </tr>
+      <tr>
+          <td>Runtime</td>
+          <td>Per-run budget</td>
+          <td>Looping or expensive task before completion</td>
+          <td>Underreported provider usage</td>
+      </tr>
+      <tr>
+          <td>Routing</td>
+          <td>Logged route policy and route reason</td>
+          <td>Invisible fallback paths</td>
+          <td>Bad policy that is logged correctly</td>
+      </tr>
+      <tr>
+          <td>Observability</td>
+          <td>Model and token traces</td>
+          <td>Root-cause debugging</td>
+          <td>Prevention unless paired with alerts</td>
+      </tr>
+      <tr>
+          <td>Alerting</td>
+          <td>Cost-per-task anomaly</td>
+          <td>Sudden spend changes</td>
+          <td>Slow cost creep</td>
+      </tr>
+      <tr>
+          <td>Billing</td>
+          <td>Daily reconciliation</td>
+          <td>Provider/client accounting drift</td>
+          <td>Real-time containment</td>
+      </tr>
+  </tbody>
+</table>
+<p><a href="https://kpmg.com/kpmg-us/content/dam/kpmg/corporate-communications/pdf/2026/AIPulseSurvey_Q2_FINAL.pdf">KPMG&rsquo;s U.S. Q2 2026 AI Pulse survey</a> is a useful sanity check for where teams are. The survey covered 204 U.S.-based C-suite and senior business leaders at $1B+ revenue organizations between April 28 and May 25, 2026. Only 26% said AI operating costs were fully visible. The same report listed cost monitoring dashboards, AI approval cost reviews, architecture or prompt standards, and token budgets as controls companies were using.</p>
+<p>That matches what I see in engineering teams: dashboards arrive earlier than enforcement. Dashboards tell you what happened. Budgets and circuit breakers change what can happen.</p>
+<h2 id="how-should-the-route-policy-be-logged">How should the route policy be logged?</h2>
+<p>Model routing can save money, but only if every decision is inspectable.</p>
+<p>I like the 70/20/10 mental model for agents: most routine work goes to cheap models, harder synthesis goes to mid-tier models, and frontier or pro models are reserved for genuinely hard decisions. The danger is that routing becomes another implicit default. If the router says &ldquo;escalated for quality&rdquo; but does not log the matching rule, the model candidates, and the final selected model, you cannot debug it later.</p>
+<p>This is the minimum route event I now log:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;trace_id&#34;</span>: <span style="color:#e6db74">&#34;tr_20260709_1841_02&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;workflow_name&#34;</span>: <span style="color:#e6db74">&#34;crm_followup_agent&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;step_name&#34;</span>: <span style="color:#e6db74">&#34;draft_followup&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;router_version&#34;</span>: <span style="color:#e6db74">&#34;agent-router@2.3.1&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;route_policy&#34;</span>: <span style="color:#e6db74">&#34;routine_note_followup_v4&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;route_reason&#34;</span>: <span style="color:#e6db74">&#34;routine_text_generation&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;candidate_models&#34;</span>: [<span style="color:#e6db74">&#34;openai:gpt-5.4-nano&#34;</span>, <span style="color:#e6db74">&#34;openai:gpt-5.4-mini&#34;</span>],
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;selected_model&#34;</span>: <span style="color:#e6db74">&#34;openai:gpt-5.4-nano&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;fallback_used&#34;</span>: <span style="color:#66d9ef">false</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;budget_remaining_usd&#34;</span>: <span style="color:#ae81ff">4.82</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>When the incident happened, I had <code>selected_model</code> in some places and provider usage in another place. I did not have the route decision, response model, and token count in the same event stream. That made the first hour slower than it needed to be.</p>
+<p>For coding agents, the same point applies to execution infrastructure. The model bill is only one part of task cost. Sandboxes, test runners, browser sessions, and long-lived environments can add their own meter. The <a href="/posts/code-execution-sandbox-pricing-comparison-2026/">Code Execution Sandbox Pricing 2026</a> comparison is relevant if your agent runs code, because a cheap model can still drive an expensive runtime loop.</p>
+<h2 id="what-should-you-do-about-reasoning-tokens">What should you do about reasoning tokens?</h2>
+<p>Reasoning models need separate controls because visible output is not the whole bill.</p>
+<p>The 2026 arXiv paper <a href="https://arxiv.org/html/2606.04056v1">&ldquo;Token Budgets&rdquo;</a> cataloged 63 confirmed LLM-agent budget-overrun incidents across 21 sub-projects and 18 ecosystems from 2023 to 2026, plus 47 supplementary structural entries. One of its practical warnings is that reasoning models can bill for hidden reasoning tokens outside visible output, so <code>max_output_tokens</code> is not a complete cost cap for those workloads.</p>
+<p>That matters when debugging an overspend. A short visible answer can still be expensive if the model spent heavily on hidden reasoning. For reasoning-capable models, I now log reasoning token fields where the provider exposes them and set provider-side controls such as <code>reasoning_effort</code> or <code>thinking.budget_tokens</code> when available.</p>
+<p>The trade-off is quality. A low reasoning budget can make complex tasks worse, especially multi-step debugging or planning. I do not set one global reasoning budget. I set per-workflow budgets:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">workflows</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">invoice_classification</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">model</span>: <span style="color:#ae81ff">openai:gpt-5.4-nano</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">reasoning_effort</span>: <span style="color:#ae81ff">minimal</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">budget_usd</span>: <span style="color:#ae81ff">0.03</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">production_incident_triage</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">model</span>: <span style="color:#ae81ff">anthropic:claude-sonnet-4.6</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">thinking</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">budget_tokens</span>: <span style="color:#ae81ff">2048</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">budget_usd</span>: <span style="color:#ae81ff">1.25</span>
+</span></span></code></pre></div><p>Cheap, repetitive work gets tight caps. High-judgment incident work gets more room, but it still gets a number.</p>
+<h2 id="how-do-you-reconstruct-the-incident-timeline">How do you reconstruct the incident timeline?</h2>
+<p>I use three timelines and force them into one view.</p>
+<p>The billing timeline shows when spend moved. The trace timeline shows what the agent did. The config timeline shows what changed. The incident usually becomes obvious only when those three are side by side.</p>
+<p>For my missing model line incident, the timeline looked like this:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Time</th>
+          <th>Signal</th>
+          <th>Finding</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>09:12 UTC</td>
+          <td>Deploy</td>
+          <td><code>crm_followup_agent</code> config shipped without <code>model</code></td>
+      </tr>
+      <tr>
+          <td>09:16 UTC</td>
+          <td>Traces</td>
+          <td><code>requested_model</code> absent; <code>response_model</code> was <code>gpt-5.4-pro</code></td>
+      </tr>
+      <tr>
+          <td>10:00 UTC</td>
+          <td>Dashboard</td>
+          <td>Cost per completed follow-up up 41x</td>
+      </tr>
+      <tr>
+          <td>11:30 UTC</td>
+          <td>Billing export</td>
+          <td>Same request volume, much higher model unit cost</td>
+      </tr>
+      <tr>
+          <td>12:05 UTC</td>
+          <td>Config diff</td>
+          <td>Unsafe fallback selected pro-tier default</td>
+      </tr>
+      <tr>
+          <td>12:22 UTC</td>
+          <td>Fix</td>
+          <td>Explicit nano model, allowlist, fail-closed resolver</td>
+      </tr>
+  </tbody>
+</table>
+<p>The important part is &ldquo;same request volume.&rdquo; Without that, I might have chased a traffic spike or retry storm. The call count was normal. Cost per call was not.</p>
+<h2 id="what-alerts-should-fire-next-time">What alerts should fire next time?</h2>
+<p>I want alerts that map to failure modes, not generic &ldquo;spend is high&rdquo; warnings.</p>
+<p>Here are the alerts I would implement before shipping another agent workflow:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">alerts</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">response_model_mismatch</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">condition</span>: <span style="color:#ae81ff">response_model != expected_model</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">window</span>: <span style="color:#ae81ff">5m</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">severity</span>: <span style="color:#ae81ff">page</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">cost_per_task_spike</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">condition</span>: <span style="color:#ae81ff">cost_per_task_usd &gt; 3 * rolling_p95_7d</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">window</span>: <span style="color:#ae81ff">15m</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">severity</span>: <span style="color:#ae81ff">page</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">missing_requested_model</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">condition</span>: <span style="color:#ae81ff">requested_model is null</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">window</span>: <span style="color:#ae81ff">1m</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">severity</span>: <span style="color:#ae81ff">page</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">tool_loop_suspected</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">condition</span>: <span style="color:#ae81ff">tool_calls_per_trace &gt; max_tool_calls * 0.9</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">window</span>: <span style="color:#ae81ff">10m</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">severity</span>: <span style="color:#ae81ff">ticket</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">context_growth</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">condition</span>: <span style="color:#ae81ff">input_tokens_step_n &gt; 2 * input_tokens_step_1</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">window</span>: <span style="color:#ae81ff">15m</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">severity</span>: <span style="color:#ae81ff">ticket</span>
+</span></span></code></pre></div><p>The <code>response_model_mismatch</code> alert is the one I wish I had first. It would have caught the incident within minutes.</p>
+<p>I also recommend a daily reconciliation job. Provider usage reports are the billing source of truth. Your traces are operational truth. They should be close. If they diverge, either your estimator is wrong, canceled streams are undercounted, cache accounting is off, or some traffic bypasses your gateway.</p>
+<h2 id="what-does-a-practical-launch-checklist-look-like">What does a practical launch checklist look like?</h2>
+<p>Before I let an agent spend real money, I now want this checklist complete:</p>
+<ul>
+<li>Every workflow has an explicit model, budget, max step count, max tool call count, and owner.</li>
+<li>Missing model config fails closed in CI and at runtime.</li>
+<li>Pro-tier or frontier models require an allowlist entry and route reason.</li>
+<li><code>requested_model</code>, <code>response_model</code>, provider, workflow, step, input tokens, output tokens, reasoning tokens, tool calls, cache reads, cache writes, and estimated cost are logged per model call.</li>
+<li>Cost is grouped by task, user or tenant, environment, workflow, model, and API key.</li>
+<li>Alerts cover model mismatch, missing model, cost-per-task spikes, runaway steps, and context growth.</li>
+<li>Reasoning models have provider-side reasoning controls where available.</li>
+<li>Agent runs have per-run budgets and circuit breakers.</li>
+<li>Billing export reconciliation runs daily.</li>
+<li>Route policies are versioned and included in traces.</li>
+</ul>
+<p>This may sound heavy for a solo builder. I would still keep the core pieces: explicit model, fail closed, per-run budget, and a cheap cost log. You do not need a full observability stack to avoid the worst mistake. You need to refuse silent defaults.</p>
+<h2 id="what-are-the-common-questions-about-ai-agent-cost-debugging">What are the common questions about AI agent cost debugging?</h2>
+<h3 id="what-is-an-ai-agent-overspend-model-line-mistake">What is an AI agent overspend model line mistake?</h3>
+<p>It is a cost incident where an agent workflow runs on the wrong model because the model configuration is missing, misspelled, overridden, or silently defaulted. The bug is dangerous because the agent can keep producing acceptable output while using a much more expensive model than intended.</p>
+<h3 id="how-do-i-debug-an-unexpected-ai-api-bill-spike">How do I debug an unexpected AI API bill spike?</h3>
+<p>Start by grouping spend by project, API key, workflow, trace, and model. Then compare <code>requested_model</code> with <code>response_model</code> for the most expensive traces. If request volume is normal but cost per task jumped, inspect model routing and token volume before assuming a traffic spike.</p>
+<h3 id="what-is-the-difference-between-requested-model-and-response-model">What is the difference between requested model and response model?</h3>
+<p><code>requested_model</code> is what your application, router, or SDK asked for. <code>response_model</code> is what the provider says generated the response. They can differ because of fallback routing, aliases, gateway policy, provider defaults, regional endpoints, or missing config.</p>
+<h3 id="should-ai-agents-use-a-default-model">Should AI agents use a default model?</h3>
+<p>For production agents, I prefer no implicit expensive default. A safe default can be acceptable for local development, but production workflows should declare a model explicitly and fail closed when it is missing. Silent fallback to the most capable model is a billing incident waiting to happen.</p>
+<h3 id="what-is-the-most-useful-guardrail-for-ai-agent-cost-control">What is the most useful guardrail for AI agent cost control?</h3>
+<p>The highest-value guardrail is a per-run budget tied to trace-level observability. Token prices matter, but agents fail at the task level: loops, retries, tools, context, and reasoning all compound inside one run. Budget the run, log each step, and alert when actual model use differs from policy.</p>
+]]></content:encoded></item></channel></rss>

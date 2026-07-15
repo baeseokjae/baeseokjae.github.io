@@ -1,1 +1,111 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Code-Injection on RockB</title><link>https://baeseokjae.github.io/tags/code-injection/</link><description>Recent content in Code-Injection on RockB</description><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 07 Jul 2026 00:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/code-injection/index.xml" rel="self" type="application/rss+xml"/><item><title>smolagents Python Executor Code Injection Guide 2026 (CVE-2026-4963)</title><link>https://baeseokjae.github.io/posts/smolagents-python-executor-code-injection-guide-2026/</link><pubDate>Tue, 07 Jul 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/smolagents-python-executor-code-injection-guide-2026/</guid><description>&lt;p&gt;If you&amp;rsquo;re running Hugging Face&amp;rsquo;s smolagents in production with the local Python executor, stop what you&amp;rsquo;re doing and read this. CVE-2026-4963 is a code injection vulnerability in smolagents &amp;lt;= 1.25.0-dev.0 that lets an attacker execute arbitrary Python code on the host machine. The NVD rates it &lt;strong&gt;10.0 CRITICAL&lt;/strong&gt; (CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H). The exploit is public. And here&amp;rsquo;s the worst part — this is an &lt;strong&gt;incomplete fix&lt;/strong&gt; for CVE-2025-9959, meaning the previous patch didn&amp;rsquo;t actually close the hole.&lt;/p&gt;</description></item></channel></rss>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Code-Injection on RockB</title><link>https://baeseokjae.github.io/tags/code-injection/</link><description>Recent content in Code-Injection on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 07 Jul 2026 00:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/code-injection/index.xml" rel="self" type="application/rss+xml"/><item><title>smolagents Python Executor Code Injection Guide 2026 (CVE-2026-4963)</title><link>https://baeseokjae.github.io/posts/smolagents-python-executor-code-injection-guide-2026/</link><pubDate>Tue, 07 Jul 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/smolagents-python-executor-code-injection-guide-2026/</guid><description>CVE-2026-4963 is a critical code injection in Hugging Face smolagents &amp;lt;= 1.25.0-dev.0. Here&amp;#39;s how the local Python executor sandbox fails, how attackers bypass it, and what to do about it.</description><content:encoded><![CDATA[<p>If you&rsquo;re running Hugging Face&rsquo;s smolagents in production with the local Python executor, stop what you&rsquo;re doing and read this. CVE-2026-4963 is a code injection vulnerability in smolagents &lt;= 1.25.0-dev.0 that lets an attacker execute arbitrary Python code on the host machine. The NVD rates it <strong>10.0 CRITICAL</strong> (CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H). The exploit is public. And here&rsquo;s the worst part — this is an <strong>incomplete fix</strong> for CVE-2025-9959, meaning the previous patch didn&rsquo;t actually close the hole.</p>
+<p>I&rsquo;ve spent the last few hours digging through the source code, the advisory, and the public exploit PoCs. Here&rsquo;s exactly how the sandbox breaks, why the blocklist approach is fundamentally flawed, and what you should do right now.</p>
+<h2 id="what-is-smolagents">What Is smolagents?</h2>
+<p>smolagents is Hugging Face&rsquo;s lightweight framework for building AI agents. The idea is simple: you give an LLM a set of tools, and it writes Python code to accomplish tasks. That generated code gets executed in a <strong>local Python executor</strong> — a custom AST interpreter in <code>src/smolagents/local_python_executor.py</code> that&rsquo;s supposed to sandbox the execution.</p>
+<p>The executor parses the agent&rsquo;s code into an AST (Abstract Syntax Tree) and walks it node by node, evaluating only the operations it considers safe. It maintains a blocklist of dangerous modules (<code>os</code>, <code>subprocess</code>, <code>shutil</code>, <code>socket</code>, <code>sys</code>, etc.) and dangerous functions (<code>builtins.eval</code>, <code>builtins.exec</code>, <code>os.system</code>, etc.). It also maintains an allowlist of safe built-in functions (<code>print</code>, <code>len</code>, <code>range</code>, <code>math.sqrt</code>, etc.) and authorized imports.</p>
+<p>The problem? <strong>Blocklists don&rsquo;t work when the attacker controls the input.</strong></p>
+<h2 id="the-vulnerability-three-bypass-vectors">The Vulnerability: Three Bypass Vectors</h2>
+<p>CVE-2026-4963 affects three functions in <code>local_python_executor.py</code>:</p>
+<ul>
+<li><code>evaluate_augassign</code> — handles <code>+=</code>, <code>-=</code>, <code>*=</code>, etc.</li>
+<li><code>evaluate_call</code> — handles function calls</li>
+<li><code>evaluate_with</code> — handles <code>with</code> statements</li>
+</ul>
+<p>Let me walk through each one.</p>
+<h3 id="1-augmented-assignment-bypass">1. Augmented Assignment Bypass</h3>
+<p>The <code>evaluate_augassign</code> function evaluates the target of an augmented assignment by calling <code>get_current_value</code>, which uses Python&rsquo;s <code>getattr()</code> to access attributes on objects:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">get_current_value</span>(target: ast<span style="color:#f92672">.</span>AST) <span style="color:#f92672">-&gt;</span> Any:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> isinstance(target, ast<span style="color:#f92672">.</span>Attribute):
+</span></span><span style="display:flex;"><span>        obj <span style="color:#f92672">=</span> evaluate_ast(target<span style="color:#f92672">.</span>value, state, static_tools, custom_tools, authorized_imports)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> getattr(obj, target<span style="color:#f92672">.</span>attr)
+</span></span></code></pre></div><p>Then it writes the result back using <code>set_value</code>, which calls <code>setattr()</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">elif</span> isinstance(target, ast<span style="color:#f92672">.</span>Attribute):
+</span></span><span style="display:flex;"><span>    obj <span style="color:#f92672">=</span> evaluate_ast(target<span style="color:#f92672">.</span>value, state, static_tools, custom_tools, authorized_imports)
+</span></span><span style="display:flex;"><span>    setattr(obj, target<span style="color:#f92672">.</span>attr, value)
+</span></span></code></pre></div><p>There&rsquo;s no check on what <code>obj</code> is. If an attacker can get a reference to a dangerous object — say, a module like <code>os</code> — they can use <code>obj.__dict__ += something</code> or <code>obj.__class__ += something</code> to modify internal state. The sandbox only checks <code>ast.Name</code> targets against <code>static_tools</code>, but <code>ast.Attribute</code> targets pass through unchecked.</p>
+<h3 id="2-function-call-bypass">2. Function Call Bypass</h3>
+<p>The <code>evaluate_call</code> function handles method calls on objects obtained through attribute access:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">elif</span> isinstance(call<span style="color:#f92672">.</span>func, ast<span style="color:#f92672">.</span>Attribute):
+</span></span><span style="display:flex;"><span>    obj <span style="color:#f92672">=</span> evaluate_ast(call<span style="color:#f92672">.</span>func<span style="color:#f92672">.</span>value, state, static_tools, custom_tools, authorized_imports)
+</span></span><span style="display:flex;"><span>    func_name <span style="color:#f92672">=</span> call<span style="color:#f92672">.</span>func<span style="color:#f92672">.</span>attr
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> <span style="color:#f92672">not</span> hasattr(obj, func_name):
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">raise</span> InterpreterError(<span style="color:#f92672">...</span>)
+</span></span><span style="display:flex;"><span>    func <span style="color:#f92672">=</span> getattr(obj, func_name)
+</span></span></code></pre></div><p>The dangerous function check only looks at <code>func.__name__</code> and <code>func.__module__</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">for</span> qualified_function_name <span style="color:#f92672">in</span> DANGEROUS_FUNCTIONS:
+</span></span><span style="display:flex;"><span>    module_name, function_name <span style="color:#f92672">=</span> qualified_function_name<span style="color:#f92672">.</span>rsplit(<span style="color:#e6db74">&#34;.&#34;</span>, <span style="color:#ae81ff">1</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> (
+</span></span><span style="display:flex;"><span>        (static_tools <span style="color:#f92672">is</span> <span style="color:#66d9ef">None</span> <span style="color:#f92672">or</span> function_name <span style="color:#f92672">not</span> <span style="color:#f92672">in</span> static_tools)
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">and</span> result<span style="color:#f92672">.</span>__name__ <span style="color:#f92672">==</span> function_name
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">and</span> result<span style="color:#f92672">.</span>__module__ <span style="color:#f92672">==</span> module_name
+</span></span><span style="display:flex;"><span>    ):
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">raise</span> InterpreterError(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;Forbidden access to function: </span><span style="color:#e6db74">{</span>function_name<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>)
+</span></span></code></pre></div><p>This check is trivially bypassable. If you can get a reference to <code>os.system</code> through a different path — say, by accessing it as an attribute of a module object you smuggled in — the <code>__name__</code> and <code>__module__</code> still match, but the check only runs on the <em>result</em> of an expression, not on intermediate objects used in attribute chains.</p>
+<p>The classic Python sandbox escape works here:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span>()<span style="color:#f92672">.</span>__class__<span style="color:#f92672">.</span>__bases__[<span style="color:#ae81ff">0</span>]<span style="color:#f92672">.</span>__subclasses__()
+</span></span></code></pre></div><p>This gives you every class loaded in the interpreter. From there, you find one with access to <code>builtins</code> or <code>os</code> and call it. The executor blocks <code>__</code> prefixed attributes in <code>evaluate_attribute</code>, but the subscript access in <code>evaluate_subscript</code> doesn&rsquo;t check for dunder methods on the <em>result</em> — only <code>evaluate_attribute</code> does.</p>
+<h3 id="3-with-statement-bypass">3. With Statement Bypass</h3>
+<p>The <code>evaluate_with</code> function calls <code>__enter__</code> and <code>__exit__</code> on context manager objects:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span>context_expr <span style="color:#f92672">=</span> evaluate_ast(item<span style="color:#f92672">.</span>context_expr, state, static_tools, custom_tools, authorized_imports)
+</span></span><span style="display:flex;"><span>enter_result <span style="color:#f92672">=</span> context_expr<span style="color:#f92672">.</span>__enter__()
+</span></span></code></pre></div><p>If an attacker can construct or obtain an object with a malicious <code>__enter__</code> method — for example, by defining a class inside the executor (which <code>evaluate_class_def</code> allows) — they can execute arbitrary code during the <code>with</code> block setup.</p>
+<h2 id="why-the-blocklist-approach-fails">Why the Blocklist Approach Fails</h2>
+<p>This is the core lesson. smolagents&rsquo; executor uses a <strong>deny-list</strong> strategy: it lists what&rsquo;s forbidden and allows everything else. This is the opposite of a <strong>allow-list</strong> strategy, where you list what&rsquo;s permitted and deny everything else.</p>
+<p>The <code>DANGEROUS_MODULES</code> list has 9 entries. The <code>DANGEROUS_FUNCTIONS</code> list has 8 entries. But Python&rsquo;s standard library has hundreds of modules, and the number of ways to access them through class introspection, <code>__subclasses__()</code>, <code>__globals__</code>, and <code>__builtins__</code> is effectively infinite.</p>
+<p>Here&rsquo;s a concrete example of what an attacker can do even with the blocklist in place:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># Step 1: Get a reference to a class that has access to builtins</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">X</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">pass</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Step 2: Walk the MRO to find object, then subclasses</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># (The executor blocks __ in attribute access, but not in subscript)</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Step 3: Once you have a reference to a class with __init__.__globals__,</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># you can access any module in its globals</span>
+</span></span></code></pre></div><p>The <code>evaluate_class_def</code> function allows defining new classes. The <code>evaluate_function_def</code> function allows defining new functions. Both of these create callable objects that get stored in <code>state</code> or <code>custom_tools</code>. Once a user-defined function exists, its <code>__globals__</code> attribute (if accessible) leaks the entire execution environment.</p>
+<h2 id="the-incomplete-fix-problem">The Incomplete Fix Problem</h2>
+<p>CVE-2026-4963 is explicitly labeled as an <strong>incomplete fix for CVE-2025-9959</strong>. This means the original vulnerability was reported, a patch was released, and the patch didn&rsquo;t actually fix it. The advisory notes that &ldquo;the vendor was contacted early about this disclosure but did not respond in any way.&rdquo;</p>
+<p>This pattern is unfortunately common in AI agent security. The attack surface is large, the sandboxing problem is hard, and one-off patches that add more entries to a blocklist rarely close all the bypass paths.</p>
+<h2 id="mitigation-what-you-should-do">Mitigation: What You Should Do</h2>
+<h3 id="immediate-today">Immediate (Today)</h3>
+<ol>
+<li>
+<p><strong>Pin smolagents to a version before 1.25.0-dev.0</strong> if you must use it, or better yet, <strong>don&rsquo;t use the local Python executor at all</strong>. Switch to the code execution tool pattern where the agent writes code but a separate, hardened sandbox (like gVisor, Firecracker microVM, or Docker with no-network and read-only rootfs) actually runs it.</p>
+</li>
+<li>
+<p><strong>If you can&rsquo;t upgrade</strong>, set <code>authorized_imports</code> to an empty list <code>[]</code> and never use <code>&quot;*&quot;</code>. This at least blocks the import vector. It won&rsquo;t stop class introspection attacks, but it raises the bar.</p>
+</li>
+<li>
+<p><strong>Run smolagents in a container</strong> with no network access, no write access to the host filesystem, and strict resource limits. Assume the sandbox will be bypassed — because it will.</p>
+</li>
+</ol>
+<h3 id="medium-term">Medium-term</h3>
+<ol>
+<li>
+<p><strong>Replace the AST interpreter with a proper sandbox</strong>. Options include:</p>
+<ul>
+<li><strong>Pyodide</strong> — CPython compiled to WebAssembly, runs in a browser-like sandbox</li>
+<li><strong>RestrictedPython</strong> — a battle-tested subset of Python for untrusted code</li>
+<li><strong>gVisor or Firecracker</strong> — full OS-level isolation for each agent execution</li>
+<li><strong>Subprocess with seccomp</strong> — run Python in a subprocess with seccomp-bpf syscall filtering</li>
+</ul>
+</li>
+<li>
+<p><strong>Audit any AI agent framework that uses AST-level sandboxing</strong>. The pattern is inherently fragile. Every AST node type you support is a potential bypass surface. smolagents supports 30+ AST node types including <code>ClassDef</code>, <code>FunctionDef</code>, <code>With</code>, <code>Try</code>, <code>Raise</code>, <code>Delete</code>, and <code>AugAssign</code> — each one is a potential escape vector.</p>
+</li>
+</ol>
+<h3 id="long-term">Long-term</h3>
+<p>The industry needs a better approach to agent code execution. The current pattern — &ldquo;let the LLM write Python, then run it in a sandbox&rdquo; — is fundamentally risky because LLMs are good at finding edge cases. I&rsquo;ve written about this before in my <a href="/posts/ai-agent-security-tools-2026/">AI Agent Security Best Practices</a> post, and the conclusion is the same: <strong>don&rsquo;t trust the sandbox, trust the isolation</strong>.</p>
+<h2 id="the-bigger-picture">The Bigger Picture</h2>
+<p>CVE-2026-4963 is not an isolated incident. It&rsquo;s part of a pattern. We&rsquo;ve seen similar issues in <a href="/posts/praisonai-cross-origin-agent-execution-vulnerability-guide-2026/">PraisonAI</a>, in various MCP server implementations, and in the <a href="/posts/agent-skills-supply-chain-security-guide-2026/">agent supply chain</a>. The fundamental problem is that AI agent frameworks are being built with security as an afterthought — sandboxing is bolted on after the fact, and the sandbox is always playing catch-up with the attacker.</p>
+<p>The smolagents executor is a well-written piece of code for what it tries to do. The AST walking is clean, the error handling is thorough, and the code is readable. But no amount of clean code can make a blocklist-based sandbox secure against a determined attacker who controls the input.</p>
+<p>If you&rsquo;re building an AI agent system today, assume the code executor will be compromised. Design your architecture so that a compromised executor can&rsquo;t access your production database, your API keys, or your customer data. That&rsquo;s the only defense that actually works.</p>
+<h2 id="references">References</h2>
+<ul>
+<li><a href="https://github.com/advisories/GHSA-54fq-v6x8-244g">GitHub Advisory GHSA-54fq-v6x8-244g</a></li>
+<li><a href="https://nvd.nist.gov/vuln/detail/CVE-2026-4963">NVD Entry for CVE-2026-4963</a></li>
+<li><a href="https://advisories.gitlab.com/pypi/smolagents/CVE-2026-4963/">GitLab Advisory Database Entry</a></li>
+<li><a href="https://github.com/huggingface/smolagents">smolagents source code on GitHub</a></li>
+<li><a href="/posts/ai-agent-security-tools-2026/">AI Agent Security Tools 2026</a></li>
+<li><a href="/posts/agent-skills-supply-chain-security-guide-2026/">Agent Skills Supply Chain Security Guide</a></li>
+</ul>
+]]></content:encoded></item></channel></rss>
