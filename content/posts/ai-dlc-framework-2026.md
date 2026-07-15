@@ -1,4 +1,8 @@
 ---
+cover:
+  alt: 'AI-DLC Framework 2026: The AI-Driven Development Lifecycle Explained'
+  image: /images/ai-dlc-framework-2026.png
+  relative: false
 title: "AI-DLC Framework 2026: The AI-Driven Development Lifecycle Explained"
 date: 2026-07-07T12:00:00+00:00
 tags: ["ai-dlc", "ai development lifecycle", "sdlc", "ai coding agents", "amazon q developer"]

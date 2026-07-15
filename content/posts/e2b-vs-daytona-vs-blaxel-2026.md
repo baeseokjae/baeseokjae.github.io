@@ -1,4 +1,8 @@
 ---
+cover:
+  alt: 'E2B vs Daytona vs Blaxel: AI Agent Code Execution Sandbox Comparison 2026'
+  image: /images/e2b-vs-daytona-vs-blaxel-2026.png
+  relative: false
 date: 2026-05-10 00:00:00+00:00
 description: 'E2B vs Daytona vs Blaxel: a head-to-head sandbox comparison covering
   cold starts, state persistence, pricing, and which provider fits which agentic work...'

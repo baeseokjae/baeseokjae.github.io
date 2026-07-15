@@ -1,4 +1,8 @@
 ---
+cover:
+  alt: 'Semantic Kernel Agent RCE Vulnerabilities Guide 2026: When Prompt Injection Becomes Code Execution'
+  image: /images/semantic-kernel-agent-rce-vulnerabilities-guide-2026.png
+  relative: false
 title: "Semantic Kernel Agent RCE Vulnerabilities Guide 2026: When Prompt Injection Becomes Code Execution"
 date: 2026-07-07
 draft: false

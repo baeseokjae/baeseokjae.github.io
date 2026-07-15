@@ -1,4 +1,8 @@
 ---
+cover:
+  alt: 'Amp Code Review 2026: Sourcegraph''s Autonomous Coding Agent Tested'
+  image: /images/amp-code-review-2026.png
+  relative: false
 date: 2026-05-08 00:00:00+00:00
 description: A hands-on review of Amp Code, Sourcegraph's autonomous coding agent.
   Covers multi-model routing, parallel subagents, Oracle Mode, Amp Tab, pricing, and...

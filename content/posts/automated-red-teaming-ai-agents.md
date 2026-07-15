@@ -1,3 +1,11 @@
+---
+title: 'Automated Red Teaming for AI Agents'
+cover:
+  alt: 'Automated Red Teaming for AI Agents'
+  image: /images/automated-red-teaming-ai-agents.png
+  relative: false
+---
+
 # Automated Red Teaming for AI Agent Safety: A Practical Guide (2026)
 
 ## Introduction

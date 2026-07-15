@@ -1,4 +1,8 @@
 ---
+cover:
+  alt: 'Claude Code Cross-User Data Leak 2026: What Happened and How to Protect Yourself'
+  image: /images/claude-code-cross-user-data-leak-2026.png
+  relative: false
 title: "Claude Code Cross-User Data Leak 2026: What Happened and How to Protect Yourself"
 date: 2026-07-06
 draft: false

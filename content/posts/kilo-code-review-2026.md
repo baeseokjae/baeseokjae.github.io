@@ -1,4 +1,8 @@
 ---
+cover:
+  alt: 'Kilo Code Review 2026: Cline Fork with Orchestrator Mode and Inline Autocomplete'
+  image: /images/kilo-code-review-2026.png
+  relative: false
 date: 2026-05-13 00:00:00+00:00
 description: 'A thorough 2026 review of Kilo Code: the Roo Code successor with 1.5M
   users, Orchestrator Mode for multi-agent workflows, Memory Bank, inline autocomple...'

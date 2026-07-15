@@ -1,4 +1,8 @@
 ---
+cover:
+  alt: 'CodeGraph vs Graphify: Choosing the Right Code Knowledge Graph for AI Coding Agents in 2026'
+  image: /images/codegraph-vs-graphify-ai-coding-agents-2026.png
+  relative: false
 title: "CodeGraph vs Graphify: Choosing the Right Code Knowledge Graph for AI Coding Agents in 2026"
 date: 2026-07-07
 draft: false

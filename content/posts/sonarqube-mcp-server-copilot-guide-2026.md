@@ -1,3 +1,11 @@
+---
+title: 'SonarQube MCP Server for GitHub Copilot'
+cover:
+  alt: 'SonarQube MCP Server for GitHub Copilot'
+  image: /images/sonarqube-mcp-server-copilot-guide-2026.png
+  relative: false
+---
+
 # SonarQube MCP Server for GitHub Copilot 2026: Code Quality Inside Agent Workflows
 
 ## Overview

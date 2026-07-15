@@ -1,4 +1,8 @@
 ---
+cover:
+  alt: 'LLM Red Teaming Guide 2026: Security Testing for AI Agents'
+  image: /images/llm-red-teaming-guide-2026.png
+  relative: false
 date: 2026-05-10 00:00:00+00:00
 draft: false
 schema: schema-llm-red-teaming-guide-2026

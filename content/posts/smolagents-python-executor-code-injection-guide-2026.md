@@ -1,4 +1,8 @@
 ---
+cover:
+  alt: 'smolagents Python Executor Code Injection Guide 2026 (CVE-2026-4963)'
+  image: /images/smolagents-python-executor-code-injection-guide-2026.png
+  relative: false
 title: "smolagents Python Executor Code Injection Guide 2026 (CVE-2026-4963)"
 slug: smolagents-python-executor-code-injection-guide-2026
 date: 2026-07-07

@@ -1,4 +1,8 @@
 ---
+cover:
+  alt: 'AI Agent Verification Plugins Compared 2026: SonarQube vs Snyk vs Aikido vs CodeQL'
+  image: /images/ai-agent-verification-plugins-comparison-2026.png
+  relative: false
 title: "AI Agent Verification Plugins Compared 2026: SonarQube vs Snyk vs Aikido vs CodeQL"
 date: 2026-07-04T12:00:00+09:00
 draft: false
