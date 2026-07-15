@@ -1,0 +1,397 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Chaos Engineering on RockB</title><link>https://baeseokjae.github.io/tags/chaos-engineering/</link><description>Recent content in Chaos Engineering on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 14 Jul 2026 12:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/chaos-engineering/index.xml" rel="self" type="application/rss+xml"/><item><title>What Breaks an AI Agent After 50 Clean Demos: Production Reliability Guide (2026)</title><link>https://baeseokjae.github.io/posts/ai-agent-50-clean-demos-break-2026/</link><pubDate>Tue, 14 Jul 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/ai-agent-50-clean-demos-break-2026/</guid><description>Why AI agents that pass 50 demos fail in production — the 7 failure modes, the $47K prompt injection case study, and how to build production-grade reliability with chaos engineering, 12-factor architecture, and multi-trial testing.</description><content:encoded><![CDATA[<p>You demo an AI agent to your team. Fifty runs, zero failures. Everyone&rsquo;s impressed. You deploy to production. Within a week, it&rsquo;s hallucinating tool calls, getting stuck in loops, and your Slack is full of &ldquo;the agent did something weird&rdquo; messages.</p>
+<p>I&rsquo;ve been there. Multiple times. And I&rsquo;ve spent the last year digging into why this happens and what actually works to fix it.</p>
+<p>The short answer: <strong>your agent isn&rsquo;t broken — your testing methodology is.</strong> Single-digit demos and pass/fail judgments hide a massive variance problem that only emerges under statistical scrutiny. Gartner predicts over 40% of AI agent projects will fail by 2027, and in January 2026, a prompt injection in a customer support agent processed a $47,000 fraudulent refund. These aren&rsquo;t edge cases — they&rsquo;re systematic failures that most teams aren&rsquo;t testing for.</p>
+<p>This guide covers the seven failure modes that kill production agents, the architectural patterns that survive them, and the testing infrastructure you need before you can trust an agent in production.</p>
+<h2 id="the-50-demo-illusion">The 50-Demo Illusion</h2>
+<p>Here&rsquo;s a number that should scare you: LLMs show up to <strong>72% variance across runs even at temperature=0</strong>. This isn&rsquo;t a bug in one model — it&rsquo;s a fundamental property of how transformer-based models sample tokens. The <a href="/posts/llm-benchmark-variance-2026/">LLM benchmark variance problem</a> is well-documented, and it applies doubly to agentic workflows where a single token change in a tool selection can cascade into a completely different execution path.</p>
+<p>The <a href="https://github.com/alepot55/agentrial">agentrial</a> project ran agents 100 times on the same task and found that pass rates dropped to <strong>60-80%</strong> despite 90%+ accuracy in single-run demos. That&rsquo;s not a 10% degradation — it&rsquo;s a 20-40 percentage point drop that only appears when you run enough trials to get statistically meaningful data.</p>
+<p>In practice, this means:</p>
+<ul>
+<li><strong>A single &ldquo;pass&rdquo; tells you nothing.</strong> You need at least 30-50 runs to establish a baseline pass rate.</li>
+<li><strong>Temperature=0 is not deterministic.</strong> It reduces variance but doesn&rsquo;t eliminate it. The model still samples from a probability distribution — it just picks the most likely token every time. But &ldquo;most likely&rdquo; changes based on floating-point precision, prompt formatting, and context window state.</li>
+<li><strong>Variance compounds across steps.</strong> A 5-step agent where each step has 90% reliability has a theoretical pass rate of 0.9⁵ = 59%. Run that 100 times and you&rsquo;ll see failures in 40% of trials.</li>
+</ul>
+<h2 id="the-7-failure-modes-every-production-agent-faces">The 7 Failure Modes Every Production Agent Faces</h2>
+<p>Most teams test hallucination and prompt injection. Almost no one systematically tests cascade failures, context limit drift, or data integration drift before shipping. Here are the seven failure modes I&rsquo;ve seen kill production agents in practice.</p>
+<h3 id="1-hallucination-under-unexpected-inputs">1. Hallucination Under Unexpected Inputs</h3>
+<p>This is the classic failure mode, but it&rsquo;s more nuanced than &ldquo;the model makes stuff up.&rdquo; In production, hallucination manifests as the agent confidently asserting facts that don&rsquo;t exist in its context window — not because the model is broken, but because it&rsquo;s operating outside its training distribution.</p>
+<p>I&rsquo;ve watched an agent that correctly processed 47 out of 50 records, then at record 48 started returning fabricated data because the relevant instructions had scrolled out of the active context window. The model didn&rsquo;t tell me it was confused. It just started making things up with the same confidence it had for the first 47 records.</p>
+<h3 id="2-edge-case-collapse-nulls-unicode-concurrency">2. Edge Case Collapse (Nulls, Unicode, Concurrency)</h3>
+<p>Production data is messy. Null fields, unicode homoglyphs, concurrent requests, and malformed inputs that your test suite never generated will find their way into your agent&rsquo;s context window. I&rsquo;ve seen agents crash on a single null field in a JSON response — not because the tool returned an error, but because the model couldn&rsquo;t decide what to do with <code>null</code> and entered an infinite reasoning loop.</p>
+<p>Unicode homoglyphs are particularly nasty. An attacker can replace a Latin &lsquo;a&rsquo; with a Cyrillic &lsquo;а&rsquo; (U+0430) — visually identical, semantically different. Your input validation passes, but the agent interprets the string differently. This is one of the 18 prompt injection attack vectors that bypassed PromptGuard with 100% confidence in a 2026 audit.</p>
+<h3 id="3-prompt-injection-and-adversarial-inputs">3. Prompt Injection and Adversarial Inputs</h3>
+<p>The January 2026 incident is the one everyone references now: a customer support agent received a carefully crafted message that included hidden instructions embedded in what appeared to be a legitimate support request. The agent processed a $47,000 fraudulent refund before anyone caught it.</p>
+<p>The techniques are evolving fast. Attackers now use:</p>
+<ul>
+<li><strong>Unicode homoglyphs</strong> — visually identical characters with different byte representations</li>
+<li><strong>Base64-encoded instructions</strong> — the agent decodes and follows them</li>
+<li><strong>ROT13 and other simple ciphers</strong> — the agent &ldquo;figures out&rdquo; the hidden message</li>
+<li><strong>Non-English languages</strong> — instructions in a language the agent handles but the monitoring system doesn&rsquo;t</li>
+<li><strong>Multi-turn fragmentation</strong> — spreading the injection across multiple conversation turns to avoid detection</li>
+</ul>
+<p>The <a href="/posts/secure-ai-agents-least-privilege-2026/">secure AI agents guide</a> covers defense-in-depth approaches, but the reality is: no single guardrail catches everything. In a 2026 audit, 12 out of 18 prompt injection attack vectors bypassed PromptGuard with 100% confidence. You need layered defenses, not a silver bullet.</p>
+<h3 id="4-context-limit-surprises">4. Context Limit Surprises</h3>
+<p>This is the most insidious failure mode because it&rsquo;s invisible until it hits. An agent that works perfectly with a 10-turn conversation will start hallucinating at turn 50 because the context window is full of accumulated tool outputs, error messages, and intermediate results.</p>
+<p>The model doesn&rsquo;t tell you it&rsquo;s confused. It just starts making things up. I&rsquo;ve seen agents that correctly processed 47 out of 50 records, then at record 48 started returning fabricated data because the relevant instructions had scrolled out of the active context window.</p>
+<p>The fix is the <strong>stateless reducer pattern</strong> — instead of dumping everything into the context window, maintain a compact state representation and only inject what the agent needs for the current step. This is the same pattern Redux popularized for frontend state management, and it works just as well for agents.</p>
+<h3 id="5-cascade-failures-in-multi-step-workflows">5. Cascade Failures in Multi-Step Workflows</h3>
+<p>Every step in an agent&rsquo;s execution chain adds failure surface area. A 10-step agent where each step has 95% reliability has a 40% chance of completing without error. But the degradation isn&rsquo;t linear — I&rsquo;ve seen agents that handle steps 1-4 perfectly, then at step 5 the context window is cluttered with intermediate results, the model loses track of what it was doing, and it starts repeating steps or skipping critical operations.</p>
+<p>This is especially bad in the &ldquo;here&rsquo;s your prompt, here&rsquo;s a bag of tools, loop until you hit the goal&rdquo; pattern that many agent frameworks default to. The <a href="/posts/open-source-agent-eval-harness-comparison-2026/">open-source agent eval harnesses</a> I&rsquo;ve tested show this pattern consistently: agents with Directed Graph (DAG) orchestrators like Airflow or Prefect significantly outperform monolithic loop-based agents on multi-step tasks, because the orchestration layer handles state management and retry logic instead of leaving it to the LLM.</p>
+<h3 id="6-data-integration-drift">6. Data Integration Drift</h3>
+<p>Your agent depends on external data sources — APIs, databases, file systems. These sources change over time. An API returns a new field, a database schema changes, a file format gets updated. The agent, trained on the old format, starts making incorrect assumptions.</p>
+<p>I&rsquo;ve seen this manifest as an agent that reliably parsed CSV exports for months, then suddenly started failing because the export tool added a BOM header. The agent didn&rsquo;t fail gracefully — it silently misparsed the data and made decisions based on the wrong columns. Data integration drift is almost never tested because it requires maintaining test fixtures that evolve with the production data sources.</p>
+<h3 id="7-authorization-confusion-in-multi-tenant-systems">7. Authorization Confusion in Multi-Tenant Systems</h3>
+<p>When an agent operates across multiple tenants or user contexts, it can accidentally apply one user&rsquo;s permissions to another&rsquo;s data. This is especially dangerous in customer support agents that handle multiple accounts — the agent might read data from account A while operating under account B&rsquo;s authorization context.</p>
+<p>The fix is <strong>least-privilege tool access</strong>: each tool call should carry its own authorization context, not inherit the agent&rsquo;s global permissions. The <a href="/posts/secure-ai-agents-least-privilege-2026/">secure AI agents guide</a> covers this in detail, but the short version is: treat every tool call as an independent authorization boundary.</p>
+<h2 id="epistemic-distortion-the-meta-failure-mode">Epistemic Distortion: The Meta-Failure Mode</h2>
+<p>Beyond the seven specific failure modes, there&rsquo;s a meta-pattern that researchers have documented across 1,400+ controlled experiments: <strong>epistemic distortion</strong>. This is the agent&rsquo;s tendency to silently drop conflicting instructions, apply wrong evidence standards, or selectively ignore parts of its system prompt.</p>
+<p>In practice, epistemic distortion looks like:</p>
+<ul>
+<li>The agent follows the most recent instruction even when earlier instructions explicitly contradict it</li>
+<li>The agent applies different reasoning standards to different types of inputs (treating user input as more authoritative than system prompts)</li>
+<li>The agent &ldquo;forgets&rdquo; constraints that were established earlier in the conversation</li>
+</ul>
+<p>This isn&rsquo;t a bug — it&rsquo;s a consequence of how attention mechanisms work. The model weights all tokens in its context window, and newer or more salient tokens can override earlier instructions. The fix is structural: don&rsquo;t rely on the model to remember constraints. Encode them in the tool schemas, the orchestration layer, and the validation pipeline.</p>
+<h2 id="the-12-factor-agent-architecture">The 12-Factor Agent Architecture</h2>
+<p>The <a href="https://github.com/humanlayer/12-factor-agents">12-Factor Agents</a> methodology (which hit 475+ points on Hacker News for good reason) provides a solid foundation. Here are the principles I&rsquo;ve found most impactful in practice.</p>
+<h3 id="own-your-prompts-and-context-window">Own Your Prompts and Context Window</h3>
+<p>Don&rsquo;t let the framework manage your prompts. You need explicit control over:</p>
+<ul>
+<li><strong>System prompt versioning</strong> — every change is a new version, tracked in git</li>
+<li><strong>Context window budgeting</strong> — know exactly how many tokens each component uses</li>
+<li><strong>Prompt injection surface</strong> — user input should never be concatenated into system prompts</li>
+</ul>
+<p>I use a simple pattern: each agent step gets a fixed token budget. The system prompt gets 30%, the current state gets 20%, tool definitions get 30%, and user input gets 20%. If something exceeds its budget, it gets truncated — not the model&rsquo;s job to figure out what&rsquo;s important.</p>
+<h3 id="tools-as-structured-outputs">Tools as Structured Outputs</h3>
+<p>Treat tool definitions as JSON schemas with strict validation, not as natural language descriptions. This means:</p>
+<ul>
+<li>Every tool parameter has a type, description, and required/optional flag</li>
+<li>Tool calls are validated against the schema before execution</li>
+<li>Validation failures return structured error messages, not &ldquo;something went wrong&rdquo;</li>
+</ul>
+<p>This pattern, combined with the <a href="/posts/llm-structured-output-guide-2026/">LLM structured output</a> capabilities available in 2026, means you can catch tool selection errors before they cause damage. The agent might still pick the wrong tool, but it won&rsquo;t call it with invalid parameters.</p>
+<h3 id="small-focused-agents-over-monolithic-loops">Small, Focused Agents over Monolithic Loops</h3>
+<p>A single agent with 20 tools and a &ldquo;keep going until done&rdquo; instruction is a recipe for unpredictable behavior. Instead, decompose your workflow into small, focused agents:</p>
+<ul>
+<li><strong>One agent per task type</strong> — each with 3-5 tools max</li>
+<li><strong>DAG orchestration</strong> — use an orchestrator to sequence agents, not the LLM</li>
+<li><strong>Explicit handoffs</strong> — each agent produces a structured output that the next agent consumes</li>
+</ul>
+<p>I&rsquo;ve found that agents with 3-5 tools have significantly lower tool selection drift than agents with 10+ tools. The model has fewer options to confuse, and the tool descriptions can be more specific.</p>
+<h3 id="stateless-reducer-pattern">Stateless Reducer Pattern</h3>
+<p>Instead of passing the entire conversation history to every agent call, maintain a compact state object:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;step&#34;</span>: <span style="color:#ae81ff">4</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;completed_tasks&#34;</span>: [<span style="color:#e6db74">&#34;search&#34;</span>, <span style="color:#e6db74">&#34;validate&#34;</span>, <span style="color:#e6db74">&#34;transform&#34;</span>],
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;current_input&#34;</span>: <span style="color:#e6db74">&#34;output_from_step_3.json&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;errors&#34;</span>: [],
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;accumulated_results&#34;</span>: [<span style="color:#e6db74">&#34;result_1&#34;</span>, <span style="color:#e6db74">&#34;result_2&#34;</span>]
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>Each agent step reads the current state, produces an action, and returns a new state. The full conversation history is stored in an audit log for debugging, but the agent only sees what it needs for the current step. This dramatically reduces context window pressure and eliminates the &ldquo;forgot what it was doing&rdquo; failure mode.</p>
+<h2 id="testing-strategies-that-actually-work">Testing Strategies That Actually Work</h2>
+<p>If you take one thing from this guide, let it be this: <strong>stop testing agents like you test deterministic software.</strong> Agents are stochastic systems, and they need stochastic testing methodologies.</p>
+<h3 id="multi-trial-testing-with-confidence-intervals">Multi-Trial Testing with Confidence Intervals</h3>
+<p>Run every test scenario at least 30 times. Calculate:</p>
+<ul>
+<li><strong>Pass rate</strong> with Wilson confidence intervals (not raw percentages)</li>
+<li><strong>Cost variance</strong> — how much does each run cost in tokens?</li>
+<li><strong>Latency variance</strong> — how long does each run take?</li>
+</ul>
+<p>The <a href="https://github.com/alepot55/agentrial">agentrial</a> framework does this out of the box. You define a task, run it 100 times, and get back pass rates with confidence intervals, cost distributions, and latency distributions. Without this, you&rsquo;re making decisions based on anecdotes.</p>
+<h3 id="chaos-engineering-for-agents-flakestorm-approach">Chaos Engineering for Agents (Flakestorm Approach)</h3>
+<p><a href="https://github.com/flakestorm">Flakestorm</a> and similar tools apply chaos engineering principles to agent systems. The approach is simple: inject failures at the tool call level and observe how the agent recovers. Testing a LangChain agent with this approach revealed a <strong>95% failure rate on adversarial inputs</strong> — not because the LLM was bad, but because the agent had no recovery mechanisms.</p>
+<p>The chaos engineering scenarios I&rsquo;ve found most valuable:</p>
+<ul>
+<li><strong>Inject API latency</strong> — test timeout handling. Most agents crash when a tool call takes 30 seconds instead of 2.</li>
+<li><strong>Return malformed tool outputs</strong> — test error recovery. Can the agent retry, or does it enter an infinite loop?</li>
+<li><strong>Drop intermediate results</strong> — test state persistence. Does the agent resume or start over?</li>
+<li><strong>Rotate model versions mid-workflow</strong> — test compatibility. Does the agent handle a different model&rsquo;s output format?</li>
+<li><strong>Adversarial inputs</strong> — test prompt injection resistance. Can the agent distinguish instructions from data?</li>
+</ul>
+<p>I&rsquo;ve found that most agents fail catastrophically under these conditions — not because the LLM is bad, but because the surrounding infrastructure doesn&rsquo;t handle failures gracefully. A well-designed agent should degrade, not crash.</p>
+<h3 id="cascade-failure-testing">Cascade Failure Testing</h3>
+<p>This is the one almost no one tests. To test cascade failures:</p>
+<ol>
+<li>Inject a bad intermediate result at step N</li>
+<li>Observe whether the agent detects the error or propagates it</li>
+<li>Measure how many steps the error propagates before detection</li>
+<li>Test recovery: can the agent roll back to a known-good state?</li>
+</ol>
+<p>The Fisher exact test (used by agentrial) can identify which specific step has statistically significant failure rates. This is the difference between &ldquo;the agent fails sometimes&rdquo; and &ldquo;step 4 of the tool selection phase has a 30% failure rate when the input contains more than 5 items.&rdquo;</p>
+<h3 id="context-window-monitoring">Context Window Monitoring</h3>
+<p>Monitor context window utilization as a first-class metric. When utilization exceeds 70%, the risk of context limit surprises increases exponentially. Set up alerts for:</p>
+<ul>
+<li><strong>Token count per turn</strong> — sudden increases indicate context window bloat</li>
+<li><strong>Instruction proximity</strong> — how far back are the original instructions?</li>
+<li><strong>Tool output size</strong> — are intermediate results consuming too much context?</li>
+</ul>
+<h2 id="infrastructure-for-resilient-agents">Infrastructure for Resilient Agents</h2>
+<p>The testing patterns above tell you where your agent breaks. The infrastructure patterns below keep it running anyway.</p>
+<h3 id="durable-execution-and-state-persistence">Durable Execution and State Persistence</h3>
+<p><a href="https://github.com/orra-dev/orra">Orra</a> and similar tools provide durable execution for AI agent workflows. The key idea: if an agent crashes mid-step, it should resume from where it left off, not start over. This requires:</p>
+<ul>
+<li><strong>State persistence</strong> — every intermediate result is saved to durable storage</li>
+<li><strong>Idempotent tool calls</strong> — running the same tool with the same input twice produces the same result</li>
+<li><strong>Automatic retry with backoff</strong> — transient failures don&rsquo;t kill the workflow</li>
+</ul>
+<p>The <a href="/posts/openai-agents-sdk-temporal-integration-2026/">OpenAI Agents SDK Temporal integration</a> is a good example of this pattern in practice — Temporal provides the durable execution layer while the agent SDK handles the LLM interactions.</p>
+<h3 id="pre-validated-execution-plans">Pre-Validated Execution Plans</h3>
+<p>Before an agent executes anything, validate the entire plan against your constraints:</p>
+<ul>
+<li>Are all required tools available?</li>
+<li>Do the tool parameters match the schemas?</li>
+<li>Is the estimated cost within budget?</li>
+<li>Are there any circular dependencies in the plan?</li>
+</ul>
+<p>This catches the &ldquo;agent decided to do something unexpected&rdquo; failure mode before it costs you money or corrupts data. Orra&rsquo;s pre-validated execution plans are a reference implementation of this pattern.</p>
+<h3 id="automatic-health-monitoring-and-audit-logs">Automatic Health Monitoring and Audit Logs</h3>
+<p>You need observability at two levels:</p>
+<ol>
+<li><strong>Agent-level</strong> — what did the agent decide, what tools did it call, what was the outcome?</li>
+<li><strong>System-level</strong> — what&rsquo;s the pass rate trend, cost trend, latency trend?</li>
+</ol>
+<p>The <a href="/posts/llm-observability-tools-comparison-2026/">LLM observability tools</a> (LangSmith, Langfuse, Helicone, Arize) all support agent tracing now. The key metric I track is <strong>pass rate over a rolling 24-hour window</strong> — if it drops below 80%, I want to know immediately, not when a user complains.</p>
+<h2 id="building-a-production-reliability-checklist">Building a Production Reliability Checklist</h2>
+<p>Before you deploy an agent to production, run through this checklist:</p>
+<p><strong>Testing (pre-deployment)</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Multi-trial testing: 100 runs per scenario with confidence intervals</li>
+<li><input disabled="" type="checkbox"> Chaos engineering: injected failures at tool call level</li>
+<li><input disabled="" type="checkbox"> Adversarial eval: prompt injection attack vectors tested</li>
+<li><input disabled="" type="checkbox"> Cascade failure testing: bad intermediate results injected</li>
+<li><input disabled="" type="checkbox"> Edge case coverage: nulls, unicode, concurrent requests</li>
+</ul>
+<p><strong>Architecture</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Stateless reducer pattern (not full conversation history in context)</li>
+<li><input disabled="" type="checkbox"> Small, focused agents (3-5 tools per agent)</li>
+<li><input disabled="" type="checkbox"> DAG orchestration (not monolithic loops)</li>
+<li><input disabled="" type="checkbox"> Structured tool definitions with JSON schema validation</li>
+<li><input disabled="" type="checkbox"> Pre-validated execution plans</li>
+</ul>
+<p><strong>Infrastructure</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Durable execution with state persistence</li>
+<li><input disabled="" type="checkbox"> Action deduplication (idempotent tool calls)</li>
+<li><input disabled="" type="checkbox"> Human-in-the-loop approval gates for destructive operations</li>
+<li><input disabled="" type="checkbox"> Least-privilege tool access with per-call authorization</li>
+</ul>
+<p><strong>Monitoring</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Rolling 24-hour pass rate with alerts</li>
+<li><input disabled="" type="checkbox"> Context window utilization tracking</li>
+<li><input disabled="" type="checkbox"> Cost anomaly detection</li>
+<li><input disabled="" type="checkbox"> Tool call distribution monitoring</li>
+<li><input disabled="" type="checkbox"> Audit log with full conversation history</li>
+</ul>
+<h2 id="from-demo-to-production-confidence">From Demo to Production Confidence</h2>
+<p>The 40%+ failure rate for AI agent projects isn&rsquo;t because agents are fundamentally unreliable. It&rsquo;s because most teams treat agents like deterministic software and are surprised when stochastic behavior emerges.</p>
+<p>The path to production confidence is straightforward:</p>
+<ol>
+<li><strong>Test statistically</strong> — run 100 trials, not 5 demos</li>
+<li><strong>Architect for failure</strong> — DAG orchestrators, stateless reducers, durable execution</li>
+<li><strong>Monitor continuously</strong> — rolling pass rates, cost trends, latency distributions</li>
+<li><strong>Gate destructively</strong> — human approval for high-risk operations</li>
+<li><strong>Test adversarially</strong> — prompt injection, chaos engineering, cascade failures</li>
+</ol>
+<p>I&rsquo;ve been running production agents for over a year now, and the ones that survive are the ones built with these patterns from day one. The ones that fail are the ones that looked perfect in demos and fell apart under real load.</p>
+<p>Your agent isn&rsquo;t broken. Your testing methodology is. Fix that first, and the rest follows.</p>
+]]></content:encoded></item><item><title>What Breaks an AI Agent After 50 Clean Demos: Production Reliability Guide (2026)</title><link>https://baeseokjae.github.io/posts/what-breaks-an-ai-agent-after-50-clean-demos-production-reliability-guide/</link><pubDate>Tue, 14 Jul 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/what-breaks-an-ai-agent-after-50-clean-demos-production-reliability-guide/</guid><description>Why AI agents that pass 50 demos fail in production — the 7 failure modes, the $47K prompt injection case study, and how to build production-grade reliability with chaos engineering, 12-factor architecture, and multi-trial testing.</description><content:encoded><![CDATA[<p>You demo an AI agent to your team. Fifty runs, zero failures. Everyone&rsquo;s impressed. You deploy to production. Within a week, it&rsquo;s hallucinating tool calls, getting stuck in loops, and your Slack is full of &ldquo;the agent did something weird&rdquo; messages.</p>
+<p>I&rsquo;ve been there. Multiple times. And I&rsquo;ve spent the last year digging into why this happens and what actually works to fix it.</p>
+<p>The short answer: <strong>your agent isn&rsquo;t broken — your testing methodology is.</strong> Single-digit demos and pass/fail judgments hide a massive variance problem that only emerges under statistical scrutiny. Gartner predicts over 40% of AI agent projects will fail by 2027, and in January 2026, a prompt injection in a customer support agent processed a $47,000 fraudulent refund. These aren&rsquo;t edge cases — they&rsquo;re systematic failures that most teams aren&rsquo;t testing for.</p>
+<p>This guide covers the seven failure modes that kill production agents, the architectural patterns that survive them, and the testing infrastructure you need before you can trust an agent in production.</p>
+<h2 id="the-50-demo-illusion">The 50-Demo Illusion</h2>
+<p>Here&rsquo;s a number that should scare you: LLMs show up to <strong>72% variance across runs even at temperature=0</strong>. This isn&rsquo;t a bug in one model — it&rsquo;s a fundamental property of how transformer-based models sample tokens. The <a href="/posts/llm-benchmark-variance-2026/">LLM benchmark variance problem</a> is well-documented, and it applies doubly to agentic workflows where a single token change in a tool selection can cascade into a completely different execution path.</p>
+<p>The <a href="https://github.com/alepot55/agentrial">agentrial</a> project ran agents 100 times on the same task and found that pass rates dropped to <strong>60-80%</strong> despite 90%+ accuracy in single-run demos. That&rsquo;s not a 10% degradation — it&rsquo;s a 20-40 percentage point drop that only appears when you run enough trials to get statistically meaningful data.</p>
+<p>In practice, this means:</p>
+<ul>
+<li><strong>A single &ldquo;pass&rdquo; tells you nothing.</strong> You need at least 30-50 runs to establish a baseline pass rate.</li>
+<li><strong>Temperature=0 is not deterministic.</strong> It reduces variance but doesn&rsquo;t eliminate it. The model still samples from a probability distribution — it just picks the most likely token every time. But &ldquo;most likely&rdquo; changes based on floating-point precision, prompt formatting, and context window state.</li>
+<li><strong>Variance compounds across steps.</strong> A 5-step agent where each step has 90% reliability has a theoretical pass rate of 0.9⁵ = 59%. Run that 100 times and you&rsquo;ll see failures in 40% of trials.</li>
+</ul>
+<h2 id="the-7-failure-modes-every-production-agent-faces">The 7 Failure Modes Every Production Agent Faces</h2>
+<p>Most teams test hallucination and prompt injection. Almost no one systematically tests cascade failures, context limit drift, or data integration drift before shipping. Here are the seven failure modes I&rsquo;ve seen kill production agents in practice.</p>
+<h3 id="1-hallucination-under-unexpected-inputs">1. Hallucination Under Unexpected Inputs</h3>
+<p>This is the classic failure mode, but it&rsquo;s more nuanced than &ldquo;the model makes stuff up.&rdquo; In production, hallucination manifests as the agent confidently asserting facts that don&rsquo;t exist in its context window — not because the model is broken, but because it&rsquo;s operating outside its training distribution.</p>
+<p>I&rsquo;ve watched an agent that correctly processed 47 out of 50 records, then at record 48 started returning fabricated data because the relevant instructions had scrolled out of the active context window. The model didn&rsquo;t tell me it was confused. It just started making things up with the same confidence it had for the first 47 records.</p>
+<h3 id="2-edge-case-collapse-nulls-unicode-concurrency">2. Edge Case Collapse (Nulls, Unicode, Concurrency)</h3>
+<p>Production data is messy. Null fields, unicode homoglyphs, concurrent requests, and malformed inputs that your test suite never generated will find their way into your agent&rsquo;s context window. I&rsquo;ve seen agents crash on a single null field in a JSON response — not because the tool returned an error, but because the model couldn&rsquo;t decide what to do with <code>null</code> and entered an infinite reasoning loop.</p>
+<p>Unicode homoglyphs are particularly nasty. An attacker can replace a Latin &lsquo;a&rsquo; with a Cyrillic &lsquo;а&rsquo; (U+0430) — visually identical, semantically different. Your input validation passes, but the agent interprets the string differently. This is one of the 18 prompt injection attack vectors that bypassed PromptGuard with 100% confidence in a 2026 audit.</p>
+<h3 id="3-prompt-injection-and-adversarial-inputs">3. Prompt Injection and Adversarial Inputs</h3>
+<p>The January 2026 incident is the one everyone references now: a customer support agent received a carefully crafted message that included hidden instructions embedded in what appeared to be a legitimate support request. The agent processed a $47,000 fraudulent refund before anyone caught it.</p>
+<p>The techniques are evolving fast. Attackers now use:</p>
+<ul>
+<li><strong>Unicode homoglyphs</strong> — visually identical characters with different byte representations</li>
+<li><strong>Base64-encoded instructions</strong> — the agent decodes and follows them</li>
+<li><strong>ROT13 and other simple ciphers</strong> — the agent &ldquo;figures out&rdquo; the hidden message</li>
+<li><strong>Non-English languages</strong> — instructions in a language the agent handles but the monitoring system doesn&rsquo;t</li>
+<li><strong>Multi-turn fragmentation</strong> — spreading the injection across multiple conversation turns to avoid detection</li>
+</ul>
+<p>The <a href="/posts/secure-ai-agents-least-privilege-2026/">secure AI agents guide</a> covers defense-in-depth approaches, but the reality is: no single guardrail catches everything. In a 2026 audit, 12 out of 18 prompt injection attack vectors bypassed PromptGuard with 100% confidence. You need layered defenses, not a silver bullet.</p>
+<h3 id="4-context-limit-surprises">4. Context Limit Surprises</h3>
+<p>This is the most insidious failure mode because it&rsquo;s invisible until it hits. An agent that works perfectly with a 10-turn conversation will start hallucinating at turn 50 because the context window is full of accumulated tool outputs, error messages, and intermediate results.</p>
+<p>The model doesn&rsquo;t tell you it&rsquo;s confused. It just starts making things up. I&rsquo;ve seen agents that correctly processed 47 out of 50 records, then at record 48 started returning fabricated data because the relevant instructions had scrolled out of the active context window.</p>
+<p>The fix is the <strong>stateless reducer pattern</strong> — instead of dumping everything into the context window, maintain a compact state representation and only inject what the agent needs for the current step. This is the same pattern Redux popularized for frontend state management, and it works just as well for agents.</p>
+<h3 id="5-cascade-failures-in-multi-step-workflows">5. Cascade Failures in Multi-Step Workflows</h3>
+<p>Every step in an agent&rsquo;s execution chain adds failure surface area. A 10-step agent where each step has 95% reliability has a 40% chance of completing without error. But the degradation isn&rsquo;t linear — I&rsquo;ve seen agents that handle steps 1-4 perfectly, then at step 5 the context window is cluttered with intermediate results, the model loses track of what it was doing, and it starts repeating steps or skipping critical operations.</p>
+<p>This is especially bad in the &ldquo;here&rsquo;s your prompt, here&rsquo;s a bag of tools, loop until you hit the goal&rdquo; pattern that many agent frameworks default to. The <a href="/posts/open-source-agent-eval-harness-comparison-2026/">open-source agent eval harnesses</a> I&rsquo;ve tested show this pattern consistently: agents with Directed Graph (DAG) orchestrators like Airflow or Prefect significantly outperform monolithic loop-based agents on multi-step tasks, because the orchestration layer handles state management and retry logic instead of leaving it to the LLM.</p>
+<h3 id="6-data-integration-drift">6. Data Integration Drift</h3>
+<p>Your agent depends on external data sources — APIs, databases, file systems. These sources change over time. An API returns a new field, a database schema changes, a file format gets updated. The agent, trained on the old format, starts making incorrect assumptions.</p>
+<p>I&rsquo;ve seen this manifest as an agent that reliably parsed CSV exports for months, then suddenly started failing because the export tool added a BOM header. The agent didn&rsquo;t fail gracefully — it silently misparsed the data and made decisions based on the wrong columns. Data integration drift is almost never tested because it requires maintaining test fixtures that evolve with the production data sources.</p>
+<h3 id="7-authorization-confusion-in-multi-tenant-systems">7. Authorization Confusion in Multi-Tenant Systems</h3>
+<p>When an agent operates across multiple tenants or user contexts, it can accidentally apply one user&rsquo;s permissions to another&rsquo;s data. This is especially dangerous in customer support agents that handle multiple accounts — the agent might read data from account A while operating under account B&rsquo;s authorization context.</p>
+<p>The fix is <strong>least-privilege tool access</strong>: each tool call should carry its own authorization context, not inherit the agent&rsquo;s global permissions. The <a href="/posts/secure-ai-agents-least-privilege-2026/">secure AI agents guide</a> covers this in detail, but the short version is: treat every tool call as an independent authorization boundary.</p>
+<h2 id="epistemic-distortion-the-meta-failure-mode">Epistemic Distortion: The Meta-Failure Mode</h2>
+<p>Beyond the seven specific failure modes, there&rsquo;s a meta-pattern that researchers have documented across 1,400+ controlled experiments: <strong>epistemic distortion</strong>. This is the agent&rsquo;s tendency to silently drop conflicting instructions, apply wrong evidence standards, or selectively ignore parts of its system prompt.</p>
+<p>In practice, epistemic distortion looks like:</p>
+<ul>
+<li>The agent follows the most recent instruction even when earlier instructions explicitly contradict it</li>
+<li>The agent applies different reasoning standards to different types of inputs (treating user input as more authoritative than system prompts)</li>
+<li>The agent &ldquo;forgets&rdquo; constraints that were established earlier in the conversation</li>
+</ul>
+<p>This isn&rsquo;t a bug — it&rsquo;s a consequence of how attention mechanisms work. The model weights all tokens in its context window, and newer or more salient tokens can override earlier instructions. The fix is structural: don&rsquo;t rely on the model to remember constraints. Encode them in the tool schemas, the orchestration layer, and the validation pipeline.</p>
+<h2 id="the-12-factor-agent-architecture">The 12-Factor Agent Architecture</h2>
+<p>The <a href="https://github.com/humanlayer/12-factor-agents">12-Factor Agents</a> methodology (which hit 475+ points on Hacker News for good reason) provides a solid foundation. Here are the principles I&rsquo;ve found most impactful in practice.</p>
+<h3 id="own-your-prompts-and-context-window">Own Your Prompts and Context Window</h3>
+<p>Don&rsquo;t let the framework manage your prompts. You need explicit control over:</p>
+<ul>
+<li><strong>System prompt versioning</strong> — every change is a new version, tracked in git</li>
+<li><strong>Context window budgeting</strong> — know exactly how many tokens each component uses</li>
+<li><strong>Prompt injection surface</strong> — user input should never be concatenated into system prompts</li>
+</ul>
+<p>I use a simple pattern: each agent step gets a fixed token budget. The system prompt gets 30%, the current state gets 20%, tool definitions get 30%, and user input gets 20%. If something exceeds its budget, it gets truncated — not the model&rsquo;s job to figure out what&rsquo;s important.</p>
+<h3 id="tools-as-structured-outputs">Tools as Structured Outputs</h3>
+<p>Treat tool definitions as JSON schemas with strict validation, not as natural language descriptions. This means:</p>
+<ul>
+<li>Every tool parameter has a type, description, and required/optional flag</li>
+<li>Tool calls are validated against the schema before execution</li>
+<li>Validation failures return structured error messages, not &ldquo;something went wrong&rdquo;</li>
+</ul>
+<p>This pattern, combined with the <a href="/posts/llm-structured-output-guide-2026/">LLM structured output</a> capabilities available in 2026, means you can catch tool selection errors before they cause damage. The agent might still pick the wrong tool, but it won&rsquo;t call it with invalid parameters.</p>
+<h3 id="small-focused-agents-over-monolithic-loops">Small, Focused Agents over Monolithic Loops</h3>
+<p>A single agent with 20 tools and a &ldquo;keep going until done&rdquo; instruction is a recipe for unpredictable behavior. Instead, decompose your workflow into small, focused agents:</p>
+<ul>
+<li><strong>One agent per task type</strong> — each with 3-5 tools max</li>
+<li><strong>DAG orchestration</strong> — use an orchestrator to sequence agents, not the LLM</li>
+<li><strong>Explicit handoffs</strong> — each agent produces a structured output that the next agent consumes</li>
+</ul>
+<p>I&rsquo;ve found that agents with 3-5 tools have significantly lower tool selection drift than agents with 10+ tools. The model has fewer options to confuse, and the tool descriptions can be more specific.</p>
+<h3 id="stateless-reducer-pattern">Stateless Reducer Pattern</h3>
+<p>Instead of passing the entire conversation history to every agent call, maintain a compact state object:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;step&#34;</span>: <span style="color:#ae81ff">4</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;completed_tasks&#34;</span>: [<span style="color:#e6db74">&#34;search&#34;</span>, <span style="color:#e6db74">&#34;validate&#34;</span>, <span style="color:#e6db74">&#34;transform&#34;</span>],
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;current_input&#34;</span>: <span style="color:#e6db74">&#34;output_from_step_3.json&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;errors&#34;</span>: [],
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;accumulated_results&#34;</span>: [<span style="color:#e6db74">&#34;result_1&#34;</span>, <span style="color:#e6db74">&#34;result_2&#34;</span>]
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>Each agent step reads the current state, produces an action, and returns a new state. The full conversation history is stored in an audit log for debugging, but the agent only sees what it needs for the current step. This dramatically reduces context window pressure and eliminates the &ldquo;forgot what it was doing&rdquo; failure mode.</p>
+<h2 id="testing-strategies-that-actually-work">Testing Strategies That Actually Work</h2>
+<p>If you take one thing from this guide, let it be this: <strong>stop testing agents like you test deterministic software.</strong> Agents are stochastic systems, and they need stochastic testing methodologies.</p>
+<h3 id="multi-trial-testing-with-confidence-intervals">Multi-Trial Testing with Confidence Intervals</h3>
+<p>Run every test scenario at least 30 times. Calculate:</p>
+<ul>
+<li><strong>Pass rate</strong> with Wilson confidence intervals (not raw percentages)</li>
+<li><strong>Cost variance</strong> — how much does each run cost in tokens?</li>
+<li><strong>Latency variance</strong> — how long does each run take?</li>
+</ul>
+<p>The <a href="https://github.com/alepot55/agentrial">agentrial</a> framework does this out of the box. You define a task, run it 100 times, and get back pass rates with confidence intervals, cost distributions, and latency distributions. Without this, you&rsquo;re making decisions based on anecdotes.</p>
+<h3 id="chaos-engineering-for-agents-flakestorm-approach">Chaos Engineering for Agents (Flakestorm Approach)</h3>
+<p><a href="https://github.com/flakestorm">Flakestorm</a> and similar tools apply chaos engineering principles to agent systems. The approach is simple: inject failures at the tool call level and observe how the agent recovers. Testing a LangChain agent with this approach revealed a <strong>95% failure rate on adversarial inputs</strong> — not because the LLM was bad, but because the agent had no recovery mechanisms.</p>
+<p>The chaos engineering scenarios I&rsquo;ve found most valuable:</p>
+<ul>
+<li><strong>Inject API latency</strong> — test timeout handling. Most agents crash when a tool call takes 30 seconds instead of 2.</li>
+<li><strong>Return malformed tool outputs</strong> — test error recovery. Can the agent retry, or does it enter an infinite loop?</li>
+<li><strong>Drop intermediate results</strong> — test state persistence. Does the agent resume or start over?</li>
+<li><strong>Rotate model versions mid-workflow</strong> — test compatibility. Does the agent handle a different model&rsquo;s output format?</li>
+<li><strong>Adversarial inputs</strong> — test prompt injection resistance. Can the agent distinguish instructions from data?</li>
+</ul>
+<p>I&rsquo;ve found that most agents fail catastrophically under these conditions — not because the LLM is bad, but because the surrounding infrastructure doesn&rsquo;t handle failures gracefully. A well-designed agent should degrade, not crash.</p>
+<h3 id="cascade-failure-testing">Cascade Failure Testing</h3>
+<p>This is the one almost no one tests. To test cascade failures:</p>
+<ol>
+<li>Inject a bad intermediate result at step N</li>
+<li>Observe whether the agent detects the error or propagates it</li>
+<li>Measure how many steps the error propagates before detection</li>
+<li>Test recovery: can the agent roll back to a known-good state?</li>
+</ol>
+<p>The Fisher exact test (used by agentrial) can identify which specific step has statistically significant failure rates. This is the difference between &ldquo;the agent fails sometimes&rdquo; and &ldquo;step 4 of the tool selection phase has a 30% failure rate when the input contains more than 5 items.&rdquo;</p>
+<h3 id="context-window-monitoring">Context Window Monitoring</h3>
+<p>Monitor context window utilization as a first-class metric. When utilization exceeds 70%, the risk of context limit surprises increases exponentially. Set up alerts for:</p>
+<ul>
+<li><strong>Token count per turn</strong> — sudden increases indicate context window bloat</li>
+<li><strong>Instruction proximity</strong> — how far back are the original instructions?</li>
+<li><strong>Tool output size</strong> — are intermediate results consuming too much context?</li>
+</ul>
+<h2 id="infrastructure-for-resilient-agents">Infrastructure for Resilient Agents</h2>
+<p>The testing patterns above tell you where your agent breaks. The infrastructure patterns below keep it running anyway.</p>
+<h3 id="durable-execution-and-state-persistence">Durable Execution and State Persistence</h3>
+<p><a href="https://github.com/orra-dev/orra">Orra</a> and similar tools provide durable execution for AI agent workflows. The key idea: if an agent crashes mid-step, it should resume from where it left off, not start over. This requires:</p>
+<ul>
+<li><strong>State persistence</strong> — every intermediate result is saved to durable storage</li>
+<li><strong>Idempotent tool calls</strong> — running the same tool with the same input twice produces the same result</li>
+<li><strong>Automatic retry with backoff</strong> — transient failures don&rsquo;t kill the workflow</li>
+</ul>
+<p>The <a href="/posts/openai-agents-sdk-temporal-integration-2026/">OpenAI Agents SDK Temporal integration</a> is a good example of this pattern in practice — Temporal provides the durable execution layer while the agent SDK handles the LLM interactions.</p>
+<h3 id="pre-validated-execution-plans">Pre-Validated Execution Plans</h3>
+<p>Before an agent executes anything, validate the entire plan against your constraints:</p>
+<ul>
+<li>Are all required tools available?</li>
+<li>Do the tool parameters match the schemas?</li>
+<li>Is the estimated cost within budget?</li>
+<li>Are there any circular dependencies in the plan?</li>
+</ul>
+<p>This catches the &ldquo;agent decided to do something unexpected&rdquo; failure mode before it costs you money or corrupts data. Orra&rsquo;s pre-validated execution plans are a reference implementation of this pattern.</p>
+<h3 id="automatic-health-monitoring-and-audit-logs">Automatic Health Monitoring and Audit Logs</h3>
+<p>You need observability at two levels:</p>
+<ol>
+<li><strong>Agent-level</strong> — what did the agent decide, what tools did it call, what was the outcome?</li>
+<li><strong>System-level</strong> — what&rsquo;s the pass rate trend, cost trend, latency trend?</li>
+</ol>
+<p>The <a href="/posts/llm-observability-tools-comparison-2026/">LLM observability tools</a> (LangSmith, Langfuse, Helicone, Arize) all support agent tracing now. The key metric I track is <strong>pass rate over a rolling 24-hour window</strong> — if it drops below 80%, I want to know immediately, not when a user complains.</p>
+<h2 id="building-a-production-reliability-checklist">Building a Production Reliability Checklist</h2>
+<p>Before you deploy an agent to production, run through this checklist:</p>
+<p><strong>Testing (pre-deployment)</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Multi-trial testing: 100 runs per scenario with confidence intervals</li>
+<li><input disabled="" type="checkbox"> Chaos engineering: injected failures at tool call level</li>
+<li><input disabled="" type="checkbox"> Adversarial eval: prompt injection attack vectors tested</li>
+<li><input disabled="" type="checkbox"> Cascade failure testing: bad intermediate results injected</li>
+<li><input disabled="" type="checkbox"> Edge case coverage: nulls, unicode, concurrent requests</li>
+</ul>
+<p><strong>Architecture</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Stateless reducer pattern (not full conversation history in context)</li>
+<li><input disabled="" type="checkbox"> Small, focused agents (3-5 tools per agent)</li>
+<li><input disabled="" type="checkbox"> DAG orchestration (not monolithic loops)</li>
+<li><input disabled="" type="checkbox"> Structured tool definitions with JSON schema validation</li>
+<li><input disabled="" type="checkbox"> Pre-validated execution plans</li>
+</ul>
+<p><strong>Infrastructure</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Durable execution with state persistence</li>
+<li><input disabled="" type="checkbox"> Action deduplication (idempotent tool calls)</li>
+<li><input disabled="" type="checkbox"> Human-in-the-loop approval gates for destructive operations</li>
+<li><input disabled="" type="checkbox"> Least-privilege tool access with per-call authorization</li>
+</ul>
+<p><strong>Monitoring</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Rolling 24-hour pass rate with alerts</li>
+<li><input disabled="" type="checkbox"> Context window utilization tracking</li>
+<li><input disabled="" type="checkbox"> Cost anomaly detection</li>
+<li><input disabled="" type="checkbox"> Tool call distribution monitoring</li>
+<li><input disabled="" type="checkbox"> Audit log with full conversation history</li>
+</ul>
+<h2 id="from-demo-to-production-confidence">From Demo to Production Confidence</h2>
+<p>The 40%+ failure rate for AI agent projects isn&rsquo;t because agents are fundamentally unreliable. It&rsquo;s because most teams treat agents like deterministic software and are surprised when stochastic behavior emerges.</p>
+<p>The path to production confidence is straightforward:</p>
+<ol>
+<li><strong>Test statistically</strong> — run 100 trials, not 5 demos</li>
+<li><strong>Architect for failure</strong> — DAG orchestrators, stateless reducers, durable execution</li>
+<li><strong>Monitor continuously</strong> — rolling pass rates, cost trends, latency distributions</li>
+<li><strong>Gate destructively</strong> — human approval for high-risk operations</li>
+<li><strong>Test adversarially</strong> — prompt injection, chaos engineering, cascade failures</li>
+</ol>
+<p>I&rsquo;ve been running production agents for over a year now, and the ones that survive are the ones built with these patterns from day one. The ones that fail are the ones that looked perfect in demos and fell apart under real load.</p>
+<p>Your agent isn&rsquo;t broken. Your testing methodology is. Fix that first, and the rest follows.</p>
+]]></content:encoded></item></channel></rss>

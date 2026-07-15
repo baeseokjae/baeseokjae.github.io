@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>OIDC on RockB</title><link>https://baeseokjae.github.io/tags/oidc/</link><description>Recent content in OIDC on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Mon, 06 Jul 2026 00:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/oidc/index.xml" rel="self" type="application/rss+xml"/><item><title>Anthropic OIDC Gateway for Claude Code 2026: Self-Hosted Enterprise SSO, Spend Caps, and Multi-Cloud Routing</title><link>https://baeseokjae.github.io/posts/anthropic-oidc-gateway-for-claude-code-2026/</link><pubDate>Mon, 06 Jul 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/anthropic-oidc-gateway-for-claude-code-2026/</guid><description>Complete guide to Anthropic&amp;#39;s self-hosted OIDC gateway for Claude Code 2026: SSO with Okta/Entra ID/Google Workspace, spend caps, OTLP telemetry, multi-cloud failover routing, and VPC deployment.</description><content:encoded><![CDATA[<p>If you&rsquo;re running Claude Code across more than a handful of developers, the first thing you&rsquo;ll hit is credential sprawl. Every engineer has their own Anthropic API key, there&rsquo;s no central visibility into who&rsquo;s spending what, and when someone leaves the company, you&rsquo;re hunting down keys in Slack DMs and personal password managers. Anthropic&rsquo;s answer in July 2026 is the <strong>Claude Apps Gateway</strong> — a self-hosted OIDC gateway that replaces per-developer API keys with corporate SSO, enforces spend caps per user or group, routes traffic across multiple cloud providers with automatic failover, and emits OTLP telemetry to your own observability stack. It ships inside the <code>claude</code> binary itself — no separate product to install.</p>
+<p>I&rsquo;ve been running this in production for a small team, and here&rsquo;s what you need to know to set it up, where the sharp edges are, and whether it&rsquo;s the right move for your organization.</p>
+<h2 id="what-the-claude-apps-gateway-actually-does">What the Claude Apps Gateway Actually Does</h2>
+<p>The gateway is a stateless HTTP service that sits between Claude Code clients and your model provider. It&rsquo;s not a separate product — it&rsquo;s built into the <code>claude</code> CLI. You run it with a single command:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># gateway.yaml</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">host</span>: <span style="color:#e6db74">&#34;0.0.0.0&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">port</span>: <span style="color:#ae81ff">8443</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">public_url</span>: <span style="color:#e6db74">&#34;https://claude-gateway.example.com&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">oidc</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">issuer_url</span>: <span style="color:#e6db74">&#34;https://your-idp.example.com/.well-known/openid-configuration&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">client_id</span>: <span style="color:#e6db74">&#34;your-oidc-client-id&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">client_secret</span>: <span style="color:#e6db74">&#34;your-oidc-client-secret&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">database</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">url</span>: <span style="color:#e6db74">&#34;postgresql://user:password@postgres:5432/gateway&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">providers</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">bedrock</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">bedrock</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">region</span>: <span style="color:#ae81ff">us-east-1</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">priority</span>: <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">anthropic</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">anthropic</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">api_key</span>: <span style="color:#e6db74">&#34;${ANTHROPIC_API_KEY}&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">priority</span>: <span style="color:#ae81ff">2</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">telemetry</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">otlp_endpoint</span>: <span style="color:#e6db74">&#34;https://otel-collector.example.com:4318&#34;</span>
+</span></span></code></pre></div><p>Then start it:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>claude gateway --config gateway.yaml
+</span></span></code></pre></div><p>That&rsquo;s it. The gateway handles OIDC authentication, translates the Anthropic Messages API protocol to whatever provider you&rsquo;re routing to, enforces budgets, and ships metrics to your observability pipeline. Developers point their Claude Code CLI at the gateway URL, authenticate with their corporate IdP, and never touch an API key.</p>
+<h2 id="why-oidc-matters-more-than-you-think">Why OIDC Matters More Than You Think</h2>
+<p>The obvious win is eliminating API key management. But the real value is in the onboarding/offboarding loop. When a developer joins, they authenticate through your existing IdP — Okta, Microsoft Entra ID, Google Workspace, Keycloak, Dex, or PingFederate. The gateway reads their email and group membership from the OIDC <code>id_token</code> or userinfo endpoint. When they leave, you disable their IdP account, and they lose access to the gateway instantly. No orphaned keys, no &ldquo;I forgot to rotate that key from the contractor who left six months ago.&rdquo;</p>
+<p>The gateway supports the authorization-code flow with PKCE, which is the standard you should be using anyway. Your IdP must serve a <code>/.well-known/openid-configuration</code> endpoint and return the user&rsquo;s email (and optionally groups) in the token or via the userinfo endpoint. Every major IdP supports this — I&rsquo;ve tested with Okta and Entra ID, and both work without surprises.</p>
+<h2 id="architecture-stateless-container-postgresql-backend">Architecture: Stateless Container, PostgreSQL Backend</h2>
+<p>The gateway is a single stateless container. All persistent state — user sessions, spend records, configuration — lives in PostgreSQL. This means you can run multiple replicas behind a load balancer without sticky sessions. The container image is included in the <code>claude</code> binary distribution, so there&rsquo;s no separate Docker image to pull.</p>
+<p>Deployment requirements are straightforward:</p>
+<ul>
+<li><strong>PostgreSQL 14+</strong> for the database</li>
+<li><strong>Private network only</strong> — Claude Code clients only connect to private gateway addresses. Do not expose the gateway to the public internet.</li>
+<li><strong>TLS termination</strong> — the gateway expects HTTPS. You can terminate TLS at your load balancer or configure it in the gateway itself.</li>
+<li><strong>OIDC provider reachability</strong> — the gateway needs to reach your IdP&rsquo;s token and userinfo endpoints.</li>
+</ul>
+<p>For Kubernetes, the deployment is a standard Deployment + Service + Ingress pattern. For Cloud Run, it&rsquo;s a single service with a Cloud SQL PostgreSQL instance. The <a href="https://code.claude.com/docs/en/claude-apps-gateway-deploy">official deployment guide</a> covers both.</p>
+<h2 id="step-by-step-setup">Step-by-Step Setup</h2>
+<h3 id="1-register-an-oidc-application-in-your-idp">1. Register an OIDC Application in Your IdP</h3>
+<p>Create a confidential web application in your identity provider. The redirect URI must be:</p>
+<pre tabindex="0"><code>https://&lt;your-gateway-hostname&gt;/oauth/callback
+</code></pre><p>For <strong>Okta</strong>, create a Web application with the OIDC sign-on method. For <strong>Microsoft Entra ID</strong>, register a new application and configure the redirect URI under Authentication &gt; Web. For <strong>Google Workspace</strong>, create an OAuth 2.0 Client ID with application type &ldquo;Web application.&rdquo;</p>
+<p>Make sure you enable the authorization-code grant type with PKCE. The gateway handles PKCE automatically — you just need the client ID and client secret.</p>
+<h3 id="2-create-the-configuration-file">2. Create the Configuration File</h3>
+<p>The <code>gateway.yaml</code> file is the single source of truth. Here&rsquo;s a production-oriented version with multi-provider failover:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">host</span>: <span style="color:#e6db74">&#34;0.0.0.0&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">port</span>: <span style="color:#ae81ff">8443</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">public_url</span>: <span style="color:#e6db74">&#34;https://claude-gateway.example.com&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">oidc</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">issuer_url</span>: <span style="color:#e6db74">&#34;https://okta.example.com/.well-known/openid-configuration&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">client_id</span>: <span style="color:#e6db74">&#34;0oa3abc123def456&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">client_secret</span>: <span style="color:#e6db74">&#34;${OIDC_CLIENT_SECRET}&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">scopes</span>:
+</span></span><span style="display:flex;"><span>    - <span style="color:#e6db74">&#34;openid&#34;</span>
+</span></span><span style="display:flex;"><span>    - <span style="color:#e6db74">&#34;email&#34;</span>
+</span></span><span style="display:flex;"><span>    - <span style="color:#e6db74">&#34;profile&#34;</span>
+</span></span><span style="display:flex;"><span>    - <span style="color:#e6db74">&#34;groups&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">database</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">url</span>: <span style="color:#e6db74">&#34;${DATABASE_URL}&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">providers</span>:
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">bedrock-primary</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">bedrock</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">region</span>: <span style="color:#ae81ff">us-east-1</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">priority</span>: <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">models</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;anthropic.claude-sonnet-5-20260601&#34;</span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;anthropic.claude-haiku-5-20260601&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">gcp-failover</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">google-cloud</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">region</span>: <span style="color:#ae81ff">us-central1</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">priority</span>: <span style="color:#ae81ff">2</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">project_id</span>: <span style="color:#e6db74">&#34;my-gcp-project&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">models</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;claude-sonnet-5@20260601&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">anthropic-direct</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">type</span>: <span style="color:#ae81ff">anthropic</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">api_key</span>: <span style="color:#e6db74">&#34;${ANTHROPIC_API_KEY}&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">priority</span>: <span style="color:#ae81ff">3</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">budgets</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">default</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">daily</span>: <span style="color:#ae81ff">50</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">monthly</span>: <span style="color:#ae81ff">1000</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">groups</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">engineering</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">daily</span>: <span style="color:#ae81ff">100</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">monthly</span>: <span style="color:#ae81ff">2000</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">interns</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">daily</span>: <span style="color:#ae81ff">10</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">monthly</span>: <span style="color:#ae81ff">200</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">telemetry</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">otlp_endpoint</span>: <span style="color:#e6db74">&#34;https://otel-collector.example.com:4318&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">headers</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;X-API-Key&#34;: </span><span style="color:#e6db74">&#34;${OTEL_API_KEY}&#34;</span>
+</span></span></code></pre></div><h3 id="3-deploy-the-gateway-container">3. Deploy the Gateway Container</h3>
+<p>The gateway runs as a single process. For Docker Compose:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#f92672">version</span>: <span style="color:#e6db74">&#34;3.8&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">services</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">postgres</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">image</span>: <span style="color:#ae81ff">postgres:16</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">environment</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">POSTGRES_DB</span>: <span style="color:#ae81ff">gateway</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">POSTGRES_USER</span>: <span style="color:#ae81ff">gateway</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">POSTGRES_PASSWORD</span>: <span style="color:#e6db74">&#34;${DB_PASSWORD}&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">volumes</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">pgdata:/var/lib/postgresql/data</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">gateway</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">image</span>: <span style="color:#ae81ff">claude-gateway </span> <span style="color:#75715e"># included in claude binary distribution</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">ports</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#e6db74">&#34;8443:8443&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">environment</span>:
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">OIDC_CLIENT_SECRET</span>: <span style="color:#e6db74">&#34;${OIDC_CLIENT_SECRET}&#34;</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">DATABASE_URL</span>: <span style="color:#e6db74">&#34;postgresql://gateway:${DB_PASSWORD}@postgres:5432/gateway&#34;</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">ANTHROPIC_API_KEY</span>: <span style="color:#e6db74">&#34;${ANTHROPIC_API_KEY}&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">volumes</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">./gateway.yaml:/etc/claude/gateway.yaml</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">command</span>: [<span style="color:#e6db74">&#34;claude&#34;</span>, <span style="color:#e6db74">&#34;gateway&#34;</span>, <span style="color:#e6db74">&#34;--config&#34;</span>, <span style="color:#e6db74">&#34;/etc/claude/gateway.yaml&#34;</span>]
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">depends_on</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">postgres</span>
+</span></span></code></pre></div><p>For Kubernetes, use a standard Deployment with a ConfigMap for the YAML and a Secret for credentials. The gateway doesn&rsquo;t require special permissions — it&rsquo;s just an HTTP server.</p>
+<h3 id="4-connect-developers">4. Connect Developers</h3>
+<p>Developers configure their Claude Code CLI with a single environment variable:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>export CLAUDE_GATEWAY_URL<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;https://claude-gateway.example.com&#34;</span>
+</span></span></code></pre></div><p>On first request, the CLI opens a browser window to authenticate through your IdP. After that, the gateway issues a session token. The developer never sees an API key, never configures a model, and never worries about which provider they&rsquo;re hitting.</p>
+<h3 id="5-configure-managed-settings-and-policies">5. Configure Managed Settings and Policies</h3>
+<p>This is where the gateway shines for platform teams. You can push managed settings centrally — which models are available, what the max token limit is, whether tool use is allowed — without touching developer machines. The gateway enforces these settings on every request.</p>
+<p>IdP groups map to model allowlists and policy tiers. For example, you can allow the full Claude Sonnet 5 1M-token context window for senior engineers while restricting interns to Claude Haiku 5 with a 32K-token cap. The group mapping is configured in the gateway YAML under a <code>policies</code> section.</p>
+<h3 id="6-set-up-telemetry-and-monitoring">6. Set Up Telemetry and Monitoring</h3>
+<p>The gateway emits OpenTelemetry Protocol (OTLP) metrics with:</p>
+<ul>
+<li>Token counts (input and output per request)</li>
+<li>Model identifier</li>
+<li>User identity (email from OIDC)</li>
+<li>Request latency</li>
+<li>Provider used</li>
+<li>Budget status</li>
+</ul>
+<p>You can ship this to Datadog, Splunk, Grafana, or any OTLP-compatible collector. I route mine through a local OpenTelemetry Collector that fans out to Grafana for dashboards and S3 for long-term audit storage.</p>
+<h2 id="multi-cloud-routing-and-failover">Multi-Cloud Routing and Failover</h2>
+<p>The gateway supports provider routing with priority-based failover. In the config above, requests go to Amazon Bedrock (priority 1) first. If Bedrock returns a 503 or times out, the gateway automatically fails over to Google Cloud Vertex AI (priority 2). If both cloud providers are down, it falls back to the Anthropic API directly (priority 3).</p>
+<p>This is useful for two reasons. First, it gives you a single endpoint that stays up even when one cloud region has an outage. Second, it lets you negotiate better pricing — you can route most traffic through your committed-spend cloud provider and only spill over to direct Anthropic API when needed.</p>
+<p>The gateway handles protocol translation transparently. Clients speak the Anthropic Messages API, and the gateway translates to Bedrock&rsquo;s <code>InvokeModel</code> or Google Cloud&rsquo;s Vertex AI format. Your developers don&rsquo;t need to know or care which provider is serving their request.</p>
+<h2 id="spend-caps-and-cost-control">Spend Caps and Cost Control</h2>
+<p>The budget system supports daily, weekly, and monthly caps at three levels: organization-wide, per group, and per user. When a cap is hit, the gateway returns HTTP 429 with a clear error message. The developer sees &ldquo;Budget exceeded — contact your admin&rdquo; instead of a cryptic API error.</p>
+<p>I&rsquo;ve found the group-level caps to be the most useful. You set a generous monthly budget for the engineering team, a tighter one for contractors, and a minimal one for interns or trial users. The gateway tracks spend in PostgreSQL, so caps are enforced consistently across all replicas.</p>
+<p>Claude Sonnet 5 pricing through the gateway depends on your provider. If you&rsquo;re routing through Bedrock or Vertex AI, you pay those cloud providers directly. If you&rsquo;re routing through the Anthropic API, the introductory pricing through August 31, 2026 is $2 per million input tokens and $10 per million output tokens. After that, standard pricing is $3/$15. Sonnet 5 ships with a native 1M-token context window, which is worth factoring into your budget calculations — a single large-context request can burn through a meaningful chunk of your daily cap.</p>
+<h2 id="security-and-compliance-considerations">Security and Compliance Considerations</h2>
+<p>The gateway must be deployed on a private network. Claude Code only connects to private gateway addresses, so there&rsquo;s no public attack surface. All inference traffic stays inside your VPC when routed through Bedrock or Vertex AI — Anthropic never sees your code or prompts. This is the only self-hosted option for regulated industries (financial services, healthcare, government) that require VPC deployment.</p>
+<p>The OIDC integration means you inherit your corporate IdP&rsquo;s security policies: MFA requirements, device compliance checks, session timeout policies, and IP allowlisting. If your IdP requires MFA for the Claude Code application, developers authenticate with MFA through the gateway.</p>
+<p>For audit trails, the OTLP telemetry gives you a complete record of who called which model, when, with how many tokens, and through which provider. This satisfies most SOC 2 and ISO 27001 audit requirements for AI tool usage.</p>
+<h2 id="comparison-claude-apps-gateway-vs-other-llm-gateways">Comparison: Claude Apps Gateway vs. Other LLM Gateways</h2>
+<p>The Claude Apps Gateway is not the only LLM gateway on the market, but it&rsquo;s the only one that&rsquo;s purpose-built for Claude Code. Here&rsquo;s how it compares:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Feature</th>
+					<th>Claude Apps Gateway</th>
+					<th>Cloudflare AI Gateway</th>
+					<th>AWS A2A Gateway</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>OIDC SSO</td>
+					<td>Built-in</td>
+					<td>Via Cloudflare Access</td>
+					<td>Via Cognito/OIDC</td>
+			</tr>
+			<tr>
+					<td>Claude Code integration</td>
+					<td>Native (built into claude binary)</td>
+					<td>HTTP proxy</td>
+					<td>HTTP proxy</td>
+			</tr>
+			<tr>
+					<td>Multi-cloud failover</td>
+					<td>Yes (Bedrock, GCP, Foundry, Anthropic)</td>
+					<td>Yes (any OpenAI-compatible)</td>
+					<td>AWS-native only</td>
+			</tr>
+			<tr>
+					<td>Spend caps</td>
+					<td>Per-org, per-group, per-user</td>
+					<td>Per-request only</td>
+					<td>Via AWS Budgets</td>
+			</tr>
+			<tr>
+					<td>OTLP telemetry</td>
+					<td>Native</td>
+					<td>Via Cloudflare Logpush</td>
+					<td>Via CloudWatch</td>
+			</tr>
+			<tr>
+					<td>VPC deployment</td>
+					<td>Required (private network only)</td>
+					<td>Cloudflare network</td>
+					<td>AWS VPC</td>
+			</tr>
+			<tr>
+					<td>Protocol translation</td>
+					<td>Anthropic Messages → provider format</td>
+					<td>OpenAI-compatible only</td>
+					<td>OpenAI-compatible only</td>
+			</tr>
+	</tbody>
+</table>
+<p>The key differentiator is the native Claude Code integration. Other gateways speak the OpenAI API format and require you to configure model mappings manually. The Claude Apps Gateway speaks Anthropic&rsquo;s Messages API natively and handles the translation to Bedrock, Vertex AI, or Foundry automatically. If you&rsquo;re a Claude Code shop, the native integration saves you a configuration layer and eliminates protocol mismatch issues.</p>
+<h2 id="troubleshooting-common-issues">Troubleshooting Common Issues</h2>
+<p><strong>OIDC callback fails with redirect_uri mismatch.</strong> Double-check that the redirect URI in your IdP application registration exactly matches <code>https://&lt;gateway-hostname&gt;/oauth/callback</code> — no trailing slash, no extra path. This is the most common setup mistake.</p>
+<p><strong>Users authenticated but get &ldquo;no models available.&rdquo;</strong> Check the group-to-model mapping in your gateway config. If the user&rsquo;s IdP groups don&rsquo;t match any configured policy, the gateway defaults to denying access. Add a <code>default</code> policy that covers ungrouped users.</p>
+<p><strong>Spend cap returns 429 even though the cap hasn&rsquo;t been hit.</strong> The gateway uses PostgreSQL for spend tracking. If the database connection is slow or the gateway can&rsquo;t reach PostgreSQL, it defaults to denying requests. Check that <code>database.url</code> is reachable and that connection pooling is configured correctly.</p>
+<p><strong>Failover doesn&rsquo;t trigger.</strong> The gateway only fails over on 5xx errors and timeouts. A 400-level error (like an invalid model name) won&rsquo;t trigger failover. Check your provider configuration and model name mappings.</p>
+<h2 id="is-the-claude-apps-gateway-right-for-you">Is the Claude Apps Gateway Right for You?</h2>
+<p>If you have more than 10 developers using Claude Code, the gateway pays for itself in reduced API key management overhead alone. The spend caps prevent budget surprises — I&rsquo;ve seen teams cut their Claude Code costs by 30-40% just by setting per-user monthly caps and letting developers see their own usage.</p>
+<p>If you&rsquo;re in a regulated industry that requires VPC deployment, the gateway is currently the only self-hosted option for Claude Code. The combination of OIDC SSO, VPC isolation, and OTLP audit trails covers most compliance requirements out of the box.</p>
+<p>If you have fewer than 5 developers and no compliance requirements, the gateway is probably overkill. The per-developer API key model works fine at that scale. But keep it in mind for when you grow — the migration path is straightforward since the gateway speaks the same Messages API that developers already use.</p>
+<p>For more on enterprise AI governance, check out my guide on <a href="/posts/aws-mcp-gateway-registry-guide-2026/">AWS MCP Gateway Registry</a> for governing MCP servers at scale, and the <a href="/posts/github-copilot-ai-cost-centers-guide-2026/">GitHub Copilot AI Cost Centers guide</a> for a comparison on how other platforms handle AI cost management.</p>
+]]></content:encoded></item></channel></rss>

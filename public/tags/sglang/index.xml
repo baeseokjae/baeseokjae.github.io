@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Sglang on RockB</title><link>https://baeseokjae.github.io/tags/sglang/</link><description>Recent content in Sglang on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 11 Jun 2026 16:02:55 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/sglang/index.xml" rel="self" type="application/rss+xml"/><item><title>GLM-5.1 Deployment Guide: 744B SWE-Bench Pro Leader Self-Hosted Rollout</title><link>https://baeseokjae.github.io/posts/glm-5-1-swe-bench-pro-deployment-2026/</link><pubDate>Thu, 11 Jun 2026 16:02:55 +0000</pubDate><guid>https://baeseokjae.github.io/posts/glm-5-1-swe-bench-pro-deployment-2026/</guid><description>A senior-engineer playbook for deploying GLM-5.1 on vLLM, SGLang, and Ascend with SWE-Bench Pro production constraints in mind.</description><content:encoded><![CDATA[<p>GLM-5.1 is a 744B parameter MoE model with 40B active tokens, and it is best deployed for SWE-Bench Pro workloads when you match stack, quantization, and API behavior to your latency and tool-call requirements. This guide gives practical production defaults for vLLM, SGLang, and Ascend, with a DeepSeek-V3.1 baseline comparison and a live-check workflow you can apply in less than a day.</p>
+<h2 id="what-makes-glm-51-deployment-hard-in-swe-bench-pro-workflows">What makes GLM-5.1 deployment hard in SWE-Bench Pro workflows?</h2>
+<p>GLM-5.1 is designed for long-horizon coding work, and SWE-Bench Pro is exactly that: 1,865 tasks with enterprise-grade difficulty, split across public/held-out/commercial sets, so the first-turn success rate is only part of the story. In deployment terms, GLM-5.1 is not just a large model; it is an orchestration surface where token routing, tool-calling behavior, request queue depth, and prefill-recompute tradeoffs decide whether you can sustain coding sessions. On the Hugging Face leaderboards, GLM-5.1 reports around 58.4 on SWE-Bench Pro and is positioned above multiple high-end competitors, but a bad parser setting or poor precision choice can erase that advantage under real call patterns. The same 1,865-task pressure that drives benchmark score also magnifies edge cases like malformed JSON, stale routes, and silent retries. The key operational lesson is that tool-loop reliability beats single-shot token quality, because SWE-Bench chains typically fail on orchestration before they fail on first-pass reasoning. The takeaway: for SWE-Bench Pro, deployment engineering decides production quality more than raw model score.</p>
+<h3 id="why-cant-i-treat-glm-51-like-a-generic-chat-model">Why can’t I treat GLM-5.1 like a generic chat model?</h3>
+<p>GLM-5.1 must be deployed as a task-executing agent substrate, not as a one-shot Q&amp;A model. A single prompt benchmark run may look fine while your tool loop fails after several turns because request arguments, chat template flags, and parallelism defaults are inconsistent. In practice, I treat every endpoint as an explicit state machine: model call, parser behavior, tool dispatch, validation callback, and retry policy. If any one stage is undefined, long-horizon tasks fail in production long before token accuracy does.</p>
+<h2 id="how-do-i-size-hardware-and-pick-fp8-or-bf16-before-downloading-the-model">How do I size hardware and pick FP8 or BF16 before downloading the model?</h2>
+<p>Sizing and precision decisions are the first architectural gate for GLM-5.1 because the model is large and your hardware bill scales hard. A practical rule is to decide hardware topology and target precision against throughput targets before model download; changing later is expensive and sometimes impossible without major re-deployment. vLLM and SGLang docs both anchor around heavy acceleration profiles, with examples using 8 GPU nodes at 141GB each on H200/H20 for comparable production serving conditions. SGLang notes that BF16 typically needs roughly twice as many GPUs as FP8 on NVIDIA for similar capacity, which is why FP8-first planning is often the only way to stay within production budget. The takeaway: lock in <code>FP8 vs BF16</code> and token-budget assumptions first, then lock architecture and installation path.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Dimension</th>
+					<th>FP8-first plan</th>
+					<th>BF16-first plan</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Starting hardware</td>
+					<td>Fewer GPUs, lower memory pressure</td>
+					<td>More GPUs for same rank</td>
+			</tr>
+			<tr>
+					<td>Throughput profile</td>
+					<td>Better density and cost efficiency</td>
+					<td>More stable on legacy stacks</td>
+			</tr>
+			<tr>
+					<td>Cost profile</td>
+					<td>Lower operational cost in sustained load</td>
+					<td>Higher upfront and cooling demand</td>
+			</tr>
+			<tr>
+					<td>SWE-Bench Pro suitability</td>
+					<td>Better for long queues when throughput matters</td>
+					<td>Better when failure recovery simplicity dominates</td>
+			</tr>
+			<tr>
+					<td>First action</td>
+					<td>Validate kernel support and calibration</td>
+					<td>Validate kernel support and memory fragmentation</td>
+			</tr>
+	</tbody>
+</table>
+<h3 id="should-i-prioritize-fp8-even-if-accuracy-risks-seem-scary">Should I prioritize FP8 even if accuracy risks seem scary?</h3>
+<p>FP8 can be the right default if your goal is sustainable SWE-Bench-style throughput, because GLM-5.1 and peers with 8x H200/H20 profiles are usually memory-bound at scale. The quantization tradeoff is mostly manageable when you pin a stable eval set early and run a small A/B harness before opening production. I do this by comparing token correctness and tool-call consistency on a fixed 200-task slice first. If BF16 gives materially better chain-of-thought behavior for your critical path, switch on a secondary lane, not globally. The takeaway: start with FP8 in the primary lane, then promote BF16 only where measurable quality risk is real.</p>
+<h2 id="what-does-a-production-vllm-deployment-for-glm-51-look-like">What does a production vLLM deployment for GLM-5.1 look like?</h2>
+<p>vLLM is often the fastest path to production because it maps well to OpenAI-compatible API gateways and predictable ops workflows, and GLM-5.1 documentation explicitly aligns with <code>vllm serve</code>-style usage for this stack. The reference setup usually starts with tensor parallel size 8 and a multi-tool parser path that enables both tool-calling and reasoning modes (<code>tool-call-parser glm47</code>, <code>reasoning-parser glm45</code>, <code>enable-auto-tool-choice</code>). In one SWE-Bench-oriented stack, throughput is strongly affected by acceptance behavior, so speculative decoding flags and cache strategy can matter more than raw GPU count once you pass baseline scaling. The takeaway: if your team already has an OpenAI-style serving layer, vLLM is the most practical first deployment, but you should tune parser and speculative controls before traffic does.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>vllm serve Z-AI/glm-5.1 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>  --tensor-parallel-size <span style="color:#ae81ff">8</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>  --gpu-memory-utilization 0.95 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>  --trust-remote-code <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>  --max-model-len <span style="color:#ae81ff">32768</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>  --enable-auto-tool-choice <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>  --tool-call-parser glm47 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>  --reasoning-parser glm45
+</span></span></code></pre></div><h3 id="how-should-i-choose-between-container-and-source-installs-in-vllm">How should I choose between container and source installs in vLLM?</h3>
+<p>Container deployments speed onboarding and reduce host contamination, while source installs help when you need aggressive patches in parser/runtime layers. In production I start with containerized launches for parity and canary checks, then move to source only if custom operators or forked backends are required. A reliable migration pattern is to maintain identical config files and compare warm-start latencies before and after. The takeaway: use container first for consistency, then harden customizations only where business requirements demand it.</p>
+<h3 id="how-do-i-avoid-low-benchmark-artifacts-in-vllm-when-testing-glm-51">How do I avoid low benchmark artifacts in vLLM when testing GLM-5.1?</h3>
+<p>Benchmarks can underreport throughput when speculative acceptance is low or when benchmark harnesses disable features that real traffic uses, and GLM recipe notes this effect in planning examples. For SWE-Bench-like tool chains, you should benchmark with realistic tool-call traces, not single-pass generation only. This is why I never approve a vLLM launch using only raw token-per-second numbers. Include at least one workflow with repeated tool calls, retries, and malformed output handling in your pre-production test matrix. The takeaway: benchmark for your own control flow, not the benchmark tool’s idealized setup.</p>
+<h2 id="what-does-sglang-deployment-look-like-for-glm-51-at-scale">What does SGLang deployment look like for GLM-5.1 at scale?</h2>
+<p>SGLang gives better control for hardware-specific optimization and can be useful when you need fine-grained scheduling around BF16/FP8 and cache behavior. The GLM-5 documentation covers targets such as H100/H200/B200 and AMD MI300X/MI325X/MI355X with explicit profiles, and in my experience this is strongest when you already evaluate cost-performance curves across multiple vendors. Compared with vLLM, SGLang often wins on tuning depth but can demand more operational discipline because many options are explicit and failure modes are less forgiving. The takeaway: pick SGLang when you need custom behavior and hardware-aware micro-optimization, not when you need the shortest path to a stable API.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>python3 -m sglang.launch_server <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>  --model-path Z-AI/glm-5.1 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>  --tp <span style="color:#ae81ff">8</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>  --mem-fraction-static 0.85 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>  --dtype fp8 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>  --enable-eagle <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>  --trust-remote-code
+</span></span></code></pre></div><h3 id="what-sglang-flags-matter-most-for-swe-bench-pro-style-calls">What SGLang flags matter most for SWE-Bench Pro style calls?</h3>
+<p><code>--mem-fraction-static</code>, tensor parallel size, and speculative decoding controls are the primary levers once the model is stable. Think mode defaults can be costly for low-latency endpoints, and you should only disable it intentionally in narrow Instruct routes via <code>chat_template_kwargs</code> if your product logic expects deterministic short responses. For SWE-Bench Pro style agent tasks, the bigger issue is queue fairness under mixed workloads, so set explicit timeouts and backoff logic at the API edge rather than relying only on server defaults. The takeaway: treat these flags as part of your application contract, not optional runtime trivia.</p>
+<h3 id="how-do-bf16-and-fp8-compare-in-sglang-for-a-monthly-budget">How do BF16 and FP8 compare in SGLang for a monthly budget?</h3>
+<p>SGLang guidance that BF16 often needs roughly double GPUs versus FP8 on NVIDIA is the critical planning number if your capex is tight. For teams with fixed monthly budget and uncertain demand, FP8 provides faster path to usable capacity, while BF16 is a fallback for accuracy-sensitive edge cases. In practice, I reserve BF16 for a secondary lane and keep the primary path on FP8 with tighter guardrails. The takeaway: use BF16 selectively; otherwise it can burn budget before production value appears.</p>
+<h2 id="when-is-vllm-ascend-or-multi-node-deployment-the-right-choice">When is vllm-ascend or multi-node deployment the right choice?</h2>
+<p>Ascend-based and multi-node deployment usually comes into play when compliance or on-prem hardware policy forces you away from mainstream GPU clouds. The official GLM deployment guidance includes both single-node and distributed flow patterns for vllm-ascend, including Docker and source installation patterns and explicit device mounting and communication checks. In such environments, throughput is often constrained by infra assumptions rather than model quality, so your first action is topology verification: device discovery, mount points, NCCL/RDMA health, and startup synchronization. On a 744B-class stack, a 1% communication mismatch can cascade into repeated node timeouts and unstable generation. My standard procedure is a canary-only ramp where each node runs identical shard-binding and traffic mix checks before any public-facing rollout. The takeaway: if you deploy in locked-down clusters or sovereign environments, Ascend and multi-node planning is a platform choice, not a performance experiment.</p>
+<h3 id="what-does-a-practical-multi-node-glm-51-plan-look-like">What does a practical multi-node GLM-5.1 plan look like?</h3>
+<p>A practical multi-node start is a small canary mesh: one master control path and two worker nodes with synthetic SWE-Bench tool traces, then a controlled ramp. You validate node join, shard binding, and model-load parity before opening internet-facing requests. This avoids a common failure where nodes pass cold-start smoke tests but diverge under sustained traffic. The takeaway: converge on topology and consistency first, then optimize inference.</p>
+<h3 id="how-do-docker-and-source-vllm-ascend-differ-operationally">How do Docker and source vllm-ascend differ operationally?</h3>
+<p>Docker for vllm-ascend makes reproducibility easy and helps teams with compliance audits, while source installs allow deeper patch-level changes when integration constraints require it. I usually prefer Docker unless I need custom kernels or special transport layers. The operational difference becomes visible during incident response: containers recover faster and are easier to rollback; source gives more freedom but more state to manage. The takeaway: default to Docker and promote source changes only when you can demonstrate necessity.</p>
+<h2 id="how-should-i-compare-glm-51-against-deepseek-v31-before-freezing-architecture">How should I compare GLM-5.1 against DeepSeek-V3.1 before freezing architecture?</h2>
+<p>DeepSeek-V3.1 is the nearest practical production baseline for this class of large MoE coding model because the deployment guidance includes similar scale assumptions, including 8x H200/H20 guidance and expert-parallel or reasoning-aware launch options. In other words, your GLM stack decisions should be compared against a known target and not against smaller or older models. In side-by-side planning, GLM-5.1 frequently wins on SWE-Bench-like coding quality, while DeepSeek alternatives can differ in parser ergonomics and endpoint behavior enough to affect overall SLA under tool-heavy tasks. The takeaway: benchmark endpoint behavior, not just headline score.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Dimension</th>
+					<th>GLM-5.1 Stack</th>
+					<th>DeepSeek-V3.1 Stack</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>SWE-Bench Pro benchmark signal</td>
+					<td>~58.4 reported in HF cards</td>
+					<td>Baseline from large-MoE public references</td>
+			</tr>
+			<tr>
+					<td>Deployment intent</td>
+					<td>SWE-Bench Pro agentic workflows</td>
+					<td>Comparable large-scale serving targets</td>
+			</tr>
+			<tr>
+					<td>Critical parser controls</td>
+					<td><code>tool-call-parser glm47</code>, <code>reasoning-parser glm45</code></td>
+					<td>Framework-specific equivalents</td>
+			</tr>
+			<tr>
+					<td>Hardware anchor example</td>
+					<td>8 GPUs at ~141GB each in known profiles</td>
+					<td>8x H200/H20 class guidance</td>
+			</tr>
+			<tr>
+					<td>Operational bias</td>
+					<td>Tool-call and reasoning modes first-class</td>
+					<td>Validate parity per endpoint</td>
+			</tr>
+	</tbody>
+</table>
+<h3 id="why-compare-on-swe-bench-pro-specifically-for-tool-workflows">Why compare on SWE-Bench Pro specifically for tool workflows?</h3>
+<p>Because SWE-Bench Pro’s task horizon makes tool orchestration a first-class feature, parser behavior can dominate your production outcome even when raw correctness is close. If two models score similarly in isolation, choose the one with fewer parser edge cases in your own service, since retries and recovery cost can turn a leaderboard edge into a production liability. The takeaway: the right comparison metric is end-to-end tool-success rate at scale.</p>
+<h3 id="what-baseline-numbers-should-i-keep-fixed-across-all-tests">What baseline numbers should I keep fixed across all tests?</h3>
+<p>I keep three fixed baselines: task success under tool invocation, median latency under queue pressure, and memory headroom under sustained load. If any baseline drifts more than a few percent after model upgrades, I block rollout until the regression is explained. It is better to tolerate a small score dip and keep stable operations than ship a flashy leaderboard gain with unstable behavior. The takeaway: lock a small set of operational metrics before tuning model-specific parameters.</p>
+<h2 id="how-do-i-handle-tool-calling-reasoning-and-api-contracts-for-swe-bench-pro">How do I handle tool calling, reasoning, and API contracts for SWE-Bench Pro?</h2>
+<p>Tooling and API contract design decide whether your deployment feels reliable in production, and GLM-5.1 docs explicitly expose separate parser and reasoning settings for this reason. A robust setup uses explicit parser selection, strict JSON schema checks, and reason-mode controls that preserve your desired response profile (<code>thinking</code> enabled for deep agents, disabled for low-latency assistant mode). A subtle bug I see repeatedly is letting defaults drift between environments, so canary traffic receives different model behavior than dev traffic despite identical model versions. On long-horizon SWE-Bench tasks, that mismatch usually appears as tool calls that look valid in JSON shape but contain non-terminating argument chains. Pin parser settings per route, validate payload contracts at ingress, and capture idempotent retry tokens for every tool action. The takeaway: lock contract knobs and schema validation in code, then treat any parser mismatch as an SLO-breaking incident.</p>
+<h3 id="what-is-the-right-pattern-for-parser-and-tool-selection">What is the right pattern for parser and tool selection?</h3>
+<p>The direct answer is to pin parser configuration per route and validate that payload shape before and after each call. GLM-style routes often rely on <code>tool-call-parser glm47</code> and <code>reasoning-parser glm45</code> together with auto-tool-choice, while other stacks expose equivalent flags. I map these settings to explicit route profiles: coding agent, retrieval/execute agent, and summarization agent. That prevents one endpoint from inheriting a high-latency thinking mode intended for deep tasks. The takeaway: route-level parser isolation beats global defaults.</p>
+<h3 id="how-should-i-design-json-contract-checks-in-front-of-the-model">How should I design JSON contract checks in front of the model?</h3>
+<p>Use a strict schema with required fields (<code>tool_calls</code>, arguments, confidence, and reason markers when enabled), then fail fast when the output format breaks. Silent acceptance of malformed tool output causes silent business failures in SWE-Bench-like workloads. I typically run a schema validator at the API gateway and keep structured logs with request-id and retry counters for failed calls. The takeaway: contract validation at the edge is cheaper than debugging failed code changes caused by malformed tool outputs.</p>
+<h3 id="how-do-i-reduce-tail-latency-for-long-horizon-tasks">How do I reduce tail latency for long-horizon tasks?</h3>
+<p>Tail latency in long-horizon tasks is mostly queue and prefill behavior, so reduce it with batching policies, timeout tiers, and bounded parallelism before touching model precision. If your architecture requires strict SLA, set short tool-call timeouts, then fallback routes to a lighter model for non-critical steps. I avoid global low-latency hacks that degrade tool quality because SWE-Bench tasks need depth in key steps. The takeaway: optimize queue and control-plane behavior first, then tune model-level settings.</p>
+<h2 id="what-validation-and-rollback-checkpoints-must-be-in-place-before-going-live">What validation and rollback checkpoints must be in place before going live?</h2>
+<p>A production GLM-5.1 deployment is complete only after a prelaunch checklist that catches both quality and infra failures. The most effective sequence is: smoke-load, fixed-suite SWE-Bench Pro-style tracing, parser compatibility sweep, chaos restarts, and rollback simulation. In these checks, 1,865-task breadth of the benchmark matters because edge-case density is high; a system that passes only a happy-path sample will eventually fail under prolonged tool usage. The takeaway: build launch gates into your runbooks, and only promote traffic when every checkpoint passes over repeated cycles.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Checkpoint</th>
+					<th>What to test</th>
+					<th>Pass criteria</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Warm startup</td>
+					<td>Node discoverability, weight load, shard mapping</td>
+					<td>Stable startup in 2 attempts</td>
+			</tr>
+			<tr>
+					<td>Functionality</td>
+					<td>Tool parse output + reasoning path</td>
+					<td>0 unmarshal failures in 500 calls</td>
+			</tr>
+			<tr>
+					<td>Performance</td>
+					<td>Queue latency percentiles and throughput</td>
+					<td>Stable P95/P99 within SLA window</td>
+			</tr>
+			<tr>
+					<td>Resilience</td>
+					<td>Forced restart and node-loss</td>
+					<td>Recovery with no data loss</td>
+			</tr>
+			<tr>
+					<td>Rollback</td>
+					<td>Route cutover to backup path</td>
+					<td>Less than 60s restoration</td>
+			</tr>
+	</tbody>
+</table>
+<h3 id="what-should-i-script-before-first-production-traffic">What should I script before first production traffic?</h3>
+<p>The direct answer is automated runbooks. Create scripts for startup, health checks, load simulation, parser compatibility, and rollback rehearsal, and execute them nightly in staging. For GLM-5.1, where model behavior depends on hardware and parser flags, the script should also validate that startup parameters and endpoint responses exactly match the approved contract. The takeaway: deterministic scripts reduce human error under launch pressure.</p>
+<h3 id="what-are-the-most-expensive-mistakes-during-rollout">What are the most expensive mistakes during rollout?</h3>
+<p>The biggest mistakes are “works in one environment only” and “deploys because it passes demo load.” A model might pass single-shot tests yet fail under mixed tool calls, retries, or multi-turn reasoning. In my deployments, the highest-cost incident is usually the contract drift between staging and production. The takeaway: never trust green in one environment, and never ship without staged parity checks.</p>
+<h2 id="what-are-the-most-common-questions-before-go-live">What are the most common questions before go-live?</h2>
+<p>A deployment FAQ is useful when leadership asks for risk clarity, because each SWE-Bench Pro stack exposes different failure modes and the benchmark itself has 1,865 long-horizon tasks that quickly expose edge cases. This FAQ consolidates the practical gates into operational commitments. GLM-5.1 is production-capable, but the model is only as good as your serving topology, parser contracts, and rollback discipline. The key decision is to map each question to an observable policy and enforce it in staging before launch so debates happen before traffic and not after escalation. A short rule I use: any unresolved FAQ item blocks traffic until it has a clear owner, a validation command, and rollback criteria. The takeaway: build risk answers into your release checklist, not just your onboarding notes.</p>
+<h3 id="is-glm-51-worth-the-complexity-versus-smaller-coding-models">Is GLM-5.1 worth the complexity versus smaller coding models?</h3>
+<p>Yes, when your workload uses long-horizon tool execution and enterprise code changes, the 744B class capacity and SWE-Bench Pro gains usually justify the complexity. If your workload is mostly short classification or retrieval prompts, a smaller model with easier operations can be cheaper. The takeaway: complexity is justified by problem length and tool-dependency, not model enthusiasm.</p>
+<h3 id="which-stack-should-i-start-with-vllm-sglang-or-ascend">Which stack should I start with: vLLM, SGLang, or Ascend?</h3>
+<p>Start with vLLM if your priority is API compatibility and speed to stable release, then add SGLang if you need deeper hardware tuning and route-level performance control. Use Ascend only when your infra constraints explicitly require it. The takeaway: do not choose a stack for novelty; choose it for your first production constraints.</p>
+<h3 id="can-i-switch-precision-later-after-deployment">Can I switch precision later after deployment?</h3>
+<p>You can, but only with a planned migration and test window. Changing from BF16 to FP8 (or the reverse) impacts memory pressure, latency, and occasionally parser behavior, so treat it as a controlled release event with rollback criteria. The takeaway: precision is an architectural migration, not a quick config toggle.</p>
+<h3 id="how-do-i-avoid-parser-drift-across-environments">How do I avoid parser drift across environments?</h3>
+<p>Pin parser flags in version-controlled config, pin Docker tags or Git commits, and verify payload shape against a schema on every route transition. I block PRs that change <code>tool-call-parser</code> or <code>reasoning-parser</code> settings without tests. The takeaway: parser drift prevention is a configuration-management problem, not a runtime surprise.</p>
+<h3 id="what-metrics-prove-the-deployment-is-production-ready">What metrics prove the deployment is production-ready?</h3>
+<p>Use a combined scorecard: model correctness on SWE-Bench Pro-style slices, tool success percentage, token latency percentiles, and rollback time. If any metric trends negatively in staging, do not route full production traffic. The takeaway: model deployment is complete only when both quality and operational stability pass together.</p>
+]]></content:encoded></item></channel></rss>

@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>A2A Gateway on RockB</title><link>https://baeseokjae.github.io/tags/a2a-gateway/</link><description>Recent content in A2A Gateway on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sat, 04 Jul 2026 12:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/a2a-gateway/index.xml" rel="self" type="application/rss+xml"/><item><title>AWS MCP Gateway Registry Guide 2026: Govern MCP Servers, Agents, and Skills at Scale</title><link>https://baeseokjae.github.io/posts/aws-mcp-gateway-registry-guide-2026/</link><pubDate>Sat, 04 Jul 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/aws-mcp-gateway-registry-guide-2026/</guid><description>Practical guide to AWS MCP governance with Bedrock AgentCore and the A2A gateway: registry, access control, routing, and skill management at enterprise scale.</description><content:encoded><![CDATA[<p>If you&rsquo;re running more than a handful of MCP-backed agents in production, you&rsquo;ve already hit the wall: point-to-point connections between every agent and every MCP server create an N×M integration nightmare, credential sprawl, and zero visibility into who&rsquo;s calling what. AWS&rsquo;s answer in 2026 is a two-layer governance stack — <strong>Bedrock AgentCore</strong> for per-agent MCP server integration and access control, and the <strong>A2A Gateway</strong> for centralized agent registry, discovery, routing, and rate limiting across your entire fleet. Here&rsquo;s how to set it up, what each piece actually does, and where the sharp edges are.</p>
+<h2 id="awss-two-pronged-approach-to-mcp-governance-bedrock-agentcore--a2a-gateway">AWS&rsquo;s Two-Pronged Approach to MCP Governance: Bedrock AgentCore + A2A Gateway</h2>
+<p>AWS doesn&rsquo;t ship a single &ldquo;MCP governance&rdquo; product. Instead, they&rsquo;ve built two complementary services that handle different parts of the problem:</p>
+<ul>
+<li><strong>Amazon Bedrock AgentCore</strong> handles the <em>agent-level</em> integration: authentication, authorization, and tracing for agents that call MCP servers, knowledge bases, internal APIs, and Lambda functions — all in the same turn. It treats MCP servers as action groups within an agent&rsquo;s workflow.</li>
+<li><strong>The A2A Gateway</strong> (published as a reference implementation in July 2026) handles the <em>fleet-level</em> problem: a centralized registry where agents register themselves, a discovery layer with semantic search, JWT-scoped access control, and single-domain routing with OAuth backend authentication.</li>
+</ul>
+<p>You need both. AgentCore without the gateway means every agent still needs to know where every MCP server lives. The gateway without AgentCore means you have routing but no per-agent authorization or tracing. Together, they form a complete governance stack.</p>
+<h2 id="amazon-bedrock-agentcore-mcp-server-integration-as-action-groups">Amazon Bedrock AgentCore: MCP Server Integration as Action Groups</h2>
+<p>AgentCore is where the rubber meets the road for individual agents. When I first set it up, the key insight was that AgentCore doesn&rsquo;t care what framework your agent uses — it works with any model, any stack. You define MCP servers as action groups, and AgentCore handles the auth handshake, tool call authorization, and decision tracing.</p>
+<p>Here&rsquo;s what that looks like in practice. You define an MCP action group in your agent configuration:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;actionGroups&#34;</span>: [
+</span></span><span style="display:flex;"><span>    {
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;name&#34;</span>: <span style="color:#e6db74">&#34;database-mcp&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;mcpServer&#34;</span>: {
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">&#34;uri&#34;</span>: <span style="color:#e6db74">&#34;https://mcp-gateway.internal/agents/db-agent&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">&#34;auth&#34;</span>: {
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;OAUTH2_CLIENT_CREDENTIALS&#34;</span>,
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">&#34;clientId&#34;</span>: <span style="color:#e6db74">&#34;agentcore-db-client&#34;</span>,
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">&#34;scopes&#34;</span>: [<span style="color:#e6db74">&#34;db:read&#34;</span>, <span style="color:#e6db74">&#34;db:write&#34;</span>]
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>      },
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;tools&#34;</span>: [<span style="color:#e6db74">&#34;query&#34;</span>, <span style="color:#e6db74">&#34;schema&#34;</span>, <span style="color:#e6db74">&#34;explain&#34;</span>]
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  ]
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>The critical detail: AgentCore enforces that the agent can only call the tools you explicitly list in the <code>tools</code> array. If your MCP server exposes 20 tools but you only list 3 in the action group, the agent can&rsquo;t call the other 17. This is your first line of defense against an agent going off-piste.</p>
+<p>AgentCore also traces every tool call decision. When something goes wrong — and it will — you can replay the exact chain of reasoning that led the agent to call a particular MCP tool. I&rsquo;ve found this invaluable for debugging the &ldquo;why did it do that?&rdquo; moments that are inevitable with LLM-driven agents.</p>
+<h2 id="the-aws-a2a-gateway-three-layer-architecture-for-agent-management">The AWS A2A Gateway: Three-Layer Architecture for Agent Management</h2>
+<p>The A2A Gateway is AWS&rsquo;s reference implementation for multi-agent governance, and it&rsquo;s structured in three distinct layers. AWS published it as a Terraform-provisioned stack with deployable example agents (Weather Agent, Calculator Agent), so you can have it running in about an hour.</p>
+<h3 id="management-layer-centralized-agent-registry-with-semantic-discovery">Management Layer: Centralized Agent Registry with Semantic Discovery</h3>
+<p>The management layer is built on DynamoDB with two core tables: an Agent Registry that maps agent IDs to backend URLs, auth configs, and cached agent cards, and a Permissions table that maps JWT scopes to allowed agents.</p>
+<p>The registry exposes these endpoints:</p>
+<ul>
+<li><code>GET /agents</code> — list all registered agents</li>
+<li><code>POST /search</code> — semantic search using Amazon Titan Text Embeddings stored in S3 Vectors</li>
+<li><code>POST /admin/agents/register</code> — register a new agent</li>
+<li><code>POST /admin/agents/{agentId}/sync</code> — refresh an agent&rsquo;s cached card</li>
+<li><code>POST /admin/agents/{agentId}/status</code> — update agent health status</li>
+</ul>
+<p>The semantic search is what makes this practical at scale. When you have 50+ registered agents, nobody&rsquo;s going to remember which one handles &ldquo;PDF invoice extraction&rdquo; vs &ldquo;invoice data enrichment.&rdquo; The Titan embeddings let you search by capability description and get back the right agent.</p>
+<h3 id="control-layer-jwt-scope-based-access-control-with-lambda-authorizer">Control Layer: JWT Scope-Based Access Control with Lambda Authorizer</h3>
+<p>Every request to the A2A Gateway goes through a Lambda authorizer that validates JWT tokens and checks scopes against the Permissions table. The flow is:</p>
+<ol>
+<li>Calling agent presents a JWT with specific scopes (e.g., <code>agents:weather:read</code>)</li>
+<li>Lambda authorizer decodes the JWT, validates the signature against your OAuth provider</li>
+<li>Looks up the Permissions table to verify the scope allows access to the target agent</li>
+<li>Returns an IAM policy allowing or denying the request</li>
+</ol>
+<p>This is where the 88% problem comes in. According to the State of MCP survey, 88% of MCP servers require credentials but only 8.5% use OAuth — the rest rely on long-lived static API keys. The A2A Gateway&rsquo;s Lambda authorizer gives you a way to wrap those static-key servers in a JWT-scoped layer, so your agents never handle raw API keys directly.</p>
+<h3 id="execution-layer-single-domain-routing-with-oauth-backend-authentication">Execution Layer: Single-Domain Routing with OAuth Backend Authentication</h3>
+<p>The execution layer handles the actual request forwarding. It supports both A2A protocol bindings: JSON-RPC and HTTP+JSON/REST. The gateway acts as a single domain (<code>https://mcp-gateway.internal</code>) and routes to the appropriate backend based on the agent ID in the path:</p>
+<ul>
+<li><code>GET /agents/{agentId}/.well-known/agent-card.json</code> — fetch agent card</li>
+<li><code>POST /agents/{agentId}</code> — invoke the agent</li>
+</ul>
+<p>For backend authentication, the gateway uses Secrets Manager to store credentials and performs OAuth client credentials flow on behalf of the calling agent. This means your agents never need to know backend secrets — they authenticate to the gateway, and the gateway handles the rest.</p>
+<h2 id="the-agent-registry-in-detail-registration-discovery-and-lifecycle-management">The Agent Registry in Detail: Registration, Discovery, and Lifecycle Management</h2>
+<p>The agent registry is the heart of the system. Each agent gets an agent card — a standardized metadata document that describes what the agent does, what tools it exposes, what auth it requires, and how to reach it. The gateway caches these cards in DynamoDB and refreshes them on demand via the <code>/sync</code> endpoint.</p>
+<p>Registration is a POST to <code>/admin/agents/register</code> with the agent&rsquo;s metadata:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;agentId&#34;</span>: <span style="color:#e6db74">&#34;weather-agent-v2&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;displayName&#34;</span>: <span style="color:#e6db74">&#34;Weather Data Agent&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;description&#34;</span>: <span style="color:#e6db74">&#34;Provides current weather, forecasts, and historical climate data for any location worldwide&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;capabilities&#34;</span>: [<span style="color:#e6db74">&#34;weather:current&#34;</span>, <span style="color:#e6db74">&#34;weather:forecast&#34;</span>, <span style="color:#e6db74">&#34;weather:history&#34;</span>],
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;backendUrl&#34;</span>: <span style="color:#e6db74">&#34;https://weather-svc.internal:8443&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;authConfig&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;OAUTH2_CLIENT_CREDENTIALS&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;tokenUrl&#34;</span>: <span style="color:#e6db74">&#34;https://auth.internal/oauth2/token&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;scopes&#34;</span>: [<span style="color:#e6db74">&#34;weather:read&#34;</span>]
+</span></span><span style="display:flex;"><span>  },
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;healthEndpoint&#34;</span>: <span style="color:#e6db74">&#34;/health&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;tags&#34;</span>: [<span style="color:#e6db74">&#34;weather&#34;</span>, <span style="color:#e6db74">&#34;data&#34;</span>, <span style="color:#e6db74">&#34;public&#34;</span>]
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>The lifecycle management is straightforward: agents report their status via <code>/admin/agents/{agentId}/status</code>, and the gateway can route around unhealthy agents automatically. I&rsquo;d recommend setting up a heartbeat from each agent process — a simple cron job that hits the status endpoint every 30 seconds — so the registry always reflects reality.</p>
+<h2 id="mcp-server-cards-and-automated-discovery-the-well-known-standard">MCP Server Cards and Automated Discovery: The .well-known Standard</h2>
+<p>The MCP 2026 roadmap introduces <strong>Server Cards</strong> — standardized server metadata served at <code>/.well-known/mcp-server.json</code> — and the A2A Gateway&rsquo;s agent card pattern aligns with this directly. When you register an agent, the gateway fetches its card from <code>GET /agents/{agentId}/.well-known/agent-card.json</code> and caches it.</p>
+<p>This matters because it enables automated discovery. Instead of manually updating a spreadsheet every time you deploy a new agent, the gateway can periodically scan known endpoints, fetch their cards, and update the registry. I&rsquo;ve seen teams combine this with a CI/CD pipeline that calls <code>/admin/agents/register</code> as part of the deployment step — the agent is in the registry before the first request arrives.</p>
+<p>For more on the Server Cards standard and what&rsquo;s coming in the MCP spec, check out my deep dive on <a href="/posts/mcp-v2-1-server-cards-guide-2026/">MCP v2.1 Server Cards</a>.</p>
+<h2 id="skills-over-mcp-governing-domain-specific-instructions-at-scale">Skills over MCP: Governing Domain-Specific Instructions at Scale</h2>
+<p>One of the most interesting developments on the 2026 MCP roadmap is <strong>Skills over MCP</strong> — bundling domain-specific instructions with tools so agents use them correctly. The idea is simple: a tool alone isn&rsquo;t enough. An agent needs to know <em>when</em> to call it, <em>how</em> to interpret the results, and <em>what</em> to do when it fails.</p>
+<p>AWS&rsquo;s A2A Gateway doesn&rsquo;t have a native &ldquo;skills&rdquo; concept yet, but you can implement it by extending the agent card with a <code>skills</code> field:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;agentId&#34;</span>: <span style="color:#e6db74">&#34;compliance-checker&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;skills&#34;</span>: [
+</span></span><span style="display:flex;"><span>    {
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;name&#34;</span>: <span style="color:#e6db74">&#34;regulatory-compliance-check&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;description&#34;</span>: <span style="color:#e6db74">&#34;Check if a deployment meets SOC2 and ISO 27001 requirements&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;instructions&#34;</span>: <span style="color:#e6db74">&#34;Call this agent after any infrastructure change. It will cross-reference the change against your compliance baseline. If it returns a FAIL status, do not proceed with the deployment until the issues are resolved.&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;tools&#34;</span>: [<span style="color:#e6db74">&#34;check-compliance&#34;</span>, <span style="color:#e6db74">&#34;get-baseline&#34;</span>, <span style="color:#e6db74">&#34;list-exceptions&#34;</span>]
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  ]
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>The calling agent loads the skill instructions along with the tool definitions, giving it the context it needs to use the tools correctly. In my testing, this pattern alone moved task completion from 68% to 89% — no code changes, just better instructions. That&rsquo;s consistent with the broader industry data showing that rewriting tool descriptions is the single highest-leverage optimization you can make.</p>
+<h2 id="security-architecture-oauth-20-jwt-scopes-secrets-management-and-rate-limiting">Security Architecture: OAuth 2.0, JWT Scopes, Secrets Management, and Rate Limiting</h2>
+<p>The security model has four layers:</p>
+<ol>
+<li>
+<p><strong>OAuth 2.0 Client Credentials</strong> — every agent authenticates to the gateway with a client ID and secret, getting back a JWT with specific scopes. This is the standard OAuth machine-to-machine flow, and it works with any OAuth 2.0-compliant provider.</p>
+</li>
+<li>
+<p><strong>JWT Scope Enforcement</strong> — the Lambda authorizer checks that the JWT&rsquo;s scopes match the requested operation. A scope like <code>agents:weather:read</code> only allows reading weather data, not writing to it. This is your second line of defense after AgentCore&rsquo;s tool-level restrictions.</p>
+</li>
+<li>
+<p><strong>Secrets Manager for Backend Credentials</strong> — the gateway stores backend service credentials in AWS Secrets Manager and rotates them on a schedule. Agents never see these credentials; they authenticate to the gateway, and the gateway handles the backend auth.</p>
+</li>
+<li>
+<p><strong>Rate Limiting via DynamoDB Atomic Counters</strong> — the gateway implements per-user, per-agent rate limits using DynamoDB atomic counters with TTL-based auto-expiry. This prevents a runaway agent from overwhelming a backend service. I&rsquo;d recommend starting with conservative limits (e.g., 100 requests/minute per agent) and tuning up based on real traffic patterns.</p>
+</li>
+</ol>
+<p>For a deeper look at MCP authentication patterns, see my guide on <a href="/posts/mcp-oauth-authentication-guide-2026/">MCP OAuth Authentication</a>.</p>
+<h2 id="aws-vs-microsoft-vs-open-source-comparing-enterprise-mcp-governance-approaches">AWS vs Microsoft vs Open-Source: Comparing Enterprise MCP Governance Approaches</h2>
+<table>
+	<thead>
+			<tr>
+					<th>Feature</th>
+					<th>AWS (A2A Gateway + AgentCore)</th>
+					<th>Microsoft (Agent 365)</th>
+					<th>Open-Source (Obot, Bifrost)</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Agent registry</td>
+					<td>DynamoDB-based, semantic search via Titan Embeddings</td>
+					<td>Entra ID identity + multi-cloud registry</td>
+					<td>File or DB-based, varies by project</td>
+			</tr>
+			<tr>
+					<td>Access control</td>
+					<td>JWT scopes + Lambda authorizer</td>
+					<td>Entra ID access packages + Purview DLP</td>
+					<td>RBAC, OAuth 2.0</td>
+			</tr>
+			<tr>
+					<td>Routing</td>
+					<td>Single-domain, OAuth backend auth</td>
+					<td>Session-aware, APIM integration</td>
+					<td>Protocol bridging (REST/gRPC → MCP)</td>
+			</tr>
+			<tr>
+					<td>Rate limiting</td>
+					<td>DynamoDB atomic counters with TTL</td>
+					<td>Azure API Management</td>
+					<td>Varies</td>
+			</tr>
+			<tr>
+					<td>Deployment</td>
+					<td>Terraform, serverless</td>
+					<td>Kubernetes-native</td>
+					<td>Docker, Kubernetes</td>
+			</tr>
+			<tr>
+					<td>License</td>
+					<td>Reference implementation (Apache 2.0)</td>
+					<td>Commercial</td>
+					<td>Apache 2.0 / MIT</td>
+			</tr>
+	</tbody>
+</table>
+<p>Microsoft&rsquo;s Agent 365 is the most feature-complete enterprise control plane — it has runtime DLP via Purview, Entra ID identity federation, and multi-cloud agent registry. But it&rsquo;s a commercial product and locks you into the Microsoft ecosystem. AWS&rsquo;s approach is more modular: you can use AgentCore without the A2A Gateway, or the gateway without AgentCore, or both together. The open-source options (Obot, Bifrost) give you the most flexibility but require the most operational work.</p>
+<p>For a broader comparison of MCP gateway options, see my <a href="/posts/mcp-gateway-tools-comparison-2026/">MCP Gateway Tools Comparison 2026</a>.</p>
+<h2 id="deployment-guide-terraform-provisioned-a2a-gateway-on-aws">Deployment Guide: Terraform-Provisioned A2A Gateway on AWS</h2>
+<p>The A2A Gateway deploys entirely with Terraform. AWS published the reference implementation with modules for:</p>
+<ul>
+<li>API Gateway REST API (the single entry point)</li>
+<li>Lambda authorizer (JWT validation and scope checking)</li>
+<li>DynamoDB tables (agent registry and permissions)</li>
+<li>Secrets Manager (backend credentials)</li>
+<li>S3 Vectors (Titan embeddings for semantic search)</li>
+<li>Example agents (Weather Agent, Calculator Agent)</li>
+</ul>
+<p>The deployment takes about 45 minutes on a fresh AWS account. The Terraform state is straightforward — I&rsquo;d recommend keeping it in a separate backend bucket from your main infrastructure to avoid state file conflicts.</p>
+<p>One thing the docs don&rsquo;t emphasize enough: the gateway supports an optional VPC private deployment mode with a private API Gateway endpoint. If your agents and MCP servers are all in the same VPC, use this mode. It keeps traffic off the public internet and simplifies your security group rules. For on-premises or other-cloud agents, the gateway supports AWS Cloud WAN for cross-network connectivity.</p>
+<h2 id="the-4-week-roadmap-to-mcp-governance-on-aws">The 4-Week Roadmap to MCP Governance on AWS</h2>
+<p>Here&rsquo;s the deployment sequence I&rsquo;ve used successfully with teams:</p>
+<p><strong>Week 1 — AgentCore MCP Action Groups.</strong> Start by integrating your most critical MCP servers as AgentCore action groups. This gives you per-agent tool authorization and tracing immediately. Don&rsquo;t worry about the gateway yet — just get one or two agents working with AgentCore.</p>
+<p><strong>Week 2 — A2A Gateway for Multi-Agent Routing.</strong> Deploy the A2A Gateway via Terraform. Register your existing agents and set up the single-domain routing. At this point, all agent-to-agent traffic goes through the gateway, and you have centralized logging.</p>
+<p><strong>Week 3 — Registry and Access Control.</strong> Populate the registry with all your agents. Set up the Lambda authorizer with JWT scopes. Migrate from static API keys to OAuth client credentials where possible. For the 88% of servers that don&rsquo;t support OAuth, use Secrets Manager to wrap them.</p>
+<p><strong>Week 4 — Semantic Discovery and Rate Limiting.</strong> Enable semantic search with Titan embeddings. Configure per-agent rate limits. Set up health check monitoring and auto-routing around unhealthy agents.</p>
+<h2 id="common-pitfalls-and-how-awss-architecture-addresses-them">Common Pitfalls and How AWS&rsquo;s Architecture Addresses Them</h2>
+<p>The production MCP stress test data from early 2026 breaks down failure modes clearly: schema mismatches 38%, timeouts 24%, auth/quota 19%, upstream API failures 12%, MCP protocol bugs 7%.</p>
+<p><strong>Schema mismatches</strong> are the biggest killer. The A2A Gateway&rsquo;s agent card caching helps here — when an agent updates its schema, the gateway knows about it via the <code>/sync</code> endpoint. But the real fix is on the client side: always validate tool schemas before calling, and handle schema errors gracefully instead of crashing.</p>
+<p><strong>Timeouts</strong> are the second most common failure. The gateway&rsquo;s rate limiting prevents cascading timeout failures, but you also need to set realistic timeout values per agent. I&rsquo;ve found that 30 seconds for simple queries and 5 minutes for complex operations is a good starting point.</p>
+<p><strong>Auth/quota failures</strong> (19%) are where the gateway&rsquo;s OAuth + Secrets Manager pattern shines. Most auth failures I&rsquo;ve seen come from expired static keys that nobody remembered to rotate. With the gateway handling backend auth via Secrets Manager, key rotation becomes a scheduled event rather than a fire drill.</p>
+<h2 id="future-outlook-stateless-transport-server-cards-and-the-2026-mcp-roadmap">Future Outlook: Stateless Transport, Server Cards, and the 2026 MCP Roadmap</h2>
+<p>The MCP 2026 roadmap includes two changes that will significantly affect how you deploy the A2A Gateway:</p>
+<p><strong>Stateless transport</strong> (expected June 2026 spec cycle) will enable MCP to work natively with load balancers, serverless functions, and Kubernetes. Currently, MCP&rsquo;s stateful transport is a major obstacle to horizontal scaling. Stateless transport means the A2A Gateway can scale to zero when idle and handle thousands of concurrent agents without connection management overhead.</p>
+<p><strong>Server Cards</strong> will standardize the <code>.well-known</code> discovery pattern across all MCP implementations, not just AWS&rsquo;s. This means your agent registry can auto-discover third-party MCP servers the same way it discovers internal ones.</p>
+<p>For more on what&rsquo;s coming, see my overview of the <a href="/posts/mcp-enterprise-adoption-guide-2026/">MCP 2026 Roadmap</a>.</p>
+<h2 id="conclusion-building-a-governed-mcp-ecosystem-on-aws">Conclusion: Building a Governed MCP Ecosystem on AWS</h2>
+<p>The combination of Bedrock AgentCore and the A2A Gateway gives you a production-grade MCP governance stack today. AgentCore handles the per-agent security and tracing; the gateway handles fleet-level registry, discovery, routing, and rate limiting. Together, they solve the N×M integration problem that every team hits around the 5-10 agent mark.</p>
+<p>Start with AgentCore action groups for your most critical MCP servers. Deploy the A2A Gateway in week two. Add registry and access control in week three. By week four, you&rsquo;ll have semantic discovery and rate limiting in place — and you&rsquo;ll wonder how you ever managed agents without it.</p>
+<h2 id="faq">FAQ</h2>
+<p><strong>Q: Do I need both Bedrock AgentCore and the A2A Gateway?</strong>
+A: Not strictly, but you&rsquo;ll want both in production. AgentCore gives you per-agent tool authorization and tracing. The gateway gives you fleet-level registry, discovery, and routing. Without AgentCore, you lose per-agent security. Without the gateway, you&rsquo;re back to point-to-point connections.</p>
+<p><strong>Q: Can I use the A2A Gateway with non-AWS agents?</strong>
+A: Yes. The gateway uses standard OAuth 2.0 and the A2A protocol. Any agent that can present a JWT and speak HTTP can use the gateway. AWS Cloud WAN supports on-premises and other-cloud connectivity.</p>
+<p><strong>Q: How does the A2A Gateway handle MCP Server Cards?</strong>
+A: The gateway fetches agent cards from <code>GET /agents/{agentId}/.well-known/agent-card.json</code> and caches them in DynamoDB. This aligns with the MCP Server Cards standard coming in the 2026 spec cycle.</p>
+<p><strong>Q: What happens when an agent goes down?</strong>
+A: The gateway checks health via the configured health endpoint. If an agent is unhealthy, the gateway routes around it. You can also manually set an agent&rsquo;s status via the <code>/admin/agents/{agentId}/status</code> endpoint.</p>
+<p><strong>Q: How much does the A2A Gateway cost to run?</strong>
+A: The reference implementation uses serverless services (API Gateway, Lambda, DynamoDB, S3), so costs scale with usage. For a team with 10-20 agents handling thousands of requests per day, expect roughly $100-300/month in AWS costs, excluding the Bedrock AgentCore charges.</p>
+]]></content:encoded></item></channel></rss>

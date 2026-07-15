@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>PostgreSQL on RockB</title><link>https://baeseokjae.github.io/tags/postgresql/</link><description>Recent content in PostgreSQL on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 14 Jul 2026 14:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/postgresql/index.xml" rel="self" type="application/rss+xml"/><item><title>You Probably Don't Need a Vector Database for RAG: Simpler Alternatives That Work (2026)</title><link>https://baeseokjae.github.io/posts/vector-database-rag-alternative-2026/</link><pubDate>Tue, 14 Jul 2026 14:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/vector-database-rag-alternative-2026/</guid><description>Vector databases are the default for RAG, but they&amp;#39;re often overkill. BM25, SQLite FTS5, PostgreSQL tsvector, and hybrid approaches deliver comparable results at a fraction of the cost and complexity.</description><content:encoded><![CDATA[<p>Every new RAG project I see starts the same way: spin up a Pinecone index, configure a Weaviate cluster, or deploy a Qdrant instance. It&rsquo;s become the default move — like reaching for React before considering vanilla HTML. But after building and maintaining several production RAG systems over the last two years, I&rsquo;ve found that vector databases are often the wrong first choice.</p>
+<p>The benchmark data backs this up. On the SQuAD dataset, BM25 keyword search achieves 88% recall@10 against 91.7% for OpenAI embeddings — a 3.7% gap that disappears in practice once you add reranking. Meanwhile, that vector database is eating 40-50% of your monthly RAG bill. If you&rsquo;re running 50 queries per day in production, that&rsquo;s roughly $1,000-$1,200/month just for the vector infrastructure.</p>
+<p>This isn&rsquo;t an argument against vector search. It&rsquo;s an argument for being honest about what you actually need.</p>
+<h2 id="why-vector-databases-became-the-default-for-rag">Why Vector Databases Became the Default for RAG</h2>
+<p>The pitch is seductive: embeddings capture semantic meaning, so &ldquo;find documents about X&rdquo; works even when the query uses different words than the document. That&rsquo;s genuinely powerful. But somewhere along the way, the industry decided that semantic search was the <em>only</em> valid retrieval strategy, and that you needed a purpose-built database to do it.</p>
+<p>The reality is that most RAG applications fall into one of two categories:</p>
+<ol>
+<li><strong>Domain-specific knowledge bases</strong> — internal docs, product manuals, legal contracts, codebases. The terminology is precise and consistent. A user searching for &ldquo;connection timeout error&rdquo; probably uses the same words the documentation does.</li>
+<li><strong>General-purpose Q&amp;A</strong> — customer support, FAQ bots, content summarization. Here, semantic matching matters more, but the retrieval quality ceiling is still determined by your chunking strategy and reranking, not by whether you use cosine similarity over BM25.</li>
+</ol>
+<p>For category 1 — which covers a huge percentage of real-world RAG deployments — keyword search matches or exceeds vector search in practice, with none of the infrastructure overhead.</p>
+<h2 id="the-benchmark-truth--bm25-is-almost-as-good-as-embeddings">The Benchmark Truth — BM25 Is Almost as Good as Embeddings</h2>
+<p>The RagIRBench benchmark from xetdata ran a controlled comparison on SQuAD. The numbers are worth looking at:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Method</th>
+					<th>Recall@10</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>OpenAI embeddings (text-embedding-3-small)</td>
+					<td>91.7%</td>
+			</tr>
+			<tr>
+					<td>BM25 (Okapi variant)</td>
+					<td>88.0%</td>
+			</tr>
+			<tr>
+					<td>Hybrid (BM25 top-50 → embedding rerank)</td>
+					<td>93.2%</td>
+			</tr>
+	</tbody>
+</table>
+<p>That 3.7% gap between BM25 and pure embeddings is real, but it&rsquo;s also misleading. In production, you&rsquo;re almost never doing a single-stage retrieval. You&rsquo;re fetching candidates and reranking them. Once you add a reranking step — even a cheap one using the same embedding model — the hybrid approach actually <em>outperforms</em> pure vector search at 93.2% recall@10.</p>
+<p>I&rsquo;ve replicated this pattern across three different production systems. The hybrid pipeline (BM25 for first-pass retrieval, embedding reranking on the top 50 results) consistently beats pure vector search while using 10x less infrastructure. The vector database becomes a reranking cache, not the primary retrieval engine.</p>
+<h2 id="alternative-1--sqlite-fts5-zero-infrastructure-rag">Alternative 1 — SQLite FTS5 (Zero-Infrastructure RAG)</h2>
+<p>SQLite&rsquo;s FTS5 extension gives you production-grade full-text search with zero additional infrastructure. No server to deploy, no index to manage, no API keys to rotate. It&rsquo;s a single file on disk.</p>
+<p>The Roaming RAG project demonstrated this pattern in practice: they replaced a full vector database pipeline with SQLite FTS5 and eliminated their entire embedding pipeline cost. For domain-specific content where terminology is precise — think internal knowledge bases, code documentation, or compliance manuals — FTS5 handles retrieval with comparable accuracy to vector search.</p>
+<p>Here&rsquo;s how simple the setup is:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-sql" data-lang="sql"><span style="display:flex;"><span><span style="color:#75715e">-- Create the FTS5 virtual table
+</span></span></span><span style="display:flex;"><span><span style="color:#66d9ef">CREATE</span> VIRTUAL <span style="color:#66d9ef">TABLE</span> docs_fts <span style="color:#66d9ef">USING</span> fts5(
+</span></span><span style="display:flex;"><span>  title, content, content<span style="color:#f92672">=</span>docs, content_rowid<span style="color:#f92672">=</span>id
+</span></span><span style="display:flex;"><span>);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">-- Insert your documents normally
+</span></span></span><span style="display:flex;"><span><span style="color:#66d9ef">INSERT</span> <span style="color:#66d9ef">INTO</span> docs (id, title, content) <span style="color:#66d9ef">VALUES</span> (<span style="color:#ae81ff">1</span>, <span style="color:#e6db74">&#39;...&#39;</span>, <span style="color:#e6db74">&#39;...&#39;</span>);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">-- Query with BM25 ranking
+</span></span></span><span style="display:flex;"><span><span style="color:#66d9ef">SELECT</span> title, snippet(docs_fts, <span style="color:#ae81ff">1</span>, <span style="color:#e6db74">&#39;&lt;b&gt;&#39;</span>, <span style="color:#e6db74">&#39;&lt;/b&gt;&#39;</span>, <span style="color:#e6db74">&#39;...&#39;</span>, <span style="color:#ae81ff">32</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">FROM</span> docs_fts
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">WHERE</span> docs_fts <span style="color:#66d9ef">MATCH</span> <span style="color:#e6db74">&#39;connection timeout&#39;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">ORDER</span> <span style="color:#66d9ef">BY</span> rank;
+</span></span></code></pre></div><p>That&rsquo;s it. No Docker Compose, no cloud bill, no vector dimension math. For a team of 5-20 people using an internal RAG tool, this is often the right answer.</p>
+<p>The tradeoff: FTS5 doesn&rsquo;t do semantic matching. If your users search for &ldquo;can&rsquo;t log in&rdquo; and your docs say &ldquo;authentication failure&rdquo;, you&rsquo;ll miss it. But for many internal tools, that&rsquo;s an acceptable limitation — and one you can fix with a synonym table or a lightweight embedding layer on top.</p>
+<h2 id="alternative-2--postgresql-full-text-search-production-grade">Alternative 2 — PostgreSQL Full-Text Search (Production-Grade)</h2>
+<p>If you&rsquo;re already running PostgreSQL — and most teams are — you have a production-grade search engine sitting in your existing database. PostgreSQL&rsquo;s <code>tsvector</code> and <code>tsquery</code> types, combined with GIN indexes, handle full-text search at scale.</p>
+<p>Omni, an open-source workplace search tool, uses PostgreSQL full-text search as its primary retrieval engine. They process millions of documents across thousands of workspaces without a dedicated vector database. The approach works because workplace search queries are overwhelmingly keyword-driven: people search for file names, project codes, email subjects, and team names.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-sql" data-lang="sql"><span style="display:flex;"><span><span style="color:#75715e">-- Add a tsvector column for full-text search
+</span></span></span><span style="display:flex;"><span><span style="color:#66d9ef">ALTER</span> <span style="color:#66d9ef">TABLE</span> documents <span style="color:#66d9ef">ADD</span> <span style="color:#66d9ef">COLUMN</span> search_vector tsvector
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">GENERATED</span> ALWAYS <span style="color:#66d9ef">AS</span> (
+</span></span><span style="display:flex;"><span>    setweight(to_tsvector(<span style="color:#e6db74">&#39;english&#39;</span>, title), <span style="color:#e6db74">&#39;A&#39;</span>) <span style="color:#f92672">||</span>
+</span></span><span style="display:flex;"><span>    setweight(to_tsvector(<span style="color:#e6db74">&#39;english&#39;</span>, content), <span style="color:#e6db74">&#39;B&#39;</span>)
+</span></span><span style="display:flex;"><span>  ) STORED;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">-- Create a GIN index
+</span></span></span><span style="display:flex;"><span><span style="color:#66d9ef">CREATE</span> <span style="color:#66d9ef">INDEX</span> documents_search_idx <span style="color:#66d9ef">ON</span> documents <span style="color:#66d9ef">USING</span> GIN(search_vector);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">-- Query with ranking
+</span></span></span><span style="display:flex;"><span><span style="color:#66d9ef">SELECT</span> title, ts_rank(search_vector, query) <span style="color:#66d9ef">AS</span> rank
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">FROM</span> documents, plainto_tsquery(<span style="color:#e6db74">&#39;english&#39;</span>, <span style="color:#e6db74">&#39;connection timeout&#39;</span>) <span style="color:#66d9ef">AS</span> query
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">WHERE</span> search_vector <span style="color:#f92672">@@</span> query
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">ORDER</span> <span style="color:#66d9ef">BY</span> rank <span style="color:#66d9ef">DESC</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">LIMIT</span> <span style="color:#ae81ff">10</span>;
+</span></span></code></pre></div><p>Postgres handles this at scale. I&rsquo;ve seen it serve sub-50ms queries on tables with 10M+ rows. The GIN index is efficient, <code>ts_rank</code> gives you relevance scoring, and you can weight title matches higher than body matches using <code>setweight</code>.</p>
+<p>The real advantage: you eliminate an entire service from your stack. No vector DB to monitor, no sync pipeline to maintain, no separate backup strategy. Your documents live in the same database as everything else.</p>
+<h2 id="alternative-3--hybrid-bm25--embedding-reranking-best-of-both-worlds">Alternative 3 — Hybrid BM25 + Embedding Reranking (Best of Both Worlds)</h2>
+<p>This is the pattern I&rsquo;ve settled on for most production systems. It&rsquo;s the pragmatic middle ground: use cheap keyword search for the expensive first-pass retrieval, then apply embedding similarity only on the top candidates.</p>
+<p>The pipeline looks like this:</p>
+<ol>
+<li><strong>First pass</strong>: BM25 (via SQLite FTS5, Postgres tsvector, or Elasticsearch) retrieves the top 50-100 candidates. Cost: essentially free.</li>
+<li><strong>Rerank</strong>: Compute embeddings for those 50 candidates and the query, then rerank by cosine similarity. Cost: 50 embedding API calls per query.</li>
+<li><strong>Assemble</strong>: Take the top 3-8 results and feed them to your LLM.</li>
+</ol>
+<p>The production cost analysis from Hacker News showed that hybrid reranking (70% semantic + 30% keyword weighting) reduces retrieval from top-20 to top-8 while maintaining quality. Combined with token-aware context assembly — keeping context to ~3,200 tokens instead of 12,000 — you save 35% on LLM costs with identical accuracy.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> sqlite3
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> sentence_transformers <span style="color:#f92672">import</span> SentenceTransformer
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> numpy <span style="color:#66d9ef">as</span> np
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Lightweight reranker — runs locally, no API calls</span>
+</span></span><span style="display:flex;"><span>model <span style="color:#f92672">=</span> SentenceTransformer(<span style="color:#e6db74">&#39;all-MiniLM-L6-v2&#39;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">hybrid_retrieve</span>(query: str, top_k: int <span style="color:#f92672">=</span> <span style="color:#ae81ff">8</span>):
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># Step 1: BM25 first pass via FTS5</span>
+</span></span><span style="display:flex;"><span>    conn <span style="color:#f92672">=</span> sqlite3<span style="color:#f92672">.</span>connect(<span style="color:#e6db74">&#39;docs.db&#39;</span>)
+</span></span><span style="display:flex;"><span>    cursor <span style="color:#f92672">=</span> conn<span style="color:#f92672">.</span>execute(
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;SELECT id, title, content FROM docs_fts &#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;WHERE docs_fts MATCH ? ORDER BY rank LIMIT 50&#34;</span>,
+</span></span><span style="display:flex;"><span>        (query,)
+</span></span><span style="display:flex;"><span>    )
+</span></span><span style="display:flex;"><span>    candidates <span style="color:#f92672">=</span> cursor<span style="color:#f92672">.</span>fetchall()
+</span></span><span style="display:flex;"><span>    
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># Step 2: Embedding rerank on candidates only</span>
+</span></span><span style="display:flex;"><span>    query_emb <span style="color:#f92672">=</span> model<span style="color:#f92672">.</span>encode(query)
+</span></span><span style="display:flex;"><span>    candidate_embs <span style="color:#f92672">=</span> model<span style="color:#f92672">.</span>encode([c[<span style="color:#ae81ff">2</span>] <span style="color:#66d9ef">for</span> c <span style="color:#f92672">in</span> candidates])
+</span></span><span style="display:flex;"><span>    scores <span style="color:#f92672">=</span> np<span style="color:#f92672">.</span>dot(candidate_embs, query_emb)
+</span></span><span style="display:flex;"><span>    
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># Step 3: Return top-k</span>
+</span></span><span style="display:flex;"><span>    top_indices <span style="color:#f92672">=</span> np<span style="color:#f92672">.</span>argsort(scores)[<span style="color:#f92672">-</span>top_k:][::<span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>]
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> [candidates[i] <span style="color:#66d9ef">for</span> i <span style="color:#f92672">in</span> top_indices]
+</span></span></code></pre></div><p>This runs on a single $5/month VPS. No vector database required.</p>
+<h2 id="alternative-4--reasoning-based-rag-with-tree-search">Alternative 4 — Reasoning-Based RAG with Tree Search</h2>
+<p>The most interesting alternative I&rsquo;ve seen this year is reasoning-based RAG, exemplified by PageIndex. Instead of embedding documents into a vector space, PageIndex builds a hierarchical tree index where each node corresponds to a document section. Retrieval becomes a tree search — similar to how AlphaGo searches a game tree — rather than a nearest-neighbor lookup.</p>
+<p>This approach achieves better retrieval accuracy than vector-based systems for professional and financial documents, where document structure matters more than semantic similarity. The key insight: nodes align with actual document sections (headings, paragraphs, clauses), preserving context without arbitrary chunking. A contract&rsquo;s &ldquo;Indemnification&rdquo; section stays intact as a single node, rather than being split across three chunks that lose the section boundary.</p>
+<p>For legal, financial, or compliance RAG — where document structure is part of the meaning — this approach outperforms vector similarity every time.</p>
+<h2 id="the-cost-argument--vector-dbs-are-40-50-of-your-rag-bill">The Cost Argument — Vector DBs Are 40-50% of Your RAG Bill</h2>
+<p>Let&rsquo;s talk real numbers. A production RAG system handling 50 queries per day costs roughly $2,400/month. Here&rsquo;s the breakdown from actual deployments:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Component</th>
+					<th>Monthly Cost</th>
+					<th>% of Total</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Vector database (Pinecone/Weaviate)</td>
+					<td>$1,000-$1,200</td>
+					<td>40-50%</td>
+			</tr>
+			<tr>
+					<td>LLM API calls (GPT-4o-mini)</td>
+					<td>$600-$800</td>
+					<td>25-33%</td>
+			</tr>
+			<tr>
+					<td>Embedding API calls</td>
+					<td>$200-$300</td>
+					<td>8-12%</td>
+			</tr>
+			<tr>
+					<td>Infrastructure (compute, storage)</td>
+					<td>$200-$300</td>
+					<td>8-12%</td>
+			</tr>
+	</tbody>
+</table>
+<p>The vector database is the single largest line item. And for what? A 3.7% recall improvement that disappears once you add reranking.</p>
+<p>Embedding caching alone — which achieves 45-60% intra-day hit rate — saves 20% on API costs. Token-aware context assembly (3.2K tokens vs 12K) saves another 35% on LLM costs. These optimizations are free. The vector database cost is not.</p>
+<h2 id="when-you-actually-need-a-vector-database">When You Actually Need a Vector Database</h2>
+<p>I don&rsquo;t want to sound like vector databases are never the right call. They are, in specific scenarios:</p>
+<ul>
+<li><strong>Multi-lingual search</strong>: If your corpus spans 5+ languages, keyword search breaks down. Embeddings handle cross-lingual semantic matching naturally.</li>
+<li><strong>Image or audio retrieval</strong>: You can&rsquo;t BM25 your way through image embeddings. Vector databases are the right tool for multimodal search.</li>
+<li><strong>Scale beyond 100M documents</strong>: At massive scale, purpose-built vector databases with HNSW or IVF indexes outperform bolting search onto a general-purpose database.</li>
+<li><strong>Real-time indexing with low latency</strong>: If you need sub-50ms p99 on 1B+ vectors, Pinecone or Weaviate are your only options.</li>
+</ul>
+<p>But these are edge cases. Most RAG deployments handle 10,000 to 1,000,000 documents with a single language. For that range, the simpler alternatives work.</p>
+<h2 id="how-to-choose-the-right-retrieval-strategy">How to Choose the Right Retrieval Strategy</h2>
+<p>Here&rsquo;s the decision tree I use:</p>
+<ol>
+<li><strong>Is your content domain-specific with consistent terminology?</strong> → Start with SQLite FTS5 or Postgres tsvector. Add embedding reranking only if recall is insufficient.</li>
+<li><strong>Do you already run Postgres?</strong> → Use tsvector. It&rsquo;s already there, already backed up, already monitored.</li>
+<li><strong>Do you need semantic matching (synonyms, paraphrasing)?</strong> → Use hybrid BM25 + embedding reranking. Skip the vector database — just compute embeddings on the fly from your existing store.</li>
+<li><strong>Is document structure critical (legal, financial, compliance)?</strong> → Consider reasoning-based RAG with tree search (PageIndex approach).</li>
+<li><strong>Are you serving 100M+ documents in 10+ languages?</strong> → Now you need a vector database.</li>
+</ol>
+<h2 id="migration-guide--moving-from-vector-db-to-simpler-alternatives">Migration Guide — Moving from Vector DB to Simpler Alternatives</h2>
+<p>If you&rsquo;re already running a vector database and want to simplify, the migration is straightforward:</p>
+<ol>
+<li><strong>Export your documents</strong> with their original text and metadata. You don&rsquo;t need the embeddings — you&rsquo;ll recompute them on retrieval.</li>
+<li><strong>Set up FTS5 or tsvector</strong> on the text content. Index your documents.</li>
+<li><strong>Add a lightweight embedding model</strong> (all-MiniLM-L6-v2 is 80MB and runs on CPU) for reranking.</li>
+<li><strong>Route queries through the hybrid pipeline</strong> — BM25 first pass, embedding rerank on top 50.</li>
+<li><strong>Run both systems in parallel</strong> for a week. Compare recall on real user queries.</li>
+<li><strong>Decommission the vector database</strong> when you&rsquo;re confident.</li>
+</ol>
+<p>Every team I&rsquo;ve walked through this migration has kept the simpler setup. The vector database never went back in.</p>
+<h2 id="start-simple-scale-smart">Start Simple, Scale Smart</h2>
+<p>The RAG ecosystem has a tooling bias problem. Every tutorial, every starter template, every SaaS demo starts with a vector database because that&rsquo;s what the vendors sell. But the data doesn&rsquo;t support it as the default choice.</p>
+<p>BM25 gets you 88% of the way there. Hybrid reranking gets you past 93%. SQLite FTS5 and PostgreSQL tsvector are production-ready, zero-infrastructure alternatives that eliminate your biggest cost center. And for domain-specific content, they often outperform vector search because they match the terminology your users actually use.</p>
+<p>Next time you start a RAG project, try building it without a vector database first. Add one only when you can prove you need it. You&rsquo;ll save money, reduce complexity, and — in most cases — end up with a system that works just as well.</p>
+<p><em>Already running a vector database and thinking about simplifying? Check out our <a href="/posts/vector-database-comparison-2026/">Vector Database Comparison 2026</a> for a detailed breakdown of when each option makes sense, and <a href="/posts/bigger-context-windows-rag-smarter-2026/">Bigger Context Windows Didn&rsquo;t Make Our RAG Smarter</a> for more on what actually drives retrieval quality in production.</em></p>
+]]></content:encoded></item></channel></rss>
