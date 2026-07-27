@@ -1,0 +1,343 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Linux Security on RockB</title><link>https://baeseokjae.github.io/tags/linux-security/</link><description>Recent content in Linux Security on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Mon, 27 Jul 2026 04:02:16 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/linux-security/index.xml" rel="self" type="application/rss+xml"/><item><title>Sandbox bwrap Nix: Lightweight Sandbox for AI Agents and Experiments</title><link>https://baeseokjae.github.io/posts/sandbox-bwrap-nix-agent-sandbox-2026/</link><pubDate>Mon, 27 Jul 2026 04:02:16 +0000</pubDate><guid>https://baeseokjae.github.io/posts/sandbox-bwrap-nix-agent-sandbox-2026/</guid><description>sandbox-bwrap-nix combines Bubblewrap and Nix to create a lightweight, auditable sandbox for AI coding agents that boots in under a second.</description><content:encoded><![CDATA[<h2 id="what-is-sandbox-bwrap-nix">What is sandbox-bwrap-nix?</h2>
+<p>sandbox-bwrap-nix is a lightweight, open-source sandboxing solution that combines Bubblewrap (bwrap) with the Nix package manager to create isolated environments for AI coding agents and experimental software. It boots in under a second, requires no daemon or root privileges, and gives you fine-grained control over what an AI agent can see, write, and execute. By mounting the Nix store as read-only and providing an isolated home directory with its own process namespace, it delivers three layers of protection against credential leaks, file system tampering, and cross-process snooping.</p>
+<h2 id="why-sandbox-ai-agents-the-security-problem">Why Sandbox AI Agents? The Security Problem</h2>
+<p>AI coding agents like Claude Code, OpenCode, and Codex operate with significant system access. They read files, execute commands, install packages, and communicate with external APIs. This capability creates a serious security surface: an agent with access to your SSH keys, AWS credentials, GPG signing keys, or personal files could inadvertently expose them through a prompt injection attack, a malicious package, or simply a bug in the agent&rsquo;s tool-use logic.</p>
+<p>Traditional approaches to this problem have been heavy-handed. Running each agent inside a full Docker container provides isolation, but at the cost of image management, daemon overhead, and startup times measured in seconds to minutes. Virtual machines are even heavier. The result is that many developers skip sandboxing entirely, relying on trust in the agent and hoping nothing goes wrong.</p>
+<p>The security industry has recognized this gap. Claude Code&rsquo;s own sandbox has used Bubblewrap on Linux since October 2025, and dedicated tools like ai-jail (977 GitHub stars, 86 forks as of July 2026) have emerged specifically to address the AI agent sandboxing problem. The trend is clear: lightweight, auditable sandboxing is becoming a standard requirement for AI development workflows.</p>
+<h2 id="how-bubblewrap-works-the-zero-sandbox-principle">How Bubblewrap Works: The Zero Sandbox Principle</h2>
+<p>Bubblewrap, originally developed as part of the Flatpak project, operates on what security researchers call the &ldquo;zero sandbox&rdquo; principle. By default, a Bubblewrap sandbox has access to nothing. Every file, directory, network interface, and process is explicitly granted rather than implicitly available. This is the opposite of Docker&rsquo;s approach, where a container inherits most of the host environment unless you explicitly remove access.</p>
+<p>The core mechanism is simple: Bubblewrap uses Linux kernel namespaces and bind mounts to construct a restricted view of the system. A typical invocation looks like this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>bwrap <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --ro-bind /nix/store /nix/store <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --bind /path/to/project /path/to/project <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --tmpfs /tmp <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --tmpfs /home <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --unshare-pid <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --unshare-net <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --clearenv <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --setenv HOME /home/sandbox <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --chdir /path/to/project <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  nix develop
+</span></span></code></pre></div><p>Each flag is a deliberate grant of access. <code>--ro-bind /nix/store /nix/store</code> gives read-only access to the Nix store. <code>--tmpfs /tmp</code> creates an empty, ephemeral temp directory. <code>--unshare-pid</code> creates a separate process namespace so the agent cannot see sibling processes. <code>--clearenv</code> strips all environment variables, preventing credential leaks through environment inheritance.</p>
+<p>This approach has a significant advantage: it is auditable. Every permission is visible in the command line or configuration file. There is no implicit trust, no default-allow policy, and no opaque configuration layers. As one security researcher noted, &ldquo;Bubblewrap does in 30 lines what Docker does in 30 layers.&rdquo;</p>
+<h2 id="why-nix-reproducible-dev-shells-inside-the-sandbox">Why Nix? Reproducible Dev Shells Inside the Sandbox</h2>
+<p>Nix brings a critical capability to the sandbox: reproducibility. A Nix flake or shell definition specifies every tool and dependency your AI agent needs — git, bun, uv, gnumake, Python, Node.js, or any other runtime — with exact versions and hash-verified downloads. When combined with Bubblewrap, the Nix store is mounted as read-only, guaranteeing that the agent cannot tamper with its own toolchain.</p>
+<p>This combination solves a real problem. AI agents frequently need to install packages, run build tools, and execute scripts. Without Nix, you would need to either pre-install everything on the host (defeating isolation) or allow the agent to install packages inside the sandbox (creating reproducibility issues). With Nix, the environment is declared, version-pinned, and immutable during the agent&rsquo;s run.</p>
+<p>The sandbox-bwrap-nix project takes this further by providing a pre-configured sandbox-home directory with a <code>.bashrc</code>, <code>nix.conf</code>, and OpenCode configuration. This means the agent starts in a fully functional development environment without any setup steps.</p>
+<h2 id="step-by-step-setup-guide">Step-by-Step Setup Guide</h2>
+<h3 id="prerequisites-installing-bubblewrap-and-nix">Prerequisites: Installing Bubblewrap and Nix</h3>
+<p>Before you can use sandbox-bwrap-nix, you need Bubblewrap and Nix installed on your Linux system.</p>
+<p><strong>Install Bubblewrap:</strong></p>
+<p>On most Linux distributions, Bubblewrap is available in the package manager:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Debian/Ubuntu</span>
+</span></span><span style="display:flex;"><span>sudo apt install bubblewrap
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Fedora</span>
+</span></span><span style="display:flex;"><span>sudo dnf install bubblewrap
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Arch Linux</span>
+</span></span><span style="display:flex;"><span>sudo pacman -S bubblewrap
+</span></span></code></pre></div><p><strong>Install Nix:</strong></p>
+<p>The recommended approach is the official single-user installer:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>sh &lt;<span style="color:#f92672">(</span>curl -L https://nixos.org/nix/install<span style="color:#f92672">)</span> --no-daemon
+</span></span></code></pre></div><p>This installs Nix in single-user mode, which is sufficient for sandbox-bwrap-nix and avoids the complexity of a multi-user Nix daemon setup.</p>
+<h3 id="cloning-and-configuring-sandbox-bwrap-nix">Cloning and Configuring sandbox-bwrap-nix</h3>
+<p>The sandbox-bwrap-nix project was created on July 25, 2026, and is available on GitHub:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>git clone https://github.com/your-username/sandbox-bwrap-nix.git
+</span></span><span style="display:flex;"><span>cd sandbox-bwrap-nix
+</span></span></code></pre></div><p>The project provides a <code>flake.nix</code> that defines the development environment. You can customize it to include the tools your AI agent needs:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-nix" data-lang="nix"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  inputs <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>    nixpkgs<span style="color:#f92672">.</span>url <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;github:NixOS/nixpkgs/nixos-unstable&#34;</span>;
+</span></span><span style="display:flex;"><span>    flake-utils<span style="color:#f92672">.</span>url <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;github:numtide/flake-utils&#34;</span>;
+</span></span><span style="display:flex;"><span>  };
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>  outputs <span style="color:#f92672">=</span> { self<span style="color:#f92672">,</span> nixpkgs<span style="color:#f92672">,</span> flake-utils }:
+</span></span><span style="display:flex;"><span>    flake-utils<span style="color:#f92672">.</span>lib<span style="color:#f92672">.</span>eachDefaultSystem (system:
+</span></span><span style="display:flex;"><span>      <span style="color:#66d9ef">let</span> pkgs <span style="color:#f92672">=</span> nixpkgs<span style="color:#f92672">.</span>legacyPackages<span style="color:#f92672">.</span><span style="color:#e6db74">${</span>system<span style="color:#e6db74">}</span>; <span style="color:#66d9ef">in</span> {
+</span></span><span style="display:flex;"><span>        devShells<span style="color:#f92672">.</span>default <span style="color:#f92672">=</span> pkgs<span style="color:#f92672">.</span>mkShell {
+</span></span><span style="display:flex;"><span>          buildInputs <span style="color:#f92672">=</span> <span style="color:#66d9ef">with</span> pkgs; [
+</span></span><span style="display:flex;"><span>            git
+</span></span><span style="display:flex;"><span>            nodejs
+</span></span><span style="display:flex;"><span>            python3
+</span></span><span style="display:flex;"><span>            go
+</span></span><span style="display:flex;"><span>            bun
+</span></span><span style="display:flex;"><span>            uv
+</span></span><span style="display:flex;"><span>            gnumake
+</span></span><span style="display:flex;"><span>            curl
+</span></span><span style="display:flex;"><span>            jq
+</span></span><span style="display:flex;"><span>          ];
+</span></span><span style="display:flex;"><span>        };
+</span></span><span style="display:flex;"><span>      });
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><h3 id="understanding-the-bwrap-flags">Understanding the bwrap Flags</h3>
+<p>The sandbox-bwrap-nix wrapper script uses a carefully constructed set of Bubblewrap flags. Here is what each one does:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Flag</th>
+          <th>Purpose</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>--ro-bind /nix/store /nix/store</code></td>
+          <td>Mounts the Nix store read-only so the agent cannot corrupt its toolchain</td>
+      </tr>
+      <tr>
+          <td><code>--bind /path/to/project /path/to/project</code></td>
+          <td>Gives the agent write access only to the project directory</td>
+      </tr>
+      <tr>
+          <td><code>--tmpfs /tmp</code></td>
+          <td>Creates an empty, ephemeral temp directory that disappears when the sandbox exits</td>
+      </tr>
+      <tr>
+          <td><code>--tmpfs /home</code></td>
+          <td>Provides a clean home directory with no access to your real home</td>
+      </tr>
+      <tr>
+          <td><code>--unshare-pid</code></td>
+          <td>Creates a separate PID namespace so the agent cannot see other processes</td>
+      </tr>
+      <tr>
+          <td><code>--unshare-ipc</code></td>
+          <td>Isolates IPC resources</td>
+      </tr>
+      <tr>
+          <td><code>--unshare-uts</code></td>
+          <td>Gives the sandbox its own hostname</td>
+      </tr>
+      <tr>
+          <td><code>--clearenv</code></td>
+          <td>Strips all inherited environment variables</td>
+      </tr>
+      <tr>
+          <td><code>--setenv HOME /home/sandbox</code></td>
+          <td>Sets a clean HOME path inside the sandbox</td>
+      </tr>
+      <tr>
+          <td><code>--share-net</code></td>
+          <td>Re-enables network access (needed for LLM API calls)</td>
+      </tr>
+  </tbody>
+</table>
+<p>The <code>--share-net</code> flag is particularly important for AI agents. Without network access, the agent cannot call LLM APIs, install packages, or fetch remote resources. By explicitly granting network access rather than inheriting it, you maintain the zero-sandbox principle while enabling the agent to function.</p>
+<h3 id="customizing-your-sandbox-environment">Customizing Your Sandbox Environment</h3>
+<p>The sandbox-bwrap-nix project includes a pre-configured sandbox-home directory. You can customize it by editing the files in <code>sandbox-home/</code>:</p>
+<ul>
+<li><strong><code>.bashrc</code></strong>: Set aliases, environment variables, and shell prompts that help you identify when you are inside the sandbox (the hostname is changed to &ldquo;bubblewrap&rdquo; for easy identification).</li>
+<li><strong><code>nix.conf</code></strong>: Configure Nix settings like substituters, trusted users, and experimental features.</li>
+<li><strong><code>opencode.json</code></strong>: Pre-configure OpenCode with your preferred model, temperature, and other settings.</li>
+</ul>
+<p>For credential management, the recommended approach is to inject only what the agent needs. If your agent needs to push to GitHub, create a read-only <code>.gitconfig</code> with a limited-scope token:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>--ro-bind /path/to/sandbox-home/.gitconfig /home/sandbox/.gitconfig
+</span></span></code></pre></div><p>This gives the agent access to git configuration without exposing your personal <code>.gitconfig</code> or SSH keys.</p>
+<h2 id="what-you-get-isolation-layers-explained">What You Get: Isolation Layers Explained</h2>
+<h3 id="filesystem-isolation">Filesystem Isolation</h3>
+<p>The filesystem isolation in sandbox-bwrap-nix operates at three levels. First, the Nix store is mounted read-only, preventing the agent from modifying its own toolchain. Second, the project directory is mounted with read-write access, allowing the agent to create and modify files as needed for its work. Third, everything else — your home directory, system configuration files, mounted drives — is invisible to the agent.</p>
+<p>This means an agent compromised by a prompt injection attack cannot read your SSH keys from <code>~/.ssh/</code>, cannot modify your system configuration in <code>/etc/</code>, and cannot access files in other projects. The only files it can read are the Nix store (read-only) and the project directory. The only files it can write are in the project directory.</p>
+<h3 id="process-and-pid-namespace-isolation">Process and PID Namespace Isolation</h3>
+<p>With <code>--unshare-pid</code>, the sandbox gets its own process ID namespace. The agent running inside the sandbox sees only its own process tree. It cannot see your shell sessions, your other running applications, or sibling processes. This prevents a class of attacks where an agent reads process information to discover credentials, API keys, or sensitive data in command-line arguments.</p>
+<p>The <code>--unshare-ipc</code> flag extends this isolation to inter-process communication resources, preventing the agent from interacting with host processes through shared memory or semaphores.</p>
+<h3 id="environment-variable-cleanup">Environment Variable Cleanup</h3>
+<p>Environment variables are a common vector for credential leaks. Many developers store API keys, database passwords, and cloud provider credentials in environment variables. When an AI agent inherits these variables, it has implicit access to all of them.</p>
+<p>The <code>--clearenv</code> flag in sandbox-bwrap-nix strips every environment variable before the agent starts. You then explicitly set only the variables the agent needs:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>--setenv HOME /home/sandbox <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>--setenv USER sandbox <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>--setenv OPENAI_API_KEY your-key-here
+</span></span></code></pre></div><p>This whitelist approach means you can audit exactly which credentials are exposed to the agent. No more wondering whether <code>AWS_SECRET_ACCESS_KEY</code> or <code>GITHUB_TOKEN</code> leaked into the agent&rsquo;s environment.</p>
+<h2 id="real-world-use-cases">Real-World Use Cases</h2>
+<h3 id="running-ai-coding-agents-opencode-claude-code-codex">Running AI Coding Agents (OpenCode, Claude Code, Codex)</h3>
+<p>The primary use case for sandbox-bwrap-nix is running AI coding agents in isolation. When you launch an agent inside the sandbox, it has access to the project files, the Nix-provided toolchain, and network connectivity for API calls. It does not have access to your SSH keys, GPG keys, personal files, or other projects.</p>
+<p>This is particularly valuable for organizations that use AI agents in CI/CD pipelines. A compromised agent in CI could push malicious code, exfiltrate secrets, or modify build artifacts. With sandbox-bwrap-nix, the blast radius is limited to the project directory and the ephemeral sandbox environment.</p>
+<h3 id="experimenting-with-nix-flakes-safely">Experimenting with Nix Flakes Safely</h3>
+<p>Nix flakes are powerful but can be dangerous. A flake from an untrusted source can execute arbitrary code during evaluation or build. Running <code>nix develop</code> inside a Bubblewrap sandbox contains this risk. If the flake tries to access your home directory, SSH keys, or other sensitive resources, it will fail because those resources are not mounted in the sandbox.</p>
+<p>This makes sandbox-bwrap-nix an excellent tool for evaluating Nix flakes from new or untrusted sources. You can test the flake, inspect its outputs, and decide whether to trust it — all without exposing your system.</p>
+<h3 id="testing-untrusted-code">Testing Untrusted Code</h3>
+<p>Beyond AI agents, sandbox-bwrap-nix is useful for any scenario where you need to run untrusted code. The combination of filesystem isolation, process isolation, and environment cleanup provides a safe environment for:</p>
+<ul>
+<li>Testing packages from unfamiliar sources</li>
+<li>Running code snippets from forums or AI assistants</li>
+<li>Evaluating open-source projects before installation</li>
+<li>Debugging build scripts that might have side effects</li>
+</ul>
+<p>The key advantage over Docker for these use cases is speed. A Bubblewrap sandbox starts in under a second, making it practical for ad-hoc testing where Docker&rsquo;s startup overhead would be prohibitive.</p>
+<h2 id="comparison-with-alternatives">Comparison with Alternatives</h2>
+<h3 id="sandbox-bwrap-nix-vs-docker">sandbox-bwrap-nix vs Docker</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Feature</th>
+          <th>sandbox-bwrap-nix</th>
+          <th>Docker</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Startup time</td>
+          <td>Under 1 second</td>
+          <td>2-30 seconds</td>
+      </tr>
+      <tr>
+          <td>Daemon required</td>
+          <td>No</td>
+          <td>Yes (dockerd)</td>
+      </tr>
+      <tr>
+          <td>Root required</td>
+          <td>No</td>
+          <td>Yes (daemon runs as root)</td>
+      </tr>
+      <tr>
+          <td>Image management</td>
+          <td>None (uses host Nix store)</td>
+          <td>Pull, store, update images</td>
+      </tr>
+      <tr>
+          <td>Configuration</td>
+          <td>Single shell script or config file</td>
+          <td>Dockerfile, compose, volumes</td>
+      </tr>
+      <tr>
+          <td>Network isolation</td>
+          <td>Explicit grant (&ndash;share-net)</td>
+          <td>Default isolated, explicit expose</td>
+      </tr>
+      <tr>
+          <td>Filesystem isolation</td>
+          <td>Bind mounts</td>
+          <td>Union filesystem + volumes</td>
+      </tr>
+      <tr>
+          <td>Auditability</td>
+          <td>Every flag visible in command</td>
+          <td>Multiple configuration layers</td>
+      </tr>
+      <tr>
+          <td>Cross-platform</td>
+          <td>Linux only</td>
+          <td>Linux, macOS, Windows</td>
+      </tr>
+  </tbody>
+</table>
+<p>Docker is the right choice when you need a full operating system environment, complete network isolation, or cross-platform consistency. sandbox-bwrap-nix is the right choice when you need speed, simplicity, and auditability for Linux-native workloads.</p>
+<h3 id="sandbox-bwrap-nix-vs-ai-jail">sandbox-bwrap-nix vs ai-jail</h3>
+<p>ai-jail is a Rust tool (~880KB, 4 dependencies, 124 tests) that wraps Bubblewrap with a TOML configuration file. It supports Linux (bwrap), macOS (sandbox-exec), and Windows via WSL2. With 977 GitHub stars and 86 forks, it is the most popular Bubblewrap-based AI sandbox tool.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Feature</th>
+          <th>sandbox-bwrap-nix</th>
+          <th>ai-jail</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Language</td>
+          <td>Shell + Nix</td>
+          <td>Rust</td>
+      </tr>
+      <tr>
+          <td>Configuration</td>
+          <td>Nix flake + shell script</td>
+          <td>TOML file</td>
+      </tr>
+      <tr>
+          <td>Nix integration</td>
+          <td>Native (Nix store mounted)</td>
+          <td>No native Nix support</td>
+      </tr>
+      <tr>
+          <td>Cross-platform</td>
+          <td>Linux only</td>
+          <td>Linux, macOS, Windows</td>
+      </tr>
+      <tr>
+          <td>Per-project config</td>
+          <td>Manual</td>
+          <td>Committable .ai-jail TOML</td>
+      </tr>
+      <tr>
+          <td>Lockdown mode</td>
+          <td>Manual flag selection</td>
+          <td>Built-in lockdown mode</td>
+      </tr>
+      <tr>
+          <td>Bootstrap</td>
+          <td>Manual</td>
+          <td>Generates permission configs</td>
+      </tr>
+      <tr>
+          <td>GitHub stars</td>
+          <td>New project</td>
+          <td>977 stars</td>
+      </tr>
+  </tbody>
+</table>
+<p>ai-jail is more mature and feature-rich, particularly for cross-platform use. sandbox-bwrap-nix offers deeper Nix integration and a simpler, more transparent configuration model.</p>
+<h3 id="sandbox-bwrap-nix-vs-claudes-built-in-sandbox">sandbox-bwrap-nix vs Claude&rsquo;s Built-in Sandbox</h3>
+<p>Claude Code has included Bubblewrap-based sandboxing since October 2025. It provides automatic sandboxing for Claude Code sessions on Linux.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Feature</th>
+          <th>sandbox-bwrap-nix</th>
+          <th>Claude&rsquo;s Built-in Sandbox</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Agent support</td>
+          <td>Any agent</td>
+          <td>Claude Code only</td>
+      </tr>
+      <tr>
+          <td>Escape hatch</td>
+          <td>No escape</td>
+          <td><code>dangerouslyDisableSandbox</code> option</td>
+      </tr>
+      <tr>
+          <td>Configuration</td>
+          <td>Full control</td>
+          <td>Limited to Claude&rsquo;s defaults</td>
+      </tr>
+      <tr>
+          <td>Nix integration</td>
+          <td>Native</td>
+          <td>None</td>
+      </tr>
+      <tr>
+          <td>Transparency</td>
+          <td>Open source</td>
+          <td>Proprietary</td>
+      </tr>
+      <tr>
+          <td>Customization</td>
+          <td>Full</td>
+          <td>Minimal</td>
+      </tr>
+  </tbody>
+</table>
+<p>The critical difference is the escape hatch. Claude&rsquo;s sandbox includes a <code>dangerouslyDisableSandbox</code> option that completely bypasses protection. sandbox-bwrap-nix has no such escape — if the sandbox is configured, the agent operates within it.</p>
+<h2 id="limitations-and-considerations">Limitations and Considerations</h2>
+<p>sandbox-bwrap-nix is not a complete security solution. It relies on Linux kernel namespaces, which have had vulnerabilities in the past. A kernel-level exploit could potentially break out of the sandbox. For workloads requiring the highest security, consider combining Bubblewrap with Landlock or seccomp for defense-in-depth.</p>
+<p>The tool is Linux-only. macOS users need Docker or a Linux VM, and Windows users need WSL2. This is a fundamental limitation of Bubblewrap, which uses Linux-specific kernel features.</p>
+<p>Network isolation is minimal. The <code>--share-net</code> flag gives the agent full network access, which is necessary for LLM API calls but means the agent can communicate with any internet service. For stricter isolation, you could use a network namespace with iptables rules, but this adds complexity.</p>
+<p>Finally, sandbox-bwrap-nix is a very new project (created July 25, 2026). It has not been battle-tested at scale. While the underlying technologies (Bubblewrap and Nix) are mature, the integration is fresh and may have edge cases that have not yet been discovered.</p>
+<h2 id="conclusion-is-sandbox-bwrap-nix-right-for-you">Conclusion: Is sandbox-bwrap-nix Right for You?</h2>
+<p>sandbox-bwrap-nix is an excellent choice if you are a Linux user running AI coding agents and want a lightweight, auditable sandbox that boots in under a second. It is particularly well-suited for Nix users who want reproducible development environments combined with strong isolation guarantees.</p>
+<p>If you need cross-platform support, consider ai-jail. If you need full operating system isolation, consider Docker. If you only use Claude Code and are satisfied with its built-in sandbox, you may not need sandbox-bwrap-nix at all.</p>
+<p>But if you value the zero-sandbox principle — the idea that every permission should be explicit, auditable, and minimal — sandbox-bwrap-nix delivers a clean, transparent implementation that is hard to beat. In an era where AI agents are becoming more capable and more autonomous, lightweight sandboxing is not a nice-to-have. It is a fundamental security practice.</p>
+<h2 id="frequently-asked-questions">Frequently Asked Questions</h2>
+<p><strong>Q: Does sandbox-bwrap-nix require root access?</strong></p>
+<p>A: No. Bubblewrap supports unprivileged user namespaces, which means sandbox-bwrap-nix runs entirely without root privileges. Your Linux kernel must support user namespaces, which is the default on most modern distributions.</p>
+<p><strong>Q: Can the AI agent access my SSH keys or AWS credentials inside the sandbox?</strong></p>
+<p>A: No. The sandbox uses <code>--clearenv</code> to strip all environment variables and <code>--tmpfs /home</code> to provide an isolated home directory. Your real SSH keys and credentials are not mounted into the sandbox unless you explicitly bind them.</p>
+<p><strong>Q: How does sandbox-bwrap-nix compare to running an agent in a Docker container?</strong></p>
+<p>A: sandbox-bwrap-nix starts in under a second, requires no daemon, and has no image management overhead. Docker provides stronger isolation (full OS environment, network namespaces) but at the cost of startup time, disk space, and operational complexity.</p>
+<p><strong>Q: Can I use sandbox-bwrap-nix with any AI coding agent?</strong></p>
+<p>A: Yes. The sandbox is agent-agnostic. It works with Claude Code, OpenCode, Codex, and any other agent that runs in a Linux shell. You just need to configure the Nix flake to include the tools your agent requires.</p>
+<p><strong>Q: What happens to files created inside the sandbox?</strong></p>
+<p>A: Files written to the project directory (which is bind-mounted from the host) persist after the sandbox exits. Files written to <code>/tmp</code> or <code>/home</code> inside the sandbox are ephemeral and disappear when the sandbox process terminates.</p>
+]]></content:encoded></item></channel></rss>
