@@ -1,4 +1,702 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Anthropic on RockB</title><link>https://baeseokjae.github.io/tags/anthropic/</link><description>Recent content in Anthropic on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Mon, 22 Jun 2026 00:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/anthropic/index.xml" rel="self" type="application/rss+xml"/><item><title>Claude Code Network Sandbox SOCKS5 Null-Byte Bypass: The 5.5-Month Hole in Anthropic's Agent Egress Control</title><link>https://baeseokjae.github.io/posts/claude-code-network-sandbox-socks5-null-byte-bypass-guide-2026/</link><pubDate>Mon, 22 Jun 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/claude-code-network-sandbox-socks5-null-byte-bypass-guide-2026/</guid><description>Complete guide to the Claude Code SOCKS5 null-byte sandbox bypass (v2.0.24–v2.1.89), how the parser differential worked, disclosure timeline, and mitiga...</description><content:encoded><![CDATA[<p>Every Claude Code release from v2.0.24 (October 20, 2025) through v2.1.89 (March 31, 2026) shipped a network sandbox that was trivially bypassable with a single null byte. If you ran Claude Code with a wildcard allowlist like <code>*.google.com</code>, any code executing inside the sandbox — whether through prompt injection, a malicious dependency, or a compromised repo — could reach any host on the internet by sending a SOCKS5 hostname like <code>attacker-host.com\x00.google.com</code>. The JavaScript allowlist filter saw the trailing <code>.google.com</code> and approved the connection; the OS resolver truncated at the null byte and dialed <code>attacker-host.com</code>. This is a parser-differential vulnerability in its purest form, and as of June 2026, it still has no CVE assigned to Claude Code itself.</p>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Anthropic on RockB</title><link>https://baeseokjae.github.io/tags/anthropic/</link><description>Recent content in Anthropic on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 28 Jul 2026 07:16:38 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/anthropic/index.xml" rel="self" type="application/rss+xml"/><item><title>Claude Think Tool: How Chain-of-Thought Reasoning Works in Claude</title><link>https://baeseokjae.github.io/posts/claude-think-tool/</link><pubDate>Tue, 28 Jul 2026 07:16:38 +0000</pubDate><guid>https://baeseokjae.github.io/posts/claude-think-tool/</guid><description>The Claude think tool gives AI agents dedicated space for structured chain-of-thought reasoning during complex tool use, improving accuracy by up to 54% on agentic benchmarks.</description><content:encoded><![CDATA[<p>The Claude think tool is a dedicated reasoning mechanism built into Anthropic&rsquo;s API that gives Claude a structured space to perform chain-of-thought reasoning during complex multi-step tool use. Unlike standard prompting where the model must produce an answer immediately, the think tool lets Claude pause, analyze, plan, and reason before taking action — resulting in measurably better performance on agentic tasks, with τ-Bench scores improving by up to 54% in airline customer service domains.</p>
+<h2 id="what-is-the-claude-think-tool">What Is the Claude Think Tool?</h2>
+<p>The think tool, introduced by Anthropic in March 2025, is a specialized API tool that provides Claude with a dedicated &ldquo;scratchpad&rdquo; for structured thinking during complex tool-use workflows. It is defined as a standard tool in the API, accepting a single <code>thought</code> string parameter where Claude writes its reasoning before proceeding to the next action.</p>
+<h3 id="the-official-definition-from-anthropic">The Official Definition from Anthropic</h3>
+<p>According to Anthropic&rsquo;s engineering blog, the think tool &ldquo;gives Claude a dedicated space to think during tool use.&rdquo; It is fundamentally different from the model&rsquo;s default behavior — instead of generating a response immediately, Claude can use the think tool to reason through a problem step by step, consider multiple approaches, and plan its tool calls before executing them. This structured thinking happens mid-response, during the tool-use chain, not before it.</p>
+<p>The think tool was developed specifically to address a key limitation in agentic AI: when models are given multiple tools and must decide which to use and in what order, they often make hasty or incorrect choices. By providing a dedicated thinking step, Anthropic found that Claude makes more deliberate, accurate decisions.</p>
+<h3 id="think-tool-vs-extended-thinking--key-differences">Think Tool vs Extended Thinking — Key Differences</h3>
+<p>One of the most common points of confusion is the distinction between the think tool and extended thinking. They serve different purposes and operate at different stages of the response cycle.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Feature</th>
+          <th>Think Tool</th>
+          <th>Extended Thinking</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Introduced</strong></td>
+          <td>March 2025</td>
+          <td>February 2025 (Claude 3.7 Sonnet)</td>
+      </tr>
+      <tr>
+          <td><strong>When it occurs</strong></td>
+          <td>Mid-response, during tool use</td>
+          <td>Before the response begins</td>
+      </tr>
+      <tr>
+          <td><strong>Purpose</strong></td>
+          <td>Structured reasoning during tool chains</td>
+          <td>Deep reasoning on complex problems</td>
+      </tr>
+      <tr>
+          <td><strong>User visibility</strong></td>
+          <td>Visible in tool call output</td>
+          <td>Visible thought process</td>
+      </tr>
+      <tr>
+          <td><strong>Control mechanism</strong></td>
+          <td>Tool definition with <code>thought</code> parameter</td>
+          <td>Thinking budget (token allocation)</td>
+      </tr>
+      <tr>
+          <td><strong>Best for</strong></td>
+          <td>Multi-step agentic workflows</td>
+          <td>Complex analysis, math, coding</td>
+      </tr>
+      <tr>
+          <td><strong>Anthropic&rsquo;s recommendation (Dec 2025)</strong></td>
+          <td>Use extended thinking instead in most cases</td>
+          <td>Preferred approach for most use cases</td>
+      </tr>
+  </tbody>
+</table>
+<p>The key architectural difference is timing. Extended thinking happens before Claude starts generating its response — the model thinks deeply about the problem, then answers. The think tool happens during the response, between tool calls, allowing Claude to reason about what to do next based on the results it has already received.</p>
+<h2 id="how-chain-of-thought-reasoning-works-in-claude">How Chain-of-Thought Reasoning Works in Claude</h2>
+<p>Chain-of-thought (CoT) reasoning is the fundamental technique behind both the think tool and extended thinking. It involves breaking down complex problems into intermediate steps rather than jumping directly to a conclusion.</p>
+<h3 id="the-three-levels-of-cot-prompting">The Three Levels of CoT Prompting</h3>
+<p>Research from the Claude developer community identifies three distinct levels of chain-of-thought prompting, each offering increasing structure and reliability:</p>
+<p><strong>1. Basic CoT Prompting.</strong> Simply adding &ldquo;think step by step&rdquo; to your prompt. This is the simplest approach and works well for straightforward problems. Claude will naturally break down the problem in its response, but the format is unstructured and can vary between runs.</p>
+<p><strong>2. Guided CoT Prompting.</strong> Providing specific reasoning steps the model should follow. For example, in a financial analysis task, you might instruct Claude to: (a) identify the key variables, (b) calculate each figure independently, (c) consider market conditions, and (d) produce a final recommendation. This produces more consistent results than basic prompting.</p>
+<p><strong>3. Structured CoT with XML Tags.</strong> The most reliable approach. Reasoning is enclosed in structured XML tags that cleanly separate the thinking process from the final output. This is the approach that inspired the think tool&rsquo;s design and is the foundation of Anthropic&rsquo;s official implementation.</p>
+<h3 id="structured-thinking-with-xml-tags">Structured Thinking with XML Tags</h3>
+<p>Structured CoT using XML tags is widely considered the best practice for Claude reasoning. The format looks like this:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 512 105"
+      >
+      <g transform='translate(8,16)'>
+<polygon points='8.000000,80.000000 -4.000000,74.400002 -4.000000,85.599998' fill='currentColor' transform='rotate(180.000000, 0.000000, 80.000000)'></polygon>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>&lt;</text>
+<text text-anchor='middle' x='0' y='20' fill='currentColor' style='font-size:1em'>L</text>
+<text text-anchor='middle' x='0' y='36' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='0' y='52' fill='currentColor' style='font-size:1em'>2</text>
+<text text-anchor='middle' x='0' y='68' fill='currentColor' style='font-size:1em'>3</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='8' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='8' y='36' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='8' y='52' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='8' y='68' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='8' y='84' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='16' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='16' y='84' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='24' y='36' fill='currentColor' style='font-size:1em'>F</text>
+<text text-anchor='middle' x='24' y='52' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='24' y='68' fill='currentColor' style='font-size:1em'>F</text>
+<text text-anchor='middle' x='24' y='84' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='32' y='20' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='32' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='32' y='52' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='32' y='68' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='32' y='84' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='40' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='40' y='36' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='40' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='40' y='68' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='40' y='84' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='48' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='48' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='48' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='48' y='84' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='56' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='56' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='56' y='52' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='56' y='68' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='56' y='84' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='64' y='20' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='64' y='36' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='64' y='68' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='64' y='84' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>&gt;</text>
+<text text-anchor='middle' x='72' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='72' y='52' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='72' y='68' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='72' y='84' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='80' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='80' y='36' fill='currentColor' style='font-size:1em'>I</text>
+<text text-anchor='middle' x='80' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='80' y='68' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='80' y='84' fill='currentColor' style='font-size:1em'>&gt;</text>
+<text text-anchor='middle' x='88' y='20' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='88' y='52' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='96' y='20' fill='currentColor' style='font-size:1em'>z</text>
+<text text-anchor='middle' x='96' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='96' y='52' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='96' y='68' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='104' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='104' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='104' y='52' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='104' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='112' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='112' y='52' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='112' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='120' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='120' y='36' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='120' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='128' y='20' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='128' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='128' y='68' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='136' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='136' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='136' y='52' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='136' y='68' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='144' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='144' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='144' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='144' y='68' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='152' y='68' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='160' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='160' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='160' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='160' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='168' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='168' y='36' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='168' y='52' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='176' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='176' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='176' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='176' y='68' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='184' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='184' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='184' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='184' y='68' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='192' y='36' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='192' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='200' y='20' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='200' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='200' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='208' y='20' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='208' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='208' y='52' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='208' y='68' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='216' y='36' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='216' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='216' y='68' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='224' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='224' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='224' y='52' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='232' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='232' y='52' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='232' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='240' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='240' y='36' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='240' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='240' y='68' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='248' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='248' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='248' y='68' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='256' y='20' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='256' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='256' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='256' y='68' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='264' y='36' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='264' y='52' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='264' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='272' y='36' fill='currentColor' style='font-size:1em'>'</text>
+<text text-anchor='middle' x='272' y='52' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='272' y='68' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='280' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='280' y='52' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='280' y='68' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='288' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='288' y='68' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='296' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='296' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='296' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='304' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='304' y='68' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='312' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='312' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='320' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='320' y='52' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='320' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='328' y='36' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='328' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='328' y='68' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='336' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='336' y='52' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='336' y='68' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='344' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='344' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='344' y='68' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='352' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='352' y='68' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='360' y='36' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='360' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='360' y='68' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='368' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='368' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='376' y='36' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='376' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='376' y='68' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='384' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='384' y='52' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='384' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='392' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='392' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='400' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='400' y='52' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='400' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='408' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='408' y='52' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='408' y='68' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='416' y='36' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='416' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='416' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='424' y='52' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='432' y='52' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='432' y='68' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='440' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='440' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='448' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='456' y='52' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='456' y='68' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='464' y='52' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='464' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='472' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='472' y='68' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='480' y='52' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='480' y='68' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='488' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='496' y='52' fill='currentColor' style='font-size:1em'>.</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>This approach cleanly separates reasoning from output, making it easier to debug, monitor, and control Claude&rsquo;s behavior. The think tool formalizes this pattern into a proper API tool, giving developers programmatic access to structured reasoning.</p>
+<h2 id="the-think-tool-in-action-architecture-and-implementation">The Think Tool in Action: Architecture and Implementation</h2>
+<h3 id="tool-definition-format">Tool Definition Format</h3>
+<p>The think tool is defined as a standard Claude API tool with a single string parameter:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;name&#34;</span>: <span style="color:#e6db74">&#34;think&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;description&#34;</span>: <span style="color:#e6db74">&#34;Use the tool to think about something. It does not interact with the outside world, so use it when you need to plan or reason about the next steps.&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;input_schema&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;object&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;properties&#34;</span>: {
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;thought&#34;</span>: {
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;string&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">&#34;description&#34;</span>: <span style="color:#e6db74">&#34;Your thinking about the current situation.&#34;</span>
+</span></span><span style="display:flex;"><span>      }
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;required&#34;</span>: [<span style="color:#e6db74">&#34;thought&#34;</span>]
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>The tool has no external side effects — it does not call any API, read any file, or interact with the world. Its sole purpose is to give Claude a structured space to reason.</p>
+<h3 id="python-implementation-example">Python Implementation Example</h3>
+<p>Here is a minimal implementation that adds the think tool to any Claude-powered agent:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> anthropic
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>client <span style="color:#f92672">=</span> anthropic<span style="color:#f92672">.</span>Anthropic()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>think_tool <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;name&#34;</span>: <span style="color:#e6db74">&#34;think&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;description&#34;</span>: <span style="color:#e6db74">&#34;Use this tool to reason about the next steps before taking action.&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;input_schema&#34;</span>: {
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;object&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;properties&#34;</span>: {
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;thought&#34;</span>: {
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;string&#34;</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;description&#34;</span>: <span style="color:#e6db74">&#34;Your step-by-step reasoning about the current situation.&#34;</span>
+</span></span><span style="display:flex;"><span>            }
+</span></span><span style="display:flex;"><span>        },
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;required&#34;</span>: [<span style="color:#e6db74">&#34;thought&#34;</span>]
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>response <span style="color:#f92672">=</span> client<span style="color:#f92672">.</span>messages<span style="color:#f92672">.</span>create(
+</span></span><span style="display:flex;"><span>    model<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;claude-sonnet-4-20250514&#34;</span>,
+</span></span><span style="display:flex;"><span>    max_tokens<span style="color:#f92672">=</span><span style="color:#ae81ff">4096</span>,
+</span></span><span style="display:flex;"><span>    tools<span style="color:#f92672">=</span>[think_tool, search_tool, calculator_tool],
+</span></span><span style="display:flex;"><span>    messages<span style="color:#f92672">=</span>[{<span style="color:#e6db74">&#34;role&#34;</span>: <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#e6db74">&#34;content&#34;</span>: <span style="color:#e6db74">&#34;Find the cheapest flight from NYC to London next week and calculate the total with taxes.&#34;</span>}]
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre></div><p>When Claude needs to reason about which tool to call next, it invokes the think tool, writes its reasoning in the <code>thought</code> parameter, and then proceeds with the appropriate action. This simple addition can dramatically improve agentic reliability.</p>
+<h3 id="when-to-use-the-think-tool-vs-extended-thinking">When to Use the Think Tool vs Extended Thinking</h3>
+<p>The decision between the think tool and extended thinking depends on your use case:</p>
+<p><strong>Use the think tool when:</strong></p>
+<ul>
+<li>Building multi-step agentic workflows with multiple tool calls</li>
+<li>Your agent needs to decide between several possible actions</li>
+<li>You want visibility into Claude&rsquo;s decision-making process during tool use</li>
+<li>Debugging complex tool chains</li>
+</ul>
+<p><strong>Use extended thinking when:</strong></p>
+<ul>
+<li>Solving complex analytical problems (math, science, coding)</li>
+<li>You need deep reasoning before any action is taken</li>
+<li>Working on problems that benefit from significant thinking budget</li>
+<li>Building applications where the final answer quality matters more than intermediate steps</li>
+</ul>
+<p><strong>Important update (December 2025):</strong> Anthropic now recommends extended thinking over the think tool in most cases. Extended thinking provides deeper, more thorough reasoning and has been shown to produce better results across a wider range of tasks. However, the think tool remains valuable for agentic workflows where reasoning needs to happen between tool calls rather than before the response.</p>
+<h2 id="performance-benchmarks-and-results">Performance Benchmarks and Results</h2>
+<h3 id="τ-bench-results-airline-and-retail-domains">τ-Bench Results: Airline and Retail Domains</h3>
+<p>The most compelling evidence for the think tool&rsquo;s effectiveness comes from Anthropic&rsquo;s τ-Bench evaluation, which measures agentic performance in realistic customer service scenarios.</p>
+<p>In the airline domain, the think tool combined with an optimized prompt achieved a pass^1 score of <strong>0.570</strong> — a <strong>54% relative improvement</strong> over the baseline score of 0.370. This means Claude was able to correctly handle over half of complex airline customer service scenarios, compared to barely over a third without the think tool.</p>
+<p>In the retail domain, the improvement was more modest but still significant: <strong>0.812</strong> with the think tool versus <strong>0.783</strong> baseline. The retail domain is generally simpler than airline customer service (fewer edge cases, more straightforward workflows), so the baseline was already higher, but the think tool still delivered measurable gains.</p>
+<h3 id="gpqa-evaluation-with-parallel-test-time-compute">GPQA Evaluation with Parallel Test-Time Compute</h3>
+<p>Extended thinking, which builds on the same chain-of-thought principles, achieved even more impressive results on the GPQA benchmark — a graduate-level science reasoning test. By running <strong>256 independent samples</strong> in parallel and using a scoring model to select the best answer, Claude achieved <strong>84.8% accuracy</strong> on GPQA, with a physics subscore of <strong>96.5%</strong>.</p>
+<p>This demonstrates a key insight: chain-of-thought reasoning scales with compute. The more thinking tokens Claude is allowed to use, and the more independent reasoning chains it can explore, the better its accuracy becomes. The relationship between thinking tokens and accuracy follows a logarithmic curve — each additional unit of thinking compute delivers diminishing but consistent returns.</p>
+<h3 id="real-world-performance-gains">Real-World Performance Gains</h3>
+<p>Beyond benchmarks, the think tool has demonstrated practical improvements in real-world applications:</p>
+<ul>
+<li><strong>Prompt injection defense</strong> improved from 74% to 88% with new training, system prompt enhancements, and a dedicated classifier (at only 0.5% false positive rate)</li>
+<li><strong>Claude 3.7 Sonnet</strong> with extended thinking successfully beat 3 Pokémon Gym Leaders in Pokémon Red — a task where previous models failed to even leave Pallet Town</li>
+<li><strong>Agentic reliability</strong> in customer service workflows improved consistently across domains, with the largest gains seen in complex, multi-step scenarios</li>
+</ul>
+<h2 id="practical-guide-implementing-the-think-tool">Practical Guide: Implementing the Think Tool</h2>
+<h3 id="basic-implementation">Basic Implementation</h3>
+<p>To add the think tool to your Claude-powered application, follow these steps:</p>
+<ol>
+<li><strong>Define the tool</strong> using the JSON schema shown above</li>
+<li><strong>Include it in your tools array</strong> alongside your other tools</li>
+<li><strong>Let Claude use it naturally</strong> — the model learns to invoke the think tool when it needs to reason about complex decisions</li>
+<li><strong>Monitor think tool usage</strong> in your logs to understand when and how Claude uses it</li>
+</ol>
+<p>The think tool requires no special training or fine-tuning. Anthropic&rsquo;s base models are already trained to use it effectively through a combination of structured thinking training data and reinforcement learning.</p>
+<h3 id="optimized-prompt-engineering">Optimized Prompt Engineering</h3>
+<p>For best results, combine the think tool with a system prompt that encourages structured reasoning:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 560 121"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>Y</text>
+<text text-anchor='middle' x='0' y='20' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='0' y='36' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='0' y='52' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='0' y='68' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='0' y='100' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='8' y='100' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='16' y='20' fill='currentColor' style='font-size:1em'>P</text>
+<text text-anchor='middle' x='16' y='36' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='16' y='52' fill='currentColor' style='font-size:1em'>R</text>
+<text text-anchor='middle' x='16' y='68' fill='currentColor' style='font-size:1em'>R</text>
+<text text-anchor='middle' x='16' y='100' fill='currentColor' style='font-size:1em'>w</text>
+<text text-anchor='middle' x='24' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='24' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='24' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='24' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='24' y='100' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='32' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='32' y='36' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='32' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='32' y='68' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='32' y='100' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='40' y='20' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='40' y='36' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='40' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='40' y='68' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='40' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='48' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='48' y='52' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='48' y='68' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='56' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='56' y='36' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='56' y='52' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='56' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='56' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='64' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='64' y='68' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='64' y='100' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='72' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='72' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='72' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='80' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='80' y='36' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='80' y='52' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='80' y='68' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='80' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='88' y='20' fill='currentColor' style='font-size:1em'>q</text>
+<text text-anchor='middle' x='88' y='36' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='88' y='52' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='88' y='68' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='88' y='100' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='96' y='20' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='96' y='36' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='96' y='52' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='96' y='68' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='104' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='104' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='104' y='52' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='104' y='68' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='104' y='100' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='112' y='20' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='112' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='112' y='52' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='112' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='120' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='120' y='36' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='120' y='52' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='120' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='120' y='100' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='128' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='128' y='36' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='128' y='68' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='128' y='100' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='136' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='136' y='52' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='136' y='68' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='136' y='100' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='144' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='144' y='52' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='144' y='68' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='144' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='152' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='152' y='20' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='152' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='152' y='52' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='152' y='68' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='160' y='36' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='160' y='52' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='160' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='160' y='100' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='168' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='168' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='168' y='52' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='168' y='100' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='176' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='176' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='176' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='176' y='68' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='176' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='184' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='184' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='184' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='184' y='52' fill='currentColor' style='font-size:1em'>x</text>
+<text text-anchor='middle' x='184' y='68' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='184' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='192' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='192' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='192' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='192' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='200' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='200' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='200' y='52' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='200' y='68' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='200' y='100' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='208' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='208' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='208' y='52' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='208' y='68' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='216' y='4' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='216' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='216' y='36' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='216' y='52' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='216' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='216' y='100' fill='currentColor' style='font-size:1em'>w</text>
+<text text-anchor='middle' x='224' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='224' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='224' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='224' y='68' fill='currentColor' style='font-size:1em'>x</text>
+<text text-anchor='middle' x='224' y='100' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='232' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='232' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='232' y='36' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='232' y='52' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='232' y='68' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='232' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='240' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='240' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='240' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='240' y='52' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='240' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='240' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='248' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='248' y='36' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='248' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='248' y='68' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='256' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='256' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='256' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='256' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='256' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='264' y='4' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='264' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='264' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='264' y='100' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='272' y='36' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='272' y='52' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='272' y='68' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='272' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='280' y='4' fill='currentColor' style='font-size:1em'>U</text>
+<text text-anchor='middle' x='280' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='288' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='288' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='288' y='52' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='288' y='68' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='288' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='296' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='296' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='296' y='52' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='296' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='296' y='100' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='304' y='36' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='304' y='52' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='304' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='304' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='312' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='312' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='312' y='52' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='312' y='68' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='312' y='100' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='320' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='320' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='320' y='52' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='320' y='68' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='328' y='36' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='328' y='52' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='328' y='68' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='328' y='100' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='336' y='4' fill='currentColor' style='font-size:1em'>w</text>
+<text text-anchor='middle' x='336' y='52' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='336' y='68' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='336' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='344' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='344' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='344' y='100' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='352' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='352' y='100' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='360' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='360' y='100' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='368' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='368' y='100' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='376' y='4' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='376' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='384' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='384' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='392' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='400' y='100' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='408' y='4' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='408' y='100' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='416' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='416' y='100' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='424' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='424' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='440' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='440' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='448' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='448' y='100' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='456' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='456' y='100' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='464' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='464' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='480' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='480' y='100' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='488' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='488' y='100' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='496' y='4' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='496' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='512' y='100' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='520' y='100' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='528' y='100' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='536' y='100' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='544' y='100' fill='currentColor' style='font-size:1em'>.</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>The optimized prompt used in Anthropic&rsquo;s τ-Bench evaluation included similar guidance, which contributed to the 54% improvement in the airline domain.</p>
+<h3 id="migration-from-think-tool-to-extended-thinking">Migration from Think Tool to Extended Thinking</h3>
+<p>If you are currently using the think tool and want to migrate to extended thinking, the process is straightforward:</p>
+<ol>
+<li><strong>Enable extended thinking</strong> by setting the <code>thinking</code> parameter in your API call with an appropriate budget</li>
+<li><strong>Remove the think tool</strong> from your tools array (extended thinking handles reasoning before the response)</li>
+<li><strong>Adjust your prompt</strong> — extended thinking works best with prompts that clearly define the problem and expected output format</li>
+<li><strong>Test and compare</strong> — run your evaluation suite with both approaches to confirm extended thinking performs better for your specific use case</li>
+</ol>
+<p>Anthropic&rsquo;s December 2025 guidance recommends this migration for most applications, but the think tool remains the better choice for agentic workflows where reasoning must be interleaved with tool calls.</p>
+<h2 id="best-practices-and-common-pitfalls">Best Practices and Common Pitfalls</h2>
+<h3 id="when-not-to-use-the-think-tool">When NOT to Use the Think Tool</h3>
+<p>Chain-of-thought reasoning is not always beneficial. Avoid the think tool for:</p>
+<ul>
+<li><strong>Simple factual lookups</strong> — asking &ldquo;What is the capital of France?&rdquo; does not benefit from multi-step reasoning</li>
+<li><strong>Formatting tasks</strong> — converting text to JSON or reformatting data requires no intermediate reasoning</li>
+<li><strong>Quick classifications</strong> — binary decisions or simple categorization tasks are faster without thinking</li>
+<li><strong>High-throughput scenarios</strong> — each think tool invocation consumes tokens and adds latency</li>
+</ul>
+<p>For these tasks, the overhead of chain-of-thought reasoning outweighs any potential benefit.</p>
+<h3 id="token-budget-management">Token Budget Management</h3>
+<p>The think tool and extended thinking both consume tokens for reasoning. Key considerations:</p>
+<ul>
+<li><strong>Set appropriate max_tokens</strong> — thinking tokens count toward your total token limit, so increase your budget when using the think tool</li>
+<li><strong>Monitor thinking token usage</strong> — track how many tokens Claude spends on reasoning vs. output</li>
+<li><strong>Balance cost and quality</strong> — more thinking tokens generally improve accuracy, but with diminishing returns</li>
+<li><strong>Use thinking budget for extended thinking</strong> — the <code>thinking</code> parameter lets you set a specific budget for extended thinking tokens</li>
+</ul>
+<h3 id="debugging-and-monitoring">Debugging and Monitoring</h3>
+<p>To effectively debug Claude&rsquo;s reasoning:</p>
+<ol>
+<li><strong>Log all think tool invocations</strong> — capture the <code>thought</code> parameter to review Claude&rsquo;s reasoning</li>
+<li><strong>Track tool call sequences</strong> — monitor which tools Claude calls and in what order</li>
+<li><strong>Compare with and without thinking</strong> — run A/B tests to measure the impact on your specific use case</li>
+<li><strong>Watch for reasoning loops</strong> — in rare cases, Claude may get stuck in extended thinking cycles; set appropriate timeouts</li>
+</ol>
+<h2 id="the-future-of-claudes-reasoning-capabilities">The Future of Claude&rsquo;s Reasoning Capabilities</h2>
+<h3 id="from-think-tool-to-extended-thinking">From Think Tool to Extended Thinking</h3>
+<p>The evolution of Claude&rsquo;s reasoning capabilities follows a clear trajectory. The think tool, introduced in March 2025, represented a significant step forward in making chain-of-thought reasoning programmatically accessible. Extended thinking, which arrived with Claude 3.7 Sonnet in February 2025, took this further by making deep reasoning a first-class feature of the API.</p>
+<p>Anthropic&rsquo;s recommendation to prefer extended thinking over the think tool signals where the technology is heading. Future versions of Claude will likely integrate reasoning even more deeply into the model architecture, making the distinction between &ldquo;thinking&rdquo; and &ldquo;acting&rdquo; increasingly seamless.</p>
+<h3 id="parallel-test-time-compute-scaling">Parallel Test-Time Compute Scaling</h3>
+<p>One of the most exciting developments is parallel test-time compute scaling. By running multiple independent reasoning chains in parallel and using a scoring model to select the best result, Claude achieved 84.8% on GPQA — approaching human expert performance on graduate-level science questions.</p>
+<p>This approach, sometimes called &ldquo;best-of-N sampling&rdquo; or &ldquo;majority voting with scoring,&rdquo; demonstrates that reasoning quality can be scaled horizontally. As API costs decrease and inference infrastructure improves, parallel test-time compute will become an increasingly practical way to achieve higher accuracy without waiting for the next model release.</p>
+<h3 id="safety-and-alignment-considerations">Safety and Alignment Considerations</h3>
+<p>Anthropic has been transparent about the safety implications of visible reasoning. Key concerns include:</p>
+<ul>
+<li><strong>The faithfulness problem</strong> — Claude&rsquo;s stated reasoning may not always reflect its actual decision-making process</li>
+<li><strong>Jailbreak risk</strong> — visible thinking could potentially be exploited by adversarial prompts</li>
+<li><strong>Training incentives</strong> — models might learn to produce reasoning that sounds good rather than reasoning that is correct</li>
+</ul>
+<p>Despite these challenges, Anthropic has confirmed Claude 3.7 Sonnet at the ASL-2 safety standard with enhanced CBRN monitoring, and prompt injection defenses have improved from 74% to 88% with new training and system prompt enhancements.</p>
+<h2 id="frequently-asked-questions">Frequently Asked Questions</h2>
+<p><strong>Q: What is the Claude think tool and how does it work?</strong>
+A: The Claude think tool is an API tool that gives Claude a dedicated space for structured chain-of-thought reasoning during complex tool use. It accepts a <code>thought</code> string parameter where Claude writes its step-by-step reasoning before taking action, improving decision-making accuracy in multi-step agentic workflows.</p>
+<p><strong>Q: What is the difference between the think tool and extended thinking in Claude?</strong>
+A: The think tool operates mid-response during tool use, helping Claude decide which action to take next. Extended thinking happens before the response begins, providing deep reasoning on complex problems. Extended thinking is now Anthropic&rsquo;s recommended approach for most use cases as of December 2025.</p>
+<p><strong>Q: How much does the think tool improve Claude&rsquo;s performance?</strong>
+A: On Anthropic&rsquo;s τ-Bench evaluation, the think tool combined with an optimized prompt achieved a 54% relative improvement in the airline domain (0.570 vs 0.370 baseline) and improved retail domain performance from 0.783 to 0.812.</p>
+<p><strong>Q: How do I implement the think tool in my Claude API application?</strong>
+A: Define the think tool with a JSON schema containing a <code>thought</code> string parameter, include it in your tools array alongside your other tools, and let Claude invoke it naturally when it needs to reason about complex decisions. No special training or fine-tuning is required.</p>
+<p><strong>Q: When should I use the think tool versus extended thinking?</strong>
+A: Use the think tool for multi-step agentic workflows where reasoning needs to happen between tool calls. Use extended thinking for complex analytical problems, math, science, and coding tasks. Anthropic recommends extended thinking for most cases, but the think tool remains valuable for agentic workflows with interleaved reasoning and action.</p>
+]]></content:encoded></item><item><title>Claude Code Network Sandbox SOCKS5 Null-Byte Bypass: The 5.5-Month Hole in Anthropic's Agent Egress Control</title><link>https://baeseokjae.github.io/posts/claude-code-network-sandbox-socks5-null-byte-bypass-guide-2026/</link><pubDate>Mon, 22 Jun 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/claude-code-network-sandbox-socks5-null-byte-bypass-guide-2026/</guid><description>Complete guide to the Claude Code SOCKS5 null-byte sandbox bypass (v2.0.24–v2.1.89), how the parser differential worked, disclosure timeline, and mitiga...</description><content:encoded><![CDATA[<p>Every Claude Code release from v2.0.24 (October 20, 2025) through v2.1.89 (March 31, 2026) shipped a network sandbox that was trivially bypassable with a single null byte. If you ran Claude Code with a wildcard allowlist like <code>*.google.com</code>, any code executing inside the sandbox — whether through prompt injection, a malicious dependency, or a compromised repo — could reach any host on the internet by sending a SOCKS5 hostname like <code>attacker-host.com\x00.google.com</code>. The JavaScript allowlist filter saw the trailing <code>.google.com</code> and approved the connection; the OS resolver truncated at the null byte and dialed <code>attacker-host.com</code>. This is a parser-differential vulnerability in its purest form, and as of June 2026, it still has no CVE assigned to Claude Code itself.</p>
 <h2 id="how-the-claude-code-network-sandbox-works">How the Claude Code Network Sandbox Works</h2>
 <p>Claude Code&rsquo;s sandbox relies on two OS-level primitives — <code>bubblewrap</code> on Linux and <code>seatbelt</code> (sandbox-exec) on macOS — to isolate the Bash tool subprocess. These primitives strip the network namespace and pin all traffic to localhost ports where two proxy servers run on the host:</p>
 <ul>
