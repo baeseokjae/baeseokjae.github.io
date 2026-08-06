@@ -1,471 +1,49 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>AI Agent Testing on RockB</title><link>https://baeseokjae.github.io/tags/ai-agent-testing/</link><description>Recent content in AI Agent Testing on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sun, 26 Jul 2026 22:01:52 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/ai-agent-testing/index.xml" rel="self" type="application/rss+xml"/><item><title>WhatBroke: Diff Your AI Agent Behavior Between Two Runs — See What Changed in Tool Calls, Costs, and Outputs</title><link>https://baeseokjae.github.io/posts/whatbroke-agent-diff-2026/</link><pubDate>Sun, 26 Jul 2026 22:01:52 +0000</pubDate><guid>https://baeseokjae.github.io/posts/whatbroke-agent-diff-2026/</guid><description>WhatBroke is an open-source CLI tool that diffs AI agent behavior between runs — catching silent regressions in tool calls, costs, and outputs that human review misses.</description><content:encoded><![CDATA[<h2 id="the-problem--your-agent-can-fail-silently-while-talking-perfectly">The Problem — Your Agent Can Fail Silently While Talking Perfectly</h2>
-<p>AI agents are notoriously non-deterministic. Even at temperature 0 with a fixed random seed, small local models produce different tool call sequences between runs. This means your agent can output a perfectly coherent paragraph while silently calling the wrong tool, passing malformed arguments, or skipping a critical step entirely. The worst part? A human reading the final reply will never notice. The agent sounds confident, the text looks right, but the underlying behavior has broken. This is the &ldquo;vibe check&rdquo; trap — and it is the single most dangerous failure mode in production AI agent deployments today.</p>
-<h2 id="what-is-behavioral-diffing">What Is Behavioral Diffing?</h2>
-<p>Behavioral diffing is the practice of comparing two AI agent runs at the level of tool calls, argument values, execution order, latency, and cost — rather than comparing the natural language outputs. Instead of asking &ldquo;does the reply sound right?&rdquo;, behavioral diffing asks &ldquo;did the agent call the same tools in the same order with the same arguments?&rdquo;</p>
-<p>This distinction matters because agent behavior is what produces real-world outcomes. A customer support agent that calls <code>refund_order</code> instead of <code>escalate_ticket</code> has failed regardless of how polite its closing message sounds. A code-generation agent that calls <code>write_file</code> with the wrong path has introduced a bug regardless of how well it explains the change. Behavioral diffing catches these failures at the tool-call level, before they reach production.</p>
-<p>The approach draws from a well-established software engineering practice: snapshot testing. Just as frontend developers snapshot-render UI components to catch visual regressions, AI engineers can snapshot-record agent behavior to catch behavioral regressions. The key difference is that agent behavior is probabilistic, so a single snapshot is rarely enough — you need multiple samples to distinguish real regressions from normal agent flakiness.</p>
-<h2 id="whatbroke--the-tool-that-catches-silent-agent-regressions">WhatBroke — The Tool That Catches Silent Agent Regressions</h2>
-<p>WhatBroke is an open-source CLI tool (TypeScript, MIT license) purpose-built for diffing AI agent behavior between two runs. Created by arthi-arumugam-git and released on July 22, 2026, it has quickly become one of the most practical tools in the emerging agent-testing ecosystem. The npm package <code>whatbroke-cli</code> (v0.5.0) ships with zero runtime dependencies — only <code>picocolors</code> for terminal output — making it trivially easy to install in any CI pipeline.</p>
-<p>At its core, WhatBroke answers three questions:</p>
-<ol>
-<li><strong>What changed?</strong> — Which tool calls appeared, disappeared, or changed between runs?</li>
-<li><strong>Is it real?</strong> — Multi-sample diffing separates genuine regressions from pre-existing agent flakiness.</li>
-<li><strong>Should I care?</strong> — Breaking, changed, and info classifications help you triage what matters.</li>
-</ol>
-<h3 id="how-it-works-record--change--diff">How It Works: Record → Change → Diff</h3>
-<p>The workflow is a straightforward three-step pipeline:</p>
-<p><strong>Step 1: Record a baseline.</strong> Run your agent scenarios with WhatBroke&rsquo;s proxy recorder active. The recorder intercepts all LLM API calls via <code>OPENAI_BASE_URL</code> or <code>ANTHROPIC_BASE_URL</code> and saves the full trace — tool calls, arguments, responses, timing, and cost.</p>
-<p><strong>Step 2: Make your change.</strong> Swap the model, update the prompt, change the tool definitions, or modify the agent code.</p>
-<p><strong>Step 3: Diff against the baseline.</strong> Run the same scenarios again and let WhatBroke align the two runs by ID, align tool calls within each run, and produce a structured diff report. The output classifies every difference as:</p>
-<ul>
-<li><strong>Breaking</strong> — A tool call was removed, a required argument changed, or a critical step was skipped.</li>
-<li><strong>Changed</strong> — Arguments shifted, new tool calls appeared, or execution order changed.</li>
-<li><strong>Info</strong> — Timing, cost, or token count differences that don&rsquo;t affect correctness.</li>
-</ul>
-<h3 id="multi-sample-diffing-separating-signal-from-agent-flakiness">Multi-Sample Diffing: Separating Signal from Agent Flakiness</h3>
-<p>This is WhatBroke&rsquo;s killer feature. A single run of a non-deterministic agent is meaningless — the agent might call <code>search_knowledge_base</code> before <code>get_user_profile</code> in one run and the reverse in another, both producing the correct final answer. If you diff single runs, you&rsquo;ll see a &ldquo;change&rdquo; that was actually just normal variance.</p>
-<p>WhatBroke solves this by running each scenario multiple times per version. In the published case studies, the tool uses 3 runs per version (9 run pairs total: 3 baseline × 3 changed). This turns anecdotes into rates: instead of &ldquo;the tool call changed,&rdquo; you get &ldquo;in 6 out of 9 run pairs, the agent sent the tool&rsquo;s own JSON schema as arguments instead of actual data.&rdquo; A 6/9 rate is actionable; a single-run observation is noise.</p>
-<p>The multi-sample approach also prevents a common anti-pattern: blaming pre-existing flakiness on your change. If the baseline already shows 2/3 runs diverging on a particular tool call, a 3/3 divergence after your change is not a regression — it&rsquo;s the same flakiness. WhatBroke&rsquo;s diff report surfaces this distinction automatically.</p>
-<h3 id="the-proxy-recorder-zero-code-trace-capture">The Proxy Recorder: Zero-Code Trace Capture</h3>
-<p>WhatBroke&rsquo;s proxy recorder is the most elegant part of the tool. It requires zero code changes to your agent. You simply set an environment variable:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>export OPENAI_BASE_URL<span style="color:#f92672">=</span>http://localhost:3000/proxy
-</span></span><span style="display:flex;"><span><span style="color:#75715e"># or</span>
-</span></span><span style="display:flex;"><span>export ANTHROPIC_BASE_URL<span style="color:#f92672">=</span>http://localhost:3000/proxy
-</span></span></code></pre></div><p>Then run your agent as normal. The proxy intercepts every API call, records the full request and response, and forwards it to the real provider. No SDK integration, no monkey-patching, no code changes. This works with any agent framework — LangChain, CrewAI, AutoGPT, custom implementations — because it operates at the HTTP transport layer.</p>
-<p>For programmatic use, WhatBroke also provides SDKs for Node.js and Python (<code>pip install whatbroke-recorder</code>), giving you finer control over what gets recorded and when.</p>
-<h3 id="ci-integration-fail-the-build-on-breaking-changes">CI Integration: Fail the Build on Breaking Changes</h3>
-<p>WhatBroke is designed from the ground up for CI/CD pipelines. The <code>--fail-on</code> flag accepts a severity level:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>npx whatbroke-cli diff baseline.jsonl current.jsonl --fail-on breaking
-</span></span></code></pre></div><p>This exits with a non-zero code if any breaking changes are detected, which means your CI system naturally treats it as a build failure. You can also use <code>--fail-on changed</code> for stricter enforcement or <code>--fail-on never</code> for informational-only mode.</p>
-<p>The tool outputs machine-readable JSON for downstream processing and human-readable terminal output with color-coded severity levels. This makes it equally useful for local development (quick feedback) and automated pipelines (structured data).</p>
-<h3 id="importing-existing-traces-from-langfuse-langsmith-opentelemetry">Importing Existing Traces from Langfuse, LangSmith, OpenTelemetry</h3>
-<p>WhatBroke doesn&rsquo;t require you to use its proxy recorder. If you already have traces in Langfuse, LangSmith, or OpenTelemetry format, you can import them directly:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>npx whatbroke-cli import langfuse --project my-agent --from 2026-07-01 --to 2026-07-26
-</span></span><span style="display:flex;"><span>npx whatbroke-cli diff baseline.jsonl current.jsonl
-</span></span></code></pre></div><p>This is critical for teams that already invest in observability. You don&rsquo;t need to choose between observability and testing — WhatBroke sits on top of your existing trace infrastructure and adds the diffing layer that observability tools lack.</p>
-<h2 id="real-world-case-studies-from-whatbroke">Real-World Case Studies from WhatBroke</h2>
-<p>The WhatBroke repository includes several published case studies that demonstrate exactly what the tool catches and why it matters. These are not synthetic examples — they are real regressions discovered during the tool&rsquo;s own development and dogfooding.</p>
-<h3 id="the-3x-smaller-model-swap--json-schema-as-arguments">The 3x Smaller Model Swap — JSON Schema as Arguments</h3>
-<p>A team swapped from <code>llama3.2:3b</code> to <code>llama3.2:1b</code> — a 3x reduction in model size — expecting faster, cheaper inference with acceptable quality loss. WhatBroke&rsquo;s diff revealed something alarming: in 6 out of 9 run pairs, the smaller model sent the tool&rsquo;s own JSON schema as arguments instead of actual data.</p>
-<p>The agent was calling <code>search_database</code> with the literal text of the tool&rsquo;s parameter schema — field names, types, descriptions — instead of the actual search query. The final reply to the user was still coherent because the model generated plausible-sounding text about what it &ldquo;would have&rdquo; searched. A human reading the output would never catch this. The tool call was silently broken.</p>
-<p>The team reverted the swap and chose a different optimization strategy. Without WhatBroke, this regression would have shipped to production.</p>
-<h3 id="the-litellm-proxy-that-silently-dropped-all-tool-calls">The LiteLLM Proxy That Silently Dropped All Tool Calls</h3>
-<p>In what may be the most cautionary tale in the case studies, a team migrated to LiteLLM&rsquo;s streaming proxy with the <code>ollama/</code> route. Every request returned HTTP 200. The agent appeared to work. WhatBroke&rsquo;s diff told a different story: in all 4 scenarios, at 9 out of 9 run pairs, the proxy dropped every single tool call.</p>
-<p>The streaming proxy was consuming the tool call tokens as text tokens, never delivering them to the agent. The agent received empty tool call arrays, proceeded as if no tools were needed, and generated a text-only response. The user saw a perfectly reasonable answer — just one that never actually executed any tools. The agent had been silently converted from a tool-using agent into a chatbot.</p>
-<p>This case study is particularly important because it demonstrates that infrastructure changes — not just model swaps — can silently break agent behavior. A proxy upgrade, a routing change, or a new streaming implementation can all introduce regressions that no amount of manual testing will catch.</p>
-<h3 id="same-size-vendor-swap-changed-more-than-the-downgrade">Same-Size Vendor Swap Changed More Than the Downgrade</h3>
-<p>Perhaps the most surprising finding: swapping from <code>llama3.2:3b</code> to <code>qwen2.5:3b</code> — same model size, different vendor — introduced more behavioral changes than the 3x model downgrade. The vendor swap changed tool call ordering, argument formatting, and even which tools were called in several scenarios.</p>
-<p>This finding upends a common assumption: that same-size models from different vendors are roughly interchangeable. They are not. Each model family has its own output distribution, its own tendency to format arguments differently, and its own &ldquo;preferred&rdquo; tool call patterns. A vendor swap requires the same testing rigor as a model upgrade or downgrade.</p>
-<h2 id="the-agent-testing-ecosystem--when-to-use-what">The Agent Testing Ecosystem — When to Use What</h2>
-<p>The agent testing and observability space has exploded in 2026, and it can be overwhelming. Here is how the major tools compare:</p>
-<table>
-	<thead>
-			<tr>
-					<th>Tool</th>
-					<th>Primary Function</th>
-					<th>Recording Method</th>
-					<th>Diff Capability</th>
-					<th>CI Integration</th>
-					<th>License</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td><strong>WhatBroke</strong></td>
-					<td>Behavioral diffing</td>
-					<td>Proxy recorder / SDK</td>
-					<td>Multi-sample, severity-classified</td>
-					<td><code>--fail-on</code> flag</td>
-					<td>MIT</td>
-			</tr>
-			<tr>
-					<td><strong>EvalView</strong></td>
-					<td>Snapshot testing</td>
-					<td>SDK integration</td>
-					<td>Tool call + output quality</td>
-					<td>GitHub Actions PR comments</td>
-					<td>Apache-2.0</td>
-			</tr>
-			<tr>
-					<td><strong>AgentSpec</strong></td>
-					<td>Behavior regression testing</td>
-					<td>Test framework</td>
-					<td>Diff reports</td>
-					<td>Jest-like runner</td>
-					<td>MIT</td>
-			</tr>
-			<tr>
-					<td><strong>AgentRR</strong></td>
-					<td>Record-and-replay debugging</td>
-					<td>Full trace recording</td>
-					<td>Deterministic replay with divergence halt</td>
-					<td>N/A (debugging tool)</td>
-					<td>MIT</td>
-			</tr>
-			<tr>
-					<td><strong>AgentReplay</strong></td>
-					<td>Session replay &amp; inspection</td>
-					<td>Reads Claude Code / Cursor logs</td>
-					<td>Interactive timeline UI</td>
-					<td>N/A (dev tool)</td>
-					<td>MIT</td>
-			</tr>
-			<tr>
-					<td><strong>promptfoo</strong></td>
-					<td>Prompt &amp; eval testing</td>
-					<td>SDK / proxy</td>
-					<td>Output comparison, eval scores</td>
-					<td>Native CI</td>
-					<td>MIT</td>
-			</tr>
-			<tr>
-					<td><strong>LangSmith</strong></td>
-					<td>Full observability</td>
-					<td>SDK instrumentation</td>
-					<td>Trace comparison (manual)</td>
-					<td>Built-in</td>
-					<td>Proprietary</td>
-			</tr>
-			<tr>
-					<td><strong>Langfuse</strong></td>
-					<td>Open-source observability</td>
-					<td>SDK / OpenTelemetry</td>
-					<td>Trace comparison (manual)</td>
-					<td>Built-in</td>
-					<td>MIT + EE</td>
-			</tr>
-			<tr>
-					<td><strong>DeepEval</strong></td>
-					<td>LLM evaluation framework</td>
-					<td>SDK integration</td>
-					<td>Eval metric comparison</td>
-					<td>Native CI</td>
-					<td>Apache-2.0</td>
-			</tr>
-	</tbody>
-</table>
-<p><strong>WhatBroke</strong> is the best choice when you need to answer &ldquo;what changed?&rdquo; quickly and reliably. It excels at catching silent regressions in tool call behavior, especially during model swaps, prompt changes, and infrastructure updates.</p>
-<p><strong>EvalView</strong> (124 GitHub stars, Apache-2.0, Python) is WhatBroke&rsquo;s closest competitor. It offers multi-variant baselines (up to 5 valid paths) for non-deterministic agents and integrates with LangGraph, CrewAI, OpenAI, Anthropic, Ollama, and MCP. Its optional LLM judge scores output quality alongside tool call diffs. EvalView is stronger when you need both behavioral diffing and output quality assessment in one tool.</p>
-<p><strong>promptfoo</strong> is the established leader in prompt evaluation and regression testing. It is the right choice when your primary concern is prompt quality and you need a mature ecosystem with broad model provider support.</p>
-<p><strong>LangSmith and Langfuse</strong> are observability platforms, not testing tools. They excel at monitoring, debugging, and understanding agent behavior in production. WhatBroke complements them by adding structured diffing on top of their trace data.</p>
-<p><strong>AgentRR and AgentReplay</strong> are debugging tools for understanding individual runs, not regression testing across versions. Use them when you need to understand why a specific run failed, not when you need to catch regressions across deployments.</p>
-<h3 id="the-diff-first-workflow-see-what-changed-then-judge-it">The Diff-First Workflow: See What Changed, Then Judge It</h3>
-<p>The most effective workflow combines behavioral diffing with evaluation:</p>
-<ol>
-<li><strong>Diff first</strong> — Run WhatBroke to see exactly what changed between two versions.</li>
-<li><strong>Triage</strong> — Classify each change as breaking, acceptable, or expected.</li>
-<li><strong>Eval selectively</strong> — Run your evaluation suite only on the scenarios that actually changed.</li>
-<li><strong>Ship with confidence</strong> — You know exactly what changed and whether it matters.</li>
-</ol>
-<p>This is far more efficient than running a full eval suite on every change. Most changes don&rsquo;t affect most scenarios. Why spend compute and time evaluating scenarios that didn&rsquo;t change? Diff first, eval second.</p>
-<h2 id="the-model-swap-checklist--20-minutes-to-production-confidence">The Model Swap Checklist — 20 Minutes to Production Confidence</h2>
-<p>Based on WhatBroke&rsquo;s case studies and the broader agent testing ecosystem, here is a reproducible checklist for any model change:</p>
-<ol>
-<li><strong>Record baseline (5 minutes).</strong> Run each critical scenario 3 times with your current model. Save the traces.</li>
-<li><strong>Swap the model (1 minute).</strong> Update the model identifier in your agent configuration.</li>
-<li><strong>Record the new runs (5 minutes).</strong> Run the same scenarios 3 times with the new model.</li>
-<li><strong>Diff the results (2 minutes).</strong> Run <code>npx whatbroke-cli diff baseline.jsonl current.jsonl --fail-on breaking</code>.</li>
-<li><strong>Inspect breaking changes (5 minutes).</strong> For each breaking change, decide: is this a regression or an acceptable behavior shift?</li>
-<li><strong>Run targeted evals (2 minutes).</strong> Evaluate only the scenarios that changed.</li>
-<li><strong>Ship or revert.</strong> If no unacceptable regressions, deploy. Otherwise, revert and investigate.</li>
-</ol>
-<p>Total: 20 minutes. This is the minimum viable process for any model change in production. Skipping it means you are shipping blind.</p>
-<h2 id="the-future-of-agent-reliability-testing">The Future of Agent Reliability Testing</h2>
-<p>The agent testing ecosystem is evolving rapidly. Several trends are worth watching:</p>
-<p><strong>Standardized trace formats.</strong> As tools like WhatBroke, EvalView, and Langfuse converge on common trace schemas, the ability to mix and match tools will improve. OpenTelemetry is the most likely standard, but agent-specific extensions are still being defined.</p>
-<p><strong>Automated regression detection.</strong> Future versions of WhatBroke and similar tools will likely learn your agent&rsquo;s &ldquo;normal&rdquo; behavior patterns and flag anomalies without requiring explicit baseline recording. This shifts from snapshot testing to anomaly detection.</p>
-<p><strong>Behavioral contracts.</strong> WhatBroke already supports basic behavior contracts for guardrails. Expect this to evolve into a full contract-testing paradigm where agents declare their expected behavior and tools verify compliance at runtime.</p>
-<p><strong>Multi-agent diffing.</strong> As multi-agent systems become more common, diffing tools will need to handle inter-agent communication patterns, delegation decisions, and coordination failures — not just individual agent tool calls.</p>
-<p><strong>Integration with fine-tuning pipelines.</strong> When you fine-tune a model for agentic tasks, behavioral diffing should be part of the evaluation pipeline. Did the fine-tune improve tool call accuracy or introduce new failure modes?</p>
-<h2 id="conclusion--stop-vibing-start-diffing">Conclusion — Stop Vibing, Start Diffing</h2>
-<p>The era of deploying AI agents based on &ldquo;it looks good to me&rdquo; is over. Agents are non-deterministic, infrastructure is fragile, and silent failures are the norm — not the exception. WhatBroke provides a practical, open-source answer to the question every AI engineer should be asking: &ldquo;What actually changed?&rdquo;</p>
-<p>With zero-code recording, multi-sample diffing, CI integration, and real-world case studies that demonstrate exactly what can go wrong, WhatBroke is the tool that turns agent testing from a vibe check into an engineering discipline. Install it, record a baseline, make your next change, and see for yourself what your agent is really doing.</p>
-<h2 id="faq">FAQ</h2>
-<p><strong>Q1: What is WhatBroke and what problem does it solve?</strong>
-WhatBroke is an open-source CLI tool that diffs AI agent behavior between two runs. It solves the problem of silent regressions — changes in tool calls, arguments, costs, and execution order that human review misses because the agent&rsquo;s text output still looks correct.</p>
-<p><strong>Q2: How does WhatBroke differ from LangSmith or Langfuse?</strong>
-LangSmith and Langfuse are observability platforms for monitoring and debugging agent runs. WhatBroke is a testing tool that compares two sets of runs and produces structured diff reports. They are complementary: you can import Langfuse or LangSmith traces into WhatBroke for diffing.</p>
-<p><strong>Q3: Does WhatBroke require code changes to my agent?</strong>
-No. The proxy recorder works by setting <code>OPENAI_BASE_URL</code> or <code>ANTHROPIC_BASE_URL</code> environment variables — zero code changes. For programmatic use, WhatBroke also provides Node.js and Python SDKs.</p>
-<p><strong>Q4: How does multi-sample diffing work?</strong>
-WhatBroke runs each scenario multiple times per version (e.g., 3 baseline runs × 3 changed runs = 9 run pairs). This turns single observations into rates — &ldquo;6/9 runs showed this change&rdquo; — and distinguishes genuine regressions from pre-existing agent flakiness.</p>
-<p><strong>Q5: Can WhatBroke integrate with my CI/CD pipeline?</strong>
-Yes. The <code>--fail-on breaking</code> flag causes WhatBroke to exit with a non-zero code when breaking changes are detected, which naturally fails your CI build. It also supports <code>--fail-on changed</code> for stricter enforcement and outputs machine-readable JSON for downstream processing.</p>
-]]></content:encoded></item><item><title>ArkSim Review 2026: Find AI Agent Errors Before Your Users Do</title><link>https://baeseokjae.github.io/posts/arksim-agent-error-simulation-2026/</link><pubDate>Fri, 17 Jul 2026 16:02:59 +0000</pubDate><guid>https://baeseokjae.github.io/posts/arksim-agent-error-simulation-2026/</guid><description>ArkSim is an open-source AI agent error simulation tool that catches agent drift and behavioral failures in multi-turn conversations before they reach production.</description><content:encoded><![CDATA[<h2 id="what-is-arksim-and-why-does-it-matter">What is ArkSim and Why Does It Matter?</h2>
-<p>ArkSim is an open-source, simulation-based testing framework for AI agents that catches behavioral failures, agent drift, and conversation-level errors before they reach your users. Created by Arklex.AI in February 2026 and backed by an arXiv paper (2510.11997), ArkSim uses LLM-powered synthetic users to simulate realistic multi-turn conversations with your agent, then evaluates every interaction across multiple quality metrics. With 222+ GitHub stars, support for 14+ agent frameworks, and a fully Apache-2.0 license, it is one of the fastest-growing tools in the agent reliability space.</p>
-<h2 id="the-agent-drift-problem--why-unit-tests-arent-enough">The Agent Drift Problem — Why Unit Tests Aren&rsquo;t Enough</h2>
-<p>Traditional software testing relies on deterministic unit tests: you give a function an input, assert the output, and move on. AI agents break this model entirely. An agent might pass every individual tool call test but still fail in production because of a subtle behavioral drift — it misunderstands context across turns, hallucinates a tool parameter mid-conversation, or follows a valid instruction in an invalid order.</p>
-<p>This phenomenon, known as <strong>agent drift</strong>, is one of the most critical unsolved problems in production AI systems. According to All Things Open, agents fail in ways that only show up mid-conversation, not in unit tests. A chatbot that correctly answers &ldquo;What is my account balance?&rdquo; might fail when the user follows up with &ldquo;And what about my savings account?&rdquo; — because the agent loses the conversational thread, misattributes the pronoun, or fetches the wrong data.</p>
-<p>Unit tests cannot catch these failures because they test isolated turns, not sequences. Integration tests check that the agent can call an API, but they don&rsquo;t verify that the agent maintains coherent context across a 10-turn booking flow. This is the gap ArkSim fills: it tests the agent the way a real user would interact with it — through extended, context-dependent conversations.</p>
-<h2 id="how-arksim-works-scenarios-simulation-evaluation">How ArkSim Works: Scenarios, Simulation, Evaluation</h2>
-<p>ArkSim operates in three distinct phases that mirror the real-world testing lifecycle:</p>
-<p><strong>1. Scenario Definition.</strong> You define a testing scenario with a persona (who the simulated user is), a goal (what they want to accomplish), and knowledge (what they know going in). For example: &ldquo;A small business owner who wants to set up a new email campaign in your marketing platform, but has never used the tool before.&rdquo;</p>
-<p><strong>2. LLM-Powered Simulation.</strong> ArkSim&rsquo;s synthetic user engine, powered by the SAGE (A Top-Down Bottom-Up Knowledge-Grounded User Simulator) methodology described in arXiv paper 2510.11997, drives a multi-turn conversation with your agent. The simulated user behaves like a real person — it gets confused, asks clarifying questions, changes its mind, and follows tangents. This is not a scripted chatbot; it is an adaptive conversational partner that probes your agent&rsquo;s weaknesses organically.</p>
-<p><strong>3. Multi-Metric Evaluation.</strong> After the simulation completes, ArkSim evaluates the conversation across several dimensions: task completion (did the user achieve their goal?), behavioral correctness (did the agent exhibit any harmful or unexpected behavior?), conversational coherence (did the agent maintain context across turns?), and efficiency (how many turns did it take to complete the task?).</p>
-<p>The output is an interactive HTML report that categorizes failures by type, making it easy to identify patterns in your agent&rsquo;s behavior.</p>
-<h2 id="key-features-deep-dive">Key Features Deep Dive</h2>
-<h3 id="scenario-based-testing-with-personas-goals-and-knowledge">Scenario-Based Testing with Personas, Goals, and Knowledge</h3>
-<p>ArkSim&rsquo;s scenario system is the foundation of its testing methodology. Each scenario defines three components:</p>
-<ul>
-<li><strong>Persona:</strong> The identity and background of the simulated user. Examples include &ldquo;a non-technical manager,&rdquo; &ldquo;a power user familiar with API limits,&rdquo; or &ldquo;a frustrated customer who has already tried three solutions.&rdquo;</li>
-<li><strong>Goal:</strong> The concrete task the user wants to accomplish. This can range from simple (&ldquo;reset my password&rdquo;) to complex (&ldquo;migrate 500 customer records from CSV to the new CRM schema&rdquo;).</li>
-<li><strong>Knowledge:</strong> What the user knows before starting. A user with &ldquo;no knowledge&rdquo; will ask basic questions; a user with &ldquo;expert knowledge&rdquo; will test edge cases and advanced features.</li>
-</ul>
-<p>This structured approach means you can build a library of scenarios that cover your entire user base, edge cases, and failure modes — and replay them on every code change.</p>
-<h3 id="llm-powered-synthetic-users-that-behave-like-real-people">LLM-Powered Synthetic Users That Behave Like Real People</h3>
-<p>The SAGE simulator that powers ArkSim&rsquo;s synthetic users is the result of academic research published on arXiv. Unlike simple scripted bots that follow a fixed path, SAGE generates user behavior that adapts to the agent&rsquo;s responses in real time. If the agent gives a confusing answer, the synthetic user asks for clarification. If the agent makes a mistake, the user reacts naturally — it might correct the agent, try a different approach, or give up entirely.</p>
-<p>This adaptive behavior is critical because real users do not follow happy paths. They get distracted, change their minds, and make mistakes. ArkSim&rsquo;s synthetic users replicate this unpredictability, exposing failure modes that scripted tests would never trigger.</p>
-<h3 id="multi-turn-conversation-evaluation-across-multiple-metrics">Multi-Turn Conversation Evaluation Across Multiple Metrics</h3>
-<p>ArkSim evaluates conversations on more than just task completion. The evaluation engine measures:</p>
-<ul>
-<li><strong>Task Success Rate:</strong> Did the user achieve their stated goal?</li>
-<li><strong>Behavioral Safety:</strong> Did the agent produce harmful, biased, or inappropriate responses?</li>
-<li><strong>Context Retention:</strong> Did the agent correctly reference information from earlier turns?</li>
-<li><strong>Turn Efficiency:</strong> How many exchanges were needed to complete the task?</li>
-<li><strong>Failure Categorization:</strong> What type of failure occurred (hallucination, tool misuse, context loss, etc.)?</li>
-</ul>
-<p>This multi-dimensional evaluation gives you a complete picture of your agent&rsquo;s reliability, not just a pass/fail score.</p>
-<h3 id="interactive-html-reports-with-failure-categorization">Interactive HTML Reports with Failure Categorization</h3>
-<p>After each test run, ArkSim generates an interactive HTML report that visualizes the entire conversation, highlights failure points, and categorizes errors by type. These reports are designed for team review — you can share them with developers, QA engineers, and product managers to prioritize fixes based on real behavioral data rather than speculation.</p>
-<h2 id="framework-integrations--14-and-growing">Framework Integrations — 14+ and Growing</h2>
-<p>One of ArkSim&rsquo;s strongest advantages is its framework-agnostic design. As of July 2026, it supports 14+ agent frameworks including:</p>
-<table>
-	<thead>
-			<tr>
-					<th>Framework</th>
-					<th>Support Level</th>
-					<th>Notes</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>Claude Agent SDK</td>
-					<td>Full</td>
-					<td>Native integration via MCP server</td>
-			</tr>
-			<tr>
-					<td>OpenAI Agents SDK</td>
-					<td>Full</td>
-					<td>Standard protocol support</td>
-			</tr>
-			<tr>
-					<td>LangChain</td>
-					<td>Full</td>
-					<td>Compatible with LangChain agents</td>
-			</tr>
-			<tr>
-					<td>LangGraph</td>
-					<td>Full</td>
-					<td>Supports graph-based agent workflows</td>
-			</tr>
-			<tr>
-					<td>CrewAI</td>
-					<td>Full</td>
-					<td>Multi-agent crew testing</td>
-			</tr>
-			<tr>
-					<td>AutoGen</td>
-					<td>Full</td>
-					<td>Microsoft&rsquo;s multi-agent framework</td>
-			</tr>
-			<tr>
-					<td>LlamaIndex</td>
-					<td>Full</td>
-					<td>Agentic RAG testing</td>
-			</tr>
-			<tr>
-					<td>Custom Frameworks</td>
-					<td>Via Adapter API</td>
-					<td>Build your own adapter</td>
-			</tr>
-	</tbody>
-</table>
-<p>This breadth of support means you are not locked into a specific framework to use ArkSim. Whether you are building with Claude, OpenAI, LangChain, or a custom stack, ArkSim can test your agent without modification.</p>
-<h2 id="cicd-integration--testing-every-pr">CI/CD Integration — Testing Every PR</h2>
-<p>ArkSim is designed for CI-native workflows. You can add it to your GitHub Actions, GitLab CI, or any CI/CD pipeline as a quality gate that runs on every pull request. When a PR introduces agent behavior changes, ArkSim runs your scenario suite and reports any regressions before the code is merged.</p>
-<p>This shifts agent testing from an ad-hoc, pre-release activity to a continuous quality process. Instead of discovering agent drift in production monitoring (where it is already affecting users), you catch it in CI, where it costs nothing to fix.</p>
-<h2 id="claude-code-native-integration-via-mcp">Claude Code Native Integration via MCP</h2>
-<p>ArkSim includes a native MCP (Model Context Protocol) server that integrates directly with Claude Code. This means developers working in Claude Code can run ArkSim simulations, view reports, and analyze failures without leaving their development environment. This integration is unique among agent testing tools — no competitor offers a comparable developer workflow integration.</p>
-<p>For teams building agents with Claude, this eliminates context switching between development and testing. You write agent code, run ArkSim simulations, see failures, and iterate — all within the same tool.</p>
-<h2 id="arksim-vs-the-competition">ArkSim vs. The Competition</h2>
-<h3 id="arksim-vs-ragaai-catalyst">ArkSim vs. RagaAI Catalyst</h3>
-<p>RagaAI Catalyst is the most popular agent observability platform with 16,000+ GitHub stars, but it serves a fundamentally different purpose. RagaAI focuses on <strong>observability</strong> — monitoring agents in production, tracing calls, and detecting anomalies after deployment. ArkSim focuses on <strong>pre-deployment simulation</strong> — catching errors before they reach users.</p>
-<table>
-	<thead>
-			<tr>
-					<th>Feature</th>
-					<th>ArkSim</th>
-					<th>RagaAI Catalyst</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>Primary Focus</td>
-					<td>Pre-deployment simulation</td>
-					<td>Production observability</td>
-			</tr>
-			<tr>
-					<td>Testing Method</td>
-					<td>Synthetic user conversations</td>
-					<td>Real-time monitoring</td>
-			</tr>
-			<tr>
-					<td>Framework Support</td>
-					<td>14+ frameworks</td>
-					<td>Multiple frameworks</td>
-			</tr>
-			<tr>
-					<td>CI/CD Native</td>
-					<td>Yes</td>
-					<td>Partial</td>
-			</tr>
-			<tr>
-					<td>Open Source</td>
-					<td>Apache-2.0</td>
-					<td>Apache-2.0</td>
-			</tr>
-			<tr>
-					<td>GitHub Stars</td>
-					<td>222+</td>
-					<td>16,000+</td>
-			</tr>
-			<tr>
-					<td>Best For</td>
-					<td>Catching errors before release</td>
-					<td>Monitoring after release</td>
-			</tr>
-	</tbody>
-</table>
-<p>These tools are complementary rather than competitive. A mature agent pipeline should use both: ArkSim for pre-deployment testing and RagaAI for production monitoring.</p>
-<h3 id="arksim-vs-aws-agent-evaluation">ArkSim vs. AWS Agent Evaluation</h3>
-<p>AWS Agent Evaluation (369 stars) is AWS&rsquo;s generative AI agent evaluation framework. It tests virtual agents with predefined scenarios but is tightly coupled to the AWS ecosystem. ArkSim is framework-agnostic and runs on any infrastructure, making it a better choice for multi-cloud or non-AWS teams.</p>
-<table>
-	<thead>
-			<tr>
-					<th>Feature</th>
-					<th>ArkSim</th>
-					<th>AWS Agent Evaluation</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>Cloud Dependency</td>
-					<td>None</td>
-					<td>AWS-only</td>
-			</tr>
-			<tr>
-					<td>Framework Support</td>
-					<td>14+</td>
-					<td>AWS Bedrock-focused</td>
-			</tr>
-			<tr>
-					<td>Synthetic Users</td>
-					<td>Adaptive (SAGE)</td>
-					<td>Predefined scenarios</td>
-			</tr>
-			<tr>
-					<td>License</td>
-					<td>Apache-2.0</td>
-					<td>Apache-2.0</td>
-			</tr>
-			<tr>
-					<td>CI/CD</td>
-					<td>Native</td>
-					<td>AWS-native</td>
-			</tr>
-	</tbody>
-</table>
-<h3 id="arksim-vs-langfuse--langsmith">ArkSim vs. LangFuse / LangSmith</h3>
-<p>LangFuse and LangSmith are primarily <strong>observability and tracing</strong> platforms for LangChain-based applications. They excel at debugging individual traces and monitoring latency/cost, but they do not offer simulation-based multi-turn testing. ArkSim fills this gap by providing the pre-deployment testing layer that these platforms lack.</p>
-<h2 id="getting-started-in-3-commands">Getting Started in 3 Commands</h2>
-<p>ArkSim is designed to be immediately usable. Here is how you start testing your agent:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># Install ArkSim</span>
-</span></span><span style="display:flex;"><span>pip install arksim
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#75715e"># Run a default simulation against your agent endpoint</span>
-</span></span><span style="display:flex;"><span>arksim run --agent http://localhost:8000/chat
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#75715e"># View the interactive report</span>
-</span></span><span style="display:flex;"><span>arksim report --open
-</span></span></code></pre></div><p>For CI/CD integration, add a step to your GitHub Actions workflow:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span>- <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Run ArkSim agent tests</span>
-</span></span><span style="display:flex;"><span>  <span style="color:#f92672">run</span>: <span style="color:#ae81ff">arksim run --agent ${{ secrets.AGENT_URL }} --scenarios ./tests/scenarios/ --exit-on-failure</span>
-</span></span></code></pre></div><p>The <code>--exit-on-failure</code> flag ensures your pipeline fails when agent regressions are detected, making ArkSim a true quality gate.</p>
-<h2 id="pricing--fully-open-source-apache-20">Pricing — Fully Open Source (Apache-2.0)</h2>
-<p>ArkSim is 100% open source under the Apache-2.0 license. There is no paid tier, no usage limits, and no data collection. You run it on your own infrastructure, your data never leaves your environment, and you have full control over the testing scenarios and evaluation criteria.</p>
-<p>This is a significant advantage over proprietary testing platforms that charge per evaluation or per API call. For teams running hundreds or thousands of agent tests per day, the cost savings are substantial.</p>
-<h2 id="who-should-use-arksim">Who Should Use ArkSim?</h2>
-<p>ArkSim is valuable for any team building production AI agents, but it is especially critical for:</p>
-<ul>
-<li><strong>Customer-facing chatbot teams</strong> where agent errors directly impact user trust and revenue</li>
-<li><strong>Enterprise automation teams</strong> deploying agents for internal workflows where reliability is non-negotiable</li>
-<li><strong>Agent platform providers</strong> who need to certify agent quality before marketplace publication</li>
-<li><strong>CI/CD pipeline owners</strong> who want to add agent-specific quality gates to their deployment process</li>
-<li><strong>Open source agent projects</strong> that need a standardized testing methodology for community contributions</li>
-</ul>
-<p>If your agent handles multi-turn conversations, makes tool calls, or interacts with external systems, you need ArkSim or a similar simulation-based testing tool in your pipeline.</p>
-<h2 id="verdict--is-arksim-right-for-your-agent-pipeline">Verdict — Is ArkSim Right for Your Agent Pipeline?</h2>
-<p>ArkSim addresses a genuine gap in the AI agent development lifecycle. Unit tests cannot catch agent drift. Production monitoring catches failures only after users are affected. ArkSim&rsquo;s simulation-based approach fills the middle ground — catching behavioral failures before deployment, in a controlled, repeatable, and measurable way.</p>
-<p><strong>Strengths:</strong> Framework-agnostic design, academic-grade simulation methodology (SAGE), CI-native workflow, fully open source, interactive failure reports, and unique Claude Code MCP integration.</p>
-<p><strong>Weaknesses:</strong> Relatively new project (222+ stars vs. RagaAI&rsquo;s 16,000+), smaller community and fewer pre-built scenarios, documentation is still maturing.</p>
-<p><strong>Bottom line:</strong> If you are building production AI agents that engage in multi-turn conversations, ArkSim is worth adopting today. It solves a problem that no other open-source tool addresses effectively, and its framework-agnostic design means it will work with whatever stack you choose tomorrow.</p>
-<h2 id="faq">FAQ</h2>
-<h3 id="what-is-arksim-and-how-does-it-test-ai-agents">What is ArkSim and how does it test AI agents?</h3>
-<p>ArkSim is an open-source simulation framework that uses LLM-powered synthetic users to have realistic multi-turn conversations with your AI agent. It then evaluates those conversations across multiple metrics — task completion, behavioral safety, context retention, and efficiency — to identify failures that unit tests cannot catch.</p>
-<h3 id="how-is-arksim-different-from-ragaai-catalyst-or-langfuse">How is ArkSim different from RagaAI Catalyst or LangFuse?</h3>
-<p>ArkSim focuses on pre-deployment simulation testing, while RagaAI Catalyst and LangFuse focus on production observability and monitoring. ArkSim catches errors before users see them; the others help you debug issues after deployment. They are complementary tools, not direct competitors.</p>
-<h3 id="does-arksim-work-with-any-ai-agent-framework">Does ArkSim work with any AI agent framework?</h3>
-<p>Yes. ArkSim supports 14+ agent frameworks including Claude Agent SDK, OpenAI Agents SDK, LangChain, LangGraph, CrewAI, AutoGen, and LlamaIndex. It also provides an adapter API for custom frameworks, making it truly framework-agnostic.</p>
-<h3 id="is-arksim-free-to-use">Is ArkSim free to use?</h3>
-<p>Yes. ArkSim is fully open source under the Apache-2.0 license. There are no paid tiers, usage limits, or data collection requirements. You run it on your own infrastructure with complete data privacy.</p>
-<h3 id="can-arksim-be-integrated-into-a-cicd-pipeline">Can ArkSim be integrated into a CI/CD pipeline?</h3>
-<p>Yes. ArkSim is designed for CI-native workflows and can be added to GitHub Actions, GitLab CI, or any CI/CD pipeline. The <code>--exit-on-failure</code> flag ensures your pipeline fails when agent regressions are detected, making it a true quality gate for agent deployments.</p>
-]]></content:encoded></item><item><title>Agent CI/CD Eval Pipeline Integration Guide 2026</title><link>https://baeseokjae.github.io/posts/agent-ci-cd-eval-pipeline-integration-guide-2026/</link><pubDate>Fri, 19 Jun 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-ci-cd-eval-pipeline-integration-guide-2026/</guid><description>A practical 2026 guide to integrating evaluation gates into your agent CI/CD pipeline — golden datasets, tiered evals, threshold policies, and closed-lo...</description><content:encoded><![CDATA[<p>Agent CI/CD in 2026 requires five evaluation gates that don&rsquo;t exist in traditional pipelines: golden dataset offline eval, regression blocks, cost gates, shadow evaluation against production traces, and canary rollout with auto-rollback. If you&rsquo;re shipping agent updates against only lint and unit tests, you&rsquo;re shipping blind — 89% of production agent teams run observability but only 52% run evals, and that 37-point gap is where quality silently decays (LangChain State of Agent Engineering Survey, 2026).</p>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>AI Agent Testing on RockB</title><link>https://baeseokjae.github.io/tags/ai-agent-testing/</link><description>Recent content in AI Agent Testing on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Fri, 19 Jun 2026 12:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/ai-agent-testing/index.xml" rel="self" type="application/rss+xml"/><item><title>Agent CI/CD Eval Pipeline Integration Guide 2026</title><link>https://baeseokjae.github.io/posts/agent-ci-cd-eval-pipeline-integration-guide-2026/</link><pubDate>Fri, 19 Jun 2026 12:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-ci-cd-eval-pipeline-integration-guide-2026/</guid><description>A practical 2026 guide to integrating evaluation gates into your agent CI/CD pipeline — golden datasets, tiered evals, threshold policies, and closed-lo...</description><content:encoded><![CDATA[<p>Agent CI/CD in 2026 requires five evaluation gates that don&rsquo;t exist in traditional pipelines: golden dataset offline eval, regression blocks, cost gates, shadow evaluation against production traces, and canary rollout with auto-rollback. If you&rsquo;re shipping agent updates against only lint and unit tests, you&rsquo;re shipping blind — 89% of production agent teams run observability but only 52% run evals, and that 37-point gap is where quality silently decays (LangChain State of Agent Engineering Survey, 2026).</p>
 <h2 id="why-agent-cicd-is-different-from-traditional-cicd">Why Agent CI/CD Is Different From Traditional CI/CD</h2>
 <p>Traditional CI/CD gates lint, type-check, run unit tests, verify integration contracts, and build artifacts. Agent behavior is shaped by prompts, model checkpoints, tool definitions, retrieval configs, and guardrails — not just application code. A prompt change that passes every conventional test can tank agent task completion by 20 points in production because the model responds to subtle phrasing differences that no linter catches.</p>
 <p>The core shift: agent CI/CD must evaluate what the agent <em>does</em>, not just what the code looks like. That means running the agent against representative tasks, scoring the outputs, and blocking deploys when scores regress.</p>
 <h2 id="what-does-an-agent-native-cicd-pipeline-look-like">What Does an Agent-Native CI/CD Pipeline Look Like?</h2>
 <p>A complete agent CI/CD pipeline adds five gates on top of conventional test infrastructure:</p>
 <table>
-	<thead>
-			<tr>
-					<th>Gate</th>
-					<th>What It Catches</th>
-					<th>When It Runs</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>Golden dataset offline eval</td>
-					<td>Task completion, rubric quality, hallucination</td>
-					<td>Every PR</td>
-			</tr>
-			<tr>
-					<td>Regression blocks</td>
-					<td>Metric deltas exceeding threshold</td>
-					<td>Every PR</td>
-			</tr>
-			<tr>
-					<td>Cost gate</td>
-					<td>Token/API cost spikes from degraded efficiency</td>
-					<td>Every PR</td>
-			</tr>
-			<tr>
-					<td>Shadow eval</td>
-					<td>Trajectory differences vs production baseline</td>
-					<td>Pre-deploy (replayed traffic)</td>
-			</tr>
-			<tr>
-					<td>Canary rollout with auto-rollback</td>
-					<td>Production behavior divergence</td>
-					<td>Graduated (5% → 25% → 100%)</td>
-			</tr>
-	</tbody>
+  <thead>
+      <tr>
+          <th>Gate</th>
+          <th>What It Catches</th>
+          <th>When It Runs</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Golden dataset offline eval</td>
+          <td>Task completion, rubric quality, hallucination</td>
+          <td>Every PR</td>
+      </tr>
+      <tr>
+          <td>Regression blocks</td>
+          <td>Metric deltas exceeding threshold</td>
+          <td>Every PR</td>
+      </tr>
+      <tr>
+          <td>Cost gate</td>
+          <td>Token/API cost spikes from degraded efficiency</td>
+          <td>Every PR</td>
+      </tr>
+      <tr>
+          <td>Shadow eval</td>
+          <td>Trajectory differences vs production baseline</td>
+          <td>Pre-deploy (replayed traffic)</td>
+      </tr>
+      <tr>
+          <td>Canary rollout with auto-rollback</td>
+          <td>Production behavior divergence</td>
+          <td>Graduated (5% → 25% → 100%)</td>
+      </tr>
+  </tbody>
 </table>
 <p>Most teams in 2026 adopt a 3-tier architecture: cheap deterministic tests on every commit, LLM-as-judge scoring on a nightly schedule, and continuous production monitoring with error budgets.</p>
 <h3 id="tier-1--pr-tier-minutes-cheap">Tier 1 — PR Tier (minutes, cheap)</h3>
 <p>Deterministic tool-call tests against recorded cassettes. No live model API calls, sub-second execution, no API keys needed. These catch tool selection and argument regressions — the most common agent failure mode in production. Record the agent&rsquo;s tool calls during a known-good run, store the cassette alongside the test, and replay on every PR to verify the same tools get called with structurally valid arguments.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># tests/agent_tool_regression.py — example using recorded cassettes</span>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># tests/agent_tool_regression.py — example using recorded cassettes</span>
 </span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">test_agent_tool_calls_unchanged</span>():
 </span></span><span style="display:flex;"><span>    cassette <span style="color:#f92672">=</span> load_cassette(<span style="color:#e6db74">&#34;golden/ticket_resolution_flow.json&#34;</span>)
 </span></span><span style="display:flex;"><span>    result <span style="color:#f92672">=</span> replay_agent_with_cassette(cassette)
@@ -483,7 +61,7 @@ Yes. The <code>--fail-on breaking</code> flag causes WhatBroke to exit with a no
 <li>p95 latency &lt; 4000ms</li>
 </ul>
 <p>The cost matters. A 20-test suite with 5 runs using GPT-4o runs $3-8 per PR (~$150-400/month at 50 PRs). Mitigations: run expensive judges only on the nightly schedule, use deterministic tests on every commit, and restrict LLM-judge execution to paths that actually changed agent behavior (<code>agent/prompts/</code>, <code>agent/tools/</code>, <code>agent/config/</code>).</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># .github/workflows/agent-evals-nightly.yml</span>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># .github/workflows/agent-evals-nightly.yml</span>
 </span></span><span style="display:flex;"><span><span style="color:#f92672">name</span>: <span style="color:#ae81ff">Agent Nightly Evals</span>
 </span></span><span style="display:flex;"><span><span style="color:#f92672">on</span>:
 </span></span><span style="display:flex;"><span>  <span style="color:#f92672">schedule</span>:
@@ -546,50 +124,50 @@ Yes. The <code>--fail-on breaking</code> flag causes WhatBroke to exit with a no
 <h2 id="how-to-structure-eval-thresholds">How to Structure Eval Thresholds</h2>
 <p>The thresholds depend on your domain, but here are numbers that work across most production agent systems (adapted from the evaluation testing methodology used across multiple 2026 production deployments):</p>
 <table>
-	<thead>
-			<tr>
-					<th>Metric</th>
-					<th>CI Gate Threshold</th>
-					<th>Production SLO</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>Task completion rate</td>
-					<td>&gt; 85%</td>
-					<td>&gt; 90%</td>
-			</tr>
-			<tr>
-					<td>Hallucination rate</td>
-					<td>&lt; 5%</td>
-					<td>&lt; 3%</td>
-			</tr>
-			<tr>
-					<td>Grounded response rate</td>
-					<td>&gt; 95%</td>
-					<td>&gt; 98%</td>
-			</tr>
-			<tr>
-					<td>Policy violations</td>
-					<td>0</td>
-					<td>0</td>
-			</tr>
-			<tr>
-					<td>p95 latency</td>
-					<td>&lt; 4000ms</td>
-					<td>&lt; 3000ms</td>
-			</tr>
-			<tr>
-					<td>Regression delta</td>
-					<td>0.05 tolerance</td>
-					<td>N/A</td>
-			</tr>
-			<tr>
-					<td>Cost regression</td>
-					<td>Block &gt; 15% increase</td>
-					<td>Alert &gt; 10% increase</td>
-			</tr>
-	</tbody>
+  <thead>
+      <tr>
+          <th>Metric</th>
+          <th>CI Gate Threshold</th>
+          <th>Production SLO</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Task completion rate</td>
+          <td>&gt; 85%</td>
+          <td>&gt; 90%</td>
+      </tr>
+      <tr>
+          <td>Hallucination rate</td>
+          <td>&lt; 5%</td>
+          <td>&lt; 3%</td>
+      </tr>
+      <tr>
+          <td>Grounded response rate</td>
+          <td>&gt; 95%</td>
+          <td>&gt; 98%</td>
+      </tr>
+      <tr>
+          <td>Policy violations</td>
+          <td>0</td>
+          <td>0</td>
+      </tr>
+      <tr>
+          <td>p95 latency</td>
+          <td>&lt; 4000ms</td>
+          <td>&lt; 3000ms</td>
+      </tr>
+      <tr>
+          <td>Regression delta</td>
+          <td>0.05 tolerance</td>
+          <td>N/A</td>
+      </tr>
+      <tr>
+          <td>Cost regression</td>
+          <td>Block &gt; 15% increase</td>
+          <td>Alert &gt; 10% increase</td>
+      </tr>
+  </tbody>
 </table>
 <h2 id="closed-loop-feedback-the-compounding-value">Closed-Loop Feedback: The Compounding Value</h2>
 <p>The eval pipeline compounds in value when production traces feed back into offline datasets. The loop:</p>
@@ -607,80 +185,80 @@ Yes. The <code>--fail-on breaking</code> flag causes WhatBroke to exit with a no
 <h2 id="eval-framework-options-for-cicd-integration">Eval Framework Options for CI/CD Integration</h2>
 <p>The 2026 eval framework landscape breaks into three tiers:</p>
 <table>
-	<thead>
-			<tr>
-					<th>Framework</th>
-					<th>CI Integration</th>
-					<th>Key Strengths</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>DeepEval</td>
-					<td>GitHub Actions, pytest-native, JUnit output</td>
-					<td>50+ metrics, @observe tracing, Ollama local evals</td>
-			</tr>
-			<tr>
-					<td>Braintrust</td>
-					<td>Prompt playground → immutable experiments → CI automation</td>
-					<td>Online scoring, experiment management</td>
-			</tr>
-			<tr>
-					<td>LangSmith</td>
-					<td>Control Plane API for preview deployments</td>
-					<td>LangChain ecosystem, webhook-driven triggers</td>
-			</tr>
-			<tr>
-					<td>Promptfoo</td>
-					<td>Deterministic prompt evals, LLM-rubric scoring</td>
-					<td>Latency tracking, fast iteration</td>
-			</tr>
-			<tr>
-					<td>AgentClash</td>
-					<td>CI manifest-driven, baseline comparison, PR comments</td>
-					<td>Regression suites, zero config</td>
-			</tr>
-	</tbody>
+  <thead>
+      <tr>
+          <th>Framework</th>
+          <th>CI Integration</th>
+          <th>Key Strengths</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>DeepEval</td>
+          <td>GitHub Actions, pytest-native, JUnit output</td>
+          <td>50+ metrics, @observe tracing, Ollama local evals</td>
+      </tr>
+      <tr>
+          <td>Braintrust</td>
+          <td>Prompt playground → immutable experiments → CI automation</td>
+          <td>Online scoring, experiment management</td>
+      </tr>
+      <tr>
+          <td>LangSmith</td>
+          <td>Control Plane API for preview deployments</td>
+          <td>LangChain ecosystem, webhook-driven triggers</td>
+      </tr>
+      <tr>
+          <td>Promptfoo</td>
+          <td>Deterministic prompt evals, LLM-rubric scoring</td>
+          <td>Latency tracking, fast iteration</td>
+      </tr>
+      <tr>
+          <td>AgentClash</td>
+          <td>CI manifest-driven, baseline comparison, PR comments</td>
+          <td>Regression suites, zero config</td>
+      </tr>
+  </tbody>
 </table>
 <p>For most teams starting out, DeepEval hits the sweet spot: pytest-native means your eval tests live in <code>tests/</code> alongside application code, the GitHub Action works out of the box, and you can run against a local Ollama model for $0 on the PR tier. My guide on <a href="/posts/deepeval-tutorial-2026/">DeepEval in production</a> covers the full setup.</p>
 <p>For a broader comparison of open-source eval harnesses and their trade-offs, see the <a href="/posts/open-source-agent-eval-harness-comparison-2026/">open-source agent eval harness comparison</a>.</p>
 <h2 id="maturity-model-for-agent-cicd">Maturity Model for Agent CI/CD</h2>
 <p>Most teams I talk to land at Level 2 on this scale. The jump from Level 1 to Level 2 is the highest ROI move you can make.</p>
 <table>
-	<thead>
-			<tr>
-					<th>Level</th>
-					<th>Pattern</th>
-					<th>Key Practice</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>1</td>
-					<td>Manual eval on release</td>
-					<td>Ad-hoc, skipped under deadline</td>
-			</tr>
-			<tr>
-					<td>2</td>
-					<td>CI eval gate on every PR</td>
-					<td>Automated golden dataset run, threshold blocking</td>
-			</tr>
-			<tr>
-					<td>3</td>
-					<td>Tiered eval (PR + nightly)</td>
-					<td>Deterministic cheap tests per-commit, LLM-judge on schedule</td>
-			</tr>
-			<tr>
-					<td>4</td>
-					<td>Production feedback loop</td>
-					<td>Online scoring, trace→dataset promotion, error feed</td>
-			</tr>
-			<tr>
-					<td>5</td>
-					<td>Continuous optimization</td>
-					<td>Automated prompt/model optimization from eval scores</td>
-			</tr>
-	</tbody>
+  <thead>
+      <tr>
+          <th>Level</th>
+          <th>Pattern</th>
+          <th>Key Practice</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>1</td>
+          <td>Manual eval on release</td>
+          <td>Ad-hoc, skipped under deadline</td>
+      </tr>
+      <tr>
+          <td>2</td>
+          <td>CI eval gate on every PR</td>
+          <td>Automated golden dataset run, threshold blocking</td>
+      </tr>
+      <tr>
+          <td>3</td>
+          <td>Tiered eval (PR + nightly)</td>
+          <td>Deterministic cheap tests per-commit, LLM-judge on schedule</td>
+      </tr>
+      <tr>
+          <td>4</td>
+          <td>Production feedback loop</td>
+          <td>Online scoring, trace→dataset promotion, error feed</td>
+      </tr>
+      <tr>
+          <td>5</td>
+          <td>Continuous optimization</td>
+          <td>Automated prompt/model optimization from eval scores</td>
+      </tr>
+  </tbody>
 </table>
 <p><strong>Level 1</strong> is where most teams who &ldquo;know they should test&rdquo; sit. Someone runs a manual eval before a release, and when the deadline hits, the eval gets skipped. The agent degrades and nobody notices until users complain.</p>
 <p><strong>Level 2</strong> is non-negotiable. Every PR against agent configuration triggers an automated eval run against a golden dataset. The PR is blocked if scores drop below threshold. This catches regressions before they reach staging.</p>
@@ -690,7 +268,7 @@ Yes. The <code>--fail-on breaking</code> flag causes WhatBroke to exit with a no
 <p>For a deeper look at the evaluation metrics and framework design behind agent testing, see the <a href="/posts/ai-agent-testing-guide-2026/">AI Agent Testing Guide</a>, which covers trajectory evaluation and the five-layer evaluation framework that feeds into these CI/CD gates.</p>
 <h2 id="github-actions-workflow-full-example">GitHub Actions Workflow: Full Example</h2>
 <p>Here is a complete GitHub Actions workflow that implements PR-tier and nightly-tier eval:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># .github/workflows/agent-evals.yml</span>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># .github/workflows/agent-evals.yml</span>
 </span></span><span style="display:flex;"><span><span style="color:#f92672">name</span>: <span style="color:#ae81ff">Agent Eval Pipeline</span>
 </span></span><span style="display:flex;"><span><span style="color:#f92672">on</span>:
 </span></span><span style="display:flex;"><span>  <span style="color:#f92672">pull_request</span>:
@@ -766,7 +344,7 @@ Yes. The <code>--fail-on breaking</code> flag causes WhatBroke to exit with a no
 <p>The most effective teams use a two-stage evaluation pipeline: LLM-as-judge runs on every test case and flags outliers (cases scoring below 0.6 or above 0.95 deserve human review — the low end for failure analysis, the high end to verify that easy cases aren&rsquo;t inflating pass rates). Human reviewers handle only flagged cases, typically 5-15% of the total set. This hybrid approach achieves near-human evaluation quality at a cost roughly equivalent to running LLM-as-judge on 100% plus a 10% human overhead. For mission-critical agents in expert domains (legal research, medical triage, financial analysis), raise the LLM-judge threshold to 0.75 before escalating to human review and plan for 20-30% human oversight.</p>
 <h2 id="integrating-agent-evals-into-your-cicd-pipeline">Integrating Agent Evals into Your CI/CD Pipeline</h2>
 <p>CI/CD integration transforms evaluation from a periodic manual activity into an automated deployment gate — blocking releases when agent quality regresses below a defined threshold. The standard pattern uses pytest with DeepEval for local and CI evaluation, with a 90% pass-rate threshold as the deployment gate. DeepEval is pytest-native, making adoption straightforward for existing Python test pipelines; it is used by OpenAI, Google, and Microsoft and provides 50+ research-backed metrics for agents, chatbots, RAG, single-turn, multi-turn, and safety evaluation.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># conftest.py — DeepEval CI gate</span>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># conftest.py — DeepEval CI gate</span>
 </span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> pytest
 </span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> deepeval <span style="color:#f92672">import</span> assert_test
 </span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> deepeval.metrics <span style="color:#f92672">import</span> TaskCompletionMetric, ToolCorrectnessMetric
@@ -786,7 +364,7 @@ Yes. The <code>--fail-on breaking</code> flag causes WhatBroke to exit with a no
 </span></span><span style="display:flex;"><span>        TaskCompletionMetric(threshold<span style="color:#f92672">=</span><span style="color:#ae81ff">0.85</span>),
 </span></span><span style="display:flex;"><span>    ])
 </span></span></code></pre></div><h3 id="github-actions-deployment-gate">GitHub Actions Deployment Gate</h3>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># .github/workflows/agent-eval.yml</span>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#75715e"># .github/workflows/agent-eval.yml</span>
 </span></span><span style="display:flex;"><span><span style="color:#f92672">name</span>: <span style="color:#ae81ff">Agent Evaluation Gate</span>
 </span></span><span style="display:flex;"><span><span style="color:#f92672">on</span>: [<span style="color:#ae81ff">pull_request]</span>
 </span></span><span style="display:flex;"><span><span style="color:#f92672">jobs</span>:
@@ -812,59 +390,59 @@ Yes. The <code>--fail-on breaking</code> flag causes WhatBroke to exit with a no
 <p>The Step-2 Problem describes a specific failure pattern: the agent correctly identifies the first tool to call and calls it correctly, but uses the result to parameterize the second tool call with a structurally valid but semantically wrong argument. Because the second call succeeds (it doesn&rsquo;t throw an error), the agent treats its output as ground truth and compounds the error through every subsequent step. Detection requires semantic validation of tool outputs — checking not just that the result matches the expected JSON schema, but that the values are contextually coherent with the original task. For example, a search tool returning zero results for a query that should return many is a signal worth catching at step 2, not at step 8 when the agent produces a summary based on an empty search result set.</p>
 <h2 id="top-agent-evaluation-frameworks-compared-2026">Top Agent Evaluation Frameworks Compared (2026)</h2>
 <table>
-	<thead>
-			<tr>
-					<th>Framework</th>
-					<th>Best For</th>
-					<th>CI/CD Native</th>
-					<th>Production Monitoring</th>
-					<th>Pricing</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td><strong>DeepEval</strong></td>
-					<td>Pytest-native CI evaluation, 50+ metrics</td>
-					<td>Yes (pytest)</td>
-					<td>Via Confident AI cloud</td>
-					<td>Open-source + paid</td>
-			</tr>
-			<tr>
-					<td><strong>Braintrust</strong></td>
-					<td>Production traceability, A/B evals</td>
-					<td>Via SDK</td>
-					<td>Yes (built-in)</td>
-					<td>Usage-based</td>
-			</tr>
-			<tr>
-					<td><strong>LangSmith</strong></td>
-					<td>LangChain/LangGraph teams</td>
-					<td>Yes</td>
-					<td>Yes</td>
-					<td>Usage-based</td>
-			</tr>
-			<tr>
-					<td><strong>Arize Phoenix</strong></td>
-					<td>Observability + drift detection</td>
-					<td>Partial</td>
-					<td>Yes</td>
-					<td>Open-source + paid</td>
-			</tr>
-			<tr>
-					<td><strong>Strands Evals</strong> (AWS)</td>
-					<td>AWS Bedrock teams, auto test gen</td>
-					<td>Yes</td>
-					<td>Via CloudWatch</td>
-					<td>Open-source</td>
-			</tr>
-			<tr>
-					<td><strong>Galileo</strong></td>
-					<td>Enterprise quality guardrails</td>
-					<td>Yes</td>
-					<td>Yes</td>
-					<td>Enterprise</td>
-			</tr>
-	</tbody>
+  <thead>
+      <tr>
+          <th>Framework</th>
+          <th>Best For</th>
+          <th>CI/CD Native</th>
+          <th>Production Monitoring</th>
+          <th>Pricing</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>DeepEval</strong></td>
+          <td>Pytest-native CI evaluation, 50+ metrics</td>
+          <td>Yes (pytest)</td>
+          <td>Via Confident AI cloud</td>
+          <td>Open-source + paid</td>
+      </tr>
+      <tr>
+          <td><strong>Braintrust</strong></td>
+          <td>Production traceability, A/B evals</td>
+          <td>Via SDK</td>
+          <td>Yes (built-in)</td>
+          <td>Usage-based</td>
+      </tr>
+      <tr>
+          <td><strong>LangSmith</strong></td>
+          <td>LangChain/LangGraph teams</td>
+          <td>Yes</td>
+          <td>Yes</td>
+          <td>Usage-based</td>
+      </tr>
+      <tr>
+          <td><strong>Arize Phoenix</strong></td>
+          <td>Observability + drift detection</td>
+          <td>Partial</td>
+          <td>Yes</td>
+          <td>Open-source + paid</td>
+      </tr>
+      <tr>
+          <td><strong>Strands Evals</strong> (AWS)</td>
+          <td>AWS Bedrock teams, auto test gen</td>
+          <td>Yes</td>
+          <td>Via CloudWatch</td>
+          <td>Open-source</td>
+      </tr>
+      <tr>
+          <td><strong>Galileo</strong></td>
+          <td>Enterprise quality guardrails</td>
+          <td>Yes</td>
+          <td>Yes</td>
+          <td>Enterprise</td>
+      </tr>
+  </tbody>
 </table>
 <p>DeepEval wins for teams that want to embed evaluation inside their existing pytest workflow — it requires no new infrastructure and adds evaluation as first-class test assertions. Braintrust wins for teams that need experiment-level comparison (comparing agent v1.2 to v1.3 across the same dataset) and production trace logging. LangSmith is the obvious choice if the team already uses LangChain/LangGraph; it provides native trace capture with minimal setup. Arize Phoenix focuses on observability and drift detection — useful for production monitoring but less suitable as a primary CI evaluation tool. AWS Strands Evals makes the most sense for teams already on Bedrock; its ExperimentGenerator is the standout differentiator for teams that want automated test case generation. Galileo targets enterprise teams that need policy-level quality guardrails with compliance reporting.</p>
 <h3 id="mixing-tools-is-correct">Mixing Tools Is Correct</h3>
