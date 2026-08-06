@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Protocol Design on RockB</title><link>https://baeseokjae.github.io/tags/protocol-design/</link><description>Recent content in Protocol Design on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sun, 02 Aug 2026 21:01:12 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/protocol-design/index.xml" rel="self" type="application/rss+xml"/><item><title>MCP Stateless Spec 2026: What the New Protocol Means for AI Agent Architecture and Costs</title><link>https://baeseokjae.github.io/posts/mcp-stateless-spec-2026/</link><pubDate>Sun, 02 Aug 2026 21:01:12 +0000</pubDate><guid>https://baeseokjae.github.io/posts/mcp-stateless-spec-2026/</guid><description>MCP&amp;#39;s 2026-07-28 spec removes sessions and initialization handshakes, enabling stateless AI agent protocols with lower costs and simpler scaling.</description><content:encoded><![CDATA[<p>The Model Context Protocol (MCP) is going stateless. The 2026-07-28 specification removes the mandatory initialization handshake and session concept, making every request self-contained. This means AI agents can now connect to tools using standard HTTP load balancers without sticky sessions, reducing infrastructure complexity and operational costs while enabling horizontal scaling for multi-agent deployments. For the 90% of MCP servers that never used session state, the transition is seamless — and for the rest, explicit state handles provide a clean migration path.</p>
+<h2 id="what-is-mcp-and-why-does-statefulness-matter">What Is MCP and Why Does Statefulness Matter?</h2>
+<p>The Model Context Protocol, created by David Soria Parra and Justin Spahr-Summers at Anthropic, is the open standard that defines how AI agents discover and interact with external tools, data sources, and services. Think of it as the USB-C for AI agents — a universal protocol that lets any compliant agent talk to any compliant server, whether that server provides database access, API integrations, file system operations, or web search capabilities.</p>
+<p>Since its initial schema in November 2024, MCP has evolved through five major versions: 2024-11-05, 2025-03-26, 2025-06-18, 2025-11-25, and now 2026-07-28. Each iteration has refined how agents and servers communicate, but the 2026-07-28 release represents the most fundamental architectural shift yet.</p>
+<h3 id="the-problem-with-stateful-mcp--load-balancing-resilience-complexity">The Problem with Stateful MCP — Load Balancing, Resilience, Complexity</h3>
+<p>Under the previous stateful design, every MCP connection required a two-phase initialization handshake before any real work could begin. The client would send an <code>initialize</code> request, the server would respond with its capabilities and protocol version, the client would send <code>initialized</code> notification, and only then could the agent start listing tools or making calls. This handshake created an implicit session — a stateful relationship between a specific client and a specific server instance.</p>
+<p>This statefulness created several practical problems:</p>
+<p><strong>Load balancing required sticky sessions.</strong> Because the server held session state in memory, every request from a given agent had to route to the same server instance. This forced operators to use session-affinity load balancers, which complicate failover, reduce cluster utilization, and make auto-scaling less effective.</p>
+<p><strong>Resilience suffered.</strong> If a server instance went down, all its active sessions were lost. The agent would need to re-initialize from scratch, losing any in-flight operations. There was no built-in mechanism for session recovery or migration.</p>
+<p><strong>Complexity was high.</strong> Server operators had to manage session lifecycle — creation, timeout, cleanup, and error recovery. SDKs handled some of this, but the protocol itself imposed a stateful model that many servers simply didn&rsquo;t need.</p>
+<p><strong>Caching was impossible across sessions.</strong> List endpoints like <code>tools/list</code> and <code>resources/list</code> returned results scoped to a session. Two subagents working for the same orchestrator couldn&rsquo;t share cached results, forcing redundant fetches that multiplied with every subagent and every server.</p>
+<h2 id="sep-2575-making-mcp-stateless-by-default">SEP-2575: Making MCP Stateless by Default</h2>
+<p>SEP-2575 is the cornerstone specification that removes the mandatory initialization handshake from MCP. Instead of requiring a separate handshake phase, every request now carries its own protocol metadata, making each interaction fully self-contained.</p>
+<h3 id="removing-the-initialization-handshake">Removing the Initialization Handshake</h3>
+<p>The old initialize/initialized handshake consumed at least two round trips before any productive work could happen. For a simple tool call, that meant:</p>
+<ol>
+<li>Client sends <code>initialize</code> → Server responds with capabilities</li>
+<li>Client sends <code>initialized</code> notification</li>
+<li>Client sends <code>tools/list</code> → Server responds with tool list</li>
+<li>Client sends <code>tools/call</code> → Server responds with result</li>
+</ol>
+<p>Under the new stateless spec, steps 1 and 2 are gone. The client sends <code>tools/list</code> directly, including protocol version and capabilities in the <code>_meta</code> field of the request. The server processes it immediately. This eliminates two round trips from every new connection — a meaningful latency reduction, especially for short-lived agent interactions.</p>
+<h3 id="per-request-protocol-version-and-capabilities">Per-Request Protocol Version and Capabilities</h3>
+<p>Every request in the stateless MCP spec includes a <code>_meta</code> object containing:</p>
+<ul>
+<li><code>protocolVersion</code>: The protocol version the client supports</li>
+<li><code>clientInfo</code>: Name and version of the client application</li>
+<li><code>capabilities</code>: The client&rsquo;s supported features (roots, sampling, experimental extensions)</li>
+</ul>
+<p>This per-request metadata means the server can handle clients running different protocol versions simultaneously. Version negotiation happens implicitly on every request rather than once at connection setup. This is particularly valuable in multi-agent environments where an orchestrator and its subagents might run different SDK versions.</p>
+<h3 id="the-serverdiscover-rpc-for-capability-discovery">The server/discover RPC for Capability Discovery</h3>
+<p>With the initialization handshake gone, clients need a new way to discover what a server supports. The <code>server/discover</code> RPC fills this role. It returns the server&rsquo;s capabilities, protocol version, and available features — the same information the old <code>initialize</code> response provided, but available on demand at any point in the interaction.</p>
+<p>This on-demand discovery model is more flexible than the old mandatory handshake. A client that already knows a server&rsquo;s capabilities (from a previous interaction or a shared cache) can skip discovery entirely and start making requests immediately. This is a significant optimization for persistent agent loops that repeatedly contact the same servers.</p>
+<h3 id="subscriptionslisten-for-long-lived-notification-channels">subscriptions/listen for Long-Lived Notification Channels</h3>
+<p>Stateless doesn&rsquo;t mean notification-free. The <code>subscriptions/listen</code> RPC lets clients establish long-lived channels for receiving server-initiated notifications — resource updates, tool list changes, or custom events. This is the stateless equivalent of the old SSE (Server-Sent Events) streaming model, but decoupled from the request-response lifecycle.</p>
+<p>The key insight is that notifications are now an opt-in feature rather than a baked-in transport assumption. Simple stateless interactions don&rsquo;t pay the overhead of maintaining a persistent connection. Only agents that need real-time updates subscribe to notification channels, and they do so explicitly.</p>
+<h2 id="sep-2567-removing-sessions-entirely">SEP-2567: Removing Sessions Entirely</h2>
+<p>While SEP-2575 removes the initialization handshake, SEP-2567 goes further by eliminating the session concept from the protocol entirely. The <code>Mcp-Session-Id</code> header is gone. Sessions as a first-class protocol construct no longer exist.</p>
+<h3 id="why-sessions-were-problematic--undefined-lifetime-no-caching-fixed-cardinality">Why Sessions Were Problematic — Undefined Lifetime, No Caching, Fixed Cardinality</h3>
+<p>An automated survey of over 1,000 open-source MCP repositories revealed a striking fact: <strong>90% of MCP servers have no application-level reference to the session ID at all.</strong> The session ID was passed through SDK boilerplate but never actually used by the server&rsquo;s business logic. Only 2.5% of servers used session-keyed application state that would require migration.</p>
+<p>The remaining 3.5% used the session ID for transport routing — a function that the sessionless SDK now handles transparently.</p>
+<p>Sessions created several structural problems:</p>
+<p><strong>Undefined lifetime.</strong> When does a session end? When the client disconnects? After a timeout? When the server restarts? Different implementations handled this differently, creating interoperability issues.</p>
+<p><strong>No caching across sessions.</strong> List endpoints returned session-scoped results. An orchestrator managing 10 subagents, each talking to 5 servers, would make 50 <code>tools/list</code> calls — one per subagent-server pair — even though the results were identical.</p>
+<p><strong>Fixed cardinality.</strong> Sessions created a one-to-one mapping between client and server. An agent couldn&rsquo;t easily share a connection pool or distribute requests across multiple server instances.</p>
+<h3 id="explicit-state-handles-replace-session-state">Explicit State Handles Replace Session State</h3>
+<p>For the 2.5% of servers that do need state, the solution is elegant: explicit state handles. Instead of relying on an implicit session to hold state, the server returns a handle (like <code>basket_id</code> or <code>browser_id</code>) that the client includes in subsequent requests.</p>
+<p>This shifts state management from the protocol layer to the application layer — exactly where it belongs. The AI model itself decides what state to share, what to isolate, and when to create or destroy stateful contexts. A shopping agent might create a <code>basket_id</code> for each user session, while a coding agent might use a <code>workspace_id</code> for each project. The protocol doesn&rsquo;t constrain these choices.</p>
+<h3 id="list-endpoints-become-cacheable">List Endpoints Become Cacheable</h3>
+<p>This is one of the most impactful changes for multi-agent architectures. Under the stateless spec, <code>tools/list</code>, <code>resources/list</code>, and <code>prompts/list</code> return results that are independent of any session. This means:</p>
+<ul>
+<li>Results can be cached at the HTTP level using standard cache headers</li>
+<li>Multiple subagents can share cached list results</li>
+<li>An orchestrator can fetch tool lists once and distribute them to all subagents</li>
+<li>CDNs and reverse proxies can cache list responses</li>
+</ul>
+<p>The math is compelling. In a stateful world, an orchestrator with N subagents talking to M servers makes N × M list requests. In the stateless world, it makes just M requests — a reduction from O(subagents × servers) to O(servers). For a deployment with 20 subagents and 10 servers, that&rsquo;s 200 requests reduced to 10.</p>
+<h2 id="what-this-means-for-ai-agent-architecture">What This Means for AI Agent Architecture</h2>
+<p>The stateless MCP spec isn&rsquo;t just a protocol change — it&rsquo;s a fundamental shift in how AI agent systems are designed and deployed.</p>
+<h3 id="horizontal-scaling-without-sticky-sessions">Horizontal Scaling Without Sticky Sessions</h3>
+<p>Standard L4/L7 round-robin load balancers can now distribute MCP traffic across any number of server instances. No sticky sessions, no session affinity, no custom routing logic. This means:</p>
+<ul>
+<li><strong>Auto-scaling works naturally.</strong> New server instances join the pool and immediately handle requests. No session migration, no warm-up period.</li>
+<li><strong>Failover is instant.</strong> If a server instance dies, the load balancer simply routes to a healthy instance. No sessions to recover, no state to reconstruct.</li>
+<li><strong>Geo-distributed deployments become practical.</strong> With the HTTP standardization (SEP-2243), MCP traffic can be routed based on geographic proximity using <code>x-mcp-header</code> annotations, reducing latency for global agent deployments.</li>
+</ul>
+<h3 id="subagent-orchestration-and-list-caching">Subagent Orchestration and List Caching</h3>
+<p>Multi-agent systems benefit disproportionately from stateless MCP. Consider a typical orchestration pattern:</p>
+<ol>
+<li>The orchestrator agent receives a complex task</li>
+<li>It spawns multiple subagents, each responsible for a subtask</li>
+<li>Each subagent needs to discover and call tools from several MCP servers</li>
+</ol>
+<p>In the stateful world, every subagent-server pair required a full initialization handshake and a session-scoped list fetch. With stateless MCP, the orchestrator can:</p>
+<ul>
+<li>Fetch tool lists once and cache them</li>
+<li>Pass cached capabilities to subagents</li>
+<li>Subagents make direct tool calls without any handshake overhead</li>
+</ul>
+<p>The result is dramatically lower latency for multi-agent task execution, especially in workflows involving many subagents and many tools.</p>
+<h3 id="the-model-controls-state-not-the-protocol">The Model Controls State, Not the Protocol</h3>
+<p>Perhaps the most philosophically important shift is who — or what — controls state. In the old model, the protocol imposed a session boundary that the model couldn&rsquo;t override. State was implicit, tied to a connection, and opaque to the AI.</p>
+<p>In the new model, state is explicit. The model decides:</p>
+<ul>
+<li>What state to create (a shopping cart, a workspace, a conversation thread)</li>
+<li>What state to share across subagents (shared context, common resources)</li>
+<li>What state to isolate per subagent (private data, independent operations)</li>
+<li>When to destroy state (task completion, timeout, explicit cleanup)</li>
+</ul>
+<p>This gives AI agents more autonomy and flexibility. The protocol gets out of the way and lets the model manage state the way it manages everything else — through explicit, intentional actions.</p>
+<h2 id="cost-implications-of-stateless-mcp">Cost Implications of Stateless MCP</h2>
+<p>The architectural changes in stateless MCP translate directly to cost savings across several dimensions.</p>
+<h3 id="reduced-infrastructure-complexity">Reduced Infrastructure Complexity</h3>
+<p>Sticky-session load balancers are more expensive than standard ones — both in licensing costs and operational complexity. They require session tables, health check logic that accounts for session state, and more complex failover procedures. Stateless MCP eliminates all of this.</p>
+<p>The HTTP standardization (SEP-2243) means MCP traffic can be handled by standard HTTP infrastructure: NGINX, HAProxy, AWS ALB, Google Cloud HTTP(S) Load Balancer, Cloudflare. No custom proxies, no deep packet inspection, no transport-layer hacks. This alone can reduce infrastructure costs by 30-50% for organizations running MCP at scale.</p>
+<h3 id="lower-operational-overhead">Lower Operational Overhead</h3>
+<p>Session management is a tax on every server operator. You need to:</p>
+<ul>
+<li>Configure session timeouts</li>
+<li>Implement session cleanup routines</li>
+<li>Handle session recovery on failure</li>
+<li>Monitor session counts and memory usage</li>
+<li>Debug session-related issues</li>
+</ul>
+<p>For the 90% of servers that never used session state, this was pure overhead. For the 10% that did, the migration to explicit handles is mechanical and well-documented. Either way, the operational burden decreases.</p>
+<p>Server operators can now deploy MCP servers as stateless HTTP services — the same way they deploy REST APIs. This means existing monitoring, logging, and deployment tooling works without modification.</p>
+<h3 id="efficient-multi-agent-workloads">Efficient Multi-Agent Workloads</h3>
+<p>The O(subagents × servers) to O(servers) reduction in list-fetch overhead has real cost implications. In a stateful deployment with 50 subagents and 20 servers, that&rsquo;s 1,000 initialization handshakes and list fetches per task. Each one consumes server CPU, network bandwidth, and time.</p>
+<p>With stateless MCP, that drops to 20 list fetches — a 50x reduction in protocol overhead. For high-throughput agent systems processing thousands of tasks per hour, this translates to significant savings in compute resources and reduced latency.</p>
+<h2 id="migration-guide-for-mcp-server-operators">Migration Guide for MCP Server Operators</h2>
+<p>The transition to stateless MCP is designed to be smooth, but the migration path depends on your current server implementation.</p>
+<h3 id="who-is-affected-and-who-isnt">Who Is Affected (and Who Isn&rsquo;t)</h3>
+<table>
+	<thead>
+			<tr>
+					<th>Server Type</th>
+					<th>Impact</th>
+					<th>Action Required</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>No session state used (90%)</td>
+					<td>None</td>
+					<td>Update SDK, recompile</td>
+			</tr>
+			<tr>
+					<td>Session used for transport routing (3.5%)</td>
+					<td>None</td>
+					<td>Sessionless SDK handles this transparently</td>
+			</tr>
+			<tr>
+					<td>Session-keyed application state (2.5%)</td>
+					<td>Migration needed</td>
+					<td>Replace implicit session with explicit handles</td>
+			</tr>
+			<tr>
+					<td>Custom transport implementations</td>
+					<td>Review needed</td>
+					<td>Update to stateless transport model</td>
+			</tr>
+	</tbody>
+</table>
+<p>If your server falls in the first two categories — and 93.5% of servers do — the migration is essentially a recompile with the updated SDK. No logic changes required.</p>
+<h3 id="migrating-session-state-to-explicit-handles">Migrating Session State to Explicit Handles</h3>
+<p>For the 2.5% of servers that use session-keyed state, the migration pattern is straightforward:</p>
+<ol>
+<li>
+<p><strong>Identify session-scoped state.</strong> What data is currently keyed by session ID? Is it a shopping cart, a user profile, a conversation history, a file browser state?</p>
+</li>
+<li>
+<p><strong>Create an explicit handle.</strong> Define a handle identifier (like <code>cart_id</code>, <code>profile_id</code>, <code>workspace_id</code>) that the client passes with each request.</p>
+</li>
+<li>
+<p><strong>Move state to a shared store.</strong> Instead of holding state in server memory keyed by session ID, store it in a database or cache keyed by the explicit handle.</p>
+</li>
+<li>
+<p><strong>Update the API.</strong> Replace implicit session lookups with explicit handle parameters in your tool definitions.</p>
+</li>
+<li>
+<p><strong>Test with the new SDK.</strong> The updated MCP SDKs handle the protocol changes transparently — your server just needs to accept and return the right parameters.</p>
+</li>
+</ol>
+<h3 id="sdk-support-and-protocol-version-negotiation">SDK Support and Protocol Version Negotiation</h3>
+<p>All major MCP SDKs (TypeScript, Python, Java, Go) have been updated to support the 2026-07-28 spec. The SDKs handle:</p>
+<ul>
+<li>Per-request <code>_meta</code> injection automatically</li>
+<li>Protocol version negotiation</li>
+<li>Backward compatibility with older clients</li>
+<li>Sessionless transport management</li>
+</ul>
+<p>Servers can support multiple protocol versions simultaneously, making it safe to deploy the new SDK before all clients have upgraded. The per-request version negotiation means old and new clients can coexist on the same server.</p>
+<h2 id="the-future-of-mcp--what-comes-next">The Future of MCP — What Comes Next</h2>
+<p>The stateless MCP spec represents a maturation of the protocol. It started as a way for individual AI agents to connect to tools, and it&rsquo;s evolving into a robust, production-ready standard for agent infrastructure at scale.</p>
+<p>Several developments are on the horizon:</p>
+<p><strong>Standardized authentication.</strong> Working groups are finalizing OAuth 2.0 and API key authentication patterns for MCP, building on the stateless foundation.</p>
+<p><strong>Transport diversity.</strong> While HTTP becomes the primary transport, the stateless model works equally well with WebSocket, gRPC, and message queue transports.</p>
+<p><strong>Governance evolution.</strong> MCP is governed as an open standard under the MIT License, with multiple working groups covering transports, authentication, and governance. The SEP (Specification Enhancement Proposal) process ensures the protocol continues to evolve with community input.</p>
+<p><strong>Enterprise adoption.</strong> The stateless design removes the last major barriers to enterprise adoption — load balancing complexity, session management overhead, and operational cost concerns. Expect to see MCP become the default protocol for AI-tool integration in enterprise environments.</p>
+<h2 id="frequently-asked-questions">Frequently Asked Questions</h2>
+<p><strong>Q: What is the MCP stateless spec and why does it matter?</strong>
+A: The MCP stateless spec (2026-07-28) removes the mandatory initialization handshake and session concept from the Model Context Protocol, making every request self-contained. It matters because it enables standard HTTP load balancing, reduces infrastructure costs, and simplifies multi-agent architectures by eliminating session management overhead.</p>
+<p><strong>Q: Will my existing MCP server stop working with the new stateless spec?</strong>
+A: No. The new SDKs support backward compatibility through per-request protocol version negotiation. Old and new clients can coexist on the same server. If your server doesn&rsquo;t use session-keyed application state (90% of servers), the migration is a simple SDK update and recompile.</p>
+<p><strong>Q: How does stateless MCP reduce costs for AI agent deployments?</strong>
+A: Stateless MCP reduces costs by eliminating the need for sticky-session load balancers, removing session management overhead from server operations, and reducing protocol overhead in multi-agent workflows from O(subagents × servers) to O(servers) for list operations.</p>
+<p><strong>Q: What replaces session state in the stateless MCP spec?</strong>
+A: Explicit state handles replace implicit session state. Instead of the protocol holding state keyed by a session ID, the server returns a handle (like <code>basket_id</code> or <code>workspace_id</code>) that the client includes in subsequent requests. This shifts state management from the protocol layer to the application layer.</p>
+<p><strong>Q: How do I migrate my MCP server that uses session-keyed state?</strong>
+A: Identify your session-scoped data, create an explicit handle identifier for it, move the state to a shared store (database or cache) keyed by that handle, update your tool definitions to accept the handle as a parameter, and test with the updated SDK. The migration is mechanical and well-documented in the SEP-2567 specification.</p>
+]]></content:encoded></item></channel></rss>

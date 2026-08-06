@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Kimi K3 Architecture on RockB</title><link>https://baeseokjae.github.io/tags/kimi-k3-architecture/</link><description>Recent content in Kimi K3 Architecture on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 30 Jul 2026 04:02:12 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/kimi-k3-architecture/index.xml" rel="self" type="application/rss+xml"/><item><title>FlashKDA: Memory-Efficient KDA Kernels for LLM Training and Decode — Technical Review</title><link>https://baeseokjae.github.io/posts/flashkda-memory-efficient-kda-kernels-2026/</link><pubDate>Thu, 30 Jul 2026 04:02:12 +0000</pubDate><guid>https://baeseokjae.github.io/posts/flashkda-memory-efficient-kda-kernels-2026/</guid><description>FlashKDA is MoonshotAI&amp;#39;s high-performance CUDA kernel for Kimi Delta Attention, delivering 15%+ speedups and 75% KV cache reduction for LLM training and inference on Hopper GPUs.</description><content:encoded><![CDATA[<h2 id="what-is-flashkda--overview-and-motivation">What is FlashKDA? — Overview and Motivation</h2>
+<p>FlashKDA is MoonshotAI&rsquo;s high-performance CUDA kernel implementation of Kimi Delta Attention (KDA), a linear attention mechanism designed to eliminate the quadratic complexity bottleneck of standard attention in large language models. Built on NVIDIA CUTLASS and targeting Hopper (SM90+) GPUs, FlashKDA delivers production-grade memory efficiency for both training and inference, reducing KV cache by up to 75% while achieving 15%+ end-to-end speedups over monolithic fused kernels. It powers the Kimi K3 model at 2.8 trillion parameters and integrates seamlessly with the Flash Linear Attention (FLA) ecosystem.</p>
+<h2 id="kimi-delta-attention-kda--the-algorithm-behind-the-kernel">Kimi Delta Attention (KDA) — The Algorithm Behind the Kernel</h2>
+<p>Kimi Delta Attention is a refined variant of Gated DeltaNet, a linear attention architecture that replaces the softmax-based attention mechanism with a recurrent state update. Unlike standard multi-head attention (MHA) which stores a growing KV cache of all previous tokens, KDA compresses the context into a fixed-size recurrent state that updates incrementally as each new token is processed.</p>
+<p>The core idea is straightforward: instead of computing attention scores between every pair of tokens (O(n²) complexity), KDA maintains a compact hidden state that evolves through a gated delta rule. Each new token contributes an update to this state, and the output is computed by reading from the current state. This reduces the memory footprint from O(n × d) for KV cache to O(d²) for the recurrent state, where d is the head dimension.</p>
+<p>KDA introduces a more efficient gating mechanism compared to the original DeltaNet. The gate controls how much of the previous state is retained versus overwritten by new information, giving the model fine-grained control over context retention. This gating is what enables KDA to handle sequences up to 1 million tokens without the memory explosion that plagues standard attention.</p>
+<h2 id="architecture-deep-dive--chunk-size-fusion-strategy-and-precision">Architecture Deep Dive — Chunk Size, Fusion Strategy, and Precision</h2>
+<h3 id="why-chunk16-instead-of-chunk64">Why CHUNK=16 Instead of CHUNK=64</h3>
+<p>The chunk size is one of the most consequential design decisions in linear attention kernels. Flash Linear Attention (FLA), the reference implementation, uses CHUNK=64. FlashKDA deliberately chooses CHUNK=16, and this choice has deep technical justification.</p>
+<p>A smaller chunk size means fewer tokens are processed together in each intra-chunk step, which reduces the dynamic range of intermediate values. This is critical for numerical stability when working with bf16 precision. At CHUNK=64, the accumulated values can span a wide dynamic range, requiring intra-chunk rescaling tricks to maintain precision. FlashKDA&rsquo;s CHUNK=16 eliminates the need for these rescaling operations entirely, because the values stay within bf16&rsquo;s representable range.</p>
+<p>The trade-off is parallelism: larger chunks expose more parallelism within each chunk. However, FlashKDA compensates through its two-kernel fusion strategy, which recovers parallelism along different axes. The net result is better numerical stability without sacrificing throughput.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Feature</th>
+					<th>FlashKDA (CHUNK=16)</th>
+					<th>FLA Triton (CHUNK=64)</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Chunk size</td>
+					<td>16</td>
+					<td>64</td>
+			</tr>
+			<tr>
+					<td>State precision</td>
+					<td>bf16</td>
+					<td>bf16 with rescaling</td>
+			</tr>
+			<tr>
+					<td>Intra-chunk rescaling</td>
+					<td>Not needed</td>
+					<td>Required</td>
+			</tr>
+			<tr>
+					<td>Numerical stability</td>
+					<td>Higher (bf16 safe)</td>
+					<td>Requires workarounds</td>
+			</tr>
+			<tr>
+					<td>Parallelism axis</td>
+					<td>Token + Head split</td>
+					<td>Intra-chunk</td>
+			</tr>
+			<tr>
+					<td>SM80 (Ampere) support</td>
+					<td>Possible</td>
+					<td>Native</td>
+			</tr>
+	</tbody>
+</table>
+<h3 id="two-kernel-pipeline-k1-and-k2">Two-Kernel Pipeline: K1 and K2</h3>
+<p>FlashKDA decomposes the attention computation into two specialized kernels, each optimized for a different parallelism axis:</p>
+<p><strong>K1 (Token-Parallel):</strong> This kernel operates across the token dimension. Each thread block processes one token&rsquo;s contribution to the recurrent state update. Because tokens are independent in the forward pass of a linear attention layer, K1 achieves near-perfect scaling across the sequence length dimension. It computes the gated delta update for each token and writes the updated state to shared memory.</p>
+<p><strong>K2 (Head-Parallel):</strong> This kernel operates across the attention head dimension. After K1 has computed the updated states, K2 reads those states and computes the final output for each head. Head parallelism is natural because attention heads are independent by design.</p>
+<p>The two-kernel split yields at least 15% end-to-end speedup over a single fused kernel. The reason is that a monolithic kernel must serialize token and head operations, creating a bottleneck where one dimension waits for the other. By splitting, FlashKDA keeps both the SM tensor cores and the memory subsystem fully utilized.</p>
+<p>This is a practical lesson in GPU kernel design: splitting computation along natural parallelism axes can outperform monolithic fusion, even though fusion is conventionally seen as the optimization ideal.</p>
+<h3 id="numerical-precision-bf16-state-fp16-inverse-fp32-fma">Numerical Precision: bf16 State, fp16 Inverse, fp32 FMA</h3>
+<p>FlashKDA employs a three-tier precision strategy that balances throughput against numerical accuracy:</p>
+<ol>
+<li>
+<p><strong>Recurrent state stored in bf16:</strong> The on-chip recurrent state is maintained in bf16, which provides 8 bits of exponent and 7 bits of mantissa. This is sufficient for the state values, which evolve gradually through gated updates. Storing in bf16 rather than fp32 cuts shared memory usage in half — a critical savings on Hopper GPUs where shared memory is a scarce resource.</p>
+</li>
+<li>
+<p><strong>16×16 matrix inversion in fp16:</strong> The matrix inversion step required by the delta update rule operates on 16×16 blocks. FlashKDA computes this inversion in fp16 rather than bf16 because the inverse elements are mathematically bounded within the range [-1, 1]. This bounded range means fp16&rsquo;s limited exponent range is not a problem, and fp16&rsquo;s higher precision (11 mantissa bits vs bf16&rsquo;s 7) actually improves inversion accuracy.</p>
+</li>
+<li>
+<p><strong>FMA accumulation in fp32:</strong> All fused multiply-add (FMA) operations that accumulate over the sequence dimension are performed in fp32. This is the standard practice for numerical stability in attention kernels — the accumulator needs the extra precision to avoid error accumulation across thousands of tokens.</p>
+</li>
+</ol>
+<p>The result is a precision-engineering sweet spot: no measurable accuracy loss compared to a full fp32 reference, with 2× shared memory savings and maximum tensor core utilization.</p>
+<h2 id="performance-benchmarks-and-speedups">Performance Benchmarks and Speedups</h2>
+<p>FlashKDA&rsquo;s performance numbers are compelling across multiple dimensions:</p>
+<p><strong>KV Cache Reduction:</strong> KDA reduces KV cache by up to 75% compared to full attention mechanisms. For a 1M-token sequence with 64 attention heads and 128-dimensional head size, standard MHA requires approximately 64 GB of KV cache. KDA&rsquo;s recurrent state approach brings this down to roughly 16 GB — a difference that determines whether a model fits on a single H100 node.</p>
+<p><strong>Token Processing Speed:</strong> Kimi Linear, which uses KDA as its core attention mechanism, achieves 6.3× faster time-to-first-token (TTOT) and tokens-per-second (TPOT) compared to Multi-head Latent Attention (MLA) at 1M-token sequences. This is because KDA&rsquo;s recurrent state eliminates the need to attend over the entire prefix on every generation step.</p>
+<p><strong>End-to-End Throughput:</strong> The two-kernel split (K1 + K2) delivers at least 15% end-to-end speedup over a single fused kernel implementation. This has been verified on H100 (SM90) GPUs with sequence lengths ranging from 8K to 128K tokens.</p>
+<p><strong>RULER Benchmark:</strong> At 128K context length, KDA-based models achieve a 3.98× speedup over full attention while maintaining competitive accuracy on the RULER long-context evaluation suite.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Metric</th>
+					<th>Full Attention</th>
+					<th>KDA (FlashKDA)</th>
+					<th>Improvement</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>KV cache (1M tokens, 64 heads)</td>
+					<td>~64 GB</td>
+					<td>~16 GB</td>
+					<td>75% reduction</td>
+			</tr>
+			<tr>
+					<td>TPOT at 1M tokens</td>
+					<td>Baseline</td>
+					<td>6.3× faster vs MLA</td>
+					<td>6.3×</td>
+			</tr>
+			<tr>
+					<td>End-to-end kernel speed</td>
+					<td>Baseline</td>
+					<td>+15% vs fused kernel</td>
+					<td>15%</td>
+			</tr>
+			<tr>
+					<td>RULER 128k speed</td>
+					<td>Baseline</td>
+					<td>3.98× faster</td>
+					<td>3.98×</td>
+			</tr>
+			<tr>
+					<td>MMLU-Pro at 4k context</td>
+					<td>Baseline</td>
+					<td>51.0 (comparable)</td>
+					<td>No loss</td>
+			</tr>
+	</tbody>
+</table>
+<h2 id="integration-with-flash-linear-attention-and-kimi-linear">Integration with Flash Linear Attention and Kimi-Linear</h2>
+<p>FlashKDA is not a standalone project — it is designed as a backend for the Flash Linear Attention (FLA) library, which is the dominant open-source linear attention kernel ecosystem with over 5,479 GitHub stars and 617 forks.</p>
+<p>The integration works through FLA&rsquo;s <code>chunk_kda</code> dispatch mechanism. When a user calls FLA&rsquo;s chunked KDA operation, the library checks whether FlashKDA is available (i.e., the system has a compatible Hopper GPU and CUDA 12.9+). If so, it dispatches to the FlashKDA CUDA kernel. If not, it falls back to the Triton-based implementation.</p>
+<p>Users can explicitly opt out of FlashKDA by setting the environment variable <code>FLA_FLASH_KDA=0</code>, which forces the Triton fallback. This is useful for debugging or for running on Ampere (SM80) GPUs where FlashKDA is not yet supported.</p>
+<p>Kimi-Linear, MoonshotAI&rsquo;s hybrid linear attention architecture, uses KDA as its core attention mechanism. The stack is layered: Kimi-Linear → KDA → FlashKDA (CUDA) or FLA Triton (fallback). This means FlashKDA&rsquo;s performance benefits flow directly to any model built on Kimi-Linear.</p>
+<h2 id="flashkda-in-production-powering-kimi-k3">FlashKDA in Production: Powering Kimi K3</h2>
+<p>FlashKDA is not a research prototype — it is production-hardened and deployed at scale. The Kimi K3 model, a 2.8 trillion parameter Mixture-of-Experts (MoE) architecture with 104 billion activated parameters per token, uses KDA as its attention mechanism, and FlashKDA as the kernel backend.</p>
+<p>Kimi K3 achieves a 2.5× scaling efficiency improvement over Kimi K2 through the combination of KDA, Attention Residuals (AttnRes), and Stable LatentMoE. The model supports a 1-million-token context window, which would be prohibitively expensive with standard attention. FlashKDA&rsquo;s memory efficiency is what makes this context length feasible on production GPU clusters.</p>
+<p>The model activates 16 of 896 experts per token through its Stable LatentMoE mechanism, and KDA&rsquo;s reduced memory footprint means more GPU memory is available for expert parameters and activations. This is a compounding efficiency gain: memory-efficient attention frees resources for larger model capacity.</p>
+<h2 id="comparison-with-alternatives-fla-triton-mla-full-attention">Comparison with Alternatives (FLA Triton, MLA, Full Attention)</h2>
+<table>
+	<thead>
+			<tr>
+					<th>Feature</th>
+					<th>FlashKDA</th>
+					<th>FLA Triton</th>
+					<th>MLA</th>
+					<th>Full Attention</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Memory complexity</td>
+					<td>O(d²)</td>
+					<td>O(d²)</td>
+					<td>O(l×d_l)</td>
+					<td>O(n×d)</td>
+			</tr>
+			<tr>
+					<td>KV cache at 1M tokens</td>
+					<td>~16 GB</td>
+					<td>~16 GB</td>
+					<td>~32 GB</td>
+					<td>~64 GB</td>
+			</tr>
+			<tr>
+					<td>Numerical stability</td>
+					<td>High (CHUNK=16)</td>
+					<td>Good (rescaling)</td>
+					<td>High</td>
+					<td>High</td>
+			</tr>
+			<tr>
+					<td>GPU requirement</td>
+					<td>SM90+ (Hopper)</td>
+					<td>SM80+ (Ampere)</td>
+					<td>Any</td>
+					<td>Any</td>
+			</tr>
+			<tr>
+					<td>Speed vs full attention</td>
+					<td>3.98× at 128k</td>
+					<td>~3× at 128k</td>
+					<td>~2× at 128k</td>
+					<td>1×</td>
+			</tr>
+			<tr>
+					<td>Maturity</td>
+					<td>Production (K3)</td>
+					<td>Production</td>
+					<td>Production</td>
+					<td>Production</td>
+			</tr>
+			<tr>
+					<td>Integration</td>
+					<td>FLA backend</td>
+					<td>Native</td>
+					<td>Custom</td>
+					<td>Native</td>
+			</tr>
+			<tr>
+					<td>Community</td>
+					<td>1,022+ stars</td>
+					<td>5,479+ stars</td>
+					<td>N/A</td>
+					<td>N/A</td>
+			</tr>
+	</tbody>
+</table>
+<p>FlashKDA&rsquo;s key differentiator is its combination of Hopper-specific optimization (CUTLASS 3.x, TMA, warp-group specialization) with the CHUNK=16 design that eliminates rescaling overhead. FLA Triton is more portable (runs on Ampere) but leaves performance on the table. MLA reduces KV cache but not as aggressively as KDA. Full attention is the baseline that all linear attention methods aim to beat.</p>
+<h2 id="requirements-and-limitations">Requirements and Limitations</h2>
+<p>FlashKDA has specific hardware and software requirements that constrain its deployment:</p>
+<p><strong>Hardware:</strong> Requires NVIDIA Hopper architecture (SM90+) — specifically H100, H200, or B200 GPUs. Ampere (SM80) and Ada Lovelace (SM89) GPUs are not supported. This is because FlashKDA leverages Hopper-specific features including Tensor Memory Accelerator (TMA), warp-group specialization, and fourth-generation tensor cores.</p>
+<p><strong>Software:</strong> Requires CUDA 12.9 or later and CUTLASS 3.x. The dependency on CUTLASS means the build system must have the CUTLASS headers available. The project is built as a Python package with CUDA extensions, so a working CUDA toolchain is essential.</p>
+<p><strong>Head Dimension Constraint:</strong> FlashKDA currently requires K=V=128. This is a limitation of the current implementation — the 16×16 matrix inversion and the shared memory layout are hardcoded for this head dimension. Support for other head dimensions (e.g., 64, 96) is not yet available.</p>
+<p><strong>Ecosystem Lock-in:</strong> FlashKDA is designed specifically for KDA. It cannot be used for other linear attention variants (e.g., Mamba, Based, or ReLU attention) without significant modification. Users who want a general linear attention kernel library should use FLA Triton.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Requirement</th>
+					<th>FlashKDA</th>
+					<th>FLA Triton</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Minimum GPU</td>
+					<td>Hopper (SM90+)</td>
+					<td>Ampere (SM80+)</td>
+			</tr>
+			<tr>
+					<td>CUDA version</td>
+					<td>12.9+</td>
+					<td>11.8+</td>
+			</tr>
+			<tr>
+					<td>Head dimension</td>
+					<td>K=V=128 only</td>
+					<td>Any</td>
+			</tr>
+			<tr>
+					<td>Attention variant</td>
+					<td>KDA only</td>
+					<td>Multiple</td>
+			</tr>
+			<tr>
+					<td>Build dependency</td>
+					<td>CUTLASS 3.x</td>
+					<td>Triton</td>
+			</tr>
+	</tbody>
+</table>
+<h2 id="conclusion--why-flashkda-matters-for-llm-inference">Conclusion — Why FlashKDA Matters for LLM Inference</h2>
+<p>FlashKDA represents a significant step forward in production-grade linear attention kernels. Its CHUNK=16 design, two-kernel fusion strategy, and three-tier precision approach demonstrate that careful engineering at the kernel level can deliver substantial real-world gains.</p>
+<p>For LLM practitioners, FlashKDA matters because it makes long-context inference practical. The 75% KV cache reduction and 6.3× faster TPOT at 1M tokens mean that models can handle book-length contexts, multi-turn conversations with full history, and large-document analysis without requiring specialized hardware or exotic quantization schemes.</p>
+<p>The fact that FlashKDA powers Kimi K3 — one of the largest open-weight models ever released — validates that these techniques work at scale. It is not a theoretical paper optimization; it is a production kernel running on real GPU clusters.</p>
+<p>As the linear attention paradigm continues to mature, FlashKDA sets a new standard for what is possible with CUDA kernel engineering. The open-source ecosystem around KDA — FlashKDA, Kimi-Linear, and FLA integration — provides a complete stack from kernel to model, making these advances accessible to the broader AI community.</p>
+<h2 id="faq">FAQ</h2>
+<h3 id="what-is-flashkda-and-how-does-it-differ-from-standard-attention">What is FlashKDA and how does it differ from standard attention?</h3>
+<p>FlashKDA is MoonshotAI&rsquo;s CUDA kernel implementation of Kimi Delta Attention (KDA), a linear attention mechanism that replaces the quadratic-complexity softmax attention with a recurrent state update. Unlike standard attention which stores a growing KV cache of all previous tokens, KDA compresses context into a fixed-size state, reducing memory from O(n×d) to O(d²).</p>
+<h3 id="what-hardware-do-i-need-to-run-flashkda">What hardware do I need to run FlashKDA?</h3>
+<p>FlashKDA requires NVIDIA Hopper architecture GPUs (SM90+), specifically H100, H200, or B200. It also requires CUDA 12.9 or later and CUTLASS 3.x. Ampere (A100) and Ada Lovelace (RTX 4090) GPUs are not supported. For those GPUs, the FLA Triton fallback path is available.</p>
+<h3 id="how-much-faster-is-flashkda-compared-to-standard-attention-kernels">How much faster is FlashKDA compared to standard attention kernels?</h3>
+<p>FlashKDA delivers a 3.98× speedup on the RULER benchmark at 128K context length compared to full attention. Its two-kernel split (K1 + K2) provides at least 15% end-to-end speedup over a single fused kernel. At 1M-token sequences, Kimi Linear with KDA achieves 6.3× faster TPOT compared to Multi-head Latent Attention (MLA).</p>
+<h3 id="can-i-use-flashkda-with-my-existing-model-or-training-pipeline">Can I use FlashKDA with my existing model or training pipeline?</h3>
+<p>FlashKDA integrates as a backend for the Flash Linear Attention (FLA) library. If your model uses FLA&rsquo;s chunked KDA operation and runs on Hopper GPUs with CUDA 12.9+, FlashKDA is automatically used. You can opt out with the <code>FLA_FLASH_KDA=0</code> environment variable. Direct integration outside of FLA is not currently supported.</p>
+<h3 id="what-are-the-limitations-of-flashkda">What are the limitations of FlashKDA?</h3>
+<p>The main limitations are: (1) Hopper GPU requirement — no Ampere or Ada support; (2) head dimension locked to K=V=128; (3) KDA-specific — cannot be used for other linear attention variants; (4) CUDA 12.9+ requirement which may not be available in all environments. These limitations are expected to ease as the project matures.</p>
+]]></content:encoded></item></channel></rss>

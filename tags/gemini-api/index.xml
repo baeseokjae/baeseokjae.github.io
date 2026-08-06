@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Gemini API on RockB</title><link>https://baeseokjae.github.io/tags/gemini-api/</link><description>Recent content in Gemini API on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Wed, 22 Jul 2026 16:02:48 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/gemini-api/index.xml" rel="self" type="application/rss+xml"/><item><title>Gemini API Temperature, Top-P, and Top-K Deprecated 2026 — What Developers Need to Know</title><link>https://baeseokjae.github.io/posts/gemini-api-temperature-top-p-deprecated-2026/</link><pubDate>Wed, 22 Jul 2026 16:02:48 +0000</pubDate><guid>https://baeseokjae.github.io/posts/gemini-api-temperature-top-p-deprecated-2026/</guid><description>Google deprecated temperature, top-p, and top-k in Gemini 3.6 Flash and 3.5 Flash-Lite. Here is what replaces them and how to migrate safely.</description><content:encoded><![CDATA[<h2 id="overview--what-changed-and-why-it-matters">Overview — What Changed and Why It Matters</h2>
+<p>On July 21, 2026, Google released Gemini 3.6 Flash and Gemini 3.5 Flash-Lite with a sweeping set of API changes that break nearly every existing integration. The most impactful change is the deprecation of three core sampling parameters — temperature, top-p, and top-k — which are now silently accepted and ignored by the API. This means your existing code continues to return HTTP 200 responses, but the parameters you relied on for controlling output randomness, determinism, and creativity no longer have any effect. Google has shifted its design philosophy from developer-controlled sampling to model-autonomous output optimization, arguing that modern reasoning models produce better results when left at their default settings. This guide covers all five breaking changes, explains what replaces each deprecated parameter, and provides a step-by-step migration checklist to help you update your codebase safely.</p>
+<h2 id="the-five-breaking-changes-in-gemini-36-flash-and-35-flash-lite">The Five Breaking Changes in Gemini 3.6 Flash and 3.5 Flash-Lite</h2>
+<p>The Gemini 3.x release introduces five distinct API changes that developers must address during migration. They range from silent no-ops to hard HTTP 400 errors, and each requires a different migration strategy.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Change</th>
+					<th>Behavior</th>
+					<th>Error Type</th>
+					<th>Severity</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>temperature, top-p, top-k deprecated</td>
+					<td>Accepted but silently ignored</td>
+					<td>Silent no-op</td>
+					<td>Critical</td>
+			</tr>
+			<tr>
+					<td>thinking_budget → thinking_level</td>
+					<td>Sending both returns HTTP 400</td>
+					<td>Hard error</td>
+					<td>High</td>
+			</tr>
+			<tr>
+					<td>Last turn role &lsquo;model&rsquo;</td>
+					<td>Returns HTTP 400</td>
+					<td>Hard error</td>
+					<td>High</td>
+			</tr>
+			<tr>
+					<td>FunctionResponse requires call_id and name</td>
+					<td>Missing fields return HTTP 400</td>
+					<td>Hard error</td>
+					<td>High</td>
+			</tr>
+			<tr>
+					<td>candidate_count not supported</td>
+					<td>Returns HTTP 400</td>
+					<td>Hard error</td>
+					<td>Medium</td>
+			</tr>
+	</tbody>
+</table>
+<p>The silent deprecation of temperature, top-p, and top-k is the most dangerous change because it produces no error. Pipelines that rely on temperature=0 for deterministic output will continue receiving 200 OK responses while losing the determinism guarantee entirely. The four hard-error changes are easier to catch because they fail immediately during testing.</p>
+<h2 id="the-silent-danger--why-temperaturetop_ptop_k-being-ignored-is-worse-than-an-error">The Silent Danger — Why temperature/top_p/top_k Being Ignored Is Worse Than an Error</h2>
+<p>When an API returns an error, you know something is wrong. When it silently ignores your parameters, your application degrades without any signal. This is precisely the situation with temperature, top-p, and top-k in Gemini 3.6 Flash and 3.5 Flash-Lite.</p>
+<p>Consider a production pipeline that sets temperature=0 to ensure consistent, deterministic responses for structured data extraction. Before the migration, this pipeline produces identical outputs for identical inputs. After switching to a Gemini 3.x model, the same code runs without errors — but the temperature parameter is ignored, and the model uses its default sampling behavior. Outputs become non-deterministic, and the pipeline produces different results on each call. The developer has no warning, no error log, and no obvious signal that the behavior has changed.</p>
+<p>Google&rsquo;s official documentation states that the company &ldquo;strongly recommends keeping temperature at default 1.0 for all Gemini 3 models&rdquo; and warns that &ldquo;changing temperature below 1.0 may cause unexpected behavior like looping or degraded performance.&rdquo; In future model generations, supplying these parameters will return an HTTP 400 error, but for now they are silently accepted.</p>
+<p>According to the evolink.ai migration guide, &ldquo;the silent no-op on temperature is the most dangerous change — pipelines relying on temperature=0 for determinism will keep getting 200 OK while losing the guarantee.&rdquo; This makes thorough testing and code auditing essential before any production migration.</p>
+<h2 id="what-replaces-temperature-system-instructions-and-structured-outputs">What Replaces Temperature? System Instructions and Structured Outputs</h2>
+<p>Google&rsquo;s replacement for temperature tuning is a combination of system instructions and structured outputs. Instead of lowering temperature to make the model more deterministic, you now guide the model&rsquo;s behavior through explicit instructions and constrain its output format.</p>
+<p><strong>System instructions</strong> allow you to set the model&rsquo;s behavior, tone, and constraints at the start of a conversation. For example, instead of setting temperature=0.2 for a factual Q&amp;A bot, you would include a system instruction like &ldquo;Provide concise, factual answers based only on the provided context. Do not add speculation or creative elements.&rdquo;</p>
+<p><strong>Structured outputs</strong> (via response_schema or function calling) constrain the model to produce output in a specific JSON schema. This is the most reliable way to achieve deterministic, parseable output without temperature control. By defining the exact shape of the response, you eliminate the variability that temperature was meant to control.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Old Approach</th>
+					<th>New Approach</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>temperature=0.2 for factual responses</td>
+					<td>System instruction: &ldquo;Be precise and factual&rdquo;</td>
+			</tr>
+			<tr>
+					<td>temperature=0.7 for creative writing</td>
+					<td>System instruction: &ldquo;Write creatively with varied language&rdquo;</td>
+			</tr>
+			<tr>
+					<td>temperature=0 for deterministic extraction</td>
+					<td>Structured output with response_schema</td>
+			</tr>
+			<tr>
+					<td>top-p=0.9 for focused sampling</td>
+					<td>System instruction: &ldquo;Stay close to the most likely completions&rdquo;</td>
+			</tr>
+			<tr>
+					<td>top-k=40 for diverse candidates</td>
+					<td>Not needed — model handles diversity internally</td>
+			</tr>
+	</tbody>
+</table>
+<p>The labmemo.com analysis notes that &ldquo;Google&rsquo;s design philosophy shift&rdquo; is to &ldquo;provide optimal output by default,&rdquo; and that &ldquo;the rise of reasoning models reduces the need for developers to fine-tune sampling parameters.&rdquo; This represents a fundamental change in how Google expects developers to interact with its models — moving from low-level parameter tuning to high-level behavioral guidance.</p>
+<h2 id="thinking_budget--thinking_level-migration">thinking_budget → thinking_level Migration</h2>
+<p>The thinking_budget parameter, which controlled how many tokens the model could use for internal reasoning before generating a response, has been replaced by the thinking_level parameter. The new parameter accepts a string value rather than an integer, making it simpler to configure.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Old Parameter</th>
+					<th>New Parameter</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>thinking_budget: 1024</td>
+					<td>thinking_level: &ldquo;low&rdquo;</td>
+			</tr>
+			<tr>
+					<td>thinking_budget: 4096</td>
+					<td>thinking_level: &ldquo;medium&rdquo;</td>
+			</tr>
+			<tr>
+					<td>thinking_budget: 16384</td>
+					<td>thinking_level: &ldquo;high&rdquo;</td>
+			</tr>
+	</tbody>
+</table>
+<p>The critical migration rule is: <strong>do not send both parameters</strong>. Sending thinking_budget together with thinking_level returns an HTTP 400 error. You must remove thinking_budget from your requests and replace it with the equivalent thinking_level value.</p>
+<p>Google&rsquo;s Interactions API documentation recommends using the new stateful mode with <code>previous_interaction_id</code> to maintain reasoning context across API calls, which can reduce the need for large thinking budgets in multi-turn conversations.</p>
+<h2 id="candidate_count-removal-and-output-variety-alternatives">candidate_count Removal and Output Variety Alternatives</h2>
+<p>The candidate_count parameter, which allowed developers to request multiple response candidates from a single API call, is not supported in Gemini 3.x models. Attempting to use it returns an HTTP 400 error.</p>
+<p>To generate multiple output options, developers now have two alternatives:</p>
+<ol>
+<li><strong>Make multiple API calls</strong> with different system instructions or seed values. This is the simplest approach and works with any model version.</li>
+<li><strong>Use the Interactions API</strong> with stateful mode to explore different reasoning paths. Google recommends the Interactions API over the legacy generateContent API for new development.</li>
+</ol>
+<p>The removal of candidate_count aligns with Google&rsquo;s broader simplification of the API surface. As reasoning models become more capable, the need to sample multiple candidates and pick the best one diminishes — the model&rsquo;s internal reasoning process handles this optimization.</p>
+<h2 id="function-calling-stricter-requirements-call_id-and-name">Function Calling Stricter Requirements (call_id and name)</h2>
+<p>Function calling in Gemini 3.x now requires that every FunctionResponse include both <code>call_id</code> and <code>name</code> fields. Previously, these fields were optional in some implementations. Omitting either field now returns an HTTP 400 error.</p>
+<p>This change affects any code that constructs FunctionResponse objects manually or uses a client library that does not automatically populate these fields. The <code>call_id</code> must match the ID of the corresponding FunctionCall from the model, and the <code>name</code> must match the function name exactly.</p>
+<p>To migrate, audit all function calling code paths and ensure that every FunctionResponse includes both fields. Most SDKs have been updated to handle this automatically, but custom implementations and raw HTTP callers need explicit updates.</p>
+<h2 id="last-turn-role-model-restriction">Last Turn Role &lsquo;model&rsquo; Restriction</h2>
+<p>In Gemini 3.x, the last turn in a request must not have the role &lsquo;model&rsquo;. If the last message in your conversation history has role &lsquo;model&rsquo;, the API returns an HTTP 400 error.</p>
+<p>This change affects applications that maintain conversation state and append the model&rsquo;s previous response as the last message before sending a new request. The fix is to ensure that the last message in every request has role &lsquo;user&rsquo; or role &lsquo;system&rsquo; (if supported), and to trim or restructure conversation histories accordingly.</p>
+<h2 id="pricing-comparison--36-flash-vs-35-flash-vs-flash-lite">Pricing Comparison — 3.6 Flash vs 3.5 Flash vs Flash-Lite</h2>
+<p>The pricing changes for Gemini 3.6 Flash are favorable, with a 16% reduction in output token costs compared to Gemini 3.5 Flash.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Model</th>
+					<th>Input Price (per 1M tokens)</th>
+					<th>Output Price (per 1M tokens)</th>
+					<th>Context Window</th>
+					<th>Max Output</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Gemini 3.6 Flash</td>
+					<td>$1.50</td>
+					<td>$7.50</td>
+					<td>1M tokens</td>
+					<td>64K tokens</td>
+			</tr>
+			<tr>
+					<td>Gemini 3.5 Flash</td>
+					<td>$1.50</td>
+					<td>$9.00</td>
+					<td>1M tokens</td>
+					<td>64K tokens</td>
+			</tr>
+			<tr>
+					<td>Gemini 3.5 Flash-Lite</td>
+					<td>$0.30</td>
+					<td>$2.50</td>
+					<td>1M tokens</td>
+					<td>64K tokens</td>
+			</tr>
+	</tbody>
+</table>
+<p>Gemini 3.6 Flash maintains the same input price of $1.50 per million tokens while reducing output costs from $9.00 to $7.50 per million tokens — a 16% savings. For applications with high output token consumption, this represents a meaningful cost reduction.</p>
+<p>Gemini 3.5 Flash-Lite remains the most economical option at $0.30 per million input tokens and $2.50 per million output tokens, making it suitable for high-volume, simpler workloads. The agentpedia.codes guide recommends using &ldquo;3.6 Flash for complex reasoning and agents&rdquo; while routing &ldquo;simpler workloads to Flash-Lite.&rdquo;</p>
+<p>Both models support a 1 million token context window and 64,000 maximum output tokens, matching the capabilities of their predecessors.</p>
+<h2 id="migration-checklist--step-by-step">Migration Checklist — Step by Step</h2>
+<p>Follow this checklist to migrate your Gemini API integration safely:</p>
+<ol>
+<li><strong>Audit all API call sites</strong> — Search your codebase for every occurrence of temperature, top_p, top_k, candidate_count, and thinking_budget parameters.</li>
+<li><strong>Remove or comment out deprecated parameters</strong> — For temperature, top_p, and top_k, remove them from your requests. They are ignored, but removing them makes your code future-proof.</li>
+<li><strong>Replace thinking_budget with thinking_level</strong> — Map your existing thinking budget values to the equivalent thinking_level string (&ldquo;low&rdquo;, &ldquo;medium&rdquo;, or &ldquo;high&rdquo;).</li>
+<li><strong>Update FunctionResponse construction</strong> — Ensure every FunctionResponse includes call_id and name fields.</li>
+<li><strong>Fix conversation history</strong> — Ensure the last message in every request has role &lsquo;user&rsquo;, not &lsquo;model&rsquo;.</li>
+<li><strong>Replace temperature=0 with structured outputs</strong> — For deterministic behavior, implement response_schema or function calling with strict schema validation.</li>
+<li><strong>Replace temperature&gt;0 with system instructions</strong> — For creative control, use system instructions to guide tone and style.</li>
+<li><strong>Update candidate_count calls</strong> — Replace single-call candidate generation with multiple API calls or the Interactions API.</li>
+<li><strong>Run smoke tests</strong> — Test each change in a staging environment before production deployment.</li>
+<li><strong>Monitor production behavior</strong> — Watch for changes in output quality, determinism, and error rates after migration.</li>
+</ol>
+<h2 id="how-to-find-every-call-site-in-your-codebase">How to Find Every Call Site in Your Codebase</h2>
+<p>Finding all deprecated parameter usages is the first and most critical step. Here are practical approaches for different languages:</p>
+<p><strong>Python:</strong> <code>grep -rn &quot;temperature\|top_p\|top_k\|candidate_count\|thinking_budget&quot; --include=&quot;*.py&quot; .</code></p>
+<p><strong>JavaScript/TypeScript:</strong> <code>grep -rn &quot;temperature\|topP\|topK\|candidateCount\|thinkingBudget&quot; --include=&quot;*.{js,ts,jsx,tsx}&quot; .</code></p>
+<p><strong>For Google AI Python SDK:</strong> Search for <code>genai.GenerativeModel</code> instantiation and <code>generate_content</code> or <code>send_message</code> calls. The deprecated parameters may be passed as keyword arguments or in the <code>generation_config</code> dictionary.</p>
+<p><strong>For raw HTTP callers:</strong> Search for <code>&quot;temperature&quot;</code>, <code>&quot;top_p&quot;</code>, <code>&quot;top_k&quot;</code>, <code>&quot;candidate_count&quot;</code>, and <code>&quot;thinking_budget&quot;</code> in your JSON payload construction code.</p>
+<p><strong>For the Vertex AI SDK:</strong> Search for <code>GenerationConfig</code> objects and <code>predict</code> method calls. The deprecated parameters may be set as attributes on the config object.</p>
+<p>Create a tracking spreadsheet or issue list with each call site, its migration status, and any notes about the expected behavior change. This systematic approach prevents missed call sites from causing production issues.</p>
+<h2 id="smoke-test-plan-before-deploying-to-production">Smoke Test Plan Before Deploying to Production</h2>
+<p>Before deploying your migrated code to production, run these smoke tests:</p>
+<ol>
+<li><strong>Basic request test</strong> — Send a simple request without any deprecated parameters. Verify you receive a 200 OK response with valid content.</li>
+<li><strong>thinking_level test</strong> — Send a request with thinking_level=&ldquo;low&rdquo; and verify the response includes thought content. Repeat for &ldquo;medium&rdquo; and &ldquo;high&rdquo;.</li>
+<li><strong>Structured output test</strong> — Send a request with response_schema defined and verify the output matches the schema exactly.</li>
+<li><strong>Function calling test</strong> — Send a request with a function declaration, respond with a FunctionResponse that includes call_id and name, and verify the model processes it correctly.</li>
+<li><strong>Conversation history test</strong> — Send a multi-turn conversation where the last message has role &lsquo;user&rsquo;. Verify it works. Then test with role &lsquo;model&rsquo; as the last turn and confirm you get HTTP 400.</li>
+<li><strong>Deprecated parameter test</strong> — Send a request with temperature=0.5 and verify it is accepted (200 OK) but has no effect on output. Compare outputs with and without the parameter.</li>
+<li><strong>Regression test</strong> — Compare outputs from your old model and the new model for 10-20 representative inputs. Document any differences in quality, style, or accuracy.</li>
+<li><strong>Error handling test</strong> — Verify your error handling code correctly processes HTTP 400 responses for invalid parameter combinations.</li>
+</ol>
+<p>Run these tests in a staging environment with the same model version you will use in production. The agentpedia.codes guide recommends migrating &ldquo;behind an evaluation flag rather than changing model string globally,&rdquo; allowing you to compare old and new behavior side by side.</p>
+<h2 id="faq--common-developer-questions">FAQ — Common Developer Questions</h2>
+<p><strong>Q: Will my existing code break immediately if I switch to Gemini 3.6 Flash?</strong>
+A: It depends on which parameters you use. If you only use temperature, top-p, or top-k, your code will continue to work but those parameters will be silently ignored. If you use thinking_budget, candidate_count, FunctionResponse without call_id/name, or have a &lsquo;model&rsquo; role as the last turn, you will receive HTTP 400 errors. The silent no-op on temperature is the most dangerous because it causes behavioral degradation without any error signal.</p>
+<p><strong>Q: How do I achieve deterministic output without temperature=0?</strong>
+A: Use structured outputs with response_schema or function calling to constrain the model&rsquo;s output format. Combine this with precise system instructions that specify the exact behavior you expect. For example, a system instruction like &ldquo;Extract the following fields from the text and return them in the specified JSON format. Do not add any commentary or variation&rdquo; combined with a response_schema produces highly consistent results.</p>
+<p><strong>Q: What is the difference between thinking_budget and thinking_level?</strong>
+A: thinking_budget was an integer that controlled how many tokens the model could use for internal reasoning. thinking_level is a simpler string parameter with three values: &ldquo;low&rdquo;, &ldquo;medium&rdquo;, and &ldquo;high&rdquo;. You must not send both parameters together — doing so returns an HTTP 400 error. Remove thinking_budget and replace it with the equivalent thinking_level value.</p>
+<p><strong>Q: Is there any way to still use temperature with Gemini 3.x models?</strong>
+A: No. Temperature, top-p, and top-k are deprecated and silently ignored in Gemini 3.6 Flash and 3.5 Flash-Lite. Google&rsquo;s official documentation states that the company &ldquo;strongly recommends keeping temperature at default 1.0 for all Gemini 3 models.&rdquo; In future model generations, supplying these parameters will return an HTTP 400 error. The recommended alternatives are system instructions for behavioral control and structured outputs for format control.</p>
+<p><strong>Q: How much money will I save by migrating to Gemini 3.6 Flash?</strong>
+A: Gemini 3.6 Flash offers a 16% reduction in output token pricing compared to Gemini 3.5 Flash — from $9.00 to $7.50 per million output tokens. Input pricing remains unchanged at $1.50 per million tokens. For applications with high output token consumption, this represents meaningful savings. For example, an application consuming 100 million output tokens per month would save $150 per month by migrating from 3.5 Flash to 3.6 Flash.</p>
+<h2 id="summary--what-developers-must-do-now">Summary — What Developers Must Do Now</h2>
+<p>The Gemini 3.x API changes represent a significant shift in how Google expects developers to interact with its language models. The deprecation of temperature, top-p, and top-k marks the end of an era where developers could fine-tune sampling behavior at the parameter level. The new paradigm relies on system instructions, structured outputs, and the model&rsquo;s built-in reasoning capabilities to produce optimal results.</p>
+<p>Here is your action plan:</p>
+<ol>
+<li><strong>Audit immediately</strong> — Search your entire codebase for all five deprecated parameters. Create a complete inventory of every call site.</li>
+<li><strong>Test in isolation</strong> — Migrate behind an evaluation flag so you can compare old and new behavior side by side.</li>
+<li><strong>Replace, don&rsquo;t just remove</strong> — For temperature-dependent pipelines, implement structured outputs and system instructions as replacements. Do not simply delete the parameter and hope for the best.</li>
+<li><strong>Update SDKs</strong> — Ensure you are using the latest version of the Google AI Python SDK, Node.js SDK, or Vertex AI SDK, all of which have been updated to handle the new parameter requirements.</li>
+<li><strong>Monitor after deployment</strong> — Watch for changes in output quality, determinism, and error rates for at least one week after migration.</li>
+</ol>
+<p>The Hacker News discussion on this deprecation scored 119 points with 40 comments, reflecting the community&rsquo;s concern about the silent nature of the temperature deprecation. By following the migration checklist in this guide, you can avoid the silent failure trap and ensure your Gemini API integration continues to work reliably.</p>
+]]></content:encoded></item></channel></rss>
