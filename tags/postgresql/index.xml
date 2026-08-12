@@ -1,4 +1,115 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>PostgreSQL on RockB</title><link>https://baeseokjae.github.io/tags/postgresql/</link><description>Recent content in PostgreSQL on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 14 Jul 2026 14:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/postgresql/index.xml" rel="self" type="application/rss+xml"/><item><title>You Probably Don't Need a Vector Database for RAG: Simpler Alternatives That Work (2026)</title><link>https://baeseokjae.github.io/posts/vector-database-rag-alternative-2026/</link><pubDate>Tue, 14 Jul 2026 14:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/vector-database-rag-alternative-2026/</guid><description>Vector databases are the default for RAG, but they&amp;#39;re often overkill. BM25, SQLite FTS5, PostgreSQL tsvector, and hybrid approaches deliver comparable results at a fraction of the cost and complexity.</description><content:encoded><![CDATA[<p>Every new RAG project I see starts the same way: spin up a Pinecone index, configure a Weaviate cluster, or deploy a Qdrant instance. It&rsquo;s become the default move — like reaching for React before considering vanilla HTML. But after building and maintaining several production RAG systems over the last two years, I&rsquo;ve found that vector databases are often the wrong first choice.</p>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>PostgreSQL on RockB</title><link>https://baeseokjae.github.io/tags/postgresql/</link><description>Recent content in PostgreSQL on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Wed, 12 Aug 2026 19:02:15 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/postgresql/index.xml" rel="self" type="application/rss+xml"/><item><title>pg_clickhouse v0.10 Subquery Pushdown: 1000x Faster TPC-H Queries in 2026</title><link>https://baeseokjae.github.io/posts/pg-clickhouse-v0-10-subquery-pushdown-2026/</link><pubDate>Wed, 12 Aug 2026 19:02:15 +0000</pubDate><guid>https://baeseokjae.github.io/posts/pg-clickhouse-v0-10-subquery-pushdown-2026/</guid><description>pg_clickhouse v0.10 pushes correlated subqueries into ClickHouse, cutting TPC-H Q17 from 32.7s to 37ms. Here&amp;#39;s how it works and how to verify it.</description><content:encoded><![CDATA[<p>pg_clickhouse v0.10, released August 11, 2026, finally pushes correlated subqueries (SubPlans) down into ClickHouse, moving the TPC-H scoreboard from 12 to 16 of 22 queries fully pushed down. The headline result is TPC-H Q17, which dropped from 32.7 seconds to 37 milliseconds — roughly 880x faster and beating native PostgreSQL&rsquo;s 2.1 seconds. This guide explains how subquery pushdown works, how to verify it with EXPLAIN, and what you need to upgrade to take advantage of it.</p>
+<h2 id="what-is-pg_clickhouse-and-why-does-subquery-pushdown-matter">What is pg_clickhouse and why does subquery pushdown matter?</h2>
+<p>pg_clickhouse is a PostgreSQL extension that lets you run analytics queries on ClickHouse from PostgreSQL without rewriting your SQL. It works as a foreign data wrapper (FDW): you define ClickHouse tables as foreign tables in Postgres, and the extension&rsquo;s planner hooks teach PostgreSQL to push as much of the query as possible down to ClickHouse as a single Remote SQL statement.</p>
+<p>The whole point is to avoid the classic FDW failure mode: pulling rows back to Postgres and doing the heavy work locally. When pushdown works, ClickHouse does the aggregation, filtering, and joining, and Postgres only sees the final result. When it fails, Postgres falls back to fetching every row and evaluating the query one row at a time — which is catastrophically slow for analytics workloads.</p>
+<p>Subquery pushdown is the missing piece that finally makes correlated subqueries run entirely on ClickHouse. Before v0.10, a correlated subquery like &ldquo;average quantity per part&rdquo; forced Postgres to make one ClickHouse round trip per outer row, evaluating the subquery locally each time. With v0.10, the whole comparison — including the subquery — ships to ClickHouse as a single Remote SQL statement.</p>
+<h2 id="the-tpc-h-scoreboard-from-12-to-16-of-22-queries-fully-pushed-down">The TPC-H scoreboard: from 12 to 16 of 22 queries fully pushed down</h2>
+<p>The TPC-H benchmark is the standard stress test for analytics engines, and pg_clickhouse tracks how many of its 22 queries it can push down completely. The progress has been steady:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Version</th>
+          <th>TPC-H queries fully pushed down</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>v0.1 (Dec 2025 launch)</td>
+          <td>3 of 22</td>
+      </tr>
+      <tr>
+          <td>v0.2 (Dec semi-join work)</td>
+          <td>12 of 22</td>
+      </tr>
+      <tr>
+          <td>v0.10 (Aug 2026)</td>
+          <td>16 of 22</td>
+      </tr>
+  </tbody>
+</table>
+<p>The jump from 3 to 12 came from teaching the planner to push a whole correlated EXISTS subquery down as a single LEFT SEMI JOIN instead of a nested loop with one ClickHouse round trip per outer row. The jump from 12 to 16 in v0.10 came from SubPlan (subquery) pushdown, which handles the correlated subqueries that the semi-join work couldn&rsquo;t reach.</p>
+<p>Only 6 queries remain unpushed: Q13, Q15, Q16, Q18, Q20, and Q21. These are blocked by a deparser limitation — they have join trees on both sides of the query, which the current deparser can&rsquo;t translate into a single Remote SQL statement. That&rsquo;s a known roadmap item, not a fundamental blocker.</p>
+<h2 id="the-trophy-case-tpc-h-q17-from-327s-to-37ms">The trophy case: TPC-H Q17 from 32.7s to 37ms</h2>
+<p>The most dramatic result in v0.10 is TPC-H Q17, a correlated subquery that averages <code>l_quantity</code> per part. Here&rsquo;s the before-and-after:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Engine / version</th>
+          <th>Q17 execution time</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>pg_clickhouse v0.3 (local eval per row)</td>
+          <td>32.7 seconds</td>
+      </tr>
+      <tr>
+          <td>Native PostgreSQL</td>
+          <td>2.1 seconds</td>
+      </tr>
+      <tr>
+          <td>pg_clickhouse v0.10 (fully pushed down)</td>
+          <td>37 milliseconds</td>
+      </tr>
+  </tbody>
+</table>
+<p>That&rsquo;s roughly 880x faster than v0.3 and about 57x faster than native PostgreSQL. The reason is simple: in v0.3, Postgres evaluated the correlated subquery locally, making a ClickHouse round trip for every outer row. In v0.10, the entire query — outer query and subquery together — runs as one statement inside ClickHouse.</p>
+<p>Q17 isn&rsquo;t the only win. TPC-H Q2 dropped from 3,446ms in v0.3 to 24ms in v0.10, and Q22 dropped from 1,415ms to 45ms (pushed as multiple foreign scans). These are the same order-of-magnitude improvements: when a query stops round-tripping per row and runs entirely in ClickHouse, milliseconds replace seconds.</p>
+<h2 id="how-subquery-subplan-pushdown-works">How subquery (SubPlan) pushdown works</h2>
+<p>The core idea is elegant: subqueries in Postgres become subqueries in ClickHouse. When pg_clickhouse&rsquo;s planner hook encounters a SubPlan — a correlated subquery in the WHERE clause, SELECT list, or HAVING — it now translates that subquery into ClickHouse SQL and embeds it in the Remote SQL statement sent to the server.</p>
+<p>Before v0.10, a correlated subquery was evaluated locally: Postgres would fetch the outer rows, then for each row issue a separate ClickHouse query to evaluate the subquery. That&rsquo;s the per-row round trip that made Q17 take 32.7 seconds. With SubPlan pushdown, the deparser builds one Remote SQL statement that contains the outer query and the subquery, and ClickHouse evaluates the whole thing in a single pass.</p>
+<p>You can see this directly in the query plan. When you run EXPLAIN on a pushed-down query, the Remote SQL statement now shows the entire comparison — including the subquery — in one statement, rather than a separate foreign scan per subquery evaluation.</p>
+<h2 id="verifying-pushdown-with-explain-verbose-costs-off">Verifying pushdown with EXPLAIN (VERBOSE, COSTS OFF)</h2>
+<p>The most important practical skill is verifying that your query actually pushed down. The command is:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-sql" data-lang="sql"><span style="display:flex;"><span><span style="color:#66d9ef">EXPLAIN</span> (<span style="color:#66d9ef">VERBOSE</span>, COSTS <span style="color:#66d9ef">OFF</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">SELECT</span> ... <span style="color:#66d9ef">FROM</span> clickhouse_table <span style="color:#66d9ef">WHERE</span> ...;
+</span></span></code></pre></div><p>Look for the <code>Remote SQL</code> line in the output. If pushdown worked, you&rsquo;ll see a single foreign scan whose Remote SQL contains the full query — including the subquery. If pushdown failed, you&rsquo;ll see a nested loop or a separate foreign scan per row, which is the local-evaluation fallback.</p>
+<p>For a correlated subquery, the telltale sign of success is that the subquery appears inside the Remote SQL statement rather than as a separate scan. If you see the subquery evaluated as its own foreign scan with a nested loop join, the query is running locally and you&rsquo;re paying the per-row round-trip cost.</p>
+<h2 id="not-in-and-the-innull-semantics-rabbit-hole">NOT IN and the IN/NULL semantics rabbit hole</h2>
+<p>The hardest part of subquery pushdown isn&rsquo;t the mechanics — it&rsquo;s getting the semantics right. ClickHouse evaluates <code>IN</code> under two-valued logic (true/false), while PostgreSQL uses three-valued logic (true/false/NULL). This difference can silently invert results for queries involving NULLs.</p>
+<p>Here&rsquo;s the problem: in PostgreSQL, <code>x NOT IN (SELECT ...)</code> returns NULL (not true) when the subquery contains a NULL, because NULL comparisons are unknown. In ClickHouse&rsquo;s two-valued logic, the same expression might return true. If pg_clickhouse pushed the query down naively, results would silently change.</p>
+<p>v0.10 solves this with compensating CASE guards. The extension tracks how each expression result is consumed and wraps nullable cases in a CASE expression that reproduces PostgreSQL&rsquo;s three-valued semantics. It also sets <code>transform_null_in 0</code> in the default <code>pg_clickhouse.session_settings</code>, so server profiles can&rsquo;t silently change IN semantics.</p>
+<p>The practical takeaway: if you declare columns NOT NULL, pg_clickhouse can ship the cheaper unguarded form of the pushdown, because there&rsquo;s no NULL to worry about. Nullable columns force the guarded CASE form, which is still correct but slightly more expensive.</p>
+<h2 id="prerequisites-clickhouse-258-and-the-version-gate">Prerequisites: ClickHouse 25.8+ and the version gate</h2>
+<p>Subquery pushdown is not free — it requires a recent ClickHouse server. The correlated-subquery SQL shape that pg_clickhouse generates needs ClickHouse 25.8 or later. If you&rsquo;re running an older ClickHouse server, pg_clickhouse falls back to local evaluation, and you lose the speedup.</p>
+<p>This is a key upgrade consideration. pg_clickhouse itself supports PostgreSQL 13+ and ClickHouse v23+ (minimum ClickHouse 23.3), but the headline subquery pushdown feature specifically requires ClickHouse 25.8+. If you&rsquo;re on an older ClickHouse, you&rsquo;ll still get the other v0.10 improvements, but Q17-style correlated subqueries will run locally.</p>
+<h2 id="maximizing-pushdown-not-null-columns-and-import-foreign-schema">Maximizing pushdown: NOT NULL columns and IMPORT FOREIGN SCHEMA</h2>
+<p>To get the most out of pushdown, you want to maximize the number of queries that ship to ClickHouse in the cheap, unguarded form. The single biggest lever is declaring columns NOT NULL.</p>
+<p>When you use <code>IMPORT FOREIGN SCHEMA</code>, pg_clickhouse auto-declares non-Nullable ClickHouse columns as NOT NULL in the foreign table definition. This maximizes pushdown because NOT NULL columns let the extension use the cheaper unguarded form of IN and NOT IN pushdown — no compensating CASE guards needed.</p>
+<p>If you define foreign tables manually, declare your columns NOT NULL yourself where you know they can&rsquo;t be null. Every nullable column is a potential reason for pg_clickhouse to fall back to the guarded form or to local evaluation.</p>
+<h2 id="what-else-is-new-in-v010-aggregates-drivers-and-the-new-queryperform-api">What else is new in v0.10: aggregates, drivers, and the new query/perform API</h2>
+<p>Subquery pushdown is the headline, but v0.10 ships a lot more:</p>
+<ul>
+<li><strong>Broadened pushdown</strong>: statistical aggregates (<code>corr</code>, <code>covar_pop</code>/<code>covar_samp</code>, <code>stddev</code>, <code>var</code>, <code>any_value</code>), ordered-set aggregates (<code>percentile_cont</code>/<code>percentile_disc</code> → <code>quantiles</code>/<code>quantileExactLow</code>), partitionwise aggregation, <code>encode(bytea, ...)</code>, 3-arg <code>ltrim</code>/<code>rtrim</code>/<code>btrim</code>, and interval arithmetic on date/timestamp.</li>
+<li><strong>Driver rebuild</strong>: the binary driver is rebuilt on the ClickHouse/clickhouse-c C client (v0.3.1), the HTTP driver now uses the Native format, <code>fetch_size</code> is deprecated, inserts flush at 64MiB, and per-scan connections fix concurrency crashes.</li>
+<li><strong>New API surface</strong>: <code>clickhouse_query(server, sql)</code> and <code>clickhouse_server_version(server)</code> functions, plus a <code>CALL clickhouse_perform(server, sql)</code> procedure. <code>clickhouse_raw_query()</code> is deprecated.</li>
+</ul>
+<p>One important architectural note: builtin function pushdown has been opt-in since v0.3.0, to preserve PostgreSQL semantics (for example, trig functions raise an error in Postgres but return NaN in ClickHouse). The pushdown list is deliberately conservative so you can trust it.</p>
+<h2 id="whats-left-the-6-remaining-tpc-h-queries-and-the-roadmap">What&rsquo;s left: the 6 remaining TPC-H queries and the roadmap</h2>
+<p>The 6 remaining TPC-H queries — Q13, Q15, Q16, Q18, Q20, and Q21 — are blocked by a deparser limitation: they have join trees on both sides of the query, which the current deparser can&rsquo;t translate into a single Remote SQL statement. This is a known, well-scoped roadmap item rather than a fundamental limitation.</p>
+<p>The broader roadmap from the original launch post also included ClickBench pushdown, all aggregates and functions, comprehensive subquery pushdown, server/user-level settings, all ClickHouse data types, lightweight DELETE/UPDATE, and batch COPY. Subquery pushdown in v0.10 is a major step on that path.</p>
+<h2 id="getting-started-docker-quickstart-and-a-minimal-example">Getting started: Docker quickstart and a minimal example</h2>
+<p>The fastest way to try pg_clickhouse v0.10 is the official Docker image:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>docker run ghcr.io/clickhouse/pg_clickhouse:18
+</span></span></code></pre></div><p>Then, in PostgreSQL, create the extension and import your ClickHouse schema:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-sql" data-lang="sql"><span style="display:flex;"><span><span style="color:#66d9ef">CREATE</span> EXTENSION pg_clickhouse;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>IMPORT <span style="color:#66d9ef">FOREIGN</span> <span style="color:#66d9ef">SCHEMA</span> <span style="color:#66d9ef">public</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">FROM</span> SERVER clickhouse_svr
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">INTO</span> <span style="color:#66d9ef">public</span>;
+</span></span></code></pre></div><p>With the foreign tables in place, you can run analytics queries directly from Postgres. To confirm subquery pushdown is working, run your query through <code>EXPLAIN (VERBOSE, COSTS OFF)</code> and check that the Remote SQL contains the subquery. If you&rsquo;re on ClickHouse 25.8+ and your columns are declared NOT NULL, you should see the full query — subquery included — pushed down as a single foreign scan.</p>
+<h2 id="faq">FAQ</h2>
+<p><strong>What is pg_clickhouse subquery pushdown?</strong>
+It&rsquo;s a feature in pg_clickhouse v0.10 that translates correlated subqueries (SubPlans) in PostgreSQL into subqueries in ClickHouse, so the entire query runs as one Remote SQL statement instead of Postgres evaluating the subquery locally with a round trip per outer row.</p>
+<p><strong>How much faster is pg_clickhouse v0.10 for TPC-H queries?</strong>
+TPC-H Q17 dropped from 32.7 seconds (v0.3, local evaluation) to 37 milliseconds (v0.10, fully pushed down) — roughly 880x faster and beating native PostgreSQL&rsquo;s 2.1 seconds. Q2 dropped from 3,446ms to 24ms, and Q22 from 1,415ms to 45ms.</p>
+<p><strong>Does pg_clickhouse subquery pushdown require a specific ClickHouse version?</strong>
+Yes. The correlated-subquery SQL shape requires ClickHouse 25.8 or later. On older ClickHouse servers, pg_clickhouse falls back to local evaluation. pg_clickhouse itself supports PostgreSQL 13+ and ClickHouse v23+.</p>
+<p><strong>How do I verify that a query was pushed down?</strong>
+Run <code>EXPLAIN (VERBOSE, COSTS OFF)</code> and inspect the Remote SQL line. If pushdown worked, the full query — including the subquery — appears in a single foreign scan&rsquo;s Remote SQL. If it failed, you&rsquo;ll see a nested loop or a separate foreign scan per row.</p>
+<p><strong>Why does NOT IN behave differently in ClickHouse and PostgreSQL?</strong>
+ClickHouse uses two-valued logic (true/false) while PostgreSQL uses three-valued logic (true/false/NULL), which can silently invert results for NULLs. v0.10 adds compensating CASE guards and sets <code>transform_null_in 0</code> by default to preserve PostgreSQL semantics. Declaring columns NOT NULL enables the cheaper unguarded pushdown form.</p>
+]]></content:encoded></item><item><title>You Probably Don't Need a Vector Database for RAG: Simpler Alternatives That Work (2026)</title><link>https://baeseokjae.github.io/posts/vector-database-rag-alternative-2026/</link><pubDate>Tue, 14 Jul 2026 14:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/vector-database-rag-alternative-2026/</guid><description>Vector databases are the default for RAG, but they&amp;#39;re often overkill. BM25, SQLite FTS5, PostgreSQL tsvector, and hybrid approaches deliver comparable results at a fraction of the cost and complexity.</description><content:encoded><![CDATA[<p>Every new RAG project I see starts the same way: spin up a Pinecone index, configure a Weaviate cluster, or deploy a Qdrant instance. It&rsquo;s become the default move — like reaching for React before considering vanilla HTML. But after building and maintaining several production RAG systems over the last two years, I&rsquo;ve found that vector databases are often the wrong first choice.</p>
 <p>The benchmark data backs this up. On the SQuAD dataset, BM25 keyword search achieves 88% recall@10 against 91.7% for OpenAI embeddings — a 3.7% gap that disappears in practice once you add reranking. Meanwhile, that vector database is eating 40-50% of your monthly RAG bill. If you&rsquo;re running 50 queries per day in production, that&rsquo;s roughly $1,000-$1,200/month just for the vector infrastructure.</p>
 <p>This isn&rsquo;t an argument against vector search. It&rsquo;s an argument for being honest about what you actually need.</p>
 <h2 id="why-vector-databases-became-the-default-for-rag">Why Vector Databases Became the Default for RAG</h2>
