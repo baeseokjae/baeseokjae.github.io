@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Sandboxing on RockB</title><link>https://baeseokjae.github.io/tags/sandboxing/</link><description>Recent content in Sandboxing on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sun, 16 Aug 2026 22:01:20 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/sandboxing/index.xml" rel="self" type="application/rss+xml"/><item><title>Snapshots and Copy-on-Write: The Economics of Agent Sandboxes</title><link>https://baeseokjae.github.io/posts/snapshots-and-copy-on-write-the-economics-of-agent-sandboxes/</link><pubDate>Sun, 16 Aug 2026 22:01:20 +0000</pubDate><guid>https://baeseokjae.github.io/posts/snapshots-and-copy-on-write-the-economics-of-agent-sandboxes/</guid><description>Agent sandbox costs explode when you size for requested resources. Snapshots and copy-on-write let you pay for divergence, not the whole VM.</description><content:encoded><![CDATA[<p>Agent sandboxes get expensive because most platforms size them for the resources an agent <em>requests</em>, not the resources it actually <em>uses</em>. Snapshots and copy-on-write flip that equation: instead of paying for a full 128 GiB disk and 16 GiB of RAM per session, you pay only for the base image plus the small set of divergences each agent creates. The result is a cost model that scales with real usage, letting a single host run dozens of isolated agents instead of a handful.</p>
+<h2 id="why-agent-sandboxes-get-expensive-fast">Why Agent Sandboxes Get Expensive Fast</h2>
+<p>An AI coding agent is a program that runs commands you did not write. It can <code>rm -rf</code> a directory, exfiltrate credentials, or install a malicious package — and because you cannot predict every command, you cannot safely run it on your own machine. The industry answer is to give each agent its own throwaway Linux box with strict egress policies, treating every agent as potentially adversarial and eliminating the blast radius.</p>
+<p>The problem is that isolation is not free. A freshly booted Firecracker microVM is a sealed box with no screen, keyboard, or network until you wire it up — but a minimal microVM is not a minimal workload. Once a compiler, language server, browser, and build daemon start inside a 4 GiB guest, that guest can pull several GiB of pages into host RAM. Copying a 40 GiB ext4 image for every agent is absurd when most agents change only a few files.</p>
+<p>The naive cost model is brutal. If you size each sandbox for peak requested resources, a single host saturates its vCPU, RAM, and disk after only 9 to 24 parallel agents. That is the core economic problem: <strong>you are paying for the worst case of every session, even though most sessions touch only a handful of files and a fraction of their memory.</strong></p>
+<h2 id="the-naive-approach-full-snapshots-and-why-they-fail">The Naive Approach: Full Snapshots and Why They Fail</h2>
+<p>The obvious fix is snapshots. Firecracker can serialize its vCPU, KVM, and device state into a <code>state.bin</code>, guest memory into a <code>mem.bin</code>, and the disk as a file. Combined, that gives you full state recovery — memory, disk, and processes — which is exactly what you need for long-lived sessions you resume months later.</p>
+<p>But combined snapshots are massive. A sandbox with 16 GiB of requested RAM and 128 GiB of requested disk produces a worst-case full snapshot of roughly 144 GiB. Storing, transferring, and restoring that per session is not viable at fleet scale. The snapshot approach only works if you can avoid materializing the full state for every agent.</p>
+<p>This is why the ephemeral one-shot contract — the CI-style model Stripe popularized — does not fit every use case. A CI job runs, finishes, and dies. A harness-agnostic long-lived agent session may resume weeks or months later and needs its full state back. The economics of full snapshots break precisely when you need persistence at scale.</p>
+<h2 id="content-addressable-storage-turning-a-128-gib-disk-into-a-manifest">Content-Addressable Storage: Turning a 128 GiB Disk into a Manifest</h2>
+<p>The breakthrough is to stop treating each sandbox&rsquo;s disk as an independent 128 GiB blob and start treating it as a manifest of shared, immutable chunks. Cortex&rsquo;s approach splits the disk into fixed 16 MiB chunks, hashes each with SHA-256, and stores them in a content-addressable store.</p>
+<p>The math is the payoff. Identical chunks are stored once across all sandboxes, and zeroed chunks are skipped entirely. A manifest maps each disk offset to a chunk hash. When an agent boots, it reads the manifest and fetches only the chunks it actually touches. A session that dirties 20 chunks adds at most 320 MiB of new disk data — even on a 128 GiB virtual disk.</p>
+<p>An NBD (Network Block Device) server bridges this content-addressed storage to Firecracker. Reads fetch chunks on demand, and an NVMe device acts as an LRU hot-chunk cache so frequently accessed chunks stay in fast storage. The disk you <em>requested</em> and the disk you <em>pay for</em> are now completely different numbers.</p>
+<h2 id="copy-on-write-one-write-one-new-chunk">Copy-on-Write: One Write, One New Chunk</h2>
+<p>Content addressing handles the read path, but writes still need a strategy. Copy-on-write (CoW) is that strategy. The first write to an immutable base chunk creates a private dirty copy; the base chunk stays shared and untouched. One write equals one new chunk.</p>
+<p>This is the same idea behind filesystem snapshots and database MVCC, applied at the block level. Because base chunks are immutable, they can be shared safely across thousands of sandboxes with no locking. Because dirty chunks are private, each agent&rsquo;s divergences are isolated and cheap.</p>
+<p>The economics are dramatic. A fleet of 1,000 sandboxes sharing a 40 GiB base image stores that base once, not 1,000 times. Each sandbox&rsquo;s incremental cost is proportional to the chunks it actually dirties — typically a few hundred MiB, not tens of GiB. Copy-on-write turns the disk from a per-session liability into a shared, amortized asset.</p>
+<h2 id="the-harder-problem-memory-map_private-and-userfaultfd">The Harder Problem: Memory (MAP_PRIVATE and userfaultfd)</h2>
+<p>Disk has a clean boundary — the NBD server resolves reads — but memory does not. You cannot route every guest memory read through a server without destroying performance. Memory deduplication is the harder problem, and it requires kernel cooperation.</p>
+<p>Cortex&rsquo;s approach content-addresses memory in 512 KiB chunks. The base shared memory file is mapped with <code>MAP_PRIVATE</code>, so clean pages share the page-cache backing across all sandboxes, while writes get private pages via the kernel&rsquo;s native copy-on-write. <code>userfaultfd</code> fills the sparse base shared-memory file on demand, and <code>UFFDIO_CONTINUE</code> preserves sharing for pages that are still clean.</p>
+<p>The result is that memory cost follows the same logic as disk: you pay for the base shared memory plus the dirty RAM each session actually writes, not the full requested footprint. A 16 GiB sandbox that only dirties a few hundred MiB of pages costs a few hundred MiB of private memory, with the rest shared across the fleet.</p>
+<h2 id="from-resource-density-to-session-density">From Resource Density to Session Density</h2>
+<p>The second lever is time. Agents spend most of their time waiting — on humans, on network calls, on external tools — not computing. Sizing every retained session for peak active work is wasteful.</p>
+<p>The fix is to capture idle sandboxes and evict them. Because snapshots are now cheap (a manifest plus a small set of dirty chunks), you can snapshot an idle sandbox, free its host resources, and restore it on demand when the agent wakes up. The autoscaler removes empty hosts entirely.</p>
+<p>This shifts the metric from <em>resource density</em> to <em>session density</em>. You size for active work, not for every retained session. A host that could only run 9 to 24 peak-sized sandboxes can now hold hundreds of sessions, most of them snapshotted and idle, with only the active ones consuming real vCPU, RAM, and disk.</p>
+<h2 id="the-new-cost-model-pay-for-divergence-not-the-whole-vm">The New Cost Model: Pay for Divergence, Not the Whole VM</h2>
+<p>Putting it together, the cost model transforms. The old model was:</p>
+<blockquote>
+<p>cost ∝ requested (vCPU + RAM + disk)</p></blockquote>
+<p>The new model is:</p>
+<blockquote>
+<p>cost ∝ α·vCPU + β·(base shared memory + dirty RAM) + γ·(base disk + dirty disk)</p></blockquote>
+<p>The first term is unavoidable — you pay for the compute an agent actually uses. The second and third terms collapse because base memory and base disk are shared across the fleet, and dirty memory and dirty disk are proportional to real divergence. You pay for what an agent <em>uses and changes</em>, not for what it <em>requests</em>.</p>
+<p>This is the core economic insight of modern agent sandboxing: <strong>pay for divergence, not for the whole VM.</strong> It is what makes running thousands of isolated agents on a single machine economically sane.</p>
+<h2 id="isolation-is-a-spectrum-choosing-the-right-sandbox-layer">Isolation Is a Spectrum: Choosing the Right Sandbox Layer</h2>
+<p>Not every workload needs a microVM. Isolation is a spectrum with five levels:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Level</th>
+          <th>Technology</th>
+          <th>Best for</th>
+          <th>Boot time / overhead</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Containers</td>
+          <td>runc, Docker</td>
+          <td>Internal, trusted code</td>
+          <td>~ms, minimal</td>
+      </tr>
+      <tr>
+          <td>User-space kernels</td>
+          <td>gVisor</td>
+          <td>LLM-generated code</td>
+          <td>~ms, moderate</td>
+      </tr>
+      <tr>
+          <td>MicroVMs</td>
+          <td>Firecracker, Kata, libkrun</td>
+          <td>Untrusted code, multi-tenant</td>
+          <td>~125ms, ~5MB</td>
+      </tr>
+      <tr>
+          <td>Library OS</td>
+          <td>LiteBox</td>
+          <td>Minimal attack surface</td>
+          <td>~ms, low</td>
+      </tr>
+      <tr>
+          <td>Confidential computing</td>
+          <td>AMD SEV-SNP, Intel TDX</td>
+          <td>Hostile tenants, compliance</td>
+          <td>higher</td>
+      </tr>
+  </tbody>
+</table>
+<p>Firecracker boots in about 125ms with roughly 5MB of memory overhead, which is why it powers AWS Lambda, E2B, and Vercel Sandbox. The right choice depends on trust, latency, data sensitivity, and compliance. Internal code is fine in containers; LLM-generated code warrants gVisor or microVMs; user-uploaded binaries should be treated as hostile and run under hardware virtualization.</p>
+<p>The hyperscaler signal is unambiguous. AWS built Firecracker for Lambda, Google built gVisor for Search and Gmail, and Azure uses Hyper-V for ephemeral agent sandboxes. Every major cloud built its strongest isolation primitive and pointed it at AI — none reached for plain containers. AWS, Azure, and GCP have all quietly migrated their control planes away from runc toward hardware-enforced isolation.</p>
+<h2 id="local-vs-remote-sandboxing-two-different-problems">Local vs Remote Sandboxing: Two Different Problems</h2>
+<p>Sandboxing agents is really two problems with different threat models. A local sandbox on a developer machine faces the <em>confused deputy</em> risk: prompt injection, poisoned MCP context, and hallucination. The controls are workspace boundaries, secret isolation, network egress policy, and visibility or reversibility.</p>
+<p>A remote, multi-tenant sandbox faces <em>adversarial workloads</em>: a tenant who is actively trying to break out. The controls are isolation boundaries with defense in depth, no secrets inside the sandbox, egress as a chokepoint, resource and cost governance, and ephemerality.</p>
+<p>One warning applies to both: a sandbox that is too annoying gets disabled, which is worse than no sandbox at all because it creates a false sense of security. Remote sandboxing is ultimately about ensuring that bad behavior cannot become a systemic incident.</p>
+<h2 id="key-takeaways-for-building-cost-efficient-agent-sandboxes">Key Takeaways for Building Cost-Efficient Agent Sandboxes</h2>
+<ul>
+<li><strong>Size for usage, not requests.</strong> Content-addressable storage and copy-on-write let you pay for divergence instead of the whole VM.</li>
+<li><strong>Share the base.</strong> Identical chunks and clean memory pages are stored once across the fleet, not once per sandbox.</li>
+<li><strong>Treat memory as the hard problem.</strong> Disk has an NBD boundary; memory needs <code>MAP_PRIVATE</code> and <code>userfaultfd</code> to keep clean pages shared.</li>
+<li><strong>Snapshot and evict idle sessions.</strong> Agents wait more than they compute; size for active work, not every retained session.</li>
+<li><strong>Match isolation to trust.</strong> Containers for internal code, microVMs for untrusted code, hardware virtualization for hostile tenants.</li>
+<li><strong>Follow the hyperscalers.</strong> Every major cloud built a hardware-enforced isolation primitive for AI — none settled for containers.</li>
+</ul>
+<h2 id="faq">FAQ</h2>
+<p><strong>What is copy-on-write in an agent sandbox?</strong>
+Copy-on-write means the first write to an immutable base chunk creates a private dirty copy while the base stays shared. One write equals one new chunk, so each sandbox&rsquo;s incremental disk cost is proportional to the chunks it actually changes, not the full virtual disk size.</p>
+<p><strong>Why are full microVM snapshots impractical at scale?</strong>
+A full snapshot serializes vCPU, KVM, device state, guest memory, and disk. A sandbox with 16 GiB of RAM and 128 GiB of disk produces a worst-case snapshot of roughly 144 GiB, which is too large to store, transfer, and restore per session across a large fleet.</p>
+<p><strong>How does content-addressable storage reduce sandbox cost?</strong>
+The disk is split into fixed 16 MiB chunks, each hashed with SHA-256. Identical chunks are stored once across all sandboxes and zeroed chunks are skipped. A manifest maps offsets to hashes, so a session that dirties 20 chunks adds at most 320 MiB even on a 128 GiB virtual disk.</p>
+<p><strong>What is the difference between resource density and session density?</strong>
+Resource density counts how many peak-sized sandboxes fit on a host (typically 9 to 24). Session density counts how many sessions a host can hold when idle ones are snapshotted and evicted. Because agents spend most time waiting, sizing for active work lets a host hold hundreds of sessions.</p>
+<p><strong>Which sandbox isolation level should I use?</strong>
+It depends on trust. Containers are fine for internal, trusted code. LLM-generated code warrants gVisor or microVMs. User-uploaded binaries should be treated as hostile and run under hardware virtualization like Firecracker, Kata, or confidential computing. Firecracker boots in about 125ms with roughly 5MB of overhead.</p>
+]]></content:encoded></item></channel></rss>
