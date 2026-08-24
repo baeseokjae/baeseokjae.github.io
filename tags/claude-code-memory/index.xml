@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Claude Code Memory on RockB</title><link>https://baeseokjae.github.io/tags/claude-code-memory/</link><description>Recent content in Claude Code Memory on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Mon, 24 Aug 2026 19:02:12 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/claude-code-memory/index.xml" rel="self" type="application/rss+xml"/><item><title>Local Coding Agent Memory That Proves It's Used: PMB Review</title><link>https://baeseokjae.github.io/posts/pmb-local-memory-for-coding-agents-that-proves-it-s-used/</link><pubDate>Mon, 24 Aug 2026 19:02:12 +0000</pubDate><guid>https://baeseokjae.github.io/posts/pmb-local-memory-for-coding-agents-that-proves-it-s-used/</guid><description>PMB is a local-first, MCP-native memory layer for coding agents that measures whether memory actually changes outcomes — not just claims it.</description><content:encoded><![CDATA[<p>PMB is a local-first, MCP-native memory layer for AI coding agents that stores everything in one SQLite file on your disk and — unusually — measures whether that memory actually changes outcomes. Instead of claiming &ldquo;+X% faster,&rdquo; it scores each surfaced lesson against the turn&rsquo;s real result, so you can see when memory is genuinely helping.</p>
+<h2 id="why-coding-agents-forget--and-why-memory-is-the-hard-part">Why Coding Agents Forget — and Why &ldquo;Memory&rdquo; Is the Hard Part</h2>
+<p>Every coding agent you&rsquo;ve used — Claude Code, Cursor, Codex, Windsurf, Zed, VS Code, gemini, opencode, continue — starts each session with a clean slate. The model has no persistent recollection of the architecture decisions you made last week, the test suite you just fixed, or the deployment gotcha that cost you an afternoon. This is the &ldquo;forgetting problem,&rdquo; and it is the single biggest reason long-running projects feel like they restart from zero every time you open a new session.</p>
+<p>The hard part of agent memory is not storage. Storing text is trivial. The hard part is <strong>getting the agent to actually use the memory at the right moment</strong> — and doing so without flooding the context window with irrelevant facts. A memory system that requires the model to &ldquo;remember to call a tool&rdquo; fails in practice, because the model is exactly the thing that forgets. That is why the category has exploded: hundreds of projects now try to give coding agents durable memory, from heavyweight tools like Beads to lightweight retroactive indexers like deja-vu.</p>
+<h2 id="what-makes-pmb-different-memory-that-proves-its-used">What Makes PMB Different: Memory That Proves It&rsquo;s Used</h2>
+<p>PMB (oleksiijko/pmb) enters this crowded field with a deliberately contrarian pitch: it does not ask you to trust that memory helps. It measures it. The project&rsquo;s core differentiator is <strong>Earned Memory</strong> — a scoring system that joins each surfaced lesson to the outcome of the turn in which it was used, then reports whether that lesson was actually useful, harmful, or unverified. No LLM is involved in the scoring; it reads real signals like tests passing, a red-to-green fix, a successful build, or a completed deploy.</p>
+<p>This matters because most agent-memory tools market themselves with vague productivity claims. PMB&rsquo;s philosophy, stated plainly in its docs, is that &ldquo;a memory system you can&rsquo;t measure is one you can&rsquo;t trust.&rdquo; It would rather show you &ldquo;insufficient&rdquo; than let a flattering-but-wrong number quietly re-weight your memory. That honesty is the review&rsquo;s core hook, and it is genuinely rare in this space.</p>
+<h2 id="how-pmb-works--sqlite-source-of-truth-hybrid-recall-async-writes">How PMB Works — SQLite Source of Truth, Hybrid Recall, Async Writes</h2>
+<p>Under the hood, PMB is refreshingly simple. One SQLite file is the source of truth for all memory. Beside it, LanceDB holds rebuildable vector indexes — meaning the vectors can be regenerated from the SQLite data at any time, so nothing is ever lost if an index corrupts.</p>
+<p>Recall is <strong>hybrid</strong>: it fuses BM25 keyword search, dense vector embeddings, an entity graph, and an optional cross-encoder rerank, combined via Reciprocal-Rank-Fusion. This gives you the best of both worlds — exact keyword matches and semantic similarity — without relying on any single retrieval method.</p>
+<p>Writes are asynchronous and fast. The project reports <code>record_batch_async</code> writes returning in under 1ms, <code>prepare()</code> in 4–16ms, and warm recall at roughly 35ms (p50) with 110ms at p95. MCP cold boot takes about 3.7 seconds. These numbers matter because a memory layer that adds latency to every turn will get disabled; PMB is designed to stay out of the way.</p>
+<h2 id="hooks-that-dont-wait-to-be-asked-auto-recall-ambient-memory-session-restore">Hooks That Don&rsquo;t Wait to Be Asked: Auto-Recall, Ambient Memory, Session-Restore</h2>
+<p>The most important design decision in PMB is that it works at the <strong>protocol level</strong>, not the tool level. It wires hooks into the agent&rsquo;s own lifecycle so the model never has to remember to call a memory tool:</p>
+<ul>
+<li><strong>UserPromptSubmit auto-recall</strong> — before the model thinks, PMB injects relevant memory automatically.</li>
+<li><strong>PostToolUse ambient observe</strong> — after a tool runs, PMB journals what happened.</li>
+<li><strong>SessionStart session-restore</strong> — when a session opens, prior context is restored.</li>
+<li><strong>Stop follow-through + ambient auto-write</strong> — when a turn ends, PMB records the outcome and writes lessons.</li>
+</ul>
+<p>This is the answer to the &ldquo;remember to call a tool&rdquo; failure mode. The hooks fire whether or not the model cooperates. On the write side, <strong>ambient memory</strong> journals the agent&rsquo;s work even when it forgets to call <code>record_batch</code>, tagging entries as <code>source=autowrite</code> and scoring them by outcome (tests passed, failure fixed, deploy ran). If you don&rsquo;t like it, <code>pmb forget-auto</code> reverses it.</p>
+<h2 id="earned-memory--measuring-whether-memory-actually-helps">Earned Memory — Measuring Whether Memory Actually Helps</h2>
+<p>Earned Memory is the heart of PMB&rsquo;s &ldquo;proves it&rsquo;s used&rdquo; claim, and it reports at three levels of rigor:</p>
+<ol>
+<li><strong>Associational lift</strong> (weakest) — compares outcomes on turns where a lesson surfaced versus turns where it didn&rsquo;t. This is confounded: lessons tend to surface on harder turns, so a genuinely helpful lesson can show <em>negative</em> lift. PMB flags this as a review signal, never as ground truth.</li>
+<li><strong>Statistical honesty</strong> — uses a 95% Wilson confidence interval and only labels a lesson useful or harmful when the CI clears baseline <strong>and</strong> the sample size meets a minimum. Otherwise it reports &ldquo;unverified&rdquo; or &ldquo;insufficient.&rdquo;</li>
+<li><strong>Within-lesson causal read</strong> (strongest) — holds the surfacing trigger fixed and compares the same lesson followed versus ignored.</li>
+</ol>
+<p>The key guarantee: an n=1 fluke can never read as a real effect. And critically, Earned Memory is <strong>measurement-only</strong> — it does not feed ranking or decay until the outcome signal is dense enough to trust. PMB would rather under-claim than let a wrong number re-weight your memory.</p>
+<h2 id="the-context-bloat-problem-and-how-pmb-handles-it">The Context-Bloat Problem and How PMB Handles It</h2>
+<p>The top user concern about agent memory — raised repeatedly in the Show HN thread — is context bloat: &ldquo;My main concern is that it can overwhelm the context window with useless facts.&rdquo; Because PMB auto-injects memory before the model thinks, this risk is real and central.</p>
+<p>PMB&rsquo;s answer is a <strong>follow-rate scoring</strong> system. Every surfaced lesson carries a <code>surface_id</code>, and follow-through is recorded both by agent confirmation (<code>mark_lesson_followed</code>) and by Stop-hook inference. The dashboard&rsquo;s Lessons tab then classifies each lesson:</p>
+<ul>
+<li><strong>USEFUL</strong> — followed at least twice</li>
+<li><strong>UNVERIFIED</strong> — not enough signal yet</li>
+<li><strong>DEAD</strong> — ignored at least twice</li>
+</ul>
+<p>Dead lessons are flagged for removal, and trivial-message filtering keeps noise out. This is the mechanism that turns &ldquo;memory that proves it&rsquo;s used&rdquo; from a slogan into an operational loop: lessons that don&rsquo;t get followed get pruned, and lessons that do get followed get promoted.</p>
+<h2 id="hands-on-quickstart-connecting-agents-and-the-dashboard">Hands-On: Quickstart, Connecting Agents, and the Dashboard</h2>
+<p>Getting started is genuinely quick. The quickstart is seven commands:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 152 105"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='0' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='0' y='36' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='0' y='52' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='0' y='68' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='0' y='84' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='8' y='20' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='8' y='36' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='8' y='52' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='8' y='68' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='8' y='84' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='16' y='20' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='16' y='36' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='16' y='52' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='16' y='68' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='16' y='84' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='32' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='32' y='36' fill='currentColor' style='font-size:1em'>w</text>
+<text text-anchor='middle' x='32' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='32' y='68' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='32' y='84' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='40' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='40' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='40' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='40' y='68' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='40' y='84' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='48' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='48' y='36' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='48' y='52' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='48' y='68' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='48' y='84' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='56' y='20' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='56' y='36' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='56' y='52' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='56' y='68' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='56' y='84' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='64' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='64' y='36' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='64' y='52' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='64' y='68' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='64' y='84' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='72' y='36' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='72' y='68' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='72' y='84' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='120' y='4' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>i</text>
+</g>
+
+    </svg>
+  
+</div>
+<p><code>pmb connect</code> wires one or more agents to one workspace. All connections are stdio — the server runs as a child of the agent, so there is no network port and no token to manage. Two agents can share one memory by pointing at the same workspace; SQLite WAL plus a 10-second busy-timeout handles concurrent writes. For teams, an optional HTTP mode with bearer-token auth enables multi-machine sharing.</p>
+<p>The dashboard binds to <code>127.0.0.1:8765</code> and is where PMB&rsquo;s transparency shines. It includes a <strong>Map</strong> (live entity graph), a <strong>Timeline</strong> (git-graph journal), and nine tabs including Lessons, Duplicates, Performance, and Recall. You can inspect exactly what memory exists, why a lesson is classified the way it is, and manually review borderline dedup cases.</p>
+<h2 id="privacy-security-and-local-first-trust">Privacy, Security, and Local-First Trust</h2>
+<p>PMB is 100% offline by default with zero telemetry. Your workspace lives under <code>~/.pmb/&lt;name&gt;/</code> and is fully copyable and exportable (<code>pmb export</code> dumps to Markdown or JSON). There are no API keys, no cloud dependency, and no LLM call on the read path.</p>
+<p>Security is handled at write time: PMB auto-redacts secrets — OpenAI, Anthropic, AWS, Stripe, and GitHub keys — before they hit disk, and the redaction list is configurable. Dedup uses four layers (exact text match → cosine ≥0.92 auto-merge → 0.80–0.92 borderline for later LLM verification → manual review in the dashboard), and old values are archived, never deleted, with <code>keyed_fact_as_of(t)</code> for time-travel. The license is Apache 2.0.</p>
+<h2 id="benchmarks-and-real-world-numbers">Benchmarks and Real-World Numbers</h2>
+<p>PMB publishes concrete numbers rather than vague claims:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Metric</th>
+          <th>Value</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Warm recall (p50)</td>
+          <td>~35ms</td>
+      </tr>
+      <tr>
+          <td>Warm recall (p95)</td>
+          <td>~110ms</td>
+      </tr>
+      <tr>
+          <td><code>prepare()</code></td>
+          <td>4–16ms</td>
+      </tr>
+      <tr>
+          <td><code>record_batch_async</code> write</td>
+          <td>&lt;1ms</td>
+      </tr>
+      <tr>
+          <td>MCP cold boot</td>
+          <td>3.7s</td>
+      </tr>
+      <tr>
+          <td>LoCoMo recall@10</td>
+          <td>94.5% (n=10)</td>
+      </tr>
+      <tr>
+          <td>Multilingual top-10</td>
+          <td>99.2% (900-query mega-stress)</td>
+      </tr>
+      <tr>
+          <td>Default embedder languages</td>
+          <td>50+</td>
+      </tr>
+  </tbody>
+</table>
+<p>The default embedder, <code>paraphrase-multilingual-MiniLM-L12-v2</code>, covers 50+ languages out of the box — a Russian query can find an English fact, with top-1 scores of 1.00 for en/fr/pt/ru on a 101-query eval. There are 105 configurable settings: 25 default-tier keys that affect day-to-day quality, and 80 advanced knobs hidden behind <code>--pro</code>.</p>
+<h2 id="pmb-vs-the-landscape-beads-deja-vu-ctx-mem0-and-the-diy-crowd">PMB vs the Landscape: Beads, deja-vu, ctx, mem0, and the DIY Crowd</h2>
+<p>PMB is young — 296 GitHub stars, 23 forks, created 2026-05-25 — and it is honest about not being a category leader. Here is how it stacks up against the closest cousins:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Tool</th>
+          <th>Approach</th>
+          <th>Differentiator</th>
+          <th>Stars</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Beads</strong> (Steve Yegge)</td>
+          <td>Persists/recalls decisions across sessions</td>
+          <td>Category heavyweight by adoption</td>
+          <td>26,551</td>
+      </tr>
+      <tr>
+          <td><strong>deja-vu</strong></td>
+          <td>Retroactive verbatim-text search (BM25), no embeddings</td>
+          <td>P2P sync over SSH; indexes pre-install sessions</td>
+          <td>693</td>
+      </tr>
+      <tr>
+          <td><strong>PMB</strong></td>
+          <td>Local-first SQLite + hybrid recall + MCP hooks</td>
+          <td>Earned Memory follow-through measurement</td>
+          <td>296</td>
+      </tr>
+  </tbody>
+</table>
+<p>Beads is the reference point for the category by raw adoption. deja-vu is the closest functional cousin — it indexes sessions agents already wrote to disk, including months before install, with 85.3% hit@1 on LongMemEval-S and 69.6% on LoCoMo, but it is retroactive verbatim search with no follow-through measurement. PMB differentiates on proactive protocol-level hooks, an entity graph, and — above all — honest impact scoring. The broader landscape includes ctx, mem0, zep, Mnemos, NexusMem, Mimirs, and CodeYam, plus a DIY crowd building their own memory files.</p>
+<h2 id="honest-limitations--young-project-small-community-differentiation-pressure">Honest Limitations — Young Project, Small Community, Differentiation Pressure</h2>
+<p>A fair review has to flag the downsides. PMB is a young project with a small community (296 stars, 3 open issues). The Show HN thread drew healthy skepticism: one commenter noted &ldquo;35ms local ain&rsquo;t a brag&rdquo; and asked why this is different from the &ldquo;tonnes of agent memory options&rdquo; already out there. Another called for a &ldquo;memory arena&rdquo; to objectively compare the hundreds of projects in this space. The site itself had an intermittent load failure reported.</p>
+<p>The differentiation pressure is real. PMB&rsquo;s answer — honest measurement — is compelling, but it is a niche angle, not a moat. The context-bloat risk, the #1 user fear, is only partially mitigated by follow-rate scoring. And because Earned Memory is deliberately conservative, early users will see a lot of &ldquo;insufficient&rdquo; signals before the system has enough data to be useful. That is honest, but it is also a patience tax.</p>
+<h2 id="faq-is-pmb-right-for-your-setup">FAQ: Is PMB Right for Your Setup?</h2>
+<p><strong>Is PMB free and open source?</strong>
+Yes. PMB is Apache 2.0 licensed, installable via <code>pip install pmb-ai</code>, with no API keys and no cloud dependency. The dashboard, all hooks, and Earned Memory scoring are included.</p>
+<p><strong>Which coding agents does PMB support?</strong>
+PMB connects via MCP to Claude Code, Cursor, Codex, Windsurf, Zed, VS Code, gemini, opencode, and continue. <code>pmb connect</code> wires one or more agents to a single shared workspace over stdio.</p>
+<p><strong>Does PMB send my code or memory to the cloud?</strong>
+No. PMB is 100% offline by default with zero telemetry. Everything lives in a local SQLite file under <code>~/.pmb/&lt;name&gt;/</code>, and secrets are auto-redacted at write time. Optional HTTP mode for teams uses bearer-token auth.</p>
+<p><strong>How does PMB prove memory is actually used?</strong>
+Through Earned Memory, which joins each surfaced lesson to the turn&rsquo;s real outcome (tests pass, red-to-green, build, deploy) and reports at three rigor levels — associational lift, Wilson-CI statistical honesty, and within-lesson causal read. An n=1 fluke can never read as a real effect.</p>
+<p><strong>What is the main risk, and how does PMB handle it?</strong>
+The main risk is context bloat — auto-injected memory overwhelming the context window. PMB counters with follow-rate scoring (USEFUL/UNVERIFIED/DEAD), dead-lesson detection, and trivial-message filtering, so lessons that don&rsquo;t get followed get pruned.</p>
+<h2 id="final-verdict--a-memory-layer-that-earns-its-place">Final Verdict — A Memory Layer That Earns Its Place</h2>
+<p>PMB is not the biggest or most established agent-memory tool, and it does not pretend to be. What it offers is something rarer: a local-first, MCP-native memory layer that refuses to overclaim and instead measures whether memory actually changes outcomes. The hybrid recall is fast, the hooks work at the protocol level so the model never has to remember, and the Earned Memory system is a genuinely novel answer to the question every agent-memory tool dodges — &ldquo;does this actually help?&rdquo;</p>
+<p>If you want a memory layer you can trust because it proves it&rsquo;s used, PMB is worth a serious look. It is young, so expect a patience tax while the outcome signal accumulates. But for developers who value honest measurement over marketing, that is exactly the point.</p>
+]]></content:encoded></item></channel></rss>
