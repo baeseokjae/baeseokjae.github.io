@@ -1,0 +1,269 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>LLM Agent Harness on RockB</title><link>https://baeseokjae.github.io/tags/llm-agent-harness/</link><description>Recent content in LLM Agent Harness on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 25 Aug 2026 10:03:46 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/llm-agent-harness/index.xml" rel="self" type="application/rss+xml"/><item><title>Mini Agent Gateway: Building Code That Constrains the LLM — An Agent Gateway Harness Architecture Guide</title><link>https://baeseokjae.github.io/posts/mini-agent-gateway-harness-2026/</link><pubDate>Tue, 25 Aug 2026 10:03:46 +0000</pubDate><guid>https://baeseokjae.github.io/posts/mini-agent-gateway-harness-2026/</guid><description>A mini agent gateway constrains the LLM with schema validation, tool allow-lists, guardrails, and model routing. Here&amp;#39;s how to build one with a ReAct loop and a dynamic tool registry.</description><content:encoded><![CDATA[<p>A mini agent gateway is the code layer you place between your LLM and its tools that constrains what the model can say, call, and spend. Instead of trusting a raw model endpoint, you add schema-based argument validation, a tool allow-list, pre-execution guardrails, and model routing so every model call is checked before it touches a real system. The result is an LLM you can actually run in production: cheaper, safer, and deterministic.</p>
+<h2 id="what-is-a-mini-agent-gateway-agent-harness-and-why-build-your-own">What Is a Mini Agent Gateway (Agent Harness) and Why Build Your Own?</h2>
+<p>An agent gateway — often called an agent harness — is the structured execution environment that surrounds an LLM and does most of the actual engineering work. MongoDB makes the point bluntly in its post &ldquo;The LLM Is the Smallest Part&rdquo;: production agent systems are dominated by the harness that owns state, memory, tooling, routing, and guardrails, not by the model itself (<a href="https://www.mongodb.com/company/blog/technical/agent-harness-the-llm-is-the-smallest-part">source</a>). A <em>mini</em> version is the same idea scaled down: a lightweight, self-hosted gateway you can build in a few hundred lines of Python rather than buying an enterprise platform.</p>
+<p>Why build your own when managed gateways exist? Three reasons dominate:</p>
+<ul>
+<li><strong>You control the constraints.</strong> Schema validation, tool allow-lists, and guardrails are not abstractions you configure in a dashboard — they are code you own and can audit.</li>
+<li><strong>You control cost and routing.</strong> You decide which calls go to a cheap on-device model and which deserve an expensive frontier model, instead of paying the vendor&rsquo;s default.</li>
+<li><strong>You avoid lock-in.</strong> A gateway speaks the OpenAI-compatible API, so you can swap vLLM, Ollama, or FastAPI backends without rewriting your agent logic.</li>
+</ul>
+<p>The core shift in thinking is this: the LLM is a pluggable component, not the system. The gateway is the system. Everything that makes an agent trustworthy — validation, safety, routing, tracing — lives in the harness, not in the model weights.</p>
+<h2 id="how-does-code-actually-constrain-an-llm-schema-validation-tool-allow-lists-and-guardrails">How Does Code Actually Constrain an LLM? (Schema Validation, Tool Allow-Lists, and Guardrails)</h2>
+<p>An LLM is non-deterministic by nature, but a harness turns it into a <em>bounded</em> component. Constraint is not done by hoping the model behaves; it is done by hard engineering gates that run <em>before</em> and <em>after</em> every model call.</p>
+<h3 id="schema-based-argument-validation">Schema-based argument validation</h3>
+<p>The most important single constraint is that the LLM cannot call a tool with arbitrary arguments. You define a JSON Schema for every tool, and the harness validates the model&rsquo;s proposed arguments before execution. This mirrors the approach in the <a href="https://github.com/Anicanic/mini-agent-harness">Anicanic mini-agent-harness</a>, where a <code>schemas.py</code> layer plus a tool normalization layer constrain exactly what the LLM can call. If the model emits arguments that fail validation, the harness rejects the call and feeds the error back into the next ReAct step — teaching the model to correct itself instead of silently executing bad input.</p>
+<h3 id="tool-allow-lists">Tool allow-lists</h3>
+<p>Instead of exposing every function on your machine to the model, you present a curated registry of tools. The gateway decides <em>what the model can even see</em>. If the LLM cannot see a tool, it cannot call it. A single <code>tools.json</code> file drives the tool descriptions, the validation schemas, and runtime registration simultaneously — one source of truth that guarantees the model&rsquo;s view of the toolset matches the harness&rsquo;s enforcement.</p>
+<h3 id="pre-execution-guardrails">Pre-execution guardrails</h3>
+<p>Guardrails run checks on both input and output: content sanitization, PII filtering, safety-policy verification, and command allow-lists. The <a href="https://github.com/glenshadow/agent-harness-llm-gateway-platform">glenshadow agent-harness-llm-gateway-platform</a> implements these as a first-class layer between the model and your tools, applying policy checks <em>before</em> the tool executes so a malicious or hallucinated tool call never reaches a real system.</p>
+<h3 id="why-constraint-matters-more-than-ever">Why constraint matters more than ever</h3>
+<p>Community demand for exactly this kind of tooling is visible and growing. Claw Patrol, an agent security firewall that sits between the LLM and its tools and enforces policy, drew roughly 112 points on Hacker News in 2026 — a strong signal that developers actively want to constrain agent tool calls (<a href="https://hn.algolia.com/api/v1/search?query=agent%20gateway%20LLM">source</a>). The lesson is that &ldquo;just prompt it to be safe&rdquo; does not scale; code-level gates do.</p>
+<h2 id="core-architecture-the-react-loop-and-a-dynamic-tool-registry">Core Architecture: The ReAct Loop and a Dynamic Tool Registry</h2>
+<p>At the heart of most mini gateways is a ReAct (Reason + Act) loop. The pattern is simple and powerful: the model reasons about a task, decides on a tool call, the harness validates and executes it, and the result is fed back into the model for the next round of reasoning. This repeats until the task is solved or a stop condition fires.</p>
+<p>A clean, reference architecture — drawn from the <a href="https://github.com/Anicanic/mini-agent-harness">Anicanic mini-agent-harness</a> — looks like this:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 584 41"
+      >
+      <g transform='translate(8,16)'>
+<path d='M 88,0 L 96,0' fill='none' stroke='currentColor'></path>
+<path d='M 200,0 L 208,0' fill='none' stroke='currentColor'></path>
+<path d='M 296,0 L 304,0' fill='none' stroke='currentColor'></path>
+<path d='M 408,0 L 416,0' fill='none' stroke='currentColor'></path>
+<path d='M 32,16 L 40,16' fill='none' stroke='currentColor'></path>
+<path d='M 144,16 L 152,16' fill='none' stroke='currentColor'></path>
+<path d='M 256,16 L 264,16' fill='none' stroke='currentColor'></path>
+<path d='M 352,16 L 360,16' fill='none' stroke='currentColor'></path>
+<path d='M 472,16 L 480,16' fill='none' stroke='currentColor'></path>
+<polygon points='48.000000,16.000000 36.000000,10.400000 36.000000,21.600000' fill='currentColor' transform='rotate(0.000000, 40.000000, 16.000000)'></polygon>
+<polygon points='104.000000,0.000000 92.000000,-5.600000 92.000000,5.600000' fill='currentColor' transform='rotate(0.000000, 96.000000, 0.000000)'></polygon>
+<polygon points='160.000000,16.000000 148.000000,10.400000 148.000000,21.600000' fill='currentColor' transform='rotate(0.000000, 152.000000, 16.000000)'></polygon>
+<polygon points='216.000000,0.000000 204.000000,-5.600000 204.000000,5.600000' fill='currentColor' transform='rotate(0.000000, 208.000000, 0.000000)'></polygon>
+<polygon points='272.000000,16.000000 260.000000,10.400000 260.000000,21.600000' fill='currentColor' transform='rotate(0.000000, 264.000000, 16.000000)'></polygon>
+<polygon points='312.000000,0.000000 300.000000,-5.600000 300.000000,5.600000' fill='currentColor' transform='rotate(0.000000, 304.000000, 0.000000)'></polygon>
+<polygon points='368.000000,16.000000 356.000000,10.400000 356.000000,21.600000' fill='currentColor' transform='rotate(0.000000, 360.000000, 16.000000)'></polygon>
+<polygon points='424.000000,0.000000 412.000000,-5.600000 412.000000,5.600000' fill='currentColor' transform='rotate(0.000000, 416.000000, 0.000000)'></polygon>
+<polygon points='488.000000,16.000000 476.000000,10.400000 476.000000,21.600000' fill='currentColor' transform='rotate(0.000000, 480.000000, 16.000000)'></polygon>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>U</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>I</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='56' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='64' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='72' y='20' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='80' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='88' y='20' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='96' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='104' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>W</text>
+<text text-anchor='middle' x='112' y='20' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='120' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='120' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='128' y='20' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='144' y='4' fill='currentColor' style='font-size:1em'>U</text>
+<text text-anchor='middle' x='152' y='4' fill='currentColor' style='font-size:1em'>I</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='168' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='176' y='4' fill='currentColor' style='font-size:1em'>L</text>
+<text text-anchor='middle' x='176' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='184' y='4' fill='currentColor' style='font-size:1em'>I</text>
+<text text-anchor='middle' x='184' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='192' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='200' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='208' y='20' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='216' y='20' fill='currentColor' style='font-size:1em'>j</text>
+<text text-anchor='middle' x='224' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='224' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='232' y='4' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='232' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='240' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='240' y='20' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='248' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='256' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='264' y='4' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='272' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='280' y='4' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='280' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='288' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='296' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='304' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='312' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='320' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='320' y='20' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='328' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='328' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='336' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='336' y='20' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='344' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='352' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='360' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='368' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='376' y='4' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='376' y='20' fill='currentColor' style='font-size:1em'>T</text>
+<text text-anchor='middle' x='384' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='384' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='392' y='4' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='392' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='400' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='416' y='20' fill='currentColor' style='font-size:1em'>R</text>
+<text text-anchor='middle' x='424' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='432' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='432' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='440' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='440' y='20' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='448' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='448' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='456' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='456' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='464' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='472' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='480' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='488' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='496' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='496' y='20' fill='currentColor' style='font-size:1em'>R</text>
+<text text-anchor='middle' x='504' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='504' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='512' y='4' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='512' y='20' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='520' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='520' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='528' y='4' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='528' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='544' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='552' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='560' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='568' y='20' fill='currentColor' style='font-size:1em'>p</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>Breaking it down:</p>
+<ul>
+<li><strong><code>agent.py</code></strong> — the entry point that owns the loop and the conversation state.</li>
+<li><strong><code>prompts.py</code></strong> — the system prompt that tells the model how to reason and which tools exist.</li>
+<li><strong><code>dispatcher.py</code></strong> — decides which tool to invoke based on the model&rsquo;s structured output.</li>
+<li><strong><code>schemas.py</code></strong> — the JSON Schema definitions that validate every tool call.</li>
+<li><strong><code>tools.json</code></strong> — the single source of truth for tool descriptions, schemas, and registration.</li>
+<li><strong><code>tools.py</code></strong> — the actual executable functions the model is allowed to reach.</li>
+</ul>
+<p>The dynamic tool registry is what keeps the loop extensible. Because <code>tools.json</code> drives descriptions, validation, and registration simultaneously, adding a new tool is a one-line change: write the function in <code>tools.py</code>, add its schema, and the gateway automatically exposes it to the model with validation built in. No hand-written glue between the model&rsquo;s JSON output and your Python functions.</p>
+<h2 id="building-the-gateway-step-by-step-prompts-schemas-dispatcher-and-tools">Building the Gateway Step by Step: Prompts, Schemas, Dispatcher, and Tools</h2>
+<p>Here is the build-up path you can follow, starting small and layering in constraint as you go.</p>
+<p><strong>Step 1 — Start with a bare ReAct loop.</strong> Stand up a minimal loop that calls an OpenAI-compatible endpoint (vLLM, Ollama, or FastAPI all work) and returns text. Get the conversation flowing before you add any safety.</p>
+<p><strong>Step 2 — Add a dynamic tool registry.</strong> Create <code>tools.json</code> listing one simple tool (say, a calculator or a date fetcher). Register it at runtime so the model can see it. The key win: the model now emits structured tool calls instead of free text.</p>
+<p><strong>Step 3 — Add schema validation.</strong> Define the JSON Schema for each tool&rsquo;s arguments in <code>schemas.py</code>. Validate every proposed call before executing. This is the first real constraint — the moment the LLM stops being able to pass arbitrary arguments to your code.</p>
+<p><strong>Step 4 — Build the dispatcher.</strong> <code>dispatcher.py</code> parses the model&rsquo;s validated tool call, invokes the matching function in <code>tools.py</code>, and returns the result to the loop. Add error handling so a failed validation loops back to the model as a correction signal.</p>
+<p><strong>Step 5 — Add tracing.</strong> Log every step: the prompt, the model&rsquo;s choice, the validated call, the tool result, and the cost. Tracing is what turns a black-box loop into a debuggable, auditable system.</p>
+<p><strong>Step 6 — Layer in guardrails.</strong> Add input sanitization and PII filtering before execution, plus a policy check that a tool call is actually allowed. This is the step that makes the gateway safe enough for real systems.</p>
+<p>Start with step 1 and stop at whatever layer your risk tolerance requires. A personal assistant script might only need steps 1–3; a production-facing agent needs all six.</p>
+<h2 id="how-to-route-models-to-cut-cost-without-sacrificing-quality">How to Route Models to Cut Cost Without Sacrificing Quality</h2>
+<p>One of the strongest economic arguments for a gateway is model routing: sending the right call to the right model. A gateway is uniquely positioned to do this because it sees every request in one place.</p>
+<p>The <a href="https://github.com/glenshadow/agent-harness-llm-gateway-platform">glenshadow</a> reference implements dynamic routing across Gemini 2.5 Flash/Pro, Claude 3.5 Sonnet, and GPT-4o based on latency, cost, or capability. Arch GW goes further and markets a distributed gateway &ldquo;engineered with small LLMs,&rdquo; reflecting a clear industry trend toward routing agent traffic through cheaper or on-device models (<a href="https://docs.archgw.com/">source</a>). Rayline is a working example of the same idea in the wild: it routes Claude Code subagents to on-device and cheaper models, optimizing cost and latency by sending each call to the cheapest model that can handle it (<a href="https://rayline.ai/">source</a>).</p>
+<p>Practical routing rules you can implement today:</p>
+<ul>
+<li><strong>Classify by task type.</strong> Simple extraction and summarization go to a small on-device model; complex multi-step reasoning goes to a frontier model.</li>
+<li><strong>Classify by risk.</strong> Any call that touches a destructive tool gets routed to a stronger model and passes through stricter guardrails.</li>
+<li><strong>Classify by token budget.</strong> High-volume, low-stakes calls get the cheap model; low-volume, high-stakes calls get the best model.</li>
+</ul>
+<p>A simple <code>route()</code> function at the top of your dispatcher can decide the model based on intent, tool, or user tier. Even a coarse two-tier split — cheap model for routine steps, premium model for the final synthesis — typically cuts spend significantly while keeping output quality within acceptable bounds.</p>
+<h2 id="security-patterns-proxy-isolation-pii-filtering-and-pre-execution-guardrails">Security Patterns: Proxy Isolation, PII Filtering, and Pre-Execution Guardrails</h2>
+<p>Production gateways treat security as a first-class concern, not an afterthought. Three patterns matter most.</p>
+<p><strong>Zero-secret-exposure proxy.</strong> The gateway runs as a full-stack proxy so API keys stay isolated on the backend and never reach the client. This is the pattern the <a href="https://github.com/glenshadow/agent-harness-llm-gateway-platform">glenshadow</a> design calls out explicitly: users interact through the gateway, and their credentials never touch browser or CLI sessions. It is the difference between an agent that is safe to deploy and one that leaks keys the moment a prompt injection slips through.</p>
+<p><strong>PII filtering and content sanitization.</strong> Before any tool executes, the harness scrubs input for personally identifiable information and sanitizes content against injection attempts. If an attacker tricks the model into emitting a destructive tool call, the sanitizer is a second line of defense that does not rely on the model behaving.</p>
+<p><strong>Pre-execution guardrails.</strong> Policy verification runs <em>before</em> the tool call, not after. The gateway checks whether the proposed action is permitted — is this file in the allow-list? Is this command allowed? Is this network endpoint trusted? — and refuses if it is not. This is the exact posture of Claw Patrol, which positions itself as a security firewall between the LLM and its tools, proving the gateway pattern as a safety mechanism rather than just an optimization (<a href="https://github.com/denoland/clawpatrol">source</a>).</p>
+<h2 id="comparing-direct-api-calls-vs-a-gateway-vs-a-full-harness">Comparing Direct API Calls vs a Gateway vs a Full Harness</h2>
+<p>The decision of how much infrastructure to build depends on what you are protecting. Here is a practical comparison:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Capability</th>
+          <th>Direct API Call</th>
+          <th>Mini Agent Gateway</th>
+          <th>Full Agent Harness</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Tool-call validation</td>
+          <td>None — you parse output yourself</td>
+          <td>Schema-based, enforced in code</td>
+          <td>Schema-based, enforced in code</td>
+      </tr>
+      <tr>
+          <td>Tool allow-list</td>
+          <td>Manual</td>
+          <td>Yes, via a single registry</td>
+          <td>Yes, plus role-based access</td>
+      </tr>
+      <tr>
+          <td>Model routing</td>
+          <td>None</td>
+          <td>Yes, per-request</td>
+          <td>Yes, per-request + per-tool</td>
+      </tr>
+      <tr>
+          <td>API-key isolation</td>
+          <td>Keys exposed to clients</td>
+          <td>Zero-secret proxy</td>
+          <td>Zero-secret proxy</td>
+      </tr>
+      <tr>
+          <td>Pre-execution guardrails</td>
+          <td>None</td>
+          <td>PII filter + policy check</td>
+          <td>Full safety verification suite</td>
+      </tr>
+      <tr>
+          <td>Memory / state</td>
+          <td>Manual</td>
+          <td>In-loop only</td>
+          <td>Durable, DB-backed</td>
+      </tr>
+      <tr>
+          <td>Tracing</td>
+          <td>None</td>
+          <td>Basic step logging</td>
+          <td>Full observability</td>
+      </tr>
+      <tr>
+          <td>Build effort</td>
+          <td>Minutes</td>
+          <td>A few hundred lines</td>
+          <td>Weeks + a data platform</td>
+      </tr>
+      <tr>
+          <td>Best for</td>
+          <td>Prototypes, scripts</td>
+          <td>Personal agents, small teams</td>
+          <td>Production, enterprise, regulated</td>
+      </tr>
+  </tbody>
+</table>
+<p>The takeaway is a spectrum rather than a binary choice. Direct API calls are fine for a prototype where a bad call has no real consequence. A mini gateway is the sweet spot for most working agents: it delivers the constraint, routing, and guardrails that make an LLM trustworthy without the operational cost of a full platform. A full harness — what MongoDB calls the production-grade agent system — becomes necessary when you need durable state, multi-agent coordination, and enterprise governance (<a href="https://www.mongodb.com/company/blog/technical/agent-harness-the-llm-is-the-smallest-part">source</a>).</p>
+<h2 id="faq">FAQ</h2>
+<p><strong>What is a mini agent gateway?</strong>
+A mini agent gateway (or agent harness) is a lightweight, self-hosted code layer between an LLM and its tools that constrains what the model can call and spend. It adds schema validation, tool allow-lists, guardrails, and model routing around a model endpoint you already use.</p>
+<p><strong>How does code constrain what an LLM can do?</strong>
+By refusing to execute anything that does not pass a gate. Schema validation rejects malformed tool arguments, a tool allow-list hides tools the model is not allowed to use, and pre-execution guardrails sanitize input and verify policies before any tool runs. The LLM proposes; the harness disposes.</p>
+<p><strong>Why route agent traffic through cheaper models?</strong>
+Because most calls do not need a frontier model. Routing routine or low-risk steps to small on-device models cuts token cost and latency, while reserving expensive frontier models for complex reasoning. This is the pattern used by tools like Rayline and Arch GW.</p>
+<p><strong>Is a gateway only for security?</strong>
+No — it is a dual win. The same layer that enforces safety also enables cost optimization through routing, and it centralizes tracing and observability. Security and efficiency come from the same architectural decision: putting code in charge of every model call.</p>
+<p><strong>Do I need a full agent harness instead?</strong>
+Only if you need durable state, multi-agent coordination, or enterprise governance. For a personal assistant or a small team&rsquo;s agent, a mini gateway delivers most of the safety and cost benefits in a few hundred lines of code. Move to a full harness when your agent outgrows in-loop memory and single-process execution.</p>
+]]></content:encoded></item></channel></rss>
