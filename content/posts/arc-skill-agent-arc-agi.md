@@ -1,0 +1,141 @@
+---
+title: "ARC-Skill: The Agent Skill That Plays ARC-AGI-3 at 100% RHAE"
+date: 2026-08-30T07:01:15+00:00
+tags:
+  - arc-agi-3
+  - agent skills
+  - claude code
+  - AI agents
+  - benchmark
+description: "ARC-Skill is a 129-line agent skill that lets Claude Code finish all 25 ARC-AGI-3 games at 100% RHAE by forcing the agent to predict every press before it acts."
+draft: false
+cover:
+  image: "/images/arc-skill-agent-arc-agi.png"
+  alt: "ARC-Skill: The Agent Skill That Plays ARC-AGI-3 at 100% RHAE"
+  relative: false
+schema: "schema-arc-skill-agent-arc-agi"
+---
+
+ARC-Skill is a lightweight agent skill that lets an unmodified Claude Code agent finish all 25 ARC-AGI-3 games and all 183 levels at a perfect 100.00 RHAE score, using just 7,645 actions versus a median human's 17,135. It works by enforcing a single rule: before the agent presses any button, it must write down exactly what that press will do to the grid, and the harness refuses to act until a prediction is recorded and graded. This article explains how that one rule unlocks frontier-level performance, how ARC-Skill compares to heavier harness systems, and what it teaches about agentic skill engineering.
+
+## What is ARC-AGI-3 and why is it so hard for agents?
+
+ARC-AGI-3 is the third benchmark in the Abstraction and Reasoning Corpus series, designed by the ARC Prize Foundation to test general-purpose reasoning rather than memorized patterns. Unlike most benchmarks, it does not hand the agent a rule sheet. Each of the 25 games presents a 64x64 grid of 16 color indices and a set of legal actions, with no object list, no stated goal, no shaped reward, and no explanation of how the game works. The agent must infer the mechanics purely from interaction.
+
+The official metric is RHAE, or Relative Human Action Efficiency. RHAE compares the number of actions an agent takes per level against a first-exposure human baseline. A score of 100% means the agent completed every level at or above human-baseline efficiency. This makes ARC-AGI-3 a long-horizon, sparse-feedback environment: the agent gets almost no signal about whether it is on the right track, and it must sustain a coherent strategy across many steps.
+
+The difficulty is reflected in the numbers. Verified frontier-model performance on the Semi-private set was just 0.51% at launch in March, and even with GPT-5.6 Sol at maximum reasoning it only reached 7.78% by July, with a 13.33% score on the Public set. Raw model capability alone, no matter how powerful, struggles to crack the benchmark. That is precisely why ARC-AGI-3 has become a testbed for agent harness design and skill engineering rather than a pure model-evaluation exercise.
+
+## ARC-Skill: the one-rule skill that hit 100% RHAE
+
+ARC-Skill is a skill for Claude Code, built to run on Claude Opus 5 with no modifications to the model or the agent framework. The entire skill is 129 lines of instruction plus a 4,343-line command-line tool, and neither the instructions nor the tool mentions any of the 25 games. It is game-agnostic by design: the same skill works on any ARC-AGI-3 environment given only a game ID.
+
+The result is striking. ARC-Skill finished 25 out of 25 games and 183 out of 183 levels, achieving an RHAE of 100.00, the ceiling of the benchmark. It did so using 7,645 actions, compared to a median human's 17,135 — meaning the agent was more than twice as efficient as the average human on a first exposure. The score was verified by the ARC scorecard 24ddb219, and every recorded press was replayed through ARC's own servers with no divergence.
+
+What makes this remarkable is that the skill is tiny. It does not encode any game-specific knowledge, does not hard-code solutions, and does not rely on the most expensive reasoning settings. It simply changes how the agent behaves: it forces the agent to commit to a prediction before every action. That single behavioral constraint is what turns a model that would otherwise score in the low single digits into a perfect performer.
+
+## How the predict-before-press mechanism works
+
+The core rule of ARC-Skill is deceptively simple: before pressing a button, the agent must write down what the press will do to the grid — which cells change and to what value. The harness refuses to execute a press without a prediction, and it grades that prediction against the frame that comes back. This turns every action into a testable hypothesis.
+
+The skill defines eight claim forms that the agent can use to express its prediction: cell X,Y=V, move, region, vanish, level+1/win, change, and noop. These claims are joined with semicolons, and each one is graded independently against the returned frame. This granular grading is important because it tells the agent not just whether it was right, but exactly which part of its mental model was wrong.
+
+The skill also provides five instruments: See, Press, Plan, Compute, and memory. None of them knows anything about any game. See lets the agent observe the grid, Press executes an action, Plan lets it reason ahead, Compute handles arithmetic, and memory carries state across steps. The predict-before-press rule sits on top of these instruments as the governing discipline.
+
+The mechanism works because it forces the agent to externalize its model of the game. Instead of acting on a vague intuition, the agent must state a concrete, falsifiable prediction. When the prediction is wrong, the agent learns precisely where its belief diverged from reality. This is the difference between guessing and scientific reasoning: every press becomes an experiment with a recorded outcome.
+
+## The misses that mattered: learning from 443 failed predictions
+
+Across the entire campaign, ARC-Skill wrote 7,627 graded predictions, of which 443 missed. Every one of the 25 games contained at least one miss. At first glance, 443 failures out of 7,627 looks like a 94% accuracy rate — impressive, but the misses are the real story.
+
+A wrong prediction is more valuable than a right one because it dates exactly where belief and reality diverged. When the agent predicts that a cell will change to value V and it does not, the agent has discovered a boundary of its model. It now knows that its current theory of the game is incomplete or incorrect at a specific, identifiable point. This is the learning signal that drives the whole campaign forward.
+
+The fact that every game contained at least one miss is itself instructive. It means the agent never had a perfect model from the start; it always had to discover at least one surprising mechanic through failed prediction. The predict-before-press rule ensures these failures are not wasted. Because each prediction is graded independently, the agent can localize the error to a specific claim rather than discarding an entire strategy.
+
+This is the philosophical core of ARC-Skill: a wrong theory is more valuable than a right one, because it tells you precisely where your understanding breaks. The harness is designed to maximize the information gained from every miss, turning errors into the fuel for the next round of reasoning.
+
+## ARC-Skill vs Schema harness vs NVIDIA AVO: three roads to ~100%
+
+ARC-Skill is not the only system to reach near-perfect performance on ARC-AGI-3. It is worth comparing the three main approaches, because they represent very different philosophies about how to build capable agents.
+
+| System | Approach | Result | Cost / Notes |
+|--------|----------|--------|--------------|
+| ARC-Skill | 129-line skill + CLI tool, predict-before-press rule on unmodified Claude Code | 100.00 RHAE, 25/25 games, 183/183 levels | 7,645 actions vs human median 17,135 |
+| Schema harness | Models write each game's mechanism as an executable program, test it against reality, plan inside it | ~99% RHAE on public set | Named after Kant's schema; rule-of-construction approach |
+| NVIDIA AVO | Agentic Variation Operators: full agent architecture with memory, tools, feedback, recovery | 100.00 RHAE on all 25 environments | Lifts Opus 5 from 30% to 100%; ~12% fewer actions than VISTA |
+| Symbolica Agentica | Agentic SDK using a shared harness | 36.08% (113/182 levels, 7/25 games) | $1,005 vs Opus 4.6's 0.25% for $8,900 |
+
+The most striking contrast is between ARC-Skill and NVIDIA AVO. ARC-Skill is a minimal, game-agnostic skill that changes agent behavior with a single rule. AVO is a heavyweight architecture that adds memory, tools, feedback loops, and recovery mechanisms. Yet both reach 100.00 RHAE. This suggests that the path to frontier performance is not a single magic ingredient but a set of design choices that can be implemented in very different ways.
+
+The Schema harness takes yet another route: it has the model write each game's mechanism as an executable program, then test that program against reality and plan inside it. This is a physicist's approach — build a theory, validate it, use it to predict. It reaches ~99% RHAE, essentially tied with the other two.
+
+Symbolica's Agentica SDK is the outlier in cost efficiency. It scored 36.08% for just $1,005, compared to Opus 4.6's 0.25% for $8,900. It does not reach 100%, but it demonstrates that strong results do not require the most expensive reasoning settings — a theme that ARC-Skill reinforces.
+
+## Why system design beats raw model capability on ARC-AGI-3
+
+The clearest evidence that system design matters more than raw model capability comes from NVIDIA AVO. The AVO architecture elevates Claude Opus 5 from a 30% model baseline to 100% purely through agent system design. The model did not get smarter; the system around it did. This is a dramatic demonstration that long-horizon capability emerges from the full agent system — memory, tools, feedback, and recovery — not from the model alone.
+
+ARC-Skill makes the same point from the opposite direction. It uses a frontier model, but the model's raw capability is not what produces the 100% score. The predict-before-press rule is a system-level constraint that changes how the model reasons. Without it, the same model would score far lower. The skill is the difference.
+
+OpenAI's own findings reinforce this. The company reported that enabling two settings tripled their scores on ARC-AGI-3. Small configuration and harness changes can dramatically move results, which is exactly the pattern ARC-Skill and AVO demonstrate. The benchmark is unusually sensitive to how the agent is structured, not just what model powers it.
+
+This has a practical implication for anyone building agents: before reaching for a bigger model, examine the harness. The gap between a 30% model baseline and a 100% agent system is often a matter of design, not compute. ARC-AGI-3 is a clean testbed for this lesson because it strips away domain knowledge and forces the system to earn its score through interaction.
+
+## What ARC-Skill teaches about agentic skill engineering
+
+ARC-Skill is a case study in what a well-designed agent skill can do. The first lesson is that a skill does not need to be large to be powerful. 129 lines of instruction plus a CLI tool is enough to transform a model's performance on a hard benchmark. The power comes from the behavioral constraint, not the volume of instructions.
+
+The second lesson is that forcing externalized reasoning works. The predict-before-press rule is essentially a requirement that the agent make its thinking visible and testable before acting. This is a general principle that applies far beyond ARC-AGI-3: agents that commit to predictions and get them graded learn faster and act more reliably than agents that act on unstated intuition.
+
+The third lesson is that game-agnostic skills are more robust. ARC-Skill never mentions any of the 25 games, which means it generalizes to any environment with the same interface. A skill that encodes domain knowledge is brittle; a skill that encodes a reasoning discipline is portable. This is the direction agentic skill engineering should move.
+
+The fourth lesson is that misses are data. The 443 failed predictions were not failures in the pejorative sense; they were the learning signal that drove the campaign to 100%. A skill that treats errors as information rather than as problems to be hidden is more effective in the long run.
+
+## How to try ARC-Skill yourself (install and run)
+
+If you want to reproduce ARC-Skill's results, the setup is straightforward. The skill is distributed as an npm package, so installation is a single command:
+
+```bash
+npx skills add pbshgthm/arc-skill
+```
+
+Next, you need to export your ARC API key so the skill can talk to the ARC-AGI-3 servers:
+
+```bash
+export ARC_API_KEY=your_key_here
+```
+
+Then you can ask Claude Code to solve a specific game by ID:
+
+```bash
+claude "solve ARC-AGI-3 game lp85"
+```
+
+That is the entire workflow. The skill handles the predict-before-press discipline, the claim grading, and the interaction with the ARC servers. You do not need to modify Claude Code, tune the model, or write any game-specific code. The same command works for any of the 25 games.
+
+One thing to keep in mind: the skill is designed to be run on Claude Opus 5, which is the model used in the verified 100% run. Other models may not perform identically, though the skill's game-agnostic design means the mechanism should transfer. If you are experimenting, start with a single game and watch how the predict-before-press rule shapes the agent's behavior before scaling to the full set.
+
+## The bigger picture: ARC-AGI-3 as a benchmark for agent skills
+
+ARC-AGI-3 is more than a hard benchmark; it is a natural testbed for agentic skill engineering. Its design — no rules, sparse feedback, long-horizon interaction — is exactly the kind of environment where agent skills and harness design matter most. A benchmark that rewards system design over raw model capability is precisely what the field needs to move beyond the "bigger model" arms race.
+
+The convergence of ARC-Skill, Schema harness, and NVIDIA AVO on ~99-100% RHAE is a strong signal. Three very different implementations — a minimal skill, a program-writing harness, and a full agent architecture — all reach the ceiling. This suggests the field is converging on a set of principles: externalize reasoning, make predictions testable, treat misses as data, and design the system around the model rather than relying on the model alone.
+
+For practitioners, the takeaway is actionable. If you are building agents for long-horizon tasks, consider adding a predict-before-press-style discipline to your own harness. Force your agent to state what it expects before it acts, grade those expectations, and feed the misses back into the loop. ARC-Skill shows that this single change can be the difference between a model that flounders and an agent that performs at the ceiling of a benchmark designed to be hard for machines.
+
+## FAQ
+
+**What is ARC-Skill?**
+ARC-Skill is a lightweight agent skill for Claude Code that lets an unmodified agent play all 25 ARC-AGI-3 games from nothing but a game ID. It is 129 lines of instruction plus a 4,343-line command-line tool, and it achieves a perfect 100.00 RHAE score on the benchmark.
+
+**What does 100% RHAE on ARC-AGI-3 mean?**
+RHAE, or Relative Human Action Efficiency, compares an agent's per-level action count against a first-exposure human baseline. A 100% score means the agent completed every level at or above human-baseline efficiency. ARC-Skill finished all 25 games and 183 levels at this ceiling.
+
+**How does the predict-before-press rule work?**
+Before the agent presses any button, it must write down exactly what the press will do to the grid — which cells change and to what value. The harness refuses to act without a prediction and grades it against the returned frame, so every action becomes a testable hypothesis.
+
+**Is ARC-Skill game-specific?**
+No. Neither the instructions nor the tool mentions any of the 25 games. The skill is game-agnostic and works on any ARC-AGI-3 environment given only a game ID, which makes it portable to new games and similar environments.
+
+**How does ARC-Skill compare to NVIDIA AVO and the Schema harness?**
+All three reach roughly 99-100% RHAE but take different approaches. ARC-Skill is a minimal skill with a single behavioral rule, NVIDIA AVO is a full agent architecture with memory and recovery, and the Schema harness has models write each game's mechanism as an executable program. Their convergence shows system design matters as much as model capability.
