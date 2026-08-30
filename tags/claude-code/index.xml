@@ -149,6 +149,107 @@ Fable 5, Opus 5, and Sonnet 5 support low, medium, high, xhigh, and max. Opus 4.
 Anthropic reports the high-effort path generates roughly 7x more tokens than low effort. However, independent benchmarks found cost is dominated by tool use and prompt cache behavior, so &ldquo;always low effort&rdquo; is not reliably the cheapest path.</p>
 <p><strong>How do I change the effort level in Claude Code?</strong>
 Use the <code>/effort</code> slash command, the <code>--effort</code> CLI flag, or the <code>effortLevel</code> setting in <code>settings.json</code>. Organizations can cap available levels, and unsupported levels silently fall back to the highest supported level at or below your request.</p>
+]]></content:encoded></item><item><title>Open-Source Memory for Coding Agents, Synced Over SSH: The Complete Guide</title><link>https://baeseokjae.github.io/posts/open-source-memory-for-coding-agents-synced-over-ssh/</link><pubDate>Mon, 24 Aug 2026 10:01:16 +0000</pubDate><guid>https://baeseokjae.github.io/posts/open-source-memory-for-coding-agents-synced-over-ssh/</guid><description>Sync coding-agent memory across machines over SSH using open-source tools: symlink CLAUDE.md/AGENTS.md, git-based auto-sync, or MCP markdown stores.</description><content:encoded><![CDATA[<p>Open-source memory for coding agents synced over SSH lets you carry your AI assistant&rsquo;s context, preferences, and project knowledge across every machine you work on — without a cloud service. The most portable approach is a git-backed markdown store: symlink your agent&rsquo;s memory files, push and pull over SSH, and let auto-sync hooks handle the rest. This guide walks through the three proven methods and how to pick the right one.</p>
+<h2 id="why-coding-agent-memory-drifts-across-machines">Why Coding-Agent Memory Drifts Across Machines</h2>
+<p>Modern coding agents each read their own memory file. Claude Code reads <code>.claude/CLAUDE.md</code>, while Cursor and Codex CLI read <code>AGENTS.md</code> in the project root. When you work on a laptop, a desktop, and a remote server over SSH, each machine holds a slightly different copy of that context — and the drift compounds.</p>
+<p>The core problem is that copying instructions between <code>CLAUDE.md</code> and <code>AGENTS.md</code> causes drift: the same intent gets reworded differently, and you forget to update one file when you change the other. Over weeks, the memory on your remote box no longer matches your local setup, so the agent on each machine behaves differently. This is a real, recurring pain point for anyone running multiple agents or multiple machines.</p>
+<p>The demand for a fix is enormous. The cross-agent memory tool claude-mem has passed 91,000 GitHub stars, and claude-reflect, which writes session feedback back into <code>CLAUDE.md</code> and <code>AGENTS.md</code>, has over 1,400 stars. Developers clearly want their agent memory to follow them.</p>
+<h2 id="the-two-camps-of-open-source-agent-memory-file-based-vs-semantic">The Two Camps of Open-Source Agent Memory (File-Based vs Semantic)</h2>
+<p>Open-source memory tools fall into two broad camps, and the distinction matters a lot for SSH sync.</p>
+<p><strong>File-based memory</strong> stores everything as plain markdown plus git. Examples include memex (a Zettelkasten-style system) and claude-brain. Because the data is just text files in a git repo, it is trivially portable: you clone, pull, and push over SSH with zero special infrastructure. No vector database, no external service.</p>
+<p><strong>Semantic or vector-based memory</strong> compresses and indexes context using embeddings and knowledge graphs, typically exposed through an MCP server. These are more powerful for retrieval — one Claude Code setup using Obsidian and Graphify claims up to 71.5x fewer tokens per session — but they add moving parts that complicate remote sync.</p>
+<p>For SSH-based synchronization, file-based memory is the clear winner. It is simpler, more robust, and works with any git remote you already have.</p>
+<h2 id="prerequisites--ssh-access-and-a-git-remote-for-your-memory-store">Prerequisites — SSH Access and a Git Remote for Your Memory Store</h2>
+<p>Before you start, you need two things:</p>
+<ol>
+<li><strong>SSH access</strong> between the machines you want to sync. If you can <code>ssh user@host</code> from one box to another, you are ready. For a bare remote, a simple <code>git remote add origin user@host:/path/to/memory.git</code> works.</li>
+<li><strong>A git remote</strong> for the memory store. This can be a bare repo on your server, a private GitHub/GitLab repo, or even a local path. The key requirement is that every machine can reach it.</li>
+</ol>
+<p>You also need the agent&rsquo;s memory directory initialized. For Claude Code that is <code>.claude/</code>, and for Cursor/Codex it is the project root&rsquo;s <code>AGENTS.md</code>. Decide which file is your canonical source of truth before you set up sync.</p>
+<h2 id="method-1--symlink-claudemd-and-agentsmd-zero-dependency">Method 1 — Symlink CLAUDE.md and AGENTS.md (Zero-Dependency)</h2>
+<p>The simplest fix for multi-agent drift requires no new tool at all. Because Claude Code reads <code>.claude/CLAUDE.md</code> and Cursor/Codex read <code>AGENTS.md</code>, you can point both at the same file with a Unix symlink:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ln -s .claude/CLAUDE.md AGENTS.md
+</span></span></code></pre></div><p>Now both tools read the same memory file, so there is only one source of truth to edit. This is the zero-dependency approach recommended by the coding-with-ai.dev guide on syncing Claude Code, Codex, and Cursor memory.</p>
+<p>The trade-off is that a symlink only works on a single machine. To carry it across machines, you still need to sync the underlying file — which is where git comes in. But as a first step, symlinking eliminates the most common source of drift: two files that say the same thing in different words.</p>
+<h2 id="method-2--git-based-memory-sync-with-auto-sync-hooks-claude-brain">Method 2 — Git-Based Memory Sync with Auto-Sync Hooks (claude-brain)</h2>
+<p>When you need memory to follow you across machines, git-based sync with auto-sync hooks is the most robust open-source option. claude-brain is built specifically for this: it syncs your Claude Code brain — memory, skills, agents, rules, and settings — across machines with intelligent semantic merge.</p>
+<p>The workflow is straightforward:</p>
+<ol>
+<li>Initialize a git repo in your memory directory (<code>.claude/</code> or the project root).</li>
+<li>Add a remote reachable over SSH.</li>
+<li>Install auto-sync hooks that commit and push on change, and pull on startup.</li>
+</ol>
+<p>The standout feature is semantic merge. Instead of throwing raw git merge conflicts at you when two machines edit the same memory file, claude-brain merges the changes intelligently, so you rarely have to resolve conflicts by hand. That solves the &ldquo;forgot to push&rdquo; and &ldquo;merge conflict&rdquo; pain points that kill most naive sync setups.</p>
+<h2 id="method-3--markdown--git-memory-via-mcp-memex">Method 3 — Markdown + Git Memory via MCP (memex)</h2>
+<p>If you want a memory layer that works across many different agents — Claude Code, Cursor, VS Code Copilot, Codex, Windsurf, and any MCP client — memex is a strong choice. It is Zettelkasten-based, stores everything as markdown plus git, and exposes itself through an MCP server.</p>
+<p>Because there is no vector database, memex is naturally portable and SSH/git-sync friendly. You keep your memory in a git repo, and any agent that supports MCP can read and write to it. This makes it the most flexible option if you switch tools frequently or run several agents side by side.</p>
+<p>The setup cost is slightly higher than a symlink because you run an MCP server, but the payoff is a single memory store that every agent on every machine can share.</p>
+<h2 id="syncing-over-ssh--pushpull-workflow-and-conflict-handling">Syncing Over SSH — Push/Pull Workflow and Conflict Handling</h2>
+<p>Whichever method you choose, the sync mechanics over SSH follow the same pattern. On each machine, you pull the latest memory before you start working and push after you finish:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># On each machine, before starting work</span>
+</span></span><span style="display:flex;"><span>git -C ~/.claude pull --rebase
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># After a session, commit and push</span>
+</span></span><span style="display:flex;"><span>git -C ~/.claude add -A
+</span></span><span style="display:flex;"><span>git -C ~/.claude commit -m <span style="color:#e6db74">&#34;Update agent memory&#34;</span>
+</span></span><span style="display:flex;"><span>git -C ~/.claude push
+</span></span></code></pre></div><p>Auto-sync hooks automate this so you never forget. The remaining risk is conflicts when two machines edit the same file. Tools like claude-brain handle this with semantic merge; if you are doing it manually, <code>git pull --rebase</code> plus a quick review of any conflict markers is usually enough for small memory files.</p>
+<h2 id="security-considerations-for-remote-memory-sync">Security Considerations for Remote Memory Sync</h2>
+<p>One of the strongest arguments for open-source, SSH-based memory is privacy. Local memory files synced over SSH avoid sending your context to third-party cloud memory services. Your prompts, code snippets, and project notes stay on machines you control.</p>
+<p>That said, take basic precautions:</p>
+<ul>
+<li>Use SSH keys rather than passwords, and protect the private key.</li>
+<li>If your memory repo contains secrets, keep it private and never push to a public remote.</li>
+<li>Consider encrypting the memory directory if it holds sensitive project context.</li>
+<li>Remember that anything in your agent memory can be read by the agent — treat it like source code.</li>
+</ul>
+<h2 id="choosing-the-right-approach-for-your-setup">Choosing the Right Approach for Your Setup</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Approach</th>
+          <th>Best for</th>
+          <th>Sync over SSH</th>
+          <th>Setup effort</th>
+          <th>Multi-agent</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Symlink CLAUDE.md/AGENTS.md</td>
+          <td>Single machine, quick fix</td>
+          <td>Manual (git)</td>
+          <td>Minimal</td>
+          <td>Yes (2 tools)</td>
+      </tr>
+      <tr>
+          <td>claude-brain (git + semantic merge)</td>
+          <td>Cross-machine Claude Code</td>
+          <td>Auto via hooks</td>
+          <td>Medium</td>
+          <td>Claude Code focus</td>
+      </tr>
+      <tr>
+          <td>memex (markdown + git via MCP)</td>
+          <td>Many agents, portable store</td>
+          <td>Git-native</td>
+          <td>Medium-high</td>
+          <td>Yes (any MCP client)</td>
+      </tr>
+  </tbody>
+</table>
+<p>If you just need two tools on one machine to stop drifting, start with the symlink. If you live in Claude Code across a laptop and a server, claude-brain&rsquo;s auto-sync and semantic merge will save you the most time. If you run many different agents and want one portable memory store, memex is the most future-proof.</p>
+<h2 id="faq">FAQ</h2>
+<p><strong>What is agent memory sync over SSH?</strong>
+It is the practice of keeping a coding agent&rsquo;s memory files — like <code>CLAUDE.md</code> and <code>AGENTS.md</code> — synchronized across multiple machines using SSH and git, so every machine has the same context without a cloud service.</p>
+<p><strong>How do I sync CLAUDE.md across machines?</strong>
+Put your memory directory in a git repo, add a remote reachable over SSH, and pull before work and push after. Tools like claude-brain automate this with auto-sync hooks and semantic merge.</p>
+<p><strong>What is the difference between CLAUDE.md and AGENTS.md?</strong>
+Claude Code reads <code>.claude/CLAUDE.md</code>, while Cursor and Codex CLI read <code>AGENTS.md</code> in the project root. A symlink (<code>ln -s .claude/CLAUDE.md AGENTS.md</code>) makes both tools read the same file.</p>
+<p><strong>Is open-source agent memory better than cloud memory services?</strong>
+For privacy, yes — local markdown synced over SSH keeps your context on machines you control and avoids sending it to third-party services. The trade-off is that you manage the sync yourself.</p>
+<p><strong>Which open-source memory tool should I use?</strong>
+For a quick multi-agent fix, symlink your memory files. For cross-machine Claude Code, use claude-brain. For a portable store that works with any MCP client, use memex.</p>
 ]]></content:encoded></item><item><title>Heimdall: A Verified, Self-Healing Knowledge Layer for AI Coding Agents</title><link>https://baeseokjae.github.io/posts/heimdall-verified-knowledge-layer/</link><pubDate>Mon, 24 Aug 2026 01:02:43 +0000</pubDate><guid>https://baeseokjae.github.io/posts/heimdall-verified-knowledge-layer/</guid><description>Heimdall is a CPU-only, zero-token knowledge layer that gives AI coding agents trust-verified, self-healing memory across every repo.</description><content:encoded><![CDATA[<p>Heimdall is an open-source, CPU-only knowledge layer that gives AI coding agents a verified, self-healing memory across every repository you work in. Instead of returning plausible-but-unverified matches, every search result carries a trust verdict — STRONG, WEAK, REBUILT, or STALE — re-checked against your live filesystem at query time. It indexes with tree-sitter and local embeddings, spends zero tokens on memory maintenance, and re-anchors moved files automatically.</p>
 <h2 id="what-is-heimdall-and-why-does-it-exist">What is Heimdall and why does it exist?</h2>
 <p>Heimdall is a trust-verified knowledge layer built specifically for AI coding agents. It was released on Hacker News on August 22, 2026, and is published on npm as <code>@ariantdeva/heimdall</code> at version 0.2.1. The project&rsquo;s core claim is simple: most agent memory tools return results that <em>look</em> right but have not been checked against the actual state of your codebase. Heimdall exists to close that gap.</p>
