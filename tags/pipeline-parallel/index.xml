@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Pipeline Parallel on RockB</title><link>https://baeseokjae.github.io/tags/pipeline-parallel/</link><description>Recent content in Pipeline Parallel on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 01 Sep 2026 04:01:49 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/pipeline-parallel/index.xml" rel="self" type="application/rss+xml"/><item><title>Multi GPU Local Inference: How to Drift a Model Across Your Home GPUs</title><link>https://baeseokjae.github.io/posts/ai-at-home-multi-gpu-drifting/</link><pubDate>Tue, 01 Sep 2026 04:01:49 +0000</pubDate><guid>https://baeseokjae.github.io/posts/ai-at-home-multi-gpu-drifting/</guid><description>Multi GPU local inference lets you run models that exceed one GPU&amp;#39;s VRAM. Learn pipeline vs tensor parallel, llama.cpp and vLLM configs, and when it&amp;#39;s worth it.</description><content:encoded><![CDATA[<p>Multi GPU local inference means spreading a single large language model across two or more GPUs in your home server so you can run models that exceed the VRAM of any one card, or serve them faster. You do this by &ldquo;drifting&rdquo; the model&rsquo;s layers or tensors across your GPUs using either pipeline (layer) parallelism or tensor parallelism, configured through tools like llama.cpp and vLLM. The right strategy depends on your interconnect speed, your hardware mix, and whether your model architecture even supports the split.</p>
+<h2 id="why-run-local-inference-across-multiple-gpus">Why Run Local Inference Across Multiple GPUs</h2>
+<p>The single most common reason to run multi GPU local inference is VRAM capacity. A 70B-parameter model in 4-bit quantization needs roughly 40 GB of memory, which exceeds the 24 GB available on a single consumer RTX 4090 or RTX 3090. When your model does not fit in one GPU&rsquo;s VRAM, multi-GPU is the only way to run it locally without offloading to slow system RAM.</p>
+<p>The second reason is throughput. Even when a model fits on one card, splitting it across multiple GPUs can increase tokens-per-second for concurrent requests, especially in a home server serving several users or agents at once. The official llama.cpp multi-GPU documentation lists exactly these two triggers: the model does not fit in a single GPU&rsquo;s VRAM, or you want more throughput.</p>
+<p>There is also a growing hobbyist pull toward multi-GPU rigs. Projects like nanoslg, an educational multi-GPU LLM server claiming roughly 5x speedup, and LLMKube, which orchestrates local LLMs on Kubernetes with GPU acceleration, show that multi-GPU local inference is an active DIY space. The trend is moving from single-card experiments toward managed, containerized multi-GPU setups.</p>
+<h2 id="how-multi-gpu-inference-works-pipeline-vs-tensor-parallelism">How Multi-GPU Inference Works: Pipeline vs Tensor Parallelism</h2>
+<p>There are two fundamentally different ways to drift a model across GPUs, and they are not interchangeable.</p>
+<p><strong>Pipeline (layer) parallelism</strong> splits the model by layers. GPU 0 runs the first N layers, GPU 1 runs the next N, and so on. Each GPU holds a contiguous slice of the network, and activations flow from one GPU to the next in sequence. In llama.cpp this is the default and most compatible split mode, controlled with <code>--split-mode layer</code>. Because each GPU only needs to hold its own layers, pipeline parallelism is the natural choice when the goal is simply fitting a model that is too big for one card.</p>
+<p><strong>Tensor parallelism</strong> splits each individual layer&rsquo;s weight matrices across GPUs. All GPUs work on the same layer simultaneously, each computing a slice of the matrix multiplication, then exchanging partial results. This is faster per token because the work is parallelized within each layer, but it requires far more communication between GPUs and is much more sensitive to interconnect speed. In llama.cpp, tensor parallel is controlled with <code>--split-mode tensor</code> and <code>--tensor-split</code>, and it is explicitly marked experimental.</p>
+<p>The practical difference matters for home rigs. Pipeline parallelism is forgiving of slow interconnects because GPUs only exchange activations once per layer boundary. Tensor parallelism exchanges data constantly within every layer, so it demands fast NVLink or at least high-bandwidth PCIe.</p>
+<h2 id="choosing-your-parallelism-strategy-based-on-interconnect">Choosing Your Parallelism Strategy Based on Interconnect</h2>
+<p>Your interconnect is the single biggest factor in choosing between pipeline and tensor parallelism. The vLLM parallelism scaling documentation is explicit: for GPUs without NVLink interconnect, such as the L40S, prefer pipeline parallelism over tensor parallelism for higher throughput and lower communication overhead.</p>
+<p>Here is a practical decision table for a home multi-GPU rig:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Interconnect</th>
+          <th>Recommended strategy</th>
+          <th>Why</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>NVLink (e.g. RTX 3090/4090 pairs, A100/H100)</td>
+          <td>Tensor parallel</td>
+          <td>Low-latency high-bandwidth links make per-layer data exchange cheap</td>
+      </tr>
+      <tr>
+          <td>PCIe Gen 4/5, no NVLink (e.g. L40S, mixed consumer cards)</td>
+          <td>Pipeline (layer) parallel</td>
+          <td>Activations exchanged once per layer boundary; far less chatter</td>
+      </tr>
+      <tr>
+          <td>Mixed or unknown interconnect</td>
+          <td>Pipeline (layer) parallel</td>
+          <td>Default and most compatible; safest fallback</td>
+      </tr>
+      <tr>
+          <td>Multi-node (two separate machines)</td>
+          <td>Pipeline parallel + tensor parallel</td>
+          <td>Set tensor_parallel_size per node, pipeline_parallel_size to node count</td>
+      </tr>
+  </tbody>
+</table>
+<p>The rule of thumb: if your GPUs are not NVLink-connected, tensor parallelism will likely bottleneck on communication and deliver worse throughput than a well-tuned pipeline split. This is why vLLM&rsquo;s guidance for L40S-class hardware points away from tensor parallel.</p>
+<h2 id="setting-up-multi-gpu-inference-with-llamacpp">Setting Up Multi-GPU Inference with llama.cpp</h2>
+<p>llama.cpp supports four split modes: <code>none</code>, <code>layer</code> (pipeline, the default), <code>row</code> (deprecated), and <code>tensor</code> (experimental). For a home rig, you will almost always use <code>layer</code> or <code>tensor</code>.</p>
+<p>The key command-line flags are:</p>
+<ul>
+<li><code>--split-mode none|layer|row|tensor</code> — how to distribute the model</li>
+<li><code>--tensor-split</code> — comma-separated fraction of work per GPU (e.g. <code>1,1</code> for two equal GPUs)</li>
+<li><code>--main-gpu</code> — which GPU handles the main compute and output</li>
+<li><code>--n-gpu-layers</code> — how many layers to offload to GPU (relevant when mixing GPU and CPU)</li>
+<li><code>--device</code> — target a specific device</li>
+<li><code>--flash-attn</code> — required for tensor parallel</li>
+</ul>
+<p>A basic two-GPU pipeline split looks like:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>llama-server -m model.gguf <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --split-mode layer <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --n-gpu-layers <span style="color:#ae81ff">99</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --flash-attn
+</span></span></code></pre></div><p>For tensor parallel across two equal GPUs:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>llama-server -m model.gguf <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --split-mode tensor <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --tensor-split 1,1 <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --flash-attn
+</span></span></code></pre></div><p>There are important constraints on tensor parallel in llama.cpp. It requires flash attention and a non-quantized KV cache (f32/f16/bf16); a quantized KV cache is not implemented for tensor split. It is also not implemented for MoE or hybrid architectures such as Grok, DeepSeek2, and Mistral4, nor for state-space models like Mamba and Mamba2. If you are running any of those, you must use layer (pipeline) splitting.</p>
+<p>NCCL support in llama.cpp is selected at build time with <code>-DGGML_CUDA_NCCL=ON</code> (the default), and NCCL is not automatically distributed with CUDA, so you may need to install it separately for multi-GPU tensor parallel to work.</p>
+<h2 id="setting-up-multi-gpu-inference-with-vllm">Setting Up Multi-GPU Inference with vLLM</h2>
+<p>vLLM offers a more production-oriented path to multi GPU local inference. Its parallelism model is: single GPU, single-node multi-GPU tensor parallel, or multi-node tensor plus pipeline parallel.</p>
+<p>The two settings that matter are <code>tensor_parallel_size</code> and <code>pipeline_parallel_size</code>. vLLM recommends setting <code>tensor_parallel_size</code> to the number of GPUs per node and <code>pipeline_parallel_size</code> to the number of nodes. For a single machine with four GPUs, that means:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>vllm serve meta-llama/Llama-2-70B <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --tensor-parallel-size <span style="color:#ae81ff">4</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --pipeline-parallel-size <span style="color:#ae81ff">1</span>
+</span></span></code></pre></div><p>For a two-node setup with four GPUs each:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>vllm serve meta-llama/Llama-2-70B <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --tensor-parallel-size <span style="color:#ae81ff">4</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span><span style="color:#ae81ff"></span>  --pipeline-parallel-size <span style="color:#ae81ff">2</span>
+</span></span></code></pre></div><p>vLLM uses Ray for multi-node inference and native Python multiprocessing for single-node inference by default. For a home server, the single-node multiprocessing path is simpler and avoids the overhead of a Ray cluster.</p>
+<p>The practical takeaway from vLLM&rsquo;s guidance mirrors llama.cpp: for uneven GPU splits, use pipeline parallelism with <code>tensor_parallel_size=1</code>, and for GPUs without NVLink, prefer pipeline over tensor for throughput.</p>
+<h2 id="handling-uneven-gpu-splits-and-mixed-hardware">Handling Uneven GPU Splits and Mixed Hardware</h2>
+<p>Home rigs rarely have identical GPUs. You might pair a 24 GB RTX 3090 with a 16 GB RTX 4080, or mix an older card with a newer one. Both llama.cpp and vLLM handle this, but differently.</p>
+<p>In llama.cpp, <code>--tensor-split</code> lets you weight the work by GPU capacity. For a 24 GB and 16 GB pair, you might use <code>--tensor-split 3,2</code> to give the larger card more layers. In vLLM, the guidance is to use pipeline parallelism (<code>tensor_parallel_size=1</code>) for uneven splits, because tensor parallelism assumes roughly equal compute across GPUs and will stall on the slowest card.</p>
+<p>Mixed hardware also changes your memory planning. The total usable VRAM is the sum of all cards, but the effective throughput is bounded by the slowest GPU in a tensor-parallel configuration. If your goal is purely fitting a large model, pipeline parallelism with weighted splits is the more forgiving path.</p>
+<h2 id="common-pitfalls-and-how-to-avoid-them">Common Pitfalls and How to Avoid Them</h2>
+<p>Several mistakes trip up first-time multi-GPU builders:</p>
+<p><strong>Tensor parallel on unsupported architectures.</strong> MoE models (Grok, DeepSeek2, Mistral4) and state-space models (Mamba, Mamba2) do not support tensor parallel in llama.cpp. Check your model architecture before choosing a split mode, or you will get silent failures or crashes.</p>
+<p><strong>Missing flash attention.</strong> Tensor parallel in llama.cpp requires <code>--flash-attn</code> and a non-quantized KV cache. If you are using a quantized KV cache, tensor split will not work.</p>
+<p><strong>Slow interconnect with tensor parallel.</strong> On PCIe-only rigs without NVLink, tensor parallelism can be slower than a single GPU because communication overhead dominates. Prefer pipeline parallelism.</p>
+<p><strong>NCCL not installed.</strong> llama.cpp builds NCCL support by default, but NCCL itself is not bundled with CUDA. On a fresh install, multi-GPU tensor parallel may fail until you install NCCL.</p>
+<p><strong>Uneven GPUs in tensor parallel.</strong> Tensor parallel stalls on the slowest card. Use weighted <code>--tensor-split</code> in llama.cpp or switch to pipeline parallelism in vLLM for mixed hardware.</p>
+<h2 id="when-multi-gpu-is-and-isnt-worth-it">When Multi-GPU Is (and Isn&rsquo;t) Worth It</h2>
+<p>Multi GPU local inference is not always the right answer. It is worth it when your model does not fit in a single GPU&rsquo;s VRAM and you want to keep inference fully local, or when you need higher throughput for concurrent requests and your interconnect can support it.</p>
+<p>It is not worth it when a single GPU already fits the model comfortably, or when your interconnect is too slow to justify the added complexity. A 7B or 13B model on one 24 GB card will often outperform a poorly configured multi-GPU split of the same model. The added power draw, heat, and configuration complexity only pay off when the model genuinely exceeds single-GPU capacity or you have a real concurrency need.</p>
+<h2 id="conclusion-building-your-home-multi-gpu-inference-rig">Conclusion: Building Your Home Multi-GPU Inference Rig</h2>
+<p>Multi GPU local inference is the practical way to drift large models across your home GPUs. Start with pipeline (layer) parallelism, which is the default and most compatible in llama.cpp and the recommended choice for PCIe-only rigs in vLLM. Move to tensor parallelism only when you have NVLink-connected GPUs, a supported model architecture, flash attention enabled, and a real throughput need.</p>
+<p>Check your interconnect first, then your model architecture, then your split mode. For most home servers, a well-tuned pipeline split across two or three GPUs is the sweet spot: it fits models that exceed single-card VRAM without the communication overhead that makes tensor parallel fragile on consumer hardware.</p>
+<h2 id="faq">FAQ</h2>
+<p><strong>What is multi GPU local inference?</strong>
+Multi GPU local inference is running a single large language model across two or more GPUs in your own hardware, using pipeline or tensor parallelism, so you can fit models that exceed one GPU&rsquo;s VRAM or serve them faster.</p>
+<p><strong>What is the difference between pipeline and tensor parallelism?</strong>
+Pipeline (layer) parallelism splits the model by layers, with each GPU running a contiguous slice. Tensor parallelism splits each layer&rsquo;s weight matrices across GPUs, which is faster per token but requires far more inter-GPU communication.</p>
+<p><strong>Does multi GPU inference work with any model?</strong>
+No. In llama.cpp, tensor parallel is not implemented for MoE or hybrid architectures like Grok, DeepSeek2, and Mistral4, nor for state-space models like Mamba. Pipeline (layer) parallelism is the most compatible option.</p>
+<p><strong>Do I need NVLink for multi GPU inference?</strong>
+Not for pipeline parallelism, which works fine over PCIe. Tensor parallelism benefits strongly from NVLink, and vLLM recommends pipeline parallelism for GPUs without NVLink, such as the L40S.</p>
+<p><strong>How much VRAM do I need to run a 70B model locally?</strong>
+A 70B model in 4-bit quantization needs roughly 40 GB of VRAM, which exceeds a single 24 GB consumer card. Spreading it across two or more GPUs with multi GPU local inference lets you run it fully locally.</p>
+]]></content:encoded></item></channel></rss>
