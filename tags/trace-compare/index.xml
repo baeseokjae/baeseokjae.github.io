@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Trace Compare on RockB</title><link>https://baeseokjae.github.io/tags/trace-compare/</link><description>Recent content in Trace Compare on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Fri, 04 Sep 2026 13:01:40 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/trace-compare/index.xml" rel="self" type="application/rss+xml"/><item><title>dsh trace compare 2026: Visualizing Agent Exploration Paths in DeepSeek Harness</title><link>https://baeseokjae.github.io/posts/dsh-trace-compare-agent-exploration-2026/</link><pubDate>Fri, 04 Sep 2026 13:01:40 +0000</pubDate><guid>https://baeseokjae.github.io/posts/dsh-trace-compare-agent-exploration-2026/</guid><description>Learn how to use dsh trace compare in DeepSeek Harness to visualize and compare agent exploration paths, read session events, and debug divergent runs.</description><content:encoded><![CDATA[<p>DeepSeek Harness (dsh) records every agent run as a durable series of session events — reasoning deltas, tool calls, tool results, step starts and ends, and turn boundaries — and <code>dsh trace compare</code> is the workflow for visualizing and contrasting those exploration paths side by side. Instead of staring at linear chat logs, you render agent execution as a graph (a DAG) where parallel tool calls fan out from a single reasoning step and results fan back in, letting you pinpoint exactly where two runs diverge, stall, retry, or branch. This guide walks you through the session-event format, the native trajectory view, community comparison tools, and the pitfalls to avoid.</p>
+<h2 id="what-is-a-deepseek-harness-trace-and-why-compare-them">What Is a DeepSeek Harness Trace (and Why Compare Them)?</h2>
+<p>A dsh trace is the complete, replayable record of everything an agent did during one run, captured as durable session events rather than a flat text transcript. DeepSeek Harness defines the trajectory as its flagship feature: reasoning deltas, text deltas, tool calls, tool results, step start/end, and turn start/end are all persisted as first-class events. This is what makes trace comparison meaningful — because the events are structured, you can align two (or a hundred) runs on the same timeline and ask concrete questions: did both agents pick the same first tool? Did one take a different branch after the third reasoning step? Where did one stall and retry while the other moved on?</p>
+<p>Why compare at all? Agent runs are non-deterministic and often parallel; a single successful run tells you almost nothing about whether that path was lucky or repeatable. Comparing exploration paths across runs is how you find divergence, stalls, retries, and branches — the places where behavior degrades or improves. For anyone debugging prompt changes, model swaps, or tool-config edits, trace comparison is the difference between guessing and observing.</p>
+<h2 id="understanding-the-dsh-session-event-format-durable-trace-source-of-truth">Understanding the DSH Session Event Format (durable trace source of truth)</h2>
+<p>Every dsh run writes a <code>session.jsonl</code> file — one JSON object per line, in chronological order. This file is the single durable source of truth for comparison, because every surface (the Web UI, headless mode, the ACP/SDK, custom UIs, and Hooks) consumes the same event stream. The core event types are documented in the official DeepSeek Harness docs and reused by every community plugin:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Event type</th>
+          <th>What it records</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>reasoning-delta</code></td>
+          <td>Incremental tokens of the model&rsquo;s chain-of-thought</td>
+      </tr>
+      <tr>
+          <td><code>text-delta</code></td>
+          <td>Incremental user-visible text tokens</td>
+      </tr>
+      <tr>
+          <td><code>tool/call</code></td>
+          <td>An outgoing tool invocation with its arguments</td>
+      </tr>
+      <tr>
+          <td><code>tool/result</code></td>
+          <td>The result returned for a tool call</td>
+      </tr>
+      <tr>
+          <td><code>step/start</code> / <code>step/end</code></td>
+          <td>Beginning and end of a discrete agent step</td>
+      </tr>
+      <tr>
+          <td><code>turn/start</code> / <code>turn/end</code></td>
+          <td>Beginning and end of a full user↔agent turn</td>
+      </tr>
+  </tbody>
+</table>
+<p>Because these events are timestamped and ordered, two <code>session.jsonl</code> files can be diffed structurally. In a comparison workflow you typically export each run&rsquo;s JSONL, align on event type and order, then render differences as an overlay or side-by-side graph. If a tool call fanned out into five parallel calls in run A but only two in run B, that difference shows up immediately as a structural diff in the trace.</p>
+<h2 id="reading-an-agent-exploration-path--node-types-and-flow">Reading an Agent Exploration Path — Node Types and Flow</h2>
+<p>To compare paths, you first need to read a single path correctly. Community viewers (notably the DAG-style <code>dsh-agent-trace</code> plugin) model agent execution as a graph rather than a line. The core thesis is that &ldquo;agent execution is a graph, not a line&rdquo; — parallel tool calls fan out, and their results fan back in. The common node types you will encounter are:</p>
+<ul>
+<li><strong>Turn</strong> — a full user-to-agent exchange; the outer container.</li>
+<li><strong>Step</strong> — a discrete reasoning-or-action unit inside a turn.</li>
+<li><strong>Reasoning</strong> — the model&rsquo;s chain-of-thought for a step.</li>
+<li><strong>Tool Call</strong> — an outgoing invocation (which may be one of N parallel calls).</li>
+<li><strong>Result</strong> — the returned tool output that feeds back into the next reasoning step.</li>
+<li><strong>Response</strong> — the final user-facing output of a turn.</li>
+</ul>
+<p>The flow is a DAG: a Reasoning node can spawn multiple parallel Tool Call nodes; each Tool Call produces a Result; Results converge back into the next Reasoning node. When you compare two paths, you are really comparing two DAGs. Look first for structural differences — different out-degree on a Reasoning node (fan-out), different branch after a Result, or an extra Retry cycle that one run suffered. Tools like MiniMap and click-to-expand in the DAG viewer help you zoom in on exactly the divergence region without drowning in a wide trace.</p>
+<h2 id="native-trajectory-view-in-dsh-web-ui-default-1270013080">Native Trajectory View in DSH Web UI (default 127.0.0.1:3080)</h2>
+<p>DeepSeek Harness ships a Web UI that includes a native trajectory renderer. Install and launch it with:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>npx @deepseek-ai/dsh web
+</span></span></code></pre></div><p>The default Web UI is served at <code>http://127.0.0.1:3080</code>. Inside it, the trajectory view renders the same session events as a browsable path. You can step through reasoning deltas, expand or collapse tool calls, and see the parallel fan-out of multi-tool steps. The native view is the fastest way to eyeball a single run: it requires no additional plugins, uses the exact official <code>@deepseek-ai/dsh-session</code> data model, and respects the same interpretation rules as every other dsh surface.</p>
+<p>For comparison specifically, the native view is best as a starting point — it is excellent for single-run inspection but does not itself lay two runs on top of each other. To compare, you export the underlying <code>session.jsonl</code> (or use Headless/CLI, covered below) and feed it into a comparison-aware tool. If you are only ever debugging one run, the native view may be all you need.</p>
+<h2 id="comparing-two-runs-side-by-side--manual-and-plugin-workflows">Comparing Two Runs Side by Side — Manual and Plugin Workflows</h2>
+<p>There are two broad ways to compare dsh traces: manual (diff the JSONL / run the same task twice) and plugin-assisted (use a viewer that renders both).</p>
+<p><strong>Manual workflow:</strong> Run the same task twice against the model or config you want to compare. Export both <code>session.jsonl</code> files. Diff them line-by-line or, better, normalize each event to a compact structural tuple (<code>eventType + tool + step index</code>) and compare the sequences. The places where the sequences diverge are your exploration-path differences. Manual comparison is transparent and dependency-free, but tedious at scale and hard to do visually.</p>
+<p><strong>Plugin workflow:</strong> Use a comparison-aware tool that renders both traces as graphs and lets you align them. The DAG-style viewer and the plain-language <code>/visual-trace</code> command are the common choices (details in the next section). These convert the raw event stream into a readable path or graph, highlight pending-review markers, and let you spot divergence visually instead of by eye-diffing JSON.</p>
+<p>Whichever you choose, keep the comparison fair: identical model, identical temperature where relevant, identical tools and ordering, and identical task input. The only variable you want to change is the one you are actually testing.</p>
+<h2 id="community-plugins-for-trace-visualization-and-comparison">Community Plugins for Trace Visualization and Comparison</h2>
+<p>Several community plugins extend dsh trace work beyond the native view. Each takes a slightly different stance on visualization, comparison, and sharing.</p>
+<p><strong>dsh-agent-trace</strong> (goldgish) — the graph-centric DAG viewer. Built on react-flow with dagre auto-layout, it subscribes to durable session events and renders an interactive DAG inside the chat stream, with parallel tool-call fan-out and fan-in. Features include click-to-expand steps, a MiniMap, streaming nodes, and JSON export. Best when you want to think of exploration as a graph.</p>
+<p><strong>dsh-visual-trace</strong> (wikiiizhao) — a cross-surface plain-language trajectory reviewer. It applies the same trace-interpretation rules across Web, headless, ACP/SDK, custom UI, and Hooks. Commands include <code>/visual-trace</code>, <code>/visual-trace markdown</code>, and <code>/visual-trace json</code>, with emoji node types (user/model/tool/system) and pending-review markers. Requires DeepSeek Harness 0.1.0-rc.6 and Node.js <code>^22.19.0 || &gt;=24.0.0</code>. Best for turning traces into readable, reviewable summaries.</p>
+<p><strong>dsh-trace-viewer</strong> (li-zhixin) — an offline browser viewer for <code>session.jsonl</code>. You drop a file in and nothing is uploaded; it is a static client-only app deployed on Cloudflare Pages, built on <code>@deepseek-ai/dsh-session</code>, with a live demo at dsh-trace.lizhixin.top. Best for private, local trace inspection.</p>
+<p><strong>dsh-trace-narrator</strong> (xiangyun0519) — turns trajectory logs into structured reports (summary, postmortem, tutorial, debug, executive) with five built-in schemas, trilingual output (CN/EN/JP), and redaction on by default. Positioned as the &ldquo;shareable, reusable, teachable&rdquo; layer on top of dsh trajectories. Best when you need to hand a run to someone else as a report.</p>
+<h2 id="tool-by-tool-comparison-table">Tool-by-Tool Comparison Table</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Capability</th>
+          <th>Native DSH Web UI</th>
+          <th>dsh-agent-trace</th>
+          <th>dsh-visual-trace</th>
+          <th>dsh-trace-viewer</th>
+          <th>dsh-trace-narrator</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Primary view</td>
+          <td>Trajectory path</td>
+          <td>Interactive DAG</td>
+          <td>Plain-language path</td>
+          <td>Offline browser viewer</td>
+          <td>Structured report</td>
+      </tr>
+      <tr>
+          <td>Parallel tool fan-out</td>
+          <td>Yes</td>
+          <td>Yes (core thesis)</td>
+          <td>Yes</td>
+          <td>Yes</td>
+          <td>Summarized</td>
+      </tr>
+      <tr>
+          <td>Side-by-side run compare</td>
+          <td>Manual</td>
+          <td>Manual + visual</td>
+          <td>Command-based</td>
+          <td>Manual</td>
+          <td>Report-level</td>
+      </tr>
+      <tr>
+          <td>Rendering model</td>
+          <td>Web renderer</td>
+          <td>react-flow + dagre</td>
+          <td>Text/emoji</td>
+          <td>Static client app</td>
+          <td>Documents</td>
+      </tr>
+      <tr>
+          <td>Data leaves your machine</td>
+          <td>No</td>
+          <td>No</td>
+          <td>No</td>
+          <td>No (client-only)</td>
+          <td>No (redaction on)</td>
+      </tr>
+      <tr>
+          <td>Best for</td>
+          <td>Single-run inspection</td>
+          <td>Graph thinking</td>
+          <td>Reviewable summaries</td>
+          <td>Offline privacy</td>
+          <td>Shareable reports</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="headless-and-cli-trace-workflows-for-comparing-runs-at-scale">Headless and CLI Trace Workflows for Comparing Runs at Scale</h2>
+<p>When &ldquo;compare two runs&rdquo; becomes &ldquo;compare fifty runs,&rdquo; the Web UI and manual diffing stop scaling. dsh exposes headless modes and ACP/SDK access that let you run tasks programmatically and collect <code>session.jsonl</code> per run without a browser. The comparison pattern at scale is:</p>
+<ol>
+<li>Script the runs: invoke dsh headless for each configuration you want to compare, capturing one <code>session.jsonl</code> per run.</li>
+<li>Normalize the events into a common comparison schema (event type, tool name, step index, timing).</li>
+<li>Aggregate and diff programmatically — compute per-run metrics like step count, tool-call count, retry count, and divergence points.</li>
+<li>Render only the interesting differences (via <code>/visual-trace json</code> or a custom emitter) instead of every full trace.</li>
+</ol>
+<p>The CLI/<code>/visual-trace</code> command path is especially useful here because it emits structured output (<code>markdown</code> or <code>json</code>) that a script can consume. This turns trace comparison into a repeatable, automated quality gate on your prompt or tooling changes, rather than a manual eyeball exercise.</p>
+<h2 id="privacy-redaction-and-sharing-trace-reports">Privacy, Redaction, and Sharing Trace Reports</h2>
+<p>Traces frequently contain sensitive material — user prompts, retrieved documents, API inputs. Before you share or compare traces across a team, decide what can leave the machine. The community has built this in: <code>dsh-trace-viewer</code> is client-only (a dropped file is never uploaded), and <code>dsh-trace-narrator</code> enables redaction by default and keeps data local while producing shareable reports. The native view and DAG viewer also run locally. The practical rule: keep raw <code>session.jsonl</code> private, and share only redacted, summarized, or narrated derivatives. When comparing runs in a review, strip tool arguments and document contents first, then compare the structural path — you can usually diagnose divergence without exposing the underlying payloads.</p>
+<h2 id="common-pitfalls-when-comparing-agent-exploration-paths">Common Pitfalls When Comparing Agent Exploration Paths</h2>
+<ul>
+<li><strong>Comparing apples to oranges.</strong> Different models, temperatures, tool sets, or task inputs make the comparison meaningless. Change only the one variable under test.</li>
+<li><strong>Relying on a single run.</strong> Agent behavior is stochastic; one divergent path may be noise. Run each configuration several times before concluding.</li>
+<li><strong>Treating the chat log as the source of truth.</strong> Chat text hides parallel tool calls and reasoning deltas. Compare the structured <code>session.jsonl</code>, not the transcript.</li>
+<li><strong>Ignoring event ordering.</strong> Reasoning, tool calls, and results interleave; a reordering that looks like a divergence in raw text is often just different interleaving of the same events.</li>
+<li><strong>Forgetting pending-review markers.</strong> Some tools flag steps awaiting review; reading those as finalized divergence will mislead you.</li>
+<li><strong>Skipping redaction before sharing.</strong> Leaking tool arguments or document contents in a &ldquo;shareable&rdquo; trace defeats the purpose of safe review.</li>
+</ul>
+<h2 id="faq--dsh-trace-compare">FAQ — dsh trace compare</h2>
+<p><strong>What is dsh trace compare?</strong>
+dsh trace compare is the workflow of visualizing and contrasting DeepSeek Harness agent runs using their durable session-event traces, so you can see where exploration paths diverge, stall, retry, or branch.</p>
+<p><strong>How do I export a dsh trace to compare runs?</strong>
+Each run writes a <code>session.jsonl</code> file containing ordered events (reasoning-delta, tool/call, tool/result, step/start/end, turn/start/end). Export that file from each run and diff or render them side by side.</p>
+<p><strong>Which tool is best for comparing dsh traces?</strong>
+It depends on your goal: dsh-agent-trace for graph/DAG thinking, dsh-visual-trace for readable reviewable paths and CLI output, dsh-trace-viewer for offline privacy, and dsh-trace-narrator for shareable structured reports. The native Web UI is best for single-run inspection.</p>
+<p><strong>Does dsh trace comparison work headless or at scale?</strong>
+Yes. dsh&rsquo;s headless and ACP/SDK modes let you script many runs, capture one <code>session.jsonl</code> per run, normalize the events, and diff them programmatically — ideal for automated quality gates.</p>
+<p><strong>Are dsh traces private?</strong>
+Raw traces generally stay on your machine. dsh-trace-viewer is client-only (nothing uploaded), and dsh-trace-narrator enables redaction by default. Share only redacted or summarized derivatives.</p>
+<p>&lt;｜DSML｜tool_calls&gt;
+&lt;｜DSML｜invoke name=&ldquo;terminal&rdquo;&gt;
+&lt;｜DSML｜parameter name=&ldquo;command&rdquo; string=&ldquo;true&rdquo;&gt;python3 -c &quot;
+import re
+content = open(&rsquo;/home/ubuntu/blog/content/posts/dsh-trace-compare-agent-exploration-2026.md&rsquo;).read()
+korean = re.findall(r&rsquo;[\uAC00-\uD7A3]&rsquo;, content)
+if korean:
+print(f&rsquo;LANGUAGE ERROR: {len(korean)} Korean characters found.&rsquo;)
+import sys; sys.exit(1)
+else:
+print(&lsquo;Language check passed: English only.&rsquo;)
+&quot;
+echo &ldquo;&mdash;WORD COUNT&mdash;&rdquo;
+wc -w /home/ubuntu/blog/content/posts/dsh-trace-compare-agent-exploration-2026.md</p>
+]]></content:encoded></item></channel></rss>
