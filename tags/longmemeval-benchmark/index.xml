@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>LongMemEval Benchmark on RockB</title><link>https://baeseokjae.github.io/tags/longmemeval-benchmark/</link><description>Recent content in LongMemEval Benchmark on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 15 Sep 2026 16:09:01 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/longmemeval-benchmark/index.xml" rel="self" type="application/rss+xml"/><item><title>Deja Vu Coding Agent Memory: Index Your Session History for Instant Recall</title><link>https://baeseokjae.github.io/posts/deja-vu-memory-coding-agents-indexes-sessions/</link><pubDate>Tue, 15 Sep 2026 16:09:01 +0000</pubDate><guid>https://baeseokjae.github.io/posts/deja-vu-memory-coding-agents-indexes-sessions/</guid><description>Deja Vu indexes the session history your coding agents already wrote to disk and makes it searchable in under a millisecond, with no LLM, no embeddings, and no API key.</description><content:encoded><![CDATA[<p>Deja Vu is a memory layer for coding agents that indexes the session history your AI agents already wrote to disk, then makes it searchable by the agent itself through an MCP recall server. It starts full, not empty: instead of recording facts forward like most memory tools, it builds a searchable index over months of existing Claude Code, Codex, Cursor, and opencode transcripts, then answers recall queries in under a millisecond with a single zero-dependency local Go binary — no LLM, no embeddings, and no API key required.</p>
+<h2 id="what-deja-vu-does-one-memory-layer-for-every-coding-agent">What Deja Vu Does: One Memory Layer for Every Coding Agent</h2>
+<p>Deja Vu (the open-source project at <code>vshulcz/deja-vu</code>, distinct from the unrelated <code>focaxisdev/deja-vu</code> repo-local Markdown tool) is a compact local Go binary that turns a coding agent&rsquo;s session history into a retrievable memory. It works with 20+ coding agents that record their conversations to local files — including Claude Code, Codex, Cursor, opencode, Copilot CLI, and Hermes.</p>
+<p>The architecture is deliberately minimal. A <code>deja</code> daemon watches the directories where your agents write session transcripts, indexes them into a small on-disk structure, and exposes an MCP server that any agent can call to search that history. Because it reads plain session logs rather than requiring agents to log structured events, it picks up months of history from before you ever installed it.</p>
+<h2 id="why-agent-memory-is-the-missing-piece-and-the-context-dump-fallacy">Why Agent Memory Is the Missing Piece (and the Context-Dump Fallacy)</h2>
+<p>Coding agents are stateless across sessions. Every new conversation starts from scratch unless you manually paste context, maintain an <code>AGENTS.md</code> file, or dump a session transcript into the prompt. That context-dump approach fails in predictable ways.</p>
+<p>Full-context injection has severe accuracy limits. On the LongMemEval benchmark, injecting the entire conversation history scores 46.20%, while a no-memory baseline falls to just 22.8%. The fundamental problem is token budget and position: a long transcript far exceeds what fits in a context window, and even when a truncated slice fits, the agent must re-read and re-reason over tens of thousands of tokens to find the single decision it needs. Naive RAG over transcripts often does worse on temporal and multi-hop tasks than a simple baseline.</p>
+<p>Memory is the missing architectural component. Agent memory reports from 2026 now treat persistent recall as a first-class component rather than context dumping, with standardized benchmarks (LongMemEval, LoCoMo, and BEAM) measuring how well memory systems retrieve the right information at the right time.</p>
+<h2 id="how-deja-indexes-sessions-instead-of-recording-forward">How deja Indexes Sessions Instead of Recording Forward</h2>
+<p>The core differentiator is direction. Most memory tools — agentmemory, Mem0, the AGENTS.md pattern — start empty and record forward, meaning they only know what they learned after they were installed and only if the agent explicitly saved it. Deja Vu starts full by indexing the session transcripts your agents have already been writing to disk, including months of history that predate the install.</p>
+<p>The indexing flow works like this:</p>
+<ol>
+<li><strong>Discover</strong> the session-log directories your agents write to (Claude Code JSONL transcripts, Codex, Cursor, and others).</li>
+<li><strong>Build</strong> an index over that history on first install — this can take a few minutes for several gigabytes of transcripts.</li>
+<li><strong>Query</strong> via an MCP recall server, which the agent invokes the way it would call any other tool.</li>
+</ol>
+<p>Because index lookups return the relevant transcript slices rather than raw dumps, the agent receives only what it asked for. Deja Vu reports a median lookup time of roughly 1.5 milliseconds over 3.5 GB of history at v0.17, with the project citing sub-millisecond searches across about 5 GB of accumulated sessions.</p>
+<h2 id="key-features-cross-agent-recall-compaction-survival-secret-redaction">Key Features: Cross-Agent Recall, Compaction Survival, Secret Redaction</h2>
+<h3 id="cross-agent-recall">Cross-agent recall</h3>
+<p>Because all supported agents write transcripts to the same shared memory layer, a decision made in one tool is recallable in another. Solve a problem in Codex or Cursor, then recall it in a fresh Claude Code session — the indexed history is the same. This solves the practical problem where switching tools for a task loses the context you built in your usual one.</p>
+<h3 id="survives-context-compaction">Survives context compaction</h3>
+<p>Long sessions eventually hit context limits and are compacted into summaries. Those summaries are lossy. In measurements across 43 compactions, the surviving summary retained 77% of the decisions but only 0.2% of the commands — meaning 99.8% of the concrete, actionable command history was lost. Deja Vu hands that 99.8% back by indexing the pre-compaction transcripts, so the original details remain queryable even after the session rolls up.</p>
+<h3 id="secret-redaction-at-index-time">Secret redaction at index time</h3>
+<p>The indexer redacts secrets as it builds the index — API keys, tokens, JWTs, and private key blocks — so your credentials do not end up retrievable from memory. This matters because session transcripts routinely contain secrets from shell commands and tool calls.</p>
+<h3 id="no-llm-and-no-embeddings">No LLM and no embeddings</h3>
+<p>The binary performs pure lexical and structural indexing. There is no model inference at index or query time, no embedding vectors, and no API key. It runs entirely offline on your machine, which is a privacy and cost advantage over embedding- and vector-based memory platforms.</p>
+<h2 id="benchmarks-longmemeval-s-and-locomo-compared-honestly">Benchmarks: LongMemEval-S and LoCoMo, Compared Honestly</h2>
+<p>Deja Vu publishes reproducible numbers on the two field-standard memory benchmarks:</p>
+<ul>
+<li><strong>LongMemEval-S</strong>: 85.3% hit@1</li>
+<li><strong>LoCoMo</strong>: 69.6%</li>
+</ul>
+<p>LongMemEval is a 500-question test across six categories — single-session user recall, assistant recall, preference recall, knowledge update, temporal reasoning, and multi-session integration. LoCoMo is a 1,540-question benchmark built from multi-session dialogues. Both are public datasets, and deja ships the harnesses so you can re-run the evaluation in minutes.</p>
+<table>
+  <thead>
+      <tr>
+          <th>System</th>
+          <th>LongMemEval</th>
+          <th>LoCoMo</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Deja Vu</td>
+          <td>85.3% (S)</td>
+          <td>69.6%</td>
+      </tr>
+      <tr>
+          <td>CortexDB v1</td>
+          <td>93.8% (S)</td>
+          <td>86.9% (cat. 1–4)</td>
+      </tr>
+      <tr>
+          <td>Mem0 (2026 token-efficient)</td>
+          <td>94.4</td>
+          <td>92.5</td>
+      </tr>
+      <tr>
+          <td>Mem0 (reported vs CortexDB)</td>
+          <td>93.4%</td>
+          <td>—</td>
+      </tr>
+      <tr>
+          <td>LangMem</td>
+          <td>—</td>
+          <td>75.6%</td>
+      </tr>
+      <tr>
+          <td>MemGPT</td>
+          <td>—</td>
+          <td>69.3%</td>
+      </tr>
+      <tr>
+          <td>GPT-4o long context</td>
+          <td>56.7%</td>
+          <td>—</td>
+      </tr>
+      <tr>
+          <td>No memory baseline</td>
+          <td>22.8%</td>
+          <td>—</td>
+      </tr>
+  </tbody>
+</table>
+<p>These numbers should be read carefully. Deja Vu does not top every chart, but it reaches a strong 85.3% on LongMemEval-S and 69.6% on LoCoMo while using no model inference and no embeddings — meaning its cost is effectively zero and its privacy posture is strictly local. Higher-scoring systems like Mem0 (94.4 on LongMemEval) reach those figures at a substantial token cost of roughly 6,900 tokens per query. If raw accuracy over a large corpus is the only goal, an embedding-based platform wins. If you want offline, free, sub-millisecond recall over your existing agent history, deja is the tool designed for exactly that.</p>
+<h2 id="how-it-compares-to-memory-platforms-mem0-agentmemory-cortexdb">How It Compares to Memory Platforms (Mem0, agentmemory, CortexDB)</h2>
+<p>Understanding where deja fits requires separating two families of memory tools.</p>
+<p><strong>Session indexers</strong> (deja) read what already happened. They require no setup of save hooks, no prompt changes, and no per-fact writing discipline. Their strength and limitation are the same: they can recall anything an agent did, but they cannot reason about facts that were never recorded in a session log.</p>
+<p><strong>Recording-forward tools</strong> build memory by the agent explicitly saving facts. <code>agentmemory</code> extends Karpathy&rsquo;s LLM Wiki pattern with confidence scoring, lifecycle management, knowledge graphs, and hybrid search, writing roughly 1,900 tokens of facts per session (~$10 a year). Mem0 applies an LLM to write and consolidate facts forward, achieving top benchmark scores at a token cost per query. CortexDB runs a vector engine and reports 93.8% on LongMemEval-S. <code>focaxisdev/deja-vu</code> is a third, unrelated design: a repo-local Markdown memory system built from <code>AGENTS.md</code>, <code>memory/summary.md</code>, and <code>memory/impressions.jsonl</code>, with no database and no daemon.</p>
+<p>There is a hybrid play: deja&rsquo;s session indexing can complement a recording-forward tool. Let deja recall the exact command history and decisions, and let a fact-focused memory hold durable preferences and constraints. On deja&rsquo;s own compaction measurement, the summary retains decisions (77%) but loses commands (0.2%) — exactly the two halves of memory that the two tool types handle well.</p>
+<h2 id="installation-and-setup-guide-from-zero-to-auto-recall-in-minutes">Installation and Setup Guide: From Zero to Auto-Recall in Minutes</h2>
+<p>Deja Vu installs in about 10 seconds. This is the complete walkthrough.</p>
+<p><strong>Step 1: Install the binary.</strong> The project provides a single-command installer, or you can download a prebuilt binary for your platform. There is no Go toolchain or system dependency required at runtime.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>curl -sSf https://sh.vshulcz.dev/deja | sh
+</span></span></code></pre></div><p><strong>Step 2: Initialize and configure the daemon.</strong> Point <code>deja</code> at the directories where your agents store their transcripts.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>deja init
+</span></span><span style="display:flex;"><span>deja install <span style="color:#75715e"># registers the session-start hook</span>
+</span></span></code></pre></div><p><strong>Step 3: Index your existing history.</strong> The first-run build reads all accumulated session logs. For several gigabytes of transcripts this takes a few minutes; after that the daemon increments as new sessions close.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>deja index --all
+</span></span></code></pre></div><p><strong>Step 4: Enable auto-recall.</strong> Add the recall hook so each new agent session starts by querying memory for relevant prior work, rather than waiting for an explicit command.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>deja install --auto
+</span></span></code></pre></div><p><strong>Step 5: Point your agent at the MCP server.</strong> Connect the agent&rsquo;s MCP config to the <code>deja</code> recall server. From then on, the agent can call the recall tool directly in the flow of a task instead of making you search manually.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>deja mcp  <span style="color:#75715e"># prints the MCP server settings for Claude Code, Codex, and others</span>
+</span></span></code></pre></div><p>You are now running with a memory layer that remembers months of past sessions and is queryable by your agent in under a millisecond.</p>
+<h2 id="sync-handoff-and-living-on-more-than-one-machine">Sync, Handoff, and Living on More Than One Machine</h2>
+<p>Deja Vu also solves the multi-machine problem without a cloud dependency. The session index can be synced across machines over SSH as an append-only store. Because the design is append-only, sync never conflicts: each machine adds its own sessions and merges in the other&rsquo;s without rewriting existing records, and no data ever leaves your machines to a third-party service.</p>
+<p>This works for team and machine handoffs too. A colleague (or a second workstation) inherits the same memory layer, so a decision made on your laptop is recallable on the shared machine, and vice versa — without setting up any hosted service or managing an API key.</p>
+<h2 id="limitations-and-when-a-memory-platform-still-makes-sense">Limitations and When a Memory Platform Still Makes Sense</h2>
+<p>Deja Vu is not the universal answer to agent memory, and its own README is candid about the tradeoffs.</p>
+<ul>
+<li><strong>It only knows what was recorded.</strong> Facts that were never written to a session log — outside knowledge, project conventions nobody typed into a session, or decisions made mentally — are invisible to it. A recording-forward tool that writes facts is better for durable structured knowledge.</li>
+<li><strong>Lexical indexing, not semantic reasoning.</strong> Without embeddings, it matches on structure and text rather than meaning. Recall quality depends on how the query text overlaps with what was recorded, and it does not synthesize across facts the way a semantic store can.</li>
+<li><strong>Corpus size and recall ceiling.</strong> At roughly 85% hit@1 on LongMemEval-S, it is strong but not best-in-class. Applications that need the top few percent of retrieval accuracy on very large knowledge bases are better served by a vector/indexed platform such as CortexDB or Mem0, at the cost of tokens and inference.</li>
+<li><strong>No reasoning over memory.</strong> A pure index returns what matches. It does not consolidate, deduplicate, or re-derive facts. For tasks that need inference over stored memory (not just retrieval), a reasoning-augmented memory engine is the better fit.</li>
+</ul>
+<p>The pragmatic guidance: if your problem is &ldquo;my agent keeps forgetting commands and decisions from long sessions and I want them back instantly and for free,&rdquo; Deja Vu is purpose-built for that. If your problem is &ldquo;I want a durable, structured knowledge base my agents write and reason over,&rdquo; a recording-forward platform earns its token and inference cost.</p>
+<h2 id="frequently-asked-questions">Frequently Asked Questions</h2>
+<p><strong>What exactly does &ldquo;deja vu&rdquo; mean for coding agent memory?</strong>
+It means a memory layer that indexes the session history your coding agents already wrote to disk, so it &ldquo;starts full&rdquo; instead of empty. An agent calling the recall server can search months of past transcripts and get the relevant slice back in under a millisecond, surviving its own context compaction.</p>
+<p><strong>Does Deja Vu need an LLM, embeddings, or an API key?</strong>
+No. It is a single zero-dependency local Go binary that performs lexical indexing with no model inference, no embedding vectors, and no API key. All processing happens offline on your machine.</p>
+<p><strong>Which coding agents does Deja Vu support?</strong>
+It supports 20+ agents that record their conversations to local files, including Claude Code, Codex, Cursor, opencode, and Copilot CLI. Because the memory layer is shared, a decision made in one agent is recallable in another.</p>
+<p><strong>How does it survive context compaction?</strong>
+When a session rolls up into a summary, most detail is lost — in tests across 43 compactions the surviving summary kept 77% of decisions but only 0.2% of commands. Deja Vu indexes the pre-compaction transcripts, so the original details remain queryable after the session summaries.</p>
+<p><strong>Is it open source and free?</strong>
+Yes. The <code>vshulcz/deja-vu</code> project is MIT-licensed and runs entirely locally with no cloud service and no per-query cost, which distinguishes it from token-based memory platforms that charge for semantic recall.</p>
+<hr>
+<p><em>Note: &ldquo;Deja Vu&rdquo; is used by two independent projects. This article covers the session-indexing memory layer at <code>vshulcz/deja-vu</code> — a local Go binary that indexes coding-agent session history — not the repo-local Markdown system at <code>focaxisdev/deja-vu</code> or the <code>agentmemory</code> platform. Always verify which project a documentation link refers to before you install.</em></p>
+]]></content:encoded></item></channel></rss>
