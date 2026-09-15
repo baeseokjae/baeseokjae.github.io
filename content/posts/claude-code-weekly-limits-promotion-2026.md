@@ -1,143 +1,123 @@
 ---
-title: "Claude Code Weekly Limits in 2026: What Heavy Users Need to Know"
-date: "2026-09-14T10:01:46+00:00"
+title: "Claude Code Weekly Limits in 2026: The 50% Promotion, the Permanent 25% Raise, and What Heavy Users Keep After Sep 13"
+date: "2026-09-15T10:00:57+00:00"
 tags:
   - claude code
   - anthropic
-  - usage limits
+  - claude code weekly limits
+  - claude usage limits
   - ai coding
-  - pricing
-description: "Claude Code weekly limits rose 50% May 13–Sep 13, then a permanent 25% raise took effect Sep 14. Here's what heavy users actually keep and how to stretch it."
+description: "Claude Code weekly limits changed in 2026: a 50% promo ended Sep 13, replaced by a permanent 25% raise. Here's the exact math heavy users keep and how to stretch it."
 draft: false
 cover:
   image: "/images/claude-code-weekly-limits-promotion-2026.png"
-  alt: "Claude Code Weekly Limits in 2026: What Heavy Users Need to Know"
+  alt: "Claude Code Weekly Limits in 2026: the 50% promotion, the permanent 25% raise, and what heavy users keep"
   relative: false
 schema: "schema-claude-code-weekly-limits-promotion-2026"
 ---
 
-Claude Code weekly limits rose by 50% during Anthropic's May 13 to September 13, 2026 promotion, then a permanent 25% raise took effect on September 14. Heavy users keep 25% more than their pre-promotion baseline, but lose roughly 17% relative to the promotional peak. Here is exactly what changed, what it costs, and how to make the most of your allowance.
+Claude Code weekly limits are higher in 2026 than they were at the start of the year, but the number that matters shifted on September 14: the 50% promotional boost that ran from May 13 to September 13 has expired, and Anthropic replaced it with a permanent 25% raise to standard weekly limits on Pro, Max, Team, and seat-based Enterprise plans. Relative to the promotional peak you may have grown used to, that is a drop of about 17% — so heavy users are essentially giving back part of their summer allowance while still keeping more than their original baseline. This guide walks through the full 2026 timeline, the exact math, and practical tactics to stretch the limits you actually have.
 
 ## The 2026 Timeline: How Claude Code Limits Changed This Year
 
-Anthropic made three significant changes to Claude Code usage this year, and many users confuse them.
+Anthropic made three separate changes to Claude Code usage limits in 2026, and heavy users who only noticed one of them have a distorted picture of their allowance. Here is the order in which they landed.
 
-First, on **May 6, 2026**, Anthropic doubled the five-hour rate limits for Pro, Max, Team, and seat-based Enterprise users, and removed peak-hour reductions that previously throttled usage during busy periods. This was a real, structural change to session throughput, not just a temporary boost.
+**May 6, 2026 — five-hour limits doubled.** On this date Anthropic doubled Claude Code five-hour rate limits for Pro, Max, Team, and seat-based Enterprise plans, and simultaneously removed peak-hour reductions that had throttled usage during busy periods. This was a direct response to heavy users hitting session caps in the middle of long working sessions (source: morphllm.com).
 
-Second, on **May 13, 2026**, the company launched a weekly-limits promotion. For Pro, Max, and Team subscribers plus legacy seat-based Enterprise customers, Claude Code weekly usage limits increased by 50%. Free-plan and consumption-based Enterprise users were excluded. This promotion applied automatically with no action required.
+**May 13, 2026 — 50% weekly promotion begins.** Just a week later, Anthropic raised Claude Code weekly usage limits by 50% for the same eligible plans. The increase applied automatically, with no action or opt-in required from the user (source: support.claude.com).
 
-Third, on **September 14, 2026**, the promotion ended and was replaced by a permanent 25% raise to standard weekly limits on the same plans.
+**September 14, 2026 — permanent 25% raise replaces the promotion.** The promotional 50% expired at 11:59 PM PT on September 13, and a permanent 25% raise to standard weekly limits took effect the next day for Pro, Max, Team, and seat-based Enterprise users (source: bleepingcomputer.com).
 
-| Date | Change | Scope |
-|------|--------|-------|
-| May 6, 2026 | Five-hour rate limits doubled; peak-hour reductions removed | Pro, Max, Team, seat-based Enterprise |
-| May 13, 2026 | Weekly limits raised 50% (promotion) | Pro, Max, Team, seat-based Enterprise |
-| Sep 14, 2026 | Permanent 25% raise on standard weekly limits | Pro, Max, Team, seat-based Enterprise |
-
-The net effect for most users: your allowance is now permanently higher than before the promotion, but lower than the temporary peak you may have gotten used to over the summer.
+The net effect is that a heavy user's weekly ceiling today is higher than it was in early 2026, but noticeably lower than it was during the promotional window. Understanding that three-step sequence is the difference between "my limits got cut" and an accurate picture of where your allowance actually stands.
 
 ## What the 50% Promotion Covered (and What It Didn't)
 
-The promotion was generous but narrowly scoped, and the fine print matters.
+The promotional increase was specifically about Claude Code weekly usage, and it did not touch several other limits that users often confuse with it.
 
-**What it covered:** The 50% boost applied to Claude Code weekly usage on Pro, Max, and Team subscription plans, plus legacy seat-based Enterprise accounts. It covered Claude Code specifically, which Anthropic defines as the CLI, IDE extensions, desktop app, and web-based coding. The increase applied automatically to eligible accounts.
+**What was included.** The 50% boost applied to the weekly usage allowance in Claude Code across all its surfaces — the CLI, IDE extensions, the desktop app, and the web/agent experience. It covered Pro, Max, and Team plans, plus legacy seat-based Enterprise accounts. Free plan users and consumption-based (pay-as-you-go) Enterprise accounts were explicitly excluded, because neither of those meter usage the same way as subscription plans (source: support.claude.com).
 
-**What it didn't cover:** Free users were excluded entirely, and consumption-based Enterprise customers did not benefit. The five-hour session limits stayed exactly where they were — the promotion did not touch them. If a long-running session was your bottleneck, the 50% weekly boost did not help you there.
+**What was not included.** The promotion did not affect five-hour session limits at all — those remain governed by the separate per-session window that resets every five hours regardless of your weekly pool. It also did not change Claude chat or Cowork limits; the extra 50% was Claude Code only. If you were hoping the promotion would also stretch your Claude app conversation allowance, it did not (source: support.claude.com).
 
-**Crucially, the boost applied only to Claude Code, not to every Claude surface.** Your Claude chat and Cowork usage limits were unchanged. The weekly pool is shared across Claude surfaces for paid subscribers, but the promotion only raised the Claude Code portion of the allowance.
+This matters for budgeting. A heavy user who maximized the promotional weekly pool but still hit the five-hour session cap kept getting stopped mid-afternoon, because the promotion deliberately did nothing for the session window. The session limit and the weekly limit are two independent meters, and only one of them was boosted.
 
 ## What Happens Now: The Permanent 25% Raise and the Honest "17% Cut" Math
 
-Here is where the numbers get confusing, and many headlines have made it worse.
+Anthropic has acknowledged that framing this as a straightforward "cut" is confusing, and the numbers explain why. The three values to keep straight are your baseline, your promotional peak, and your new standard.
 
-Say your pre-promotion baseline was **100 units** of weekly Claude Code usage. During the promotion, that became **150** — a 50% increase. When the promotion ended on September 14, the allowance dropped to a new permanent standard of **125**, a 25% raise above your original baseline.
+Take a baseline weekly allowance of 100 (units are opaque — Anthropic does not publish token counts, so think of this as a normalized index). During the promotion it became 150. After September 14, with the permanent 25% raise over your pre-promotion baseline, it is 125. Compared to the promotional peak of 150, that new value of 125 is about a 17% reduction; compared to your original baseline of 100, it is still a 25% increase.
 
-Relative to your baseline, you are up 25%. Relative to the promotional peak of 150, you are down 25 units — which is about **17%** of 150.
+Anthropic acknowledged the framing directly on X, stating: "Compared to today, this works out to a 17% reduction in weekly limits on Claude Code" (source: bleepingcomputer.com). The honest reading is that heavy users are not being cut below where they started the year — they are being asked to give back roughly the top slice of a temporary bonus while keeping a permanently higher standard allowance.
 
-Anthropic itself acknowledged this framing on X: "Compared to today, this works out to a 17% reduction in weekly limits on Claude Code." That statement was comparing the new 125 against the promotional 150, not against your original baseline.
-
-So the honest summary for heavy users: **the promotion was a temporary buffer you have now lost part of, but you are still permanently better off than you were before May 2026.** The "17% cut" headline is real but misleading on its own — it compares against a temporary peak, not your starting point.
+For heavy users this is the practical number that matters: the days of a 50%-boosted pool are over, and your new monthly usable ceiling is 25% above your early-2026 level, not 50%. If you sized your workflow around the promotional peak, you now have roughly 17% less weekly headroom than you did in August, and you should plan accordingly.
 
 ## How Claude Code Weekly Limits Actually Work (Session vs Weekly vs Models)
 
-To plan around your limits, you need to understand the four things users routinely confuse.
+A recurring source of confusion is that "Claude Code limits" actually refers to several distinct meters, and users regularly mix them up. Here is how the system breaks down.
 
-**1. Usage limit.** This is your plan allowance, reset on a fixed weekly window (plus separate five-hour session windows). This is what the promotion and the permanent raise adjusted.
+**Weekly usage limit.** This is your plan's allowance that resets on a fixed weekly window. It is not a fixed number of prompts. Anthropic does not publish token counts; instead, plans are expressed as multipliers, and the actual drain per request varies with conversation length, which model you select, tool usage, and the effort level of the task (sources: claudecode101.com, superblocks.com).
 
-**2. Context or length limit.** This is the maximum size of a conversation before the model degrades. This is not a plan allowance and cannot be raised by upgrading — you trim it with `/compact` or `/clear`.
+**Five-hour session limit.** Separate from the weekly pool, this resets every five hours and governs how much you can run during a single working session. It was doubled on May 6 and was not part of the weekly promotion.
 
-**3. Rate limit.** This is how many requests per minute you can send. This is what Anthropic doubled on May 6, 2026.
+**Context / length limit.** The size of the conversation your model can hold before it degrades or must be trimmed. Managed with `/compact` and `/clear` rather than with any plan setting.
 
-**4. Credit or spend limit.** For API-key users, this is how much money you spend per token. API metering is per-token, not a flat weekly allowance.
+**Rate limit and credit / spend limit.** A rate limit throttles the pace of requests, while the credit/spend limit applies to API-key usage, which is metered per token rather than against a subscription allowance.
 
-Two more facts shape how heavy users should plan:
-
-- **Paid subscription usage is shared across Claude surfaces.** The Claude app and Claude Code draw from the same weekly pool. Using heavy Claude chat sessions eats into your Claude Code allowance.
-- **Weekly allowance is not a fixed prompt count.** Anthropic does not publish exact token counts. Your actual usage varies by conversation length, model choice, tool usage, and effort level (standard versus extended thinking).
-
-In the CLI, `/usage` shows your current allowance and remaining units; `/cost` shows API spend if you are metered per token. Checking `/usage` after September 14 is the fastest way to see your new permanent limits.
+An additional wrinkle is shared accounting. On subscription plans, usage is shared across Claude surfaces — the Claude app and Claude Code draw from the same weekly pool — whereas API keys are metered per token and never touch your subscription allowance (source: claudecode101.com). Run `/usage` in the CLI to see your current allowance and how much of the window you have consumed, and `/cost` to see API spend.
 
 ## Heavy-User Tactics: /compact, /clear, Model-Switching, and Off-Peak Scheduling
 
-If you are a heavy user who felt the summer boost and now needs to adapt, these tactics stretch your weekly allowance substantially.
+Because the weekly allowance is not a fixed prompt count, the single most effective lever for heavy users is reducing how much of that allowance each task consumes rather than trying to raise the ceiling. These tactics are the ones the research consistently recommends.
 
-**Trim context instead of burning allowance.** Long conversations consume more of your weekly pool than short ones because the model re-reads earlier turns. Use `/clear` to start a clean conversation when a task is finished, and `/compact` to summarize a long thread before continuing. Power users report this is the single most effective way to stretch a weekly limit — shorter context means more tasks per week.
+**Use `/compact` and `/clear` aggressively.** A long-running conversation that accumulates weeks of context burns far more weekly allowance per prompt. `/compact` summarizes prior context into a shorter form, and `/clear` wipes the session entirely when you are starting a fresh task. For heavy users, trimming stale context is the difference between stretching a weekly pool and exhausting it by mid-week (source: claudecode101.com).
 
-**Switch models deliberately.** Sonnet is far more economical for batch and routine work than Opus. Save Opus for planning, architecture judgment, and genuinely hard problems. A common pattern: run the bulk of a coding task on Sonnet, then switch to Opus for the design decisions where its reasoning earns the cost.
+**Keep routine batch work on Sonnet and reserve Opus for planning.** Model choice changes the per-prompt cost dramatically. Sonnet is the sensible default for bulk code generation and refactoring, while the more expensive Opus is best reserved for complex architecture, planning, and high-stakes reasoning where its quality justifies the draw on your allowance (source: claudecode101.com).
 
-**Time your sessions around the five-hour window.** The May 6 rate-limit doubling changed throughput, but the five-hour session window still resets independently. Scheduling longer work across a window boundary can keep a heavy session from stalling.
+**Schedule heavy work off-peak and keep sessions short.** With peak-hour reductions gone since May 6, the pacing advantage is now mostly about the five-hour session rhythm. Because the session limit is independent of the weekly pool, planning around five-hour resets — rather than burning through them — lets you stay productive across a full day without tripping the session cap.
 
-**Watch your shared pool.** If you are also using Claude in the browser for chat or Cowork, remember the weekly allowance is shared. Offloading long-form chat to a cheaper tool can free up Claude Code capacity.
+**Treat context size as a budget.** Since drain scales with conversation length, breaking large tasks into smaller, fresh sessions after `/clear` keeps each prompt cheaper even if you run more of them.
 
 ## When You Still Hit the Cap: Wait, Enable Usage Credits, or Upgrade
 
-Every Claude Code workflow eventually hits a limit. You have three real options, and the right one depends on how often it happens and how much you value your time.
+Even with good hygiene, heavy users will eventually press against the weekly limit. At that point you have three realistic paths, and the right one depends on how frequently you hit the wall.
 
-**Wait for the reset.** Weekly limits reset on a rolling window. If you hit the cap near the end of your cycle and the work can wait, waiting is free. The downside is dead time.
+**Wait for the reset.** The weekly window resets on a fixed cadence, and the five-hour session limit resets continuously. If your need is sporadic, simply waiting is free and correct.
 
-**Enable usage credits.** When you exceed a subscription cap, Claude can auto-switch you to pay-per-token at API rates. This gives you unlimited runway past the cap at real-money cost. Anthropic caps this path around **$2,000 per day**, which is effectively unlimited for a single engineer but can be a shock if you leave it running.
+**Enable usage credits (pay-per-token).** Once you pass the plan cap, Claude Code can auto-switch to pay-per-token at API rates, so you can keep working without waiting for the reset. This comes with a spending ceiling of roughly $2,000 per day, and it can kick in without an explicit warning — worth knowing before you leave a long task running unattended (sources: superblocks.com, morphllm.com).
 
-**Upgrade plans.** A higher Max tier multiplies your per-session and weekly capacity: Max 5x gives 5x the Pro baseline, and Max 20x gives 20x. Team Premium seats carry a 6.25x multiplier on standard seats. If you hit the cap weekly, the upgrade pays for itself in avoided downtime.
-
-One more realistic option for the truly hard cases: run the heavy, repetitive parts of a task through the API on a cheaper or faster model and save your subscription allowance for the interactive work where Claude Code shines.
+**Upgrade to a higher plan.** If you are regularly hitting the cap during normal work, the cleanest fix is a plan with a larger multiplier rather than paying per-token overages. Which one fits depends on the math in the next section.
 
 ## Which Plan Should a Heavy User Buy in 2026? (Pro vs Max 5x vs Max 20x vs Team)
 
-Plan pricing in 2026 is well documented, and the multipliers matter more than the dollar amounts.
+The 2026 plan matrix gives heavy users a clear ladder. All subscription usage resets weekly plus on a five-hour window, and Anthropic expresses capacity as multipliers rather than token counts (source: superblocks.com).
 
-| Plan | Price | Weekly multiplier (approx.) | Best for |
-|------|-------|-----------------------------|----------|
-| Free | $0 | Claude Code excluded | Testing the CLI only |
-| Pro | $20/mo ($17 annual) | 1x baseline | Light-to-moderate users, few hours/day |
-| Max 5x | $100/mo | ~5x Pro | Heavy users on larger repos |
-| Max 20x | $200/mo | ~20x Pro | Full-time, multi-project power users |
-| Team Standard | $25/seat/mo | 1.25x seat | Small teams |
-| Team Premium | $125/seat/mo | 6.25x seat | Teams with heavy Opus usage |
-| Enterprise | $20/seat + usage | negotiated | Large orgs with governance needs |
+| Plan | Price | Claude Code capacity | Best for |
+|------|-------|----------------------|----------|
+| Free | $0 | None (Claude Code excluded) | Experimenting with Claude chat only |
+| Pro | $20/mo ($17/mo annual) | 5x free per-session baseline | Light-to-moderate users, a few hours/day mostly on Sonnet |
+| Max 5x | $100/mo | 5x Pro per-session capacity | Heavy users on large repos who need Opus and long sessions |
+| Max 20x | $200/mo | 20x Pro per-session capacity | Very heavy users running continuous batch work |
+| Team Standard | $25/seat/mo | 1.25x multipliers per seat | Small teams with shared, moderate usage |
+| Team Premium | $125/seat/mo | 6.25x multipliers per seat | Teams needing heavy shared capacity |
 
-For a genuinely heavy user, **Max 5x at $100 is the sweet spot** — it gives 5x the Pro-per-session capacity and a proportionally larger weekly allowance, and it fits developers who spend several hours a day in the CLI at Sonnet with occasional Opus jumps. Users who live in large monorepos with heavy Opus usage consistently need **Max 20x at $200** to avoid hitting the cap mid-afternoon.
-
-Pro is viable only for light-to-moderate users. If you are hitting the weekly cap on Pro more than once a month, the math favors Max: the $80 monthly step from Pro to Max 5x buys you roughly 5x the capacity, which is likely cheaper than the dead time and pay-per-token overages you are living with now.
-
-Teams with more than a handful of heavy members should compare Team Premium ($125/seat) against per-seat Max licenses; the 6.25x premium multiplier frequently wins on cost-per-unit.
+For a solo heavy user, the practical threshold is where you sit between Pro and Max. Pro is a good fit if you work a few hours a day and can stay on Sonnet; once you are regularly using Opus on large repositories, the research points to Max as the place where the per-session capacity stops being the bottleneck. Max 5x at $100/mo gives five times Pro's per-session capacity, and Max 20x at $200/mo gives twenty times — the choice between them is essentially whether a 5x session is enough to finish your typical working day, or whether you need the headroom of 20x for concurrent or round-the-clock batch workloads. A note on Fable 5: it draws from the same weekly pool as Claude Code and is capped at 50% of it on Max and premium seats, so plan around it as part of your total allowance (source: morphllm.com).
 
 ## Frequently Asked Questions
 
-**Q: What are the current Claude Code weekly limits in 2026?**
-A: Anthropic does not publish exact token or message counts. The key change is that effective September 14, 2026, standard weekly limits are permanently 25% above the pre-May-2026 baseline for Pro, Max, Team, and seat-based Enterprise plans. Run `/usage` in the CLI to see your exact remaining allowance.
+**Are Claude Code weekly limits higher now than they were at the start of 2026?**
+Yes. The permanent 25% raise that took effect September 14 gives Pro, Max, Team, and seat-based Enterprise users a standard weekly allowance 25% above their pre-2026 baseline — even though it is lower than the temporary 50% promotional peak that ran May 13 through September 13 (source: bleepingcomputer.com).
 
-**Q: Did the 50% promotion increase my limits permanently?**
-A: No. The 50% boost ran from May 13 to September 13, 2026. It was replaced on September 14 by a permanent 25% raise. You keep a permanent improvement over your original baseline, but not the full 50% promotional buffer.
+**Is the 50% Claude Code promotion still active?**
+No. The promotion expired at 11:59 PM PT on September 13, 2026. It was replaced by a permanent 25% raise to standard weekly limits, which compared to the promotional peak is roughly a 17% reduction in weekly capacity (sources: support.claude.com, bleepingcomputer.com).
 
-**Q: Why do some headlines talk about a 17% cut to Claude Code limits?**
-A: The 17% figure compares the new permanent 125 units against the promotional peak of 150 units (baseline 100 → promo 150 → new 125). Compared to your original baseline, you are actually up 25%. The "cut" is only relative to the temporary summer peak.
+**What counts toward my weekly limit, and how do I check it?**
+Your weekly allowance covers all Claude Code usage on a subscription plan, and it is shared with the Claude app on the same account. The exact drain depends on conversation length, model, and tool usage rather than a fixed prompt count. Run `/usage` in the CLI to see your current and elevated limits (sources: claudecode101.com, support.claude.com).
 
-**Q: What is the /usage command in Claude Code?**
-A: `/usage` is the CLI command that shows your current weekly allowance and remaining usage units. `/cost` shows API spend for pay-per-token metering. Run `/usage` right after a limit change to confirm your new allowance.
+**Did the promotion change my five-hour session limit?**
+No. The 50% promotion applied to the weekly allowance only. Five-hour session limits were separately doubled on May 6, 2026, and were unaffected by the weekly promotion (sources: support.claude.com, morphllm.com).
 
-**Q: Which Claude Code plan is best for a heavy user?**
-A: Max 5x at $100/month is the best value for most heavy users, giving roughly 5x Pro capacity. Users who work in large monorepos with heavy Opus usage typically need Max 20x at $200/month. Pro at $20 is only for light-to-moderate workloads.
+**Does the Free plan include Claude Code?**
+No. The Free plan does not include Claude Code at all, so it was never eligible for the promotion. Claude Code requires a paid subscription (Pro, Max, Team, or seat-based Enterprise) or an API-key setup with per-token metering (sources: superblocks.com, morphllm.com).
 
 ## Bottom Line for Heavy Claude Code Users
 
-The 2026 limit saga boils down to three facts. You are permanently better off than you were nine months ago: the 25% structural raise exceeds the original baseline even after the 50% promotion ended. The "17% cut" only applies relative to a temporary summer peak, and it is not a removal of your gains. And the fastest way to adapt is not to pay more — it is to use `/compact` and `/clear` aggressively, keep routine work on Sonnet, and reserve Opus for the problems that genuinely need it. Your weekly allowance is finite, but with the right habits it stretches further than the pricing pages suggest.
+The 2026 story is not a loss for heavy users — it is a rebalancing. You end the year with a permanent weekly ceiling 25% higher than where you started, even though the summer's 50% bonus has come back down. The practical takeaway is to stop sizing your workflow around the promotional peak, treat the new standard as your real budget, and rely on the levers that actually control consumption: `/compact` and `/clear` to trim context, Sonnet for batch work with Opus reserved for planning, and five-hour session planning. Run `/usage` to see your new numbers, and if you are still hitting the wall regularly, the upgrade ladder from Pro to Max 5x to Max 20x is the cleaner answer than paying per-token overages on a regular basis.
