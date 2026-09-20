@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Agent Codemode Mcp Scripts on RockB</title><link>https://baeseokjae.github.io/tags/agent-codemode-mcp-scripts/</link><description>Recent content in Agent Codemode Mcp Scripts on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sun, 20 Sep 2026 13:01:24 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/agent-codemode-mcp-scripts/index.xml" rel="self" type="application/rss+xml"/><item><title>Agent CodeMode MCP Scripts 2026: Letting Coding-Agent Scripts Call MCP Servers</title><link>https://baeseokjae.github.io/posts/agent-codemode-mcp-scripts-2026/</link><pubDate>Sun, 20 Sep 2026 13:01:24 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-codemode-mcp-scripts-2026/</guid><description>Let coding-agent scripts call MCP servers in 2026: use mcp-call in bash, write one-shot MCP SDK scripts over stdio, or let Code Mode write code that talks to HTTP servers.</description><content:encoded><![CDATA[<p>Coding agents call MCP servers from scripts by running a CLI (like <code>mcp-call</code>), writing a one-shot script against the MCP SDK over stdio, or letting Code Mode generate code that talks to an HTTP/streamable MCP server. In 2026 you register the server once with <code>claude mcp add</code> or <code>codex mcp add</code>, then your agent&rsquo;s bash or Python script invokes tools, pipes results through <code>jq</code>, and orchestrates several MCP tools in a single shell flow — instead of burning token budget on dozens of native tool calls.</p>
+<h2 id="what-code-mode-and-mcp-servers-are--and-why-a-script-wants-to-call-them">What Code Mode and MCP servers are — and why a script wants to call them</h2>
+<p>The Model Context Protocol (MCP) is the open standard that connects AI models to external tools and data sources. An MCP server exposes named &ldquo;tools&rdquo; — query a database, read a file, search a codebase, post to Slack — to any compliant client. The ecosystem ballooned in 2026: the official MCP registry held 30,375 unique servers as of September 10, 2026, roughly three times the ~9,650 in May 2026. August 2026 alone added 6,265 servers, more than the registry&rsquo;s entire first five months (<a href="https://dev.to/amareswer/the-mcp-registry-by-the-numbers-38nc">dev.to: The MCP Registry by the Numbers</a>).</p>
+<p>&ldquo;Code Mode&rdquo; refers to OpenAI Codex&rsquo;s focused operating mode (Codex v0.114.0+) that restricts the agent to code-focused operations — read, write, test — without broader system interaction. Inside Code Mode the agent can still reach MCP servers, and the interesting 2026 shift is how it reaches them: by <em>writing code</em> that calls MCP rather than by selecting pre-registered native tools.</p>
+<p>Why would a <em>script</em> want to call MCP servers at all? Two reasons dominate:</p>
+<ul>
+<li><strong>Token economics.</strong> Every connected MCP server injects its tool definitions into the model&rsquo;s context. Each <code>mcp-call</code> you run through your shell tool is just a command; a pipeline of several MCP tools piped through <code>jq</code> consumes a fraction of the context that the same work would take as interactive tool calls. Anthropic reports that programmatic tool calling — processing MCP results inside a code-execution sandbox — reduces token usage by roughly 37% on complex multi-step workflows (<a href="https://claude.com/blog/building-agents-that-reach-production-systems-with-mcp">Anthropic: Building agents that reach production systems with MCP</a>).</li>
+<li><strong>Composability.</strong> A single bash script can read a row from Postgres, search GitHub for an issue, and post the conclusion to Slack — orchestrated as plain shell, not as sequential &ldquo;assistant pick a tool then interpret the result&rdquo; turns.</li>
+</ul>
+<h2 id="when-your-coding-agent-should-call-mcp-from-a-script-instead-of-a-native-tool-call">When your coding agent should call MCP from a script instead of a native tool call</h2>
+<p>The decision is not either/or; it is about <em>how often</em> and <em>how predictably</em> the tool will be used.</p>
+<p><strong>Prefer native tool registration when</strong> the server is a permanent part of your workflow and the model should &ldquo;see&rdquo; its tools in its tool list to choose among them intelligently. Claude Code and Codex both register servers natively (<code>claude mcp add</code>, <code>codex mcp add</code>), which gives the model structured tool schemas and lets the harness handle auth, rate limits, and audit.</p>
+<p><strong>Prefer scripts-over-MCP when</strong> the flow is multi-step and mechanical — read, transform, write — and you want to keep the model&rsquo;s context lean. This is the core <code>mcp-cli-skill</code> pattern: an LLM agent writes a bash script that calls several MCP tools in sequence and pipes results through <code>jq</code>, then runs it with its shell tool. You get one result back instead of four sequential tool calls, and the shell composition is itself readable, testable, and re-runnable (<a href="https://pypi.org/project/mcp-cli-skill">mcp-cli-skill on PyPI</a>).</p>
+<p>The rule of thumb mirrors the skills-vs-MCP split: MCP handles <em>how to use a tool</em>, while a script (or a skill) handles <em>sequencing and presentation</em> (<a href="https://claude.com/blog/extending-claude-capabilities-with-skills-mcp-servers">Anthropic: Extending Claude with Skills and MCP servers</a>). When the ordering of tool calls is fixed and the transformation is pure bash, script it.</p>
+<h2 id="prerequisites--register-the-mcp-server-you-care-about">Prerequisites — register the MCP server you care about</h2>
+<p>Before any script can call an MCP server, the client you use must know the server exists. Registration is configuration, not a plugin install.</p>
+<p><strong>Claude Code</strong> registers servers three ways, across three scopes:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Command</th>
+          <th>Scope</th>
+          <th>Persistence</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>claude mcp add &lt;name&gt; &lt;cmd&gt; [args...]</code></td>
+          <td>Local (default)</td>
+          <td><code>~/.claude.json</code></td>
+      </tr>
+      <tr>
+          <td><code>claude mcp add-json &lt;name&gt; &lt;json&gt;</code></td>
+          <td>Local</td>
+          <td><code>~/.claude.json</code></td>
+      </tr>
+      <tr>
+          <td><code>claude mcp add-from-claude-desktop &lt;name&gt;</code></td>
+          <td>Local</td>
+          <td>Imports from Claude Desktop</td>
+      </tr>
+      <tr>
+          <td><code>.mcp.json</code> committed to repo</td>
+          <td>Project</td>
+          <td>Git-tracked, shared with teammates</td>
+      </tr>
+  </tbody>
+</table>
+<p>Four transports are supported: stdio (default), streamable-http, sse, and ws. Use <code>--</code> to separate Claude&rsquo;s own flags from the server&rsquo;s launch command, so arguments that look like flags land on the server, not on the client. Project-scoped <code>.mcp.json</code> supports environment-variable expansion — <code>${VAR}</code> and <code>${VAR:-default}</code> — so secrets live in your shell environment, not in git (<a href="https://code.claude.com/docs/en/mcp-servers">Claude Code MCP docs</a>).</p>
+<p><strong>OpenAI Codex</strong> keeps its config in <code>~/.codex/config.toml</code>, where <code>[mcp_servers.&lt;name&gt;]</code> TOML tables declare servers. Manage them with <code>codex mcp list / add / get / remove / login</code>. For Code Mode specifically, MCP is an opt-in <code>[EXPERIMENTAL]</code> feature — check your Codex version, because <code>codex mcp-server</code> was removed in 0.154.0 and you drive remote Code Mode hosts over stdio and gRPC rather than WebSocket (WebSocket transport was dropped in v0.151) (<a href="https://continuumcode.ai/guides/codex-config">Continuum Code: Codex config</a>, <a href="https://blakecrosley.com/guides/codex">Blake Crosley&rsquo;s Codex guide</a>).</p>
+<h2 id="option-1--drive-mcp-from-a-bash-script-with-mcp-call">Option 1 — Drive MCP from a Bash script with mcp-call</h2>
+<p>The centerpiece pattern for &ldquo;coding-agent scripts call MCP&rdquo; is <code>mcp-call</code>, from the <code>mcp-cli-skill</code> package. It calls any MCP server tool straight from the command line and is designed for shell composition.</p>
+<p><strong>Install</strong> it as a CLI with <code>pipx install mcp-cli-skill</code> or <code>uvx mcp-cli-skill</code>, or as a Claude Code skill alongside. It seeds its config automatically from <code>~/.claude/settings.json</code> and <code>~/.claude.json</code>, so servers you already registered appear without extra setup, and it supports both stdio and HTTP transports. Shell tab-completion is included (<a href="https://pypi.org/project/mcp-cli-skill">mcp-cli-skill on PyPI</a>).</p>
+<p><strong>The core pattern</strong> is one script that calls multiple MCP tools and pipes them through <code>jq</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e">#!/usr/bin/env bash
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>set -euo pipefail
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Read order status from the orders MCP server</span>
+</span></span><span style="display:flex;"><span>order<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>mcp-call orders get_order --id <span style="color:#e6db74">&#34;</span>$1<span style="color:#e6db74">&#34;</span> | jq -r <span style="color:#e6db74">&#39;.data&#39;</span><span style="color:#66d9ef">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Search GitHub for the matching issue</span>
+</span></span><span style="display:flex;"><span>issue<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>mcp-call github search_issues --query <span style="color:#e6db74">&#34;</span>$1<span style="color:#e6db74">&#34;</span> | jq -r <span style="color:#e6db74">&#39;.items[0].html_url&#39;</span><span style="color:#66d9ef">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Post the summary to Slack</span>
+</span></span><span style="display:flex;"><span>mcp-call slack post_message --channel ops --text <span style="color:#e6db74">&#34;Order </span>$1<span style="color:#e6db74">: </span>$order<span style="color:#e6db74"> — issue </span>$issue<span style="color:#e6db74">&#34;</span>
+</span></span></code></pre></div><p>Because each <code>mcp-call</code> is a normal command, the shell is the orchestrator. The agent writes this script, runs it with its shell tool, and gets one compound result back — no need for several separate MCP tool calls, and no need to inject the intermediate JSON back into the model&rsquo;s context turn after turn.</p>
+<h2 id="option-2--write-a-one-shot-script-against-the-mcp-sdk-over-stdio">Option 2 — Write a one-shot script against the MCP SDK over stdio</h2>
+<p>When <code>mcp-call</code> doesn&rsquo;t expose the exact tool you need, or you want tighter control, write a short Python script using the official MCP SDK. The MCP client connects to the server over stdio and calls tools programmatically:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> asyncio
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> mcp <span style="color:#f92672">import</span> ClientSession, StdioServerParameters
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> mcp.client.stdio <span style="color:#f92672">import</span> stdio_client
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">async</span> <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">main</span>():
+</span></span><span style="display:flex;"><span>    params <span style="color:#f92672">=</span> StdioServerParameters(command<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;uvx&#34;</span>, args<span style="color:#f92672">=</span>[<span style="color:#e6db74">&#34;my-server&#34;</span>])
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">with</span> stdio_client(params) <span style="color:#66d9ef">as</span> (read, write):
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">async</span> <span style="color:#66d9ef">with</span> ClientSession(read, write) <span style="color:#66d9ef">as</span> session:
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">await</span> session<span style="color:#f92672">.</span>initialize()
+</span></span><span style="display:flex;"><span>            res <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> session<span style="color:#f92672">.</span>call_tool(<span style="color:#e6db74">&#34;search_docs&#34;</span>, {<span style="color:#e6db74">&#34;query&#34;</span>: <span style="color:#e6db74">&#34;MCP transport&#34;</span>})
+</span></span><span style="display:flex;"><span>            print(res<span style="color:#f92672">.</span>content[<span style="color:#ae81ff">0</span>]<span style="color:#f92672">.</span>text)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>asyncio<span style="color:#f92672">.</span>run(main())
+</span></span></code></pre></div><p>This is the &ldquo;write the code, run it, read the output&rdquo; pattern that Code Mode leans on heavily. The script is a durable artifact you can commit, test, and re-run — and because it runs in a code-execution sandbox, it doesn&rsquo;t hold the model&rsquo;s attention while it awaits interactive results. It is also the mechanism behind Anthropic&rsquo;s ~37% token reduction on multi-step workflows, since programmatic tool calling keeps results out of the conversational context window (<a href="https://claude.com/blog/building-agents-that-reach-production-systems-with-mcp">Anthropic: Building agents that reach production systems with MCP</a>).</p>
+<h2 id="option-3--code-mode-let-the-agent-write-code-that-talks-to-an-http-mcp-server">Option 3 — Code Mode: let the agent write code that talks to an HTTP MCP server</h2>
+<p>Code Mode (OpenAI Codex) takes the &ldquo;scripts over native tools&rdquo; idea to its logical endpoint: instead of the model <em>selecting</em> from a fixed list of tools, the model <em>writes</em> the tool-calling code itself, with <code>search()</code> and <code>execute()</code> paths.</p>
+<p>The flagship demonstration is Cloudflare&rsquo;s Code Mode MCP server, which collapses more than 2,500 Cloudflare API endpoints into roughly 1,000 tokens of context — a 99.9% reduction versus a tool-per-endpoint approach. Because the model writes code rather than picking from pre-defined functions, new products require <strong>no new tool definitions</strong> when they launch: the model just writes a new <code>search()</code> or <code>execute()</code> call (<a href="https://codex.danielvaughan.com/2026/04/29/codex-cli-cloudflare-code-mode-mcp-workers-edge-development">danielvaughan.com: Codex CLI Cloudflare Code Mode MCP</a>). The first API call triggers an OAuth 2.1 flow that downscopes the token; setup is either <code>/plugins</code> in the TUI or an explicit <code>[mcp_servers.cloudflare-api]</code> TOML entry for CI.</p>
+<p>This is the philosophical answer to &ldquo;letting coding-agent scripts call MCP&rdquo;: in Code Mode, calling MCP <em>is</em> writing a script. The model generates shell or Python that talks to the server, the harness executes it inside a sandbox with secret isolation and full auditability, and the result comes back as plaintext — which is also why v0.139 of Codex lets Code Mode call standalone web search directly and get plaintext results for the same reason (<a href="https://blakecrosley.com/guides/codex">Blake Crosley&rsquo;s Codex guide</a>).</p>
+<h2 id="keep-tool-context-under-control--the-35-server-rule">Keep tool context under control — the 3–5 server rule</h2>
+<p>Every connected MCP server injects its tool definitions into context. Connect ten servers and your model spends part of every turn just parsing tool names. The 2026 discipline is:</p>
+<ul>
+<li><strong>Limit active servers to 3–5</strong> per session. A bloated tool list degrades tool-selection quality, because the model struggles to pick among hundreds of near-duplicate names.</li>
+<li><strong>Group tools by intent.</strong> Put database tools on one server, notification tools on another, so each server has a coherent, small surface.</li>
+<li><strong>Use programmatic tool calling</strong> (scripts, <code>mcp-call</code>, SDK code) for mechanical multi-step flows so results never re-enter context — this is where the ~37% reduction comes from.</li>
+<li><strong>Collapse many endpoints onto one server</strong> when possible, as Cloudflare&rsquo;s Code Mode server does with its ~1,000-token footprint.</li>
+</ul>
+<h2 id="verify-and-debug-your-scripted-mcp-setup">Verify and debug your scripted MCP setup</h2>
+<p>Debugging a scripted MCP pipeline is simpler than debugging native tool calls because everything is a normal process. Check your registered servers with <code>claude mcp list</code> or <code>codex mcp list</code>, and for a given server run <code>claude mcp list &lt;name&gt;</code> for details. In the Codex TUI, <code>/mcp</code> shows live server status.</p>
+<p>The three failure modes to plan for:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Symptom</th>
+          <th>Likely cause</th>
+          <th>Fix</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Script hangs</td>
+          <td>Server&rsquo;s stdio protocol is slow, or <code>MCP_TIMEOUT</code> too low</td>
+          <td>Raise <code>MCP_TIMEOUT</code>; check server logs</td>
+      </tr>
+      <tr>
+          <td>Garbage JSON / parse errors</td>
+          <td>Server writes log lines to stdout, polluting the protocol stream</td>
+          <td>Redirect server logs to stderr or a file; only JSON on stdout</td>
+      </tr>
+      <tr>
+          <td>Tool not found</td>
+          <td>Server not registered in the scope you&rsquo;re in (local vs project)</td>
+          <td><code>claude mcp list</code>; add with the right scope</td>
+      </tr>
+  </tbody>
+</table>
+<p>Because the MCP protocol is line-delimited JSON over stdio, anything a server prints to stdout that is not a protocol message corrupts the stream — the classic &ldquo;stdout pollution&rdquo; pitfall when you wrap a chatty server in a script.</p>
+<h2 id="security-when-scripting-mcp">Security when scripting MCP</h2>
+<p>Scripting MCP multiplies your exposure because the agent is now executing arbitrary code that reaches remote servers. The 2026 registry data is sobering:</p>
+<ul>
+<li><strong>80.5%</strong> of remote-capable MCP servers declare no authentication header in their registry metadata — most won&rsquo;t protect their endpoints (<a href="https://scalix.world/research/state-of-mcp-2026">Scalix: State of MCP 2026</a>).</li>
+<li><strong>62%</strong> of official-registry servers were published once and never updated; <strong>22.9%</strong> link no source repository (37% for remote-only servers) (<a href="https://dev.to/amareswer/the-mcp-registry-by-the-numbers-38nc">dev.to: The MCP Registry by the Numbers</a>).</li>
+</ul>
+<p>The translation for scripted MCP: only script against servers you can read, pin to a specific version, and review. <strong>Never pipe credentials into <code>mcp-call</code> arguments</strong> — use environment-variable expansion in <code>.mcp.json</code> or Codex&rsquo;s TOML so secrets stay out of shell history and git. Use Codex&rsquo;s <code>approval_policy</code> (<code>untrusted</code> / <code>on-request</code> / <code>never</code>) and per-tool <code>approval_mode = &quot;approve&quot;</code> for dangerous tools like <code>browser_navigate</code>, and keep <code>sandbox_mode</code> on (<a href="https://continuumcode.ai/guides/codex-config">Continuum Code: Codex config</a>). For remote endpoints, know whether your OAuth flow downscopes the token, as Cloudflare&rsquo;s does via OAuth 2.1.</p>
+<p>Also remember the protocol is young: only 17,584 of the registry&rsquo;s remote endpoints use modern streamable-http while 1,073 still sit on deprecated sse, and 54.8% of servers are remote-only versus 38.9% local-only as of June 2026 (<a href="https://scalix.world/research/state-of-mcp-2026">Scalix: State of MCP 2026</a>). Prefer streamable-http where you can.</p>
+<h2 id="when-scripts-over-mcp-beat-native-tools--and-when-they-dont">When scripts-over-MCP beat native tools — and when they don&rsquo;t</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Scenario</th>
+          <th>Native tool registration</th>
+          <th>Script-over-MCP (mcp-call / SDK / Code Mode)</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>One-off interactive question</td>
+          <td>Best fit</td>
+          <td>Overkill</td>
+      </tr>
+      <tr>
+          <td>Mechanical multi-step pipeline (read → transform → post)</td>
+          <td>Heavy on context</td>
+          <td>Best fit</td>
+      </tr>
+      <tr>
+          <td>Server used across a whole team forever</td>
+          <td>Best fit</td>
+          <td>Fine but redundant</td>
+      </tr>
+      <tr>
+          <td>Many endpoints collapsing onto one tool surface</td>
+          <td>Context-heavy</td>
+          <td>Best fit (Cloudflare pattern)</td>
+      </tr>
+      <tr>
+          <td>Must audit every call</td>
+          <td>Native harness handles it</td>
+          <td>Add sandbox + logging yourself</td>
+      </tr>
+  </tbody>
+</table>
+<p>The ecosystem is growing without slowing: combined core MCP SDK downloads (npm <code>@modelcontextprotocol/sdk</code> + PyPI <code>mcp</code> + <code>fastmcp</code>) hit roughly 523M per month in September 2026, a fivefold rise in nine months, and the governing Agentic AI Foundation grew from 49 to 247 members with Anthropic, OpenAI, Google, Microsoft, AWS, and Block among its Platinum members (<a href="https://agentscamp.com/guides/mcp/mcp-ecosystem-statistics">AgentsCamp: MCP ecosystem statistics</a>). That momentum means the &ldquo;scripts over native calls&rdquo; pattern will only get smoother — more CLIs, more SDK examples, tighter sandboxing.</p>
+<h2 id="faq">FAQ</h2>
+<p><strong>What does it mean to let a coding agent script call MCP servers?</strong>
+It means the agent runs a command — <code>mcp-call</code> in bash, a one-shot MCP SDK script in Python, or code that Code Mode generates — that invokes MCP server tools. The script is a normal process: it calls tools, pipes results through <code>jq</code>, and orchestrates several servers in one shell flow instead of making many interactive tool calls.</p>
+<p><strong>How do I call an MCP server from a bash script?</strong>
+Register the server once (<code>claude mcp add</code> or <code>codex mcp add</code>), then install <code>mcp-cli-skill</code> and run <code>mcp-call &lt;server&gt; &lt;tool&gt; --arg value</code> inside the script. Pipe the JSON output through <code>jq</code> to extract fields and compose the results from multiple servers into one answer.</p>
+<p><strong>What is Code Mode MCP in OpenAI Codex?</strong>
+Code Mode is Codex&rsquo;s code-focused operating mode. For MCP, it means the agent <em>writes</em> the tool-calling code instead of selecting from pre-registered tools — using <code>search()</code> and <code>execute()</code> paths. Cloudflare&rsquo;s server collapses 2,500+ API endpoints into about 1,000 tokens of context and needs no new tool definitions when products launch.</p>
+<p><strong>Is MCP better handled natively or through scripts?</strong>
+Native registration is better for servers used interactively and team-wide, where the model should choose among visible tool schemas. Scripts-over-MCP are better for mechanical multi-step flows because they keep results out of context and reduce token use — Anthropic reports roughly 37% savings on complex multi-step workflows with programmatic tool calling.</p>
+<p><strong>Is it safe to script MCP servers?</strong>
+Only if you verify the server. 80.5% of remote-compatible MCP servers declare no authentication, and 62% of registry servers were never updated after publishing. Script only against servers you can read and pin, never put credentials in <code>mcp-call</code> arguments (use environment-variable expansion), and enable Codex&rsquo;s sandbox and approval policies for dangerous tools.</p>
+]]></content:encoded></item></channel></rss>
