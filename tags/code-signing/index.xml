@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Code Signing on RockB</title><link>https://baeseokjae.github.io/tags/code-signing/</link><description>Recent content in Code Signing on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sun, 20 Sep 2026 01:01:09 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/code-signing/index.xml" rel="self" type="application/rss+xml"/><item><title>macOS Data Protection Keychain for Electron Apps: Securing AI Agent Credentials</title><link>https://baeseokjae.github.io/posts/macos-data-protection-keychain-electron-2026/</link><pubDate>Sun, 20 Sep 2026 01:01:09 +0000</pubDate><guid>https://baeseokjae.github.io/posts/macos-data-protection-keychain-electron-2026/</guid><description>Secure AI agent API keys in Electron apps with the macOS Data Protection Keychain, code-signing access groups, kSecUseDataProtectionKeychain, and Touch ID.</description><content:encoded><![CDATA[<p>Electron&rsquo;s <code>safeStorage</code> is not strong enough to protect the API keys your AI agent app stores. To secure OpenAI, Anthropic, or JWT credentials against other processes and malicious code, use the macOS Data Protection Keychain directly with <code>kSecUseDataProtectionKeychain: true</code>, restrict access to a code-signing access group, and gate decryption behind Touch ID or a password. This guide walks through the threat model, the code-signing setup, and a working implementation that keeps a dozen backgrounded agents from reading each other&rsquo;s secrets.</p>
+<h2 id="why-ai-agent-credentials-need-more-than-safestorage">Why AI Agent Credentials Need More Than safeStorage</h2>
+<p>When you build an Electron app that stores OpenAI or Anthropic API keys, <code>safeStorage.encryptString()</code> looks like the obvious choice. It is built into Electron, requires no native modules, and on macOS the key lives in the Keychain. That last fact is misleading. Electron&rsquo;s <code>safeStorage</code> is roughly a 100-line C++ wrapper over Chromium&rsquo;s OSCrypt, and it inherits every limitation of that layer — most importantly, the legacy file-based Keychain that any local process can query through the <code>security</code> CLI if it can read your app&rsquo;s binary path.</p>
+<p>The danger is concrete for AI agents. A developer workstation today runs a dozen agent processes, language-server extensions, and npm packages all under the same user account. Legacy Keychain items are scoped to the signing identity, but historically any process invoking <code>/usr/bin/security</code> that knows the access group could pull the stored data without a prompt. Chen Guangliang&rsquo;s security analysis of Electron credential storage spells out the sharpest version of the problem: child processes, injected libraries, and malicious npm packages are treated as the app itself, so a compromised dependency can call the same decryption API and succeed with no user interaction.</p>
+<p>The core question every credential-store design must answer is not &ldquo;is it encrypted?&rdquo; but <strong>&ldquo;encrypted against whom?&rdquo;</strong> Windows DPAPI protects against <em>other users</em>; the legacy macOS Keychain and the Linux secret store protect against <em>other applications</em>; hardware-backed stores such as the Data Protection Keychain protect against the OS reading your secrets directly. For AI agents running untrusted code, per-user stores are effectively readable by that code. Only a store that separates access at the application level — the Data Protection Keychain — gives you the isolation you actually need.</p>
+<h2 id="the-macos-keychain-threat-model-legacy-file-based-vs-data-protection-keychain">The macOS Keychain Threat Model: Legacy File-Based vs. Data Protection Keychain</h2>
+<p>macOS has shipped two Keychain implementations, and the difference matters more than most Electron tutorials admit.</p>
+<p><strong>Legacy file-based Keychain.</strong> This is the store that Chromium&rsquo;s OSCrypt and therefore Electron&rsquo;s <code>safeStorage</code> target by default on macOS. Items live in a keychain file protected by a single master password, and the encryption key is stored in the Keychain Access database. Because the master key is shared per-user, any process running as the same user — including another agent, an injected library, or a tool that calls <code>security</code> — can, under the right conditions, obtain the data without a decryption prompt. The ACL is coarse and tied to a binary signer identity rather than a hardened per-app boundary.</p>
+<p><strong>Data Protection Keychain (DPK).</strong> Introduced in macOS 10.15, this is the modern store that keys on the device&rsquo;s hardware security. It supports three capabilities the legacy store does not:</p>
+<ul>
+<li><strong>Code-signing access groups</strong> via the <code>keychain-access-groups</code> entitlement — only explicitly entitled apps in the same access group can read an item.</li>
+<li><strong>iCloud Keychain sync</strong>, so credentials follow the user across devices.</li>
+<li><strong>Biometric access control</strong> through <code>SecAccessControl</code> — Touch ID or device-owner password gating before a key is released.</li>
+</ul>
+<p>The <code>security</code> CLI cannot open DPK items that are restricted by an access group, which closes the &ldquo;any process can query via CLI&rdquo; hole. When a rogue same-user process tries to read an item, the system surfaces the standard Keychain access prompt (or requires the configured biometric), and only that specific signed binary path is authorized — not every binary under your account.</p>
+<p>This per-app isolation is exactly what makes the Data Protection Keychain superior to safeStorage for AI-agent credential vaults. Your agent&rsquo;s API key should be unreadable by the other agent running five feet away on the same machine, and only DPK gives you that boundary by default.</p>
+<h2 id="what-electrons-safestorage-actually-protects-and-doesnt">What Electron&rsquo;s safeStorage Actually Protects (and Doesn&rsquo;t)</h2>
+<p>To make an informed choice you have to know precisely where safeStorage falls short.</p>
+<p><strong>What it does protect.</strong> On macOS, safeStorage encrypts a string using AES-128-CBC with a key it stores in the Keychain (under <code>&lt;AppName&gt; Safe Storage</code>). The key entry is protected by the system ACL, the Keychain prompts for authorization, and the encrypted database remains unusable even if the disk is stolen — unless the account has no login password set. For casual, single-app secrets, safeStorage is meaningfully better than storing plaintext on disk.</p>
+<p><strong>What it does not protect.</strong></p>
+<ul>
+<li><strong>Hardcoded IV and no authenticated encryption.</strong> Chromium&rsquo;s OSCrypt encrypts with AES-128-CBC and a hardcoded initialization vector of 16 space characters — not a random IV per encryption. Identical plaintext produces identical ciphertext, enabling ciphertext comparison, and CBC without authentication leaves the data exposed to bit-flipping and padding-oracle attacks if an attacker can drive chosen plaintext into your store.</li>
+<li><strong>Linux falls back to plaintext-equivalent storage by default.</strong> On Linux without libsecret or KWallet, Electron silently drops to <code>basic_text</code>: PBKDF2 with a single iteration, the hardcoded <code>saltysalt</code> salt, and a source password embedded in the binary. Worse, this is the <em>default</em> fallback and ships with no warning. Your &ldquo;secure&rdquo; API keys are effectively recoverable by anyone who can read the app&rsquo;s files.</li>
+<li><strong>No sandbox for extensions or code.</strong> Electron does not sandbox extensions or plugins. Any runnable Node package, extension, or injected library runs with the same full privileges as the app and can call the decryption API itself. The VS Code case is instructive: any installed extension can read the entire secrets DB at <code>~/.config/Code/User/globalStorage/state.vscdb</code> and decrypt every secret, because the extension shares the app&rsquo;s single Keychain ACL.</li>
+<li><strong>Master keys live in process memory.</strong> Recent malware such as VoidStealer (disclosed by Kaspersky in March 2026) steals the master key by attaching a debugger and setting a hardware breakpoint where the app calls its decryption API. No admin, no injection, and no EDR alert — the key simply spends a moment in the heap and gets siphoned out.</li>
+</ul>
+<p>Note also that <code>safeStorage.isEncryptionAvailable()</code> returning <code>true</code> only means a secret store exists; it says nothing about how strong or how isolated that store is. Calling it is not a security guarantee.</p>
+<h2 id="setting-up-a-signed-electron-app-code-signing-and-keychain-sharing-entitlements">Setting Up a Signed Electron App: Code Signing and Keychain Sharing Entitlements</h2>
+<p>The Data Protection Keychain API rejects unsigned apps, so code signing is not optional — it is the foundation. Here is the minimal path to a signed, entitled macOS Electron app.</p>
+<p><strong>1. Obtain a Developer ID Application certificate.</strong> You need an Apple Developer account and a <code>Developer ID Application</code> (or <code>Mac App Distribution</code>) certificate. Electron Forge and electron-builder can pull certificates from the keychain via environment variables, but for local development you can sign ad hoc, as long as you understand that ad-hoc-signed apps must still declare the keychain access group.</p>
+<p><strong>2. Add the Keychain Sharing entitlement.</strong> Create an entitlements file (<code>build/entitlements.mac.plist</code>) that names your access group. Access groups are reverse-DNS identifiers; the convention is <code>&lt;bundle-identifier&gt;.&lt;suffix&gt;</code>, and groups outside your provisioning team must be prefixed with your Team ID:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-xml" data-lang="xml"><span style="display:flex;"><span><span style="color:#75715e">&lt;?xml version=&#34;1.0&#34; encoding=&#34;UTF-8&#34;?&gt;</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">&lt;!DOCTYPE plist PUBLIC &#34;-//Apple//DTD PLIST 1.0//EN&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e">  &#34;http://www.apple.com/DTDs/PropertyList-1.0.dtd&#34;&gt;</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">&lt;plist</span> <span style="color:#a6e22e">version=</span><span style="color:#e6db74">&#34;1.0&#34;</span><span style="color:#f92672">&gt;</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">&lt;dict&gt;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&lt;key&gt;</span>keychain-access-groups<span style="color:#f92672">&lt;/key&gt;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&lt;array&gt;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&lt;string&gt;</span>$(AppIdentifierPrefix)com.yourteam.agentapp.credentials<span style="color:#f92672">&lt;/string&gt;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&lt;/array&gt;</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">&lt;/dict&gt;</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">&lt;/plist&gt;</span>
+</span></span></code></pre></div><p><strong>3. Point electron-builder at the entitlements.</strong> In <code>package.json</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span><span style="color:#e6db74">&#34;build&#34;</span><span style="color:#960050;background-color:#1e0010">:</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;mac&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;entitlements&#34;</span>: <span style="color:#e6db74">&#34;build/entitlements.mac.plist&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;entitlementsInherit&#34;</span>: <span style="color:#e6db74">&#34;build/entitlements.mac.plist&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;hardenedRuntime&#34;</span>: <span style="color:#66d9ef">true</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;gatekeeperAssess&#34;</span>: <span style="color:#66d9ef">false</span>
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p><strong>4. Sign and verify.</strong> After building, confirm the signature and the access group are embedded:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>codesign -d --entitlements - path/to/YourApp.app
+</span></span></code></pre></div><p>If the entitlements dump shows <code>keychain-access-groups</code>, you are ready to use the Data Protection Keychain.</p>
+<h2 id="using-the-keychain-store-library-accounts-mutableaccounts-and-touch-id">Using the keychain-store Library: Accounts, mutableAccounts, and Touch ID</h2>
+<p>With signing in place, the cleanest way to reach <code>kSecUseDataProtectionKeychain</code> from Electron is the <code>keychain-store</code> npm package (companion to a Swift <code>KeychainStore</code> library for native macOS). It was built specifically because safeStorage&rsquo;s legacy keychain can be queried by other agents via the <code>security</code> CLI — dangerous when several AI agents run in the background. It targets the Data Protection Keychain, restricts items to code-signing access groups, and exposes the SecItem API without legacy file-based baggage.</p>
+<p>A minimal add-and-read flow:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-js" data-lang="js"><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">KeychainStore</span> } <span style="color:#a6e22e">from</span> <span style="color:#e6db74">&#34;keychain-store&#34;</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">store</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">KeychainStore</span>({
+</span></span><span style="display:flex;"><span>  <span style="color:#75715e">// bundle id is the default service; you can override
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#a6e22e">service</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;com.yourteam.agentapp&#34;</span>,
+</span></span><span style="display:flex;"><span>});
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// store an OpenAI key, restricted to your access group
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">await</span> <span style="color:#a6e22e">store</span>.<span style="color:#a6e22e">setAccount</span>(<span style="color:#e6db74">&#34;openai-api-key&#34;</span>, {
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">account</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;openai&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">data</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;sk-...&#34;</span>,                 <span style="color:#75715e">// the secret
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#a6e22e">accessGroup</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;com.yourteam.agentapp.credentials&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">dataProtection</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">true</span>,           <span style="color:#75715e">// kSecUseDataProtectionKeychain
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>});
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// read it back
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">const</span> { <span style="color:#a6e22e">data</span> } <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">store</span>.<span style="color:#a6e22e">getAccount</span>(<span style="color:#e6db74">&#34;openai-api-key&#34;</span>);
+</span></span></code></pre></div><p>The library keeps two named item sets:</p>
+<ul>
+<li><strong><code>accounts</code></strong> — immutable account entries created once and never updated, useful for fixed metadata like an agent role&rsquo;s public identifiers.</li>
+<li><strong><code>mutableAccounts</code></strong> — writable entries where secrets like rotating API keys and JWTs live. Rotating a key is a single store update rather than a delete-and-recreate.</li>
+</ul>
+<p>Two practical advantages follow. First, package access is restricted to the exact item names you declare, so a compromised dependency cannot enumerate the whole vault. Second, because access is tied to your signing access group, another agent process — even with the same user — cannot read your items without a Keychain authorization.</p>
+<h2 id="adding-biometric-protection-user-presence-vs-biometrics-only">Adding Biometric Protection: User-Presence vs. Biometrics-Only</h2>
+<p>The Data Protection Keychain adds a security tier no other Electron credential store reaches: you can require Touch ID or the device password before the key is released. <code>SecAccessControl</code> offers two flags with different behavior:</p>
+<ul>
+<li><strong>User-presence</strong> (<code>kSecAccessControlUserPresence</code>): passes if the user authenticates with <em>either</em> Touch ID or the device password. Best default for most agents — a fallback exists but no secret is ever handed out without a human gesture.</li>
+<li><strong>Biometry any</strong> / <strong>biometry current set</strong> (<code>kSecAccessControlBiometryAny</code> or <code>...BiometryCurrentSet</code>): requires Touch ID specifically, with no password fallback. Use <code>BiometryAny</code> for a permissive biometric policy or <code>BiometryCurrentSet</code> if you want enrollments added later to be excluded.</li>
+</ul>
+<p>In <code>keychain-store</code>, pass an access-control option on write:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-js" data-lang="js"><span style="display:flex;"><span><span style="color:#66d9ef">const</span> { <span style="color:#a6e22e">data</span> } <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">store</span>.<span style="color:#a6e22e">getAccount</span>(<span style="color:#e6db74">&#34;openai-api-key&#34;</span>, {
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">accessControl</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;userPresence&#34;</span>, <span style="color:#75715e">// or &#34;biometryAny&#34; | &#34;biometryCurrentSet&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>});
+</span></span></code></pre></div><p>Reads then trigger the system prompt for authorization before returning the key. That prompt is a deliberate feature: it converts a silent background read by rogue code into an on-screen event the user will notice and approve or reject. For a long-lived backgrounded AI agent, gate the initial unlock (for example, at startup) with user-presence, then hold the decrypted key in memory for the session — but recognize the trade-off: the key will briefly live in memory, which is why you should never log or dump it.</p>
+<p>For most agent use cases, <strong>user-presence is the recommended default</strong>: it offers a usable unlock path and still blocks unattended reads. Reserve biometry-only for vaults that must never be readable with a stolen password alone.</p>
+<h2 id="cross-platform-fallback-safestorage-on-linux-and-windows">Cross-Platform Fallback: safeStorage on Linux and Windows</h2>
+<p>The Data Protection Keychain is macOS-only, and an Electron app is typically cross-platform. The recommended pattern is to use <code>keychain-store</code> where it is strong (macOS) and fall back to <code>safeStorage</code> on Linux and Windows, preserving Electron&rsquo;s cross-platform promise while taking the strongest option on every OS where it exists:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-js" data-lang="js"><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">platform</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">process</span>.<span style="color:#a6e22e">platform</span>;
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">isMac</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">platform</span> <span style="color:#f92672">===</span> <span style="color:#e6db74">&#34;darwin&#34;</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">vault</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">isMac</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">?</span> <span style="color:#a6e22e">keychainStoreVault</span>          <span style="color:#75715e">// Data Protection Keychain + Touch ID
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span>  <span style="color:#f92672">:</span> <span style="color:#a6e22e">safeStorageVault</span>;           <span style="color:#75715e">// safeStorage (DPAPI / libsecret)
+</span></span></span></code></pre></div><p>Know the ceiling of each fallback:</p>
+<ul>
+<li><strong>Windows</strong> uses DPAPI, which is per-user and not per-app. Any process running as the same user can decrypt without a prompt; there is no isolation between two agents under one account.</li>
+<li><strong>Linux</strong> uses libsecret/KWallet, which is also per-user. And if no secret store is present, safeStorage silently drops to <code>basic_text</code> — the plaintext-equivalent default described earlier. Always call <code>safeStorage.isEncryptionAvailable()</code> and refuse to run if it reports only <code>basic_text</code>.</li>
+</ul>
+<p>The cross-platform reality is that only macOS gives you real per-application isolation out of the box. On Linux and Windows, treat safeStorage as obfuscation rather than a true vault, and consider hardware-backed or cloud-KMS-backed options for anything you cannot afford to leak.</p>
+<h2 id="common-pitfalls-the-security-cli-hardcoded-iv-basic_text-and-unsandboxed-extensions">Common Pitfalls: The security CLI, Hardcoded IV, basic_text, and Unsandboxed Extensions</h2>
+<p>Bake these four failure modes into your threat model now, because each one has shipped in production apps.</p>
+<ol>
+<li><strong>The <code>security</code> CLI can drain a legacy keychain.</strong> If you use safeStorage on macOS, the underlying keychain item may be readable by any process that can invoke <code>/usr/bin/security</code> with the right path and access group. Always use the Data Protection Keychain (<code>kSecUseDataProtectionKeychain: true</code>) with a code-signing access group so the CLI is refused.</li>
+<li><strong>The hardcoded IV defeats ciphertext indistinguishability.</strong> Same secret twice → same ciphertext, because OSCrypt reuses a fixed 16-space IV in AES-128-CBC. Anyone who can write to your store and observe the output can test guesses or flip bytes. There is no per-record authentication.</li>
+<li><strong>Linux <code>basic_text</code> is a silent plaintext fallback.</strong> When libsecret/KWallet is missing, safeStorage returns <code>basic_text</code> by default: PBKDF2 with one iteration, the <code>saltysalt</code> salt, and a hardcoded password. Verify the actual backend with <code>safeStorage.getSelectedStorageBackend()</code> before trusting the result; if it is not a real secret store, refuse to persist secrets.</li>
+<li><strong>Electron does not sandbox extensions or plugins.</strong> Any runnable code you load shares your process privileges and your Keychain ACL, so it can decrypt without a prompt. Vet dependencies as you would code that reaches into your production database, keep the trusted runtime as small as possible, and never bundle credentials inside the renderer or an extension host.</li>
+</ol>
+<h2 id="comparing-options-safestorage-vs-keytar-vs-keychain-store-vs-electron-store">Comparing Options: safeStorage vs. keytar vs. keychain-store vs. electron-store</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Option</th>
+          <th>Platform isolation</th>
+          <th>Biometric / Touch ID</th>
+          <th>Native build</th>
+          <th>Notes</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>safeStorage</code> (built-in)</td>
+          <td>macOS: legacy file-based (per-signer, weak); Windows/Linux: per-user</td>
+          <td>No</td>
+          <td>None (Chromium built in)</td>
+          <td>Hardcoded IV; silent <code>basic_text</code> fallback on Linux</td>
+      </tr>
+      <tr>
+          <td><code>keytar</code></td>
+          <td>Legacy Keychain / per-user</td>
+          <td>No</td>
+          <td>Native module builds per platform</td>
+          <td>Reliable but unmaintained ergonomics, build pain</td>
+      </tr>
+      <tr>
+          <td><code>keychain-store</code> (npm, macOS)</td>
+          <td><strong>Data Protection Keychain, per-app access group</strong></td>
+          <td><strong>Yes (UserPresence / Biometry)</strong></td>
+          <td>Optional Swift lib</td>
+          <td>Strongest option; macOS-only, falls back to safeStorage elsewhere</td>
+      </tr>
+      <tr>
+          <td><code>electron-store</code> with custom encryption</td>
+          <td>Per-app <em>file</em> only</td>
+          <td>No</td>
+          <td>None</td>
+          <td>The <code>encryptionKey</code> option is obfuscation, not real security — do not use for API keys</td>
+      </tr>
+  </tbody>
+</table>
+<p>The row to internalize: <code>electron-store</code>&rsquo;s <code>encryptionKey</code> (e.g., <code>'this_only_obfuscates'</code>) is not encryption you should rely on — it is reversible obfuscation with a key in the source. <code>keytar</code> works but adds native-module build friction and does not reach the Data Protection Keychain. <code>keychain-store</code> is the only drop-in that gives you per-app isolation plus biometric gating on macOS.</p>
+<h2 id="step-by-step-summary-checklist">Step-by-Step Summary Checklist</h2>
+<p>Follow this order to ship a securely vaulted AI-agent credential store in an Electron app:</p>
+<ol>
+<li><strong>Sign the app</strong> with a Developer ID Application certificate; confirm with <code>codesign -d --entitlements -</code>.</li>
+<li><strong>Add the <code>keychain-access-groups</code> entitlement</strong> naming your access group in <code>build/entitlements.mac.plist</code>, with hardened runtime enabled.</li>
+<li><strong>Depend on <code>keychain-store</code></strong> and set <code>dataProtection: true</code> plus your <code>accessGroup</code> on every item.</li>
+<li><strong>Store secrets in <code>mutableAccounts</code></strong>; keep public metadata in immutable <code>accounts</code>.</li>
+<li><strong>Gate reads with <code>userPresence</code></strong> for the general unlock; use biometry-only only for vaults that must never be readable with a password alone.</li>
+<li><strong>On Linux and Windows, fall back to <code>safeStorage</code></strong>, but check <code>getSelectedStorageBackend()</code> and refuse to persist if it reports <code>basic_text</code>.</li>
+<li><strong>Vet every dependency and extension</strong> as if it could call your decryption API, because in Electron it can.</li>
+<li><strong>Never log the key or the decrypted secret</strong>, and keep in-memory copies short-lived.</li>
+</ol>
+<h2 id="faq">FAQ</h2>
+<p><strong>Is Electron&rsquo;s <code>safeStorage</code> secure enough to store API keys?</strong>
+Not for AI-agent credentials on macOS. It relies on the legacy file-based Keychain and Chromium&rsquo;s OSCrypt, which uses a hardcoded IV, and on Linux it silently falls back to plaintext-equivalent <code>basic_text</code> storage. Use the Data Protection Keychain with a code-signing access group instead.</p>
+<p><strong>What is <code>kSecUseDataProtectionKeychain</code>?</strong>
+It is a SecItem flag that directs the Keychain API to the modern Data Protection Keychain instead of the legacy file-based store. It enables code-signing access groups, iCloud Keychain sync, and biometric access control that the legacy store does not support.</p>
+<p><strong>Can the <code>security</code> CLI read secrets stored by the Data Protection Keychain?</strong>
+No, when items are scoped to a code-signing access group, the <code>security</code> CLI cannot open them the way it can query legacy file-based keychain items. This is the key isolation gap safeStorage leaves open.</p>
+<p><strong>What does Touch ID add to keychain storage?</strong>
+<code>SecAccessControl</code> with user-presence requires the user to authenticate with Touch ID or the device password before a key is released, turning silent background reads into an on-screen approval. It blocks unattended decryption by malicious code and is the recommended default for agents.</p>
+<p><strong>Is the Data Protection Keychain available on Linux or Windows?</strong>
+No, it is macOS-only. On Linux and Windows you fall back to <code>safeStorage</code>, which is per-user (Windows DPAPI and libsecret/KWallet) and offers no per-application isolation, and on Linux it may silently drop to plaintext-equivalent <code>basic_text</code> if no secret store is installed.</p>
+]]></content:encoded></item></channel></rss>
