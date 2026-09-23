@@ -1,0 +1,127 @@
+{
+  "topic": "AI Agent Debugging Walking-Dead States: Detecting and Patching Stalled Game State",
+  "slug": "walking-dead-state-detection-agents-sierra-2026",
+  "keyword": "agent walking-dead state detection",
+  "type": "how-to",
+  "competitors": [
+    {
+      "url": "https://antigravitylab.net/en/articles/agents/antigravity-background-agent-stuck-watchdog-progress-heartbeat-design",
+      "key_points": [
+        "Walking-dead = process alive but work isn't moving; liveness monitoring (process exists, port responds) catches NONE of it",
+        "Switch from liveness to progress monitoring: write a monotonically increasing step number + last-advance timestamp to a shared file",
+        "Heartbeat must mean 'moved forward', not 'still alive' - decoupling heartbeat from progress (beat on a timer) defeats the watchdog",
+        "Run watchdog as a SEPARATE process observing via shared file; in-process watchdog freezes with the agent body",
+        "Two-stage kill: SIGTERM first (agent cleans up, records 'aborted' note), SIGKILL after a window",
+        "Per-job-type stall thresholds (stall_sec in job metadata), derived from longest legitimate step; p95-based"
+      ]
+    },
+    {
+      "url": "https://zylos.ai/research/2026-04-03-dual-layer-state-machines-process-monitoring-ai-agents/",
+      "key_points": [
+        "Decompose state into two orthogonal dimensions: activity state (what doing now) and health state (fit to continue?)",
+        "Work-loop heartbeat (from within main processing loop) is correct; process-level heartbeat on a background thread returns 200 OK after main loop stalls",
+        "Zombie loops: repair loop cycling on identical malformed LLM output - process running, token consumption 100x normal, no error logged",
+        "Tokens-per-task-completion as high-signal health indicator: zombie loop spikes token cost 10-100x with no CPU/memory/error signature",
+        "Recovery decision matrix maps (activity x health) combos to actions: Waiting+Unhealthy = cancel call + restart; Processing+Degraded = alert don't interrupt",
+        "Guardian = pure observer reading state store, never produces state; context saturation maps to 'Degraded' (soft warning, not restart)"
+      ]
+    },
+    {
+      "url": "https://plori.ai/blog/stop-ai-agent-stuck-in-loop",
+      "key_points": [
+        "Term 'non-convergence': agent still acting after durable progress has stopped",
+        "Hard token/time budget caps worst case but can't tell busy work from progress; stop decision must live outside the model",
+        "Exact-repeat loop detector: same tool action returns same failure repeatedly -> tell agent to change approach; successful observation clears streak; exempt healthy read-only polling",
+        "Earlier budget checkpoint (at ~60% of token budget, while tools still work): write best partial artifact now + ask blunt convergence question",
+        "Save partial work before removing tools; final no-tools handoff round produces human-readable stop reason, not 'Agent failed'"
+      ]
+    },
+    {
+      "url": "https://mechanicai.dev/blog/fix-ai-agent-crashes.php",
+      "key_points": [
+        "Agents are brittle by default: API timeouts/429, expired tokens, infinite reasoning loops, cascading tool failures, file/env errors - each recoverable in isolation but frameworks lack retry/RCA/auto-patch",
+        "Loop detection via state hashing: hash prompt + tool call + output each step; same hash 3+ times in a window = looping",
+        "Self-healing sidecar pattern: agent POSTs traceback+context to localhost:1234/v1/diagnose, LLM returns structured fix action (terminal cmd, file patch, process restart, loop-break directive)",
+        "Loop-break directive injections break most reasoning loops without restart"
+      ]
+    },
+    {
+      "url": "https://agent-swarm.dev/blog/deep-dive-task-state-machine-recovery",
+      "key_points": [
+        "Naive todo/doing/done breaks under distributed reality: OOM kills, network partitions, context window exhaustion, spot preemption",
+        "Track TWO signals: lastUpdatedAt (heartbeat) vs lastProgressAt (semantic checkpoint via store_progress) - heartbeat proves alive, checkpoint proves not insane",
+        "Dual-track monitoring: heartbeat lost OR progress stalled beyond timeout -> mark stalled, release task back to pool with checkpoint intact",
+        "Progress-as-checkpoint: externalize state at semantic milestones (500 rows, each file edit, each mutation); checkpoint resume 3.2x faster than cold start; enables exactly-once for non-idempotent ops",
+        "Failure categorization drives retry policy: transient->retry, auth->park+rotate, schema->escalate, logic->self-healing pipeline"
+      ]
+    }
+  ],
+  "stats": [
+    {
+      "fact": "A July 2026 preprint ('When Agents Do Not Stop', Hou, Wang, Zhao, Wang) scanned 6,549 public LLM-agent repositories and manually confirmed 68 infinite-agent-loop failures across 47 projects.",
+      "source": "plori.ai/blog/stop-ai-agent-stuck-in-loop (citing the preprint)"
+    },
+    {
+      "fact": "One SWE-bench Verified agent stayed busy until it used 1.06 million tokens - inspecting, reasoning, calling tools - yet never wrote the patch; every health check said it was alive.",
+      "source": "plori.ai/blog/stop-ai-agent-stuck-in-loop"
+    },
+    {
+      "fact": "In a 50-task SWE-bench Verified report, 51.4% of $28.54 total model spend sat on the unresolved/non-converging side; a 30-attempt pilot saw 38.9% ($5.24 of $13.48) of spend end with no result file.",
+      "source": "plori.ai/blog/stop-ai-agent-stuck-in-loop"
+    },
+    {
+      "fact": "In production telemetry, 12% of tasks marked 'in_progress' were orphaned (agents died hours earlier but state never changed); without heartbeat detection, agent restarts orphaned 23% of in-flight tasks - reduced to 0.3% with dual-track monitoring.",
+      "source": "agent-swarm.dev/blog/deep-dive-task-state-machine-recovery"
+    },
+    {
+      "fact": "Tasks recovered via checkpoint resume complete 3.2x faster than cold starts, avoiding recomputation of idempotent work.",
+      "source": "agent-swarm.dev/blog/deep-dive-task-state-machine-recovery"
+    },
+    {
+      "fact": "Input tokens account for 53.9% of agentic spend; a single doomed/fat-tail session that costs 10x the median can dwarf a week of healthy ones.",
+      "source": "getunblocked.com/blog/why-ai-agents-burn-tokens"
+    },
+    {
+      "fact": "Reported subagent runaway recursion: one task consumed 1.2M+ tokens in ~30 minutes with the agent tree still growing; another burned ~4M tokens in under 5 minutes, and a 50+ level recursion depth was observed (Claude Code #68619 family).",
+      "source": "gist.github.com/yurukusa (citing anthropics/claude-code #68619)"
+    },
+    {
+      "fact": "A zombie loop is I/O-bound waiting on LLM responses - it does not spike CPU, does not increase memory, and logs no errors, but reliably raises token cost per completed unit of work by 10-100x.",
+      "source": "zylos.ai/research/2026-04-03-dual-layer-state-machines-process-monitoring-ai-agents"
+    }
+  ],
+  "angles": [
+    "Reframe the problem as a monitoring-model failure: 'alive/dead' is a false binary. Liveness, health, and progress are three different signals; conflating them produces false negatives.",
+    "The 1.06-million-token non-convergence story - a process that acted normally, passed every health check, and still produced nothing - is the concrete, costly face of the walking-dead state.",
+    "Heartbeats lie: a timer-driven heartbeat continues while the work loop is frozen. The fix is a work-loop heartbeat emitted only on forward advance, plus a separate-process watchdog.",
+    "Semantic checkpoints (lastProgressAt) beat wall-clock timeouts: they distinguish 'crunching a 10-minute inference' from 'zombie holding a lease forever' and enable resume-from-checkpoint and exactly-once semantics.",
+    "Tie detection to recovery policy: a decision matrix maps each (activity/health) state to the right action instead of a blanket restart that throws away warm context.",
+    "Token-per-completion is the hidden health signal for loops: zombie loops are invisible to CPU/memory/log monitors but spike token cost 10-100x.",
+    "Prevention beats detection: DAG-shaped agent topologies with explicit completed/failed transitions and enforced idempotency keys reduce stalls at the source."
+  ],
+  "keywords": [
+    "agent walking-dead state detection",
+    "AI agent stuck but running",
+    "detect stalled AI agent",
+    "agent non-convergence detection",
+    "work-loop heartbeat agent monitoring",
+    "AI agent watchdog no-progress timeout",
+    "detect infinite loop AI agent",
+    "agent token burn stuck loop",
+    "agent progress vs liveness monitoring",
+    "zombie loop LLM agent"
+  ],
+  "outline": [
+    "H2: What a walking-dead state is (and why 'is it alive?' is the wrong question)",
+    "H2: The three signals you're confusing - liveness, health, and progress",
+    "H2: Why heartbeats lie: work-loop heartbeat vs process-level heartbeat",
+    "H2: Detecting the stall: no-progress timeouts and semantic checkpoints",
+    "H2: The hidden signal: token-per-completion and zombie-loop economics",
+    "H2: Patching the state: two-stage termination and checkpoint-recoverable work",
+    "H2: A recovery decision matrix (activity x health -> action)",
+    "H2: A minimal reference implementation (watchdog + progress marker)",
+    "H2: Preventing stalls at the source: topology, explicit transitions, idempotency",
+    "H2: FAQ"
+  ],
+  "research_date": "2026-09-23"
+}
