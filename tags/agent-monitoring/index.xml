@@ -1,4 +1,169 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Agent-Monitoring on RockB</title><link>https://baeseokjae.github.io/tags/agent-monitoring/</link><description>Recent content in Agent-Monitoring on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Fri, 04 Sep 2026 07:02:15 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/agent-monitoring/index.xml" rel="self" type="application/rss+xml"/><item><title>Rungraph 2026 Review: Ask Your Agent What Happened in a Run with Interactive Graphs</title><link>https://baeseokjae.github.io/posts/rungraph-agent-run-visualization-2026/</link><pubDate>Fri, 04 Sep 2026 07:02:15 +0000</pubDate><guid>https://baeseokjae.github.io/posts/rungraph-agent-run-visualization-2026/</guid><description>Rungraph converts existing Claude Code, Codex, Hermes, opencode, and Cursor transcripts into interactive graphs and answers MCP queries about what happened in a run — no hooks or telemetry.</description><content:encoded><![CDATA[<p>Rungraph is an open-source, zero-instrumentation tool that reads the agent session transcripts already on your disk and renders them as interactive graphs. With a single <code>npx rungraph</code> command, it visualizes the orchestrator, subagents, and tool calls of any Claude Code, Codex, Hermes Agent, opencode, or Cursor run — then lets you ask, in plain language through an MCP server, &ldquo;what happened?&rdquo; and lights up the exact nodes the answer refers to.</p>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Agent Monitoring on RockB</title><link>https://baeseokjae.github.io/tags/agent-monitoring/</link><description>Recent content in Agent Monitoring on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Wed, 23 Sep 2026 22:01:26 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/agent-monitoring/index.xml" rel="self" type="application/rss+xml"/><item><title>Agent Walking-Dead State Detection: How to Detect and Patch Stalled AI Agents</title><link>https://baeseokjae.github.io/posts/walking-dead-state-detection-agents-sierra-2026/</link><pubDate>Wed, 23 Sep 2026 22:01:26 +0000</pubDate><guid>https://baeseokjae.github.io/posts/walking-dead-state-detection-agents-sierra-2026/</guid><description>Detect walking-dead AI agents that run forever but never finish. Learn progress-based detection, work-loop heartbeats, and recovery patterns.</description><content:encoded><![CDATA[<p>A &ldquo;walking-dead&rdquo; AI agent is a process that keeps running, consuming tokens and passing every liveness check, while producing no durable progress toward its task. You detect it not by watching whether the process is alive, but by tracking whether its work actually advances. In one documented case, a SWE-bench Verified agent stayed busy until it used 1.06 million tokens—inspecting, reasoning, and calling tools—yet never wrote the patch, and every health check reported it healthy. This guide shows you how to detect walking-dead states, separate liveness from progress, and patch stalled agents before they burn your budget.</p>
+<h2 id="what-is-a-walking-dead-state-in-an-ai-agent">What is a walking-dead state in an AI agent?</h2>
+<p>A walking-dead agent is a process that is technically running but semantically stuck. It differs from a crash: a crash is visible and easy to detect, while a walking-dead state hides behind a green &ldquo;alive&rdquo; status. The process exists, the port responds, CPU and memory look normal, and no error is logged—yet the work has stopped moving.</p>
+<p>The core reframing from monitoring research is that &ldquo;alive/dead&rdquo; is a false binary. Asking &ldquo;is the agent alive?&rdquo; is the wrong question because the answer is almost always yes. The right question is &ldquo;is the agent making progress?&rdquo; A walking-dead agent answers that with a quiet no, masked by every conventional health signal.</p>
+<p>These failures are far from rare. A July 2026 preprint (&ldquo;When Agents Do Not Stop&rdquo; by Hou, Wang, Zhao, and Wang) scanned 6,549 public LLM-agent repositories and manually confirmed 68 infinite-agent-loop failures across 47 projects. Production telemetry shows the same shape: in one deployment, 12% of tasks marked &ldquo;in_progress&rdquo; were actually orphaned, with agents dead for hours while their state never changed.</p>
+<h2 id="the-three-signals-you-are-confusing-liveness-health-and-progress">The three signals you are confusing: liveness, health, and progress</h2>
+<p>Monitoring agents reliably fails because people conflate three distinct signals. Treating them as one produces false negatives exactly where walking-dead agents hide.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Signal</th>
+          <th>What it proves</th>
+          <th>What it misses</th>
+          <th>Typical probes</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Liveness</strong></td>
+          <td>The process exists</td>
+          <td>Anything about the work</td>
+          <td>process exists, port responds, PID alive</td>
+      </tr>
+      <tr>
+          <td><strong>Health</strong></td>
+          <td>The system can operate</td>
+          <td>Whether work is moving</td>
+          <td>heartbeat HTTP 200, memory, CPU, error logs</td>
+      </tr>
+      <tr>
+          <td><strong>Progress</strong></td>
+          <td>Work is advancing</td>
+          <td>Nothing—this is the truth</td>
+          <td>lastProgressAt, monotonic step counter, semantic checkpoints</td>
+      </tr>
+  </tbody>
+</table>
+<p>Liveness and health monitoring catch a frozen process, but they catch none of the walking-dead condition. The agent that burned 1.06 million tokens on SWE-bench Verified passed every liveness and health check. A zombie loop is I/O-bound waiting on LLM responses—it does not spike CPU, does not increase memory, and logs no errors, which is precisely why conventional monitors never flag it.</p>
+<p>The fix is to add a third, independent signal: progress. You monitor &ldquo;is the agent advancing toward completion,&rdquo; not &ldquo;is the agent breathing.&rdquo; This is the difference between a heartbeat that proves a process exists and a progress marker that proves it is not insane.</p>
+<h2 id="why-heartbeats-lie-work-loop-heartbeat-vs-process-level-heartbeat">Why heartbeats lie: work-loop heartbeat vs process-level heartbeat</h2>
+<p>A &ldquo;heartbeat&rdquo; only works if it is emitted from the right place. A process-level heartbeat on a background thread returns HTTP 200 even after the main processing loop has stalled, because the timer thread keeps running while the logic thread is frozen. A watchdog watching that heartbeat concludes &ldquo;still alive&rdquo; while the agent does nothing useful.</p>
+<p>The correct design is a <strong>work-loop heartbeat</strong>: a beat emitted from inside the main processing loop, only when the loop actually advances. If the loop stalls, the beats stop. The heartbeat then means &ldquo;moved forward,&rdquo; not &ldquo;still alive.&rdquo;</p>
+<p>Decoupling heartbeat from progress—beating on a timer instead of on advance—defeats the entire watchdog. The whole point of the signal is to detect that forward motion has stopped, so it must be tied to forward motion.</p>
+<p>Critically, the watchdog that reads this signal must run as a <strong>separate process</strong>, not inside the agent. An in-process watchdog freezes together with the agent body it is supposed to watch. If the agent&rsquo;s loop hangs, so does its internal watchdog, and neither ever reports anything. A separate observer process reads the shared progress file and is insulated from the failure it is meant to catch.</p>
+<h2 id="detecting-the-stall-no-progress-timeouts-and-semantic-checkpoints">Detecting the stall: no-progress timeouts and semantic checkpoints</h2>
+<p>Wall-clock timeouts are the naive tool, and they fail because they cannot tell &ldquo;agent crunching a 10-minute inference&rdquo; from &ldquo;zombie holding a lease forever.&rdquo; A fixed timeout either kills legitimate slow work or lets zombie loops run far too long.</p>
+<p>The reliable pattern is a <strong>semantic checkpoint</strong> in addition to the heartbeat. Track two signals:</p>
+<ul>
+<li><strong>lastUpdatedAt</strong>: the last heartbeat, which proves the agent is alive.</li>
+<li><strong>lastProgressAt</strong>: the last semantic checkpoint, recorded only when the agent reaches a durable milestone (500 rows processed, each file edited, each mutation committed). This proves the agent is not insane.</li>
+</ul>
+<p>The rule is simple: heartbeat lost OR progress stalled beyond a timeout means the agent is marked stalled and its task is released back to the pool. One design distinguishes &ldquo;crunching hard&rdquo; from &ldquo;dead&rdquo;: a heartbeat proves alive, a checkpoint proves sane, and the two together let you tell them apart.</p>
+<p>Monitoring research goes a step further and separates activity state from health state. A &ldquo;waiting&rdquo; agent that is unhealthy (its context is degraded, its loop is spinning) is a different situation from a &ldquo;processing&rdquo; agent that is unhealthy. The first needs a cancel and restart; the second needs an alert, not an interrupt.</p>
+<p>Stall thresholds should be per-job-type. Store a <code>stall_sec</code> in job metadata, derived from the longest legitimate step and tuned to a p95 baseline. A 10-second stall might be normal for one task type and catastrophic for another.</p>
+<h2 id="the-hidden-signal-tokens-per-completion-and-zombie-loop-economics">The hidden signal: tokens-per-completion and zombie-loop economics</h2>
+<p>Walking-dead agents are invisible to CPU, memory, and log monitors, but they have one unmistakable signature: token cost per completed unit of work climbs 10–100x. A zombie loop—a repair loop cycling on identical malformed LLM output—shows no CPU spike and no memory growth, but it reliably burns tokens without producing output.</p>
+<p>This is why <strong>tokens-per-task-completion</strong> is a high-signal health metric. Input tokens account for 53.9% of agentic spend, and a single doomed fat-tail session that costs 10x the median can dwarf a whole week of healthy ones. In a 50-task SWE-bench Verified report, 51.4% of the $28.54 total model spend sat on the unresolved, non-converging side. A 30-attempt pilot showed the same shape: 38.9% of spend ($5.24 of $13.48) ended with no result file at all.</p>
+<p>The runaway cases are dramatic. One reported subagent recursion consumed 1.2M+ tokens in about 30 minutes with the agent tree still growing; another burned roughly 4M tokens in under 5 minutes, and a 50+ level recursion depth was observed (Claude Code #68619 family).</p>
+<p>Token-per-completion turns this invisible waste into a monitorable signal. When cost per completed unit spikes by 10x, you do not need to see the loop—you just see the bill and know something is spinning.</p>
+<h2 id="patching-the-state-two-stage-termination-and-checkpoint-recoverable-work">Patching the state: two-stage termination and checkpoint-recoverable work</h2>
+<p>Once a stall is detected, the recovery action matters as much as the detection. A blanket restart throws away warm context and can make things worse, so pair detection with a deliberate recovery policy.</p>
+<p><strong>Two-stage termination</strong> is the safe kill sequence. Send SIGTERM first so the agent gets a window to clean up and record an &ldquo;aborted&rdquo; note. Only if it fails to exit within the window do you escalate to SIGKILL. This preserves any partial work the agent wrote and leaves a durable trace of how the run ended instead of a silent disappearance.</p>
+<p><strong>Checkpoint-recoverable work</strong> is what makes restarts cheap. Externalize state at semantic milestones so any stalled task can resume from its last checkpoint instead of cold-starting. In production data, tasks recovered via checkpoint resume complete 3.2x faster than cold starts, and they avoid recomputing idempotent work. This enables exactly-once semantics for non-idempotent operations and lets you release a stalled task back to the pool &ldquo;with checkpoint intact.&rdquo;</p>
+<p>Loop detection also needs a mechanism. State hashing is a proven approach: hash the prompt plus tool call plus output each step, and if the same hash appears 3+ times within a window, it is looping. An exact-repeat detector works at the action level too: if the same tool call returns the same failure repeatedly, tell the agent to change approach, and let a successful observation clear the streak. Exempt healthy read-only polling so you do not flag legitimate waits.</p>
+<h2 id="a-recovery-decision-matrix-activity-x-health---action">A recovery decision matrix (activity x health -&gt; action)</h2>
+<p>A recovery decision matrix maps each (activity x health) combination to the correct action, replacing a one-size-fits-all restart.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Activity state</th>
+          <th>Health state</th>
+          <th>Recommended action</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Waiting</strong></td>
+          <td>Healthy</td>
+          <td>Keep waiting; nothing wrong</td>
+      </tr>
+      <tr>
+          <td><strong>Waiting</strong></td>
+          <td>Unhealthy</td>
+          <td>Cancel the call, restart fresh</td>
+      </tr>
+      <tr>
+          <td><strong>Processing</strong></td>
+          <td>Healthy</td>
+          <td>Continue normally</td>
+      </tr>
+      <tr>
+          <td><strong>Processing</strong></td>
+          <td>Degraded</td>
+          <td>Alert, do not interrupt</td>
+      </tr>
+      <tr>
+          <td><strong>Looping / non-converging</strong></td>
+          <td>Any</td>
+          <td>Break the loop with a directive, then verify</td>
+      </tr>
+      <tr>
+          <td><strong>Stalled (no progress)</strong></td>
+          <td>Any</td>
+          <td>Two-stage kill, then resume from checkpoint</td>
+      </tr>
+  </tbody>
+</table>
+<p>The two key cases to internalize: a &ldquo;Waiting + Unhealthy&rdquo; agent should be cancelled and restarted (it is unlikely to recover on its own), while a &ldquo;Processing + Degraded&rdquo; agent should be allowed to finish with an alert rather than being interrupted mid-valuable-work. A guardian that is a pure observer—reading the state store but never producing state itself—prevents the monitor from becoming another source of state corruption.</p>
+<p>One warning from the research: context saturation maps to &ldquo;Degraded,&rdquo; which means a soft warning, not a restart. Filling a context window is not the same as looping; restarting a context-saturated agent can actually lose a lot of useful state and the LLM&rsquo;s attention. Treat saturation as a warning to let the agent wrap up, not a signal to kill it.</p>
+<h2 id="a-minimal-reference-implementation-watchdog--progress-marker">A minimal reference implementation (watchdog + progress marker)</h2>
+<p>Here is a minimal pattern you can adopt immediately. The agent writes a progress file with two fields, and a separate watchdog process reads it.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># agent.py -- inside the work loop, on each advance</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> json<span style="color:#f92672">,</span> time<span style="color:#f92672">,</span> os
+</span></span><span style="display:flex;"><span>PROGRESS <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;/var/run/agent-state/progress.json&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">mark_progress</span>(step, note):
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">with</span> open(PROGRESS, <span style="color:#e6db74">&#34;w&#34;</span>) <span style="color:#66d9ef">as</span> f:
+</span></span><span style="display:flex;"><span>        json<span style="color:#f92672">.</span>dump({<span style="color:#e6db74">&#34;step&#34;</span>: step, <span style="color:#e6db74">&#34;lastUpdatedAt&#34;</span>: time<span style="color:#f92672">.</span>time(),
+</span></span><span style="display:flex;"><span>                   <span style="color:#e6db74">&#34;lastProgressAt&#34;</span>: time<span style="color:#f92672">.</span>time(), <span style="color:#e6db74">&#34;note&#34;</span>: note}, f)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Call mark_progress() ONLY when work actually advances:</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># mark_progress(rows_done, f&#34;processed {rows_done} rows&#34;)</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># mark_progress(edit_count, f&#34;edited {edit_count} files&#34;)</span>
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#75715e"># watchdog.py -- separate process, reads the shared file</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> json<span style="color:#f92672">,</span> time
+</span></span><span style="display:flex;"><span>PROGRESS, STALL_SEC <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;/var/run/agent-state/progress.json&#34;</span>, <span style="color:#ae81ff">300</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">while</span> <span style="color:#66d9ef">True</span>:
+</span></span><span style="display:flex;"><span>    time<span style="color:#f92672">.</span>sleep(<span style="color:#ae81ff">15</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">try</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">with</span> open(PROGRESS) <span style="color:#66d9ef">as</span> f:
+</span></span><span style="display:flex;"><span>            s <span style="color:#f92672">=</span> json<span style="color:#f92672">.</span>load(f)
+</span></span><span style="display:flex;"><span>        idle <span style="color:#f92672">=</span> time<span style="color:#f92672">.</span>time() <span style="color:#f92672">-</span> s[<span style="color:#e6db74">&#34;lastProgressAt&#34;</span>]
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> idle <span style="color:#f92672">&gt;</span> STALL_SEC:
+</span></span><span style="display:flex;"><span>            print(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;STALLED: no progress for </span><span style="color:#e6db74">{</span>idle<span style="color:#e6db74">:</span><span style="color:#e6db74">.0f</span><span style="color:#e6db74">}</span><span style="color:#e6db74">s at step </span><span style="color:#e6db74">{</span>s[<span style="color:#e6db74">&#39;step&#39;</span>]<span style="color:#e6db74">}</span><span style="color:#e6db74">; killing&#34;</span>)
+</span></span><span style="display:flex;"><span>            <span style="color:#75715e"># SIGTERM, wait, then SIGKILL</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">except</span> <span style="color:#a6e22e">FileNotFoundError</span>:
+</span></span><span style="display:flex;"><span>        print(<span style="color:#e6db74">&#34;STALLED: progress file missing; agent never advanced&#34;</span>)
+</span></span></code></pre></div><p>The key point is that <code>lastProgressAt</code> only updates on real advance, and the watchdog runs outside the agent. A heartbeat alone is not enough—a timer-driven heartbeat can fire while the work loop is frozen. The progress marker, updated only at semantic milestones, is the signal that proves the agent is not spinning.</p>
+<h2 id="preventing-stalls-at-the-source-topology-explicit-transitions-idempotency">Preventing stalls at the source: topology, explicit transitions, idempotency</h2>
+<p>Detection is necessary, but prevention beats it. Several design choices reduce walking-dead states at their source, before a watchdog ever has to fire.</p>
+<p><strong>DAG-shaped agent topologies.</strong> Explicit completed/failed transitions between stages prevent the open-ended loops that arise when an agent can wander between states indefinitely. A well-defined task graph leaves fewer ways to get lost.</p>
+<p><strong>Hard budgets.</strong> A token or time budget caps the worst case. Budgets cannot tell busy work from progress, but they stop a runaway session before it bankrupts a month of token spend. Place a budget checkpoint early—around 60% of the token budget, while tools still work—to write the best partial artifact and ask a blunt convergence question.</p>
+<p><strong>Idempotency keys.</strong> Enforce exactly-once semantics for every mutation. When a stalled task is released and retried, an idempotency key guarantees the retry does not double-apply side effects. This is what makes checkpoint-resume safe.</p>
+<p><strong>Exact-repeat detection baked in.</strong> Hashing each step and flagging repeated hashes, or detecting repeated identical tool failures, stops the most common loop shapes cold.</p>
+<p><strong>Let the stop decision live outside the model.</strong> A model caught in a reasoning loop may never decide to stop on its own. The stop decision belongs to the watchdog and the budget monitor, not to the agent being monitored.</p>
+<p>Finally, when you have to stop, save partial work before removing tools. A final no-tools handoff round should produce a human-readable stop reason, not a terse &ldquo;Agent failed.&rdquo; This turns a failure into an actionable trace.</p>
+<h2 id="faq">FAQ</h2>
+<p><strong>What is a walking-dead AI agent?</strong>
+A walking-dead agent is a process that keeps running and passing liveness checks while producing no durable progress toward its task. Unlike a crash, it is invisible to conventional health monitoring because CPU, memory, and logs all look normal.</p>
+<p><strong>How do I detect a stalled AI agent that is still running?</strong>
+Stop relying on liveness or process-level heartbeats. Add a progress signal: a monotonic step counter and a <code>lastProgressAt</code> timestamp written only when work actually advances, read by a separate watchdog process. Mark the task stalled when progress stalls beyond its job-specific timeout.</p>
+<p><strong>Why does a heartbeating agent still get stuck?</strong>
+Because a timer-driven heartbeat continues while the work loop is frozen. Use a work-loop heartbeat that fires only on forward advance, and run the watchdog as a separate process so it does not freeze with the agent body it is supposed to watch.</p>
+<p><strong>What is tokens-per-completion, and why does it matter?</strong>
+It is model spend divided by units of work completed. Walking-dead agents spike this 10–100x because zombie loops burn tokens without producing output, while staying invisible to CPU, memory, and log monitors. It is the hidden, reliable health signal for loops.</p>
+<p><strong>How do I patch a walking-dead agent without losing work?</strong>
+Use two-stage termination (SIGTERM to let it clean up and record an abort note, SIGKILL only after a window) and externalize state at semantic checkpoints so a stalled task resumes from its last checkpoint instead of cold-starting. Checkpoint resume completes tasks about 3.2x faster than cold starts and enables exactly-once recovery.</p>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>plori.ai/blog/stop-ai-agent-stuck-in-loop (citing &ldquo;When Agents Do Not Stop&rdquo; preprint, July 2026)</li>
+<li>zylos.ai/research/2026-04-03-dual-layer-state-machines-process-monitoring-ai-agents</li>
+<li>agent-swarm.dev/blog/deep-dive-task-state-machine-recovery</li>
+<li>getunblocked.com/blog/why-ai-agents-burn-tokens</li>
+<li>gist.github.com/yurukusa (citing anthropics/claude-code #68619)</li>
+<li>mechanicai.dev/blog/fix-ai-agent-crashes.php</li>
+</ul>
+]]></content:encoded></item><item><title>Rungraph 2026 Review: Ask Your Agent What Happened in a Run with Interactive Graphs</title><link>https://baeseokjae.github.io/posts/rungraph-agent-run-visualization-2026/</link><pubDate>Fri, 04 Sep 2026 07:02:15 +0000</pubDate><guid>https://baeseokjae.github.io/posts/rungraph-agent-run-visualization-2026/</guid><description>Rungraph converts existing Claude Code, Codex, Hermes, opencode, and Cursor transcripts into interactive graphs and answers MCP queries about what happened in a run — no hooks or telemetry.</description><content:encoded><![CDATA[<p>Rungraph is an open-source, zero-instrumentation tool that reads the agent session transcripts already on your disk and renders them as interactive graphs. With a single <code>npx rungraph</code> command, it visualizes the orchestrator, subagents, and tool calls of any Claude Code, Codex, Hermes Agent, opencode, or Cursor run — then lets you ask, in plain language through an MCP server, &ldquo;what happened?&rdquo; and lights up the exact nodes the answer refers to.</p>
 <h2 id="what-is-rungraph-turning-agent-transcripts-into-interactive-graphs">What Is Rungraph? Turning Agent Transcripts into Interactive Graphs</h2>
 <p>Rungraph is a JavaScript, open-source agent-run visualizer released on Hacker News in August 2026 by FayzanMalik. It sits on top of the session logs your coding agents already write to disk and converts them into a graph that you can explore interactively. The core idea is deliberately different from tracing and observability frameworks: there are no hooks, no wrappers, and no telemetry to install. Everything rungraph needs — the orchestrator turns, subagent spawns, tool calls, and human interventions — is already recorded in the transcripts your agents produce.</p>
 <p>The tool&rsquo;s positioning is captured in its tagline: &ldquo;Ask your agent what happened in a run.&rdquo; Instead of reading thousands of lines of silent terminal output, you load a run into rungraph&rsquo;s dashboard, and the work becomes a visual, interrogable artifact.</p>
