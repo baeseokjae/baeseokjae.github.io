@@ -1,0 +1,378 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Long Running Agent State Persistence on RockB</title><link>https://baeseokjae.github.io/tags/long-running-agent-state-persistence/</link><description>Recent content in Long Running Agent State Persistence on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 29 Sep 2026 19:20:21 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/long-running-agent-state-persistence/index.xml" rel="self" type="application/rss+xml"/><item><title>Google's Open Agentic Orchestrator (AX) in 2026: What It Changes, and What It Doesn't</title><link>https://baeseokjae.github.io/posts/google-open-agentic-orchestrator-guide-2026/</link><pubDate>Tue, 29 Sep 2026 19:20:21 +0000</pubDate><guid>https://baeseokjae.github.io/posts/google-open-agentic-orchestrator-guide-2026/</guid><description>Google&amp;#39;s open agentic orchestrator (AX) is a Kubernetes-style agent runtime, not a framework. What it does, its alpha limits, and who should adopt it now.</description><content:encoded><![CDATA[<p>Google&rsquo;s open agentic orchestrator, AX (Agent Executor), is an Apache-2.0 declarative control plane for AI agents: you declare a Task, a Workspace and a Model, and a distributed runtime provisions an isolated sandbox, runs it, and can suspend and resume it. It is infrastructure under your agent framework, not a framework itself.</p>
+<p>That one sentence is the difference between understanding AX and misreading it. Most coverage in late September 2026 described it as &ldquo;Google&rsquo;s new agent framework&rdquo; and then argued about features it was never designed to have. The co-creator of the project, Jaana Dogan, answered that framing directly on Hacker News: &ldquo;AX is a layer that is closer to job orchestration&hellip; It&rsquo;s NOT an agentic framework.&rdquo;</p>
+<p>This guide walks through what AX actually is, what Agent Substrate underneath it does, why its primitives are workload-shaped rather than prompt-shaped, what the alpha-state open issues mean for a real deployment, and how to decide between AX, kagent, Scion, and workflow-level durable execution tools like Temporal or LangGraph.</p>
+<h2 id="what-is-googles-open-agentic-orchestrator-ax">What is Google&rsquo;s open agentic orchestrator (AX)?</h2>
+<p>AX stands for Agent Executor. It is an open-source, Go-written runtime and control plane, released under Apache 2.0 by Google, that runs agents as stateful actors rather than as microservices or batch jobs.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Fact</th>
+          <th>Value</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>License</td>
+          <td>Apache-2.0</td>
+      </tr>
+      <tr>
+          <td>Language</td>
+          <td>Go</td>
+      </tr>
+      <tr>
+          <td>Repository created</td>
+          <td>2026-03-30</td>
+      </tr>
+      <tr>
+          <td>Latest release at time of writing</td>
+          <td>v0.3.1 (2026-09-25)</td>
+      </tr>
+      <tr>
+          <td>Stars / forks (GitHub API)</td>
+          <td>12,550 / 612</td>
+      </tr>
+      <tr>
+          <td>Open issues</td>
+          <td>59</td>
+      </tr>
+      <tr>
+          <td>Announced on the Google Cloud blog</td>
+          <td>2026-05-20</td>
+      </tr>
+      <tr>
+          <td>Hacker News front page</td>
+          <td>2026-09-21, #1, 664 points, 299 comments</td>
+      </tr>
+      <tr>
+          <td>Install path</td>
+          <td><code>go install github.com/google/ax/cmd/ax@latest</code></td>
+      </tr>
+  </tbody>
+</table>
+<p>The star count deserves a caveat that most write-ups skip. A GitHub page render of the same day showed roughly 1,955 stars while the GitHub API reported 12,550 — page snapshots lag. Quote API-scale figures, and attach a date to any Hacker News point count. The Algolia HN API returns 666 points and 300 comments for that thread as of 2026-09-29; secondary coverage of the same thread reports 621 points and 284 comments, and other snapshots show 179/74. Those are different moments of the same thread, not contradictions.</p>
+<p>The project&rsquo;s own self-description on GitHub is &ldquo;Google&rsquo;s open agentic orchestration runtime,&rdquo; and the landing page calls it &ldquo;a distributed agent runtime designed for reliability, safety, customizability, and efficiency.&rdquo;</p>
+<h2 id="why-is-ax-not-an-agent-framework">Why is AX not an agent framework?</h2>
+<p>Because its primitives contain no prompts, no planner, no graph, and no memory abstraction. Everything it exposes is about where the work runs and what it is allowed to touch.</p>
+<p>A framework answers &ldquo;how does the agent decide what to do next?&rdquo; A runtime answers &ldquo;where does that agent run, what does it survive, and who can audit it?&rdquo; AX is the second question. This is why you can run LangGraph as the Task command inside AX and lose nothing — the sandbox layer and its state survive when the Python process does not.</p>
+<p>The sharpest available framing of the boundary comes from an analysis of the two event logs:</p>
+<blockquote>
+<p>One log lets you ask why the model chose something. The other lets you kill the machine and continue. Neither substitutes for the other.</p></blockquote>
+<p>A harness logs what the model saw — prompts, reasoning, tool calls, context injections. AX logs what the task did — process state, filesystem, scheduling. Conflating checkpointing with model memory is the single most common review mistake in this space, and it leads teams to expect AX to give them conversation memory or reasoning traces, which is not its job.</p>
+<h2 id="what-ax-primitives-exist-task-workspace-and-model">What AX primitives exist: Task, Workspace, and Model?</h2>
+<p>Three declarative resources under the <code>ax.io/v1alpha1</code> API group. Each is deliberately workload-shaped and none of them is about prompting.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Primitive</th>
+          <th>What it declares</th>
+          <th>Why it exists</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Task</td>
+          <td>Execution lifecycle and sandbox resource constraints (CPU, memory)</td>
+          <td>The unit of resumable, isolated work</td>
+      </tr>
+      <tr>
+          <td>Workspace</td>
+          <td>Pre-execution environment assembly: git repos, MCP servers, skill bundles, and a natural-language goal executed by an init agent</td>
+          <td>Turns &ldquo;get the environment ready&rdquo; into a declarative step instead of a shell script</td>
+      </tr>
+      <tr>
+          <td>Model</td>
+          <td>Provider plus parameters, plus a Kubernetes secret reference for credentials</td>
+          <td>Keeps model selection, keys and parameters out of application code</td>
+      </tr>
+  </tbody>
+</table>
+<p>Tasks are immutable once created. Suspend and resume are first-class RPCs — <code>SuspendTask</code>, <code>ResumeTask</code>, and a streaming <code>WatchTask</code> — not side effects of deleting and recreating a pod.</p>
+<p>A fourth resource, <code>Gateway</code>, was removed from AX on 2026-09-24 (issue google/ax#395). It had declared outbound network allowlists and egress policy, and the maintainers deleted it across the API, controller, server, CLI, store and documentation, reserving protobuf field 8 and stripping the Gateway RPCs. The stated reason is architectural: Gateway &ldquo;introduced an unnecessary layer and architectural bifurcation between Agent Substrate and AX.&rdquo; The current <code>ax.proto</code> contains no Gateway message or service at all.</p>
+<p>That removal matters beyond bookkeeping, because it is why several September 2026 write-ups still describe &ldquo;four primitives.&rdquo; If you see a Gateway table in an AX guide, it was written from an early release or from secondary coverage rather than the source tree. It also removes the network-allowlist control surface from the AX API — network policy is now Substrate&rsquo;s to own, which is the direction the roadmap confirms.</p>
+<p>A <code>Sandbox</code> / <code>SandboxConfig</code> resource is listed as roadmap, not shipped: the roadmap puts runtime isolation backends, kernel and syscall constraints, filesystem mounts and security profiles under &ldquo;stabilize core specs.&rdquo; Do not design against it yet.</p>
+<p>The CLI is intentionally kubectl-shaped: <code>ax apply</code>, <code>ax get</code>, <code>ax describe</code>, <code>ax watch</code>, <code>ax delete</code>, <code>ax ssh</code>, plus agent-specific verbs. If you already operate Kubernetes, the muscle memory transfers on day one. If you do not, this is the moment to notice that the ergonomics promise in the README and the actual requirements do not quite line up — more on that below.</p>
+<h2 id="how-does-ax-store-state-and-why-not-in-etcd">How does AX store state, and why not in etcd?</h2>
+<p>AX deliberately does not store its state in etcd. Its DESIGN.md states the reason plainly: keeping millions of short-lived tasks as Kubernetes custom resources would exceed etcd&rsquo;s comfort zone, both the single-digit-GB size limit and the write rate. Instead AX persists state in Redis and reconciles directly with Agent Substrate under distributed locks.</p>
+<p>The binary layout reflects the same split:</p>
+<ul>
+<li><code>ax</code> — the CLI</li>
+<li><code>ax-server</code> — gRPC on port 8080, with <code>/healthz</code></li>
+<li><code>ax-task-runner</code> — PID 1 inside every task container</li>
+</ul>
+<p>That design choice is the tell that AX was built by people who intend to run it at a density Kubernetes was not designed for. CRDs are a fine control-plane contract and a poor high-frequency database.</p>
+<h2 id="what-does-agent-substrate-actually-do-under-ax">What does Agent Substrate actually do under AX?</h2>
+<p>Agent Substrate is the compute runtime. It is where the suspend/resume magic that everyone quotes actually happens, and it is a separate project with a separate governance path.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Claim</th>
+          <th>Figure</th>
+          <th>Source</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Resume latency</td>
+          <td>Sub-500ms</td>
+          <td>agent-substrate/substrate</td>
+      </tr>
+      <tr>
+          <td>Suspend/resume throughput</td>
+          <td>500+ activations per second</td>
+          <td>agent-substrate/substrate</td>
+      </tr>
+      <tr>
+          <td>Sandbox density vs standard container runtimes</td>
+          <td>10x</td>
+          <td>agent-substrate/substrate</td>
+      </tr>
+      <tr>
+          <td>Demo oversubscription</td>
+          <td>~250 stateful actors on 8 physical pods (30x+)</td>
+          <td>agent-substrate/substrate</td>
+      </tr>
+      <tr>
+          <td>Roadmap target</td>
+          <td>Sub-100ms p95 activation latency</td>
+          <td>cncf/sandbox#523</td>
+      </tr>
+      <tr>
+          <td>Stars / forks</td>
+          <td>3,962 / 473</td>
+          <td>GitHub API</td>
+      </tr>
+      <tr>
+          <td>Created</td>
+          <td>2026-05-13</td>
+          <td>GitHub API</td>
+      </tr>
+  </tbody>
+</table>
+<p>The 30x oversubscription number is the one to internalize. An agent&rsquo;s wall-clock life is mostly waiting — on model tokens, on tool round-trips, on a human approval. Standard container scheduling keeps the sandbox hot through that waiting or pays cold-start latency when the agent comes back. Substrate multiplexes many suspended actors onto shared host workers and restores them in under half a second, so density and latency stop being a tradeoff.</p>
+<p>The resume path is not a shortcut; it is a real distributed transaction. The documented flow runs CoreDNS (which resolves the actor&rsquo;s name to the atenet router ClusterIP, never the worker IP), then Envoy&rsquo;s <code>ext_proc</code> filter on <code>:50051</code>, which parses the <code>:authority</code> header into an <code>(atespace, actor_name)</code> pair and calls <code>ResumeActor</code> with request coalescing so that 50 concurrent requests to a cold actor do not cause 50 resumes. From there ateapi acquires <code>lock:actor:&lt;atespace&gt;:&lt;name&gt;</code> in Redis (30-second TTL, 28-second workflow timeout), picks an eligible idle worker, dials the atelet DaemonSet on that worker&rsquo;s node, and atelet fetches the checkpoint from object storage and calls <code>runsc restore -background -direct</code> into a gVisor sandbox. Finally ExtProc rewrites <code>:authority</code> to the pod IP and the request lands on the workload.</p>
+<p>Isolation is gVisor, not just a container namespace, and pod snapshots are backed by object storage. The community nickname for the mechanism — &ldquo;Actor Teleport&rdquo; — is descriptive enough to be worth keeping.</p>
+<h2 id="why-does-ax-depend-on-kubernetes-and-what-does-the-objection-get-right">Why does AX depend on Kubernetes, and what does the objection get right?</h2>
+<p>Because Substrate uses Kubernetes for provisioning, WorkerPool pod lifecycle, CRD reconciliation through atecontroller, and node scheduling, with Envoy as the ingress gateway for the atenet-router. The custom resources include WorkerPool, ActorTemplate, and SandboxConfig.</p>
+<p>The practitioner objection is real and it was repeated almost verbatim across the Hacker News thread: the README quickstart needs a cluster, <code>ko</code>, a registry your nodes can pull from, and a reachable Agent Substrate control API — while the same README markets &ldquo;uncompromising ergonomics.&rdquo; Commenters called that out as a mismatch, and one wrote plainly, &ldquo;LOL. Bye!&rdquo; at the cluster requirement.</p>
+<p>The maintainers answered the substance rather than the tone. Dogan noted that they do mention Agent Substrate, and that Substrate &ldquo;is working on Kubernetes but isn&rsquo;t exclusive to Kubernetes.&rdquo; AX targets teams that want one stack on any cluster and that struggle to deliver agentic applications onto someone else&rsquo;s compute. That is a coherent position. It is just not a position aimed at a developer with a laptop and one agent.</p>
+<p>There is a second, sharper objection worth quoting: with AX and Substrate you opt into a large stack and must build for Substrate, unlike projects such as Scion that run existing harnesses — Claude Code, Codex, OpenCode — both locally and in-cluster. If your instinct is &ldquo;I just want my existing agent to be resumable,&rdquo; AX asks you to rebuild the workload, not just retarget it.</p>
+<h2 id="what-is-the-real-cost-of-migrating-to-ax">What is the real cost of migrating to AX?</h2>
+<p>The CLI is not the migration. The workload model is.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Kubernetes assumption</th>
+          <th>What Substrate changes</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Kubernetes Jobs run your container</td>
+          <td>Kubernetes Jobs do not run inside a secure runtime; agents run as Substrate actors</td>
+      </tr>
+      <tr>
+          <td>Every workload talks through the API server</td>
+          <td>Substrate bypasses the standard Kubernetes control plane on the hot path</td>
+      </tr>
+      <tr>
+          <td>A Service fronts each task</td>
+          <td>Routing happens by rewriting the request&rsquo;s <code>:authority</code> to the actor&rsquo;s pod IP</td>
+      </tr>
+      <tr>
+          <td>Deployments are long-lived and hot</td>
+          <td>Actors suspend on idle and resume on demand</td>
+      </tr>
+  </tbody>
+</table>
+<p>Google&rsquo;s stated scale target explains why the control plane had to be bypassed on the hot path: hundreds of millions of registered agents, billions of tasks per cluster, and what the Cloud blog calls &ldquo;the chatter of millions of sub-second tool calls.&rdquo;</p>
+<p>If your workload is a nightly batch job that runs for four minutes and exits, none of this buys you anything. If your workload is 40,000 long-lived agents that each spend 95% of their life waiting, it is the entire product.</p>
+<h2 id="what-does-the-practical-setup-actually-require">What does the practical setup actually require?</h2>
+<p>The honest quickstart, stripped of marketing:</p>
+<ol>
+<li>Install Go and the AX CLI: <code>go install github.com/google/ax/cmd/ax@latest</code></li>
+<li>Have a Kubernetes cluster reachable with credentials.</li>
+<li>Have <code>ko</code> available for building images.</li>
+<li>Have a container registry your nodes can pull from.</li>
+<li>Have a reachable Agent Substrate control API — the in-cluster default is <code>api.ate-system.svc.cluster.local:443</code>.</li>
+<li>Deploy with <code>make deploy AX_IMAGE_REPO=&lt;your-registry&gt;</code>, which lands Redis and the control plane in the <code>ax-system</code> namespace.</li>
+</ol>
+<p>Then the operational loop is <code>ax apply -f task.yaml</code>, followed by waiting on the <code>WorkspaceReady</code> and <code>Ready</code> conditions rather than the phase string. Keep <code>debug: true</code> while learning, because without it guest services stay off — and therefore <code>ax ssh</code> does not work.</p>
+<p>The confidence test every new user should run before trusting a multi-hour job: <code>ax ssh</code> in, write a file, <code>ax suspend task</code>, <code>ax resume task</code>, ssh back, and confirm the file survived. If it did, you have understood what AX is for.</p>
+<h2 id="what-is-broken-in-ax-right-now">What is broken in AX right now?</h2>
+<p>AX is pre-1.0 with breaking changes explicitly expected, and the issue tracker documents the rough edges rather than hiding them. Here is the honest list.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Issue</th>
+          <th>Symptom</th>
+          <th>Practical impact</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>google/ax#347</td>
+          <td><code>WorkspaceReady</code> can report ready on an empty git clone</td>
+          <td>Always verify environment contents over <code>ax ssh</code> instead of trusting the condition</td>
+      </tr>
+      <tr>
+          <td>google/ax#348 territory</td>
+          <td>Task env values are plain; no <code>valueFrom</code>, no clean secret mount story</td>
+          <td>Do not assume Kubernetes secret plumbing works here</td>
+      </tr>
+      <tr>
+          <td>Egress allowlist footgun</td>
+          <td>Hostname-style allowlists can block all TLS egress</td>
+          <td>Start with host <code>*</code> on port 443, then tighten deliberately</td>
+      </tr>
+      <tr>
+          <td>google/ax#337</td>
+          <td>Per-request <code>harness_config</code> overlay allows process spawn via <code>mcp_servers</code></td>
+          <td>Security review required before multi-tenant use</td>
+      </tr>
+  </tbody>
+</table>
+<p>Release cadence tells the same story from another angle: v0.1.0, then v0.2.0 and v0.2.1 on 2026-07-22, v0.2.2 on 2026-07-23, v0.2.3 on 2026-08-13, v0.3.0 on 2026-09-20, v0.3.1 on 2026-09-25. That is a project moving fast enough that pinning versions and reading changelogs is not optional.</p>
+<p>One more caution for readers doing their own research: a widely circulated aggregator post (a dev.to article, now 404) attributed AX to a September 18 I/O unveil with a modular DAG engine, a Gemini 1.5 Pro reference implementation, and a 27% benchmark win over LangChain. None of those specifics appear in the repository, the docs, or Google&rsquo;s blog post. Treat them as fabricated. The repository, the Cloud blog announcement, the DESIGN.md file, and the issue tracker are the sources that hold up.</p>
+<h2 id="why-did-a-may-2026-project-go-viral-in-september-2026">Why did a May 2026 project go viral in September 2026?</h2>
+<p>Because the announcement and the attention were four months apart, and that gap is a useful signal rather than a mystery.</p>
+<p>AX was announced on the Google Cloud blog on 2026-05-20 by Jaana Dogan and Ethan Bao. It hit #1 on Hacker News on 2026-09-21 with 664 points and 299 comments — roughly four months later. That is why many late-September write-ups misdate the launch, and why the project suddenly seems to have appeared everywhere at once. The likely interpretation is late discovery crossing a maturity threshold: by late September there was a v0.3 release line, a real install path, a roadmap, and enough practitioner experience to argue about.</p>
+<h2 id="is-ax-vendor-neutral-or-is-it-a-google-cloud-moat">Is AX vendor-neutral, or is it a Google Cloud moat?</h2>
+<p>Both, in different layers, and the distinction matters for an adoption decision.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Layer</th>
+          <th>Where it lives</th>
+          <th>Governance status</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>AX (Agent Executor)</td>
+          <td>github.com/google/ax</td>
+          <td>Google org, Apache-2.0, no support disclaimer in the repository — and no explicit support commitment either</td>
+      </tr>
+      <tr>
+          <td>Agent Substrate</td>
+          <td>github.com/agent-substrate/substrate</td>
+          <td>Non-Google org, CNCF Sandbox application filed 2026-09-08 (cncf/sandbox#523)</td>
+      </tr>
+  </tbody>
+</table>
+<p>The CNCF application discloses that Kubernetes is used for provisioning, WorkerPool pod lifecycle, atecontroller CRD reconciliation, and node scheduling, and that Envoy handles the atenet-router ingress gateway. It also discloses, without softening, that Google&rsquo;s business model here is &ldquo;strictly infrastructure-centric&rdquo; — users run the open-source stack on VMs they buy and manage. And it flags maintainer diversity as a non-blocking technical oversight committee item: 16 of 18 maintainers come from one organization.</p>
+<p>What CNCF ownership buys you is a governance and contribution path that does not depend on one vendor&rsquo;s roadmap, plus a documented neutrality commitment. What it does not buy you is a rewrite of the technical dependency: Substrate still needs Kubernetes and Envoy, and Google still leads development. A CNCF badge is a hedge on governance, not an erasure of architecture. The process is also not finished, and adopters should watch the vote rather than the announcement: as of 2026-09-25 the binding TOC vote stood at 4 in favour, 0 against, and 7 not yet voted, against a 66% threshold. The vendor-neutrality claim is real but still pending approval.</p>
+<p>Ecosystem context from the same thread is worth noting too: <code>kagent</code> has experimental Substrate support, and <code>agent-sandbox</code> (kubernetes-sigs) is the Kubernetes-native cousin — 4,085 stars, created 2025-08-12 — with a different set of tradeoffs.</p>
+<h2 id="how-does-ax-compare-to-kagent-scion-and-langgraph-or-temporal">How does AX compare to kagent, Scion, and LangGraph or Temporal?</h2>
+<p>They solve different problems at different layers, which is why most teams need one of them rather than three.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Option</th>
+          <th>Layer</th>
+          <th>Model</th>
+          <th>Best fit</th>
+          <th>2026 signal</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Google AX</td>
+          <td>Execution runtime + declarative control plane</td>
+          <td>Tasks as suspendable actors on Substrate</td>
+          <td>Platform teams with bursty, long-lived, sandbox-needing agents</td>
+          <td>12,550 stars, v0.3.1, Apache-2.0, three primitives after the Gateway removal</td>
+      </tr>
+      <tr>
+          <td>kagent</td>
+          <td>Kubernetes control plane</td>
+          <td>Agents as CRDs, GitOps-shaped</td>
+          <td>Kubernetes-native shops that want agents in manifests</td>
+          <td>3,885 stars, CNCF Sandbox, built by Istio founders, experimental Substrate support</td>
+      </tr>
+      <tr>
+          <td>Google Scion</td>
+          <td>Multi-agent coordination</td>
+          <td>One isolated container plus optional git worktree per agent, coordination via CLI</td>
+          <td>Running several agents on one repository without file collisions</td>
+          <td>1,729 stars, GoogleCloudPlatform org, carries a project disclaimer</td>
+      </tr>
+      <tr>
+          <td>LangGraph / Temporal</td>
+          <td>Application-level durable execution</td>
+          <td>Workflow checkpoints inside your process</td>
+          <td>Durability of control flow without a sandbox runtime</td>
+          <td>Mature, widely adopted</td>
+      </tr>
+  </tbody>
+</table>
+<p>The Scion comparison is instructive because its failure mode is concrete: three Claude Code agents editing one repository read the same file and overwrite each other. Container isolation separates processes; worktree isolation separates files. Scion addresses coordination, AX addresses resumable execution, and both are Apache-2.0 Go projects created in March 2026. That layering — coordination, execution, declarative control — is evidence of a deliberate infrastructure strategy rather than one monolithic framework.</p>
+<p>If what you actually want is &ldquo;my workflow survives a process crash,&rdquo; Temporal or LangGraph checkpoints may be sufficient and far cheaper. You only need AX when the sandbox itself — the filesystem, the running process tree, the network policy — has to survive too.</p>
+<h2 id="what-is-on-the-governance-and-security-roadmap">What is on the governance and security roadmap?</h2>
+<p>Mostly roadmap, which is exactly why regulated adopters should read it as a checklist rather than as shipped capability.</p>
+<ul>
+<li>SPIFFE identities for tasks: X.509-SVIDs for zero-trust mTLS between tasks</li>
+<li>Egress gateway credential injection, so agent containers never hold long-lived secrets</li>
+<li>Substrate becoming an OIDC and SPIFFE identity provider; Google Agent Identity is already built around SPIFFE</li>
+<li>Least-privilege setup versus runtime policies, splitting workspace initialization from execution permissions</li>
+<li>Idleness detection with automatic suspension for density</li>
+<li>Stateful task branching from checkpoints</li>
+<li>Full audit trail and trajectory collection</li>
+<li>Budget guardrails and telemetry</li>
+<li>Stabilizing the <code>ax.io/v1alpha1</code> specs for Task, Workspace, Model and the roadmap <code>Sandbox</code>/<code>SandboxConfig</code></li>
+<li>A separate workspace-setup actor, and a new Agent Substrate Actor migration</li>
+</ul>
+<p>The egress gateway design is genuinely good: injecting credentials at the edge means a compromised sandbox has nothing durable to steal. But &ldquo;roadmap&rdquo; is the operative word for the SPIFFE task identity story. If your compliance requirements demand per-task cryptographic identity today, AX is not there yet.</p>
+<h2 id="who-should-adopt-ax-now-and-who-should-wait">Who should adopt AX now, and who should wait?</h2>
+<p>Adopt when most of these are true:</p>
+<ul>
+<li>You already run Kubernetes and have a platform team that owns it.</li>
+<li>Your agents are long-lived and bursty, spending most wall-clock time waiting.</li>
+<li>You need agents to survive outages, deploys, or human-in-the-loop pauses without losing workspace state.</li>
+<li>You need sandbox isolation stronger than namespaces, and you can accept gVisor.</li>
+<li>You need to run agents on your own compute, in your own data plane.</li>
+<li>You can absorb pre-1.0 breaking changes and track releases closely.</li>
+</ul>
+<p>Wait when most of these are true:</p>
+<ul>
+<li>Your agents are short-lived, single-turn, or stateless.</li>
+<li>You are one developer on a laptop with one agent — the cluster, <code>ko</code>, and registry requirements will cost you a day before you run anything.</li>
+<li>You need per-task SPIFFE identity or a mature secret-mount story today.</li>
+<li>You need a supported product with an SLA rather than an early open-source project.</li>
+<li>Your durability problem is control flow, not sandboxing — in which case LangGraph or Temporal is the cheaper answer.</li>
+</ul>
+<p>A reasonable middle path for the undecided: run the suspend/resume confidence test on one real workload in a scratch cluster. If your reaction to &ldquo;the file survived a suspend and resume&rdquo; is &ldquo;that solves a problem I currently pay for,&rdquo; AX is worth the rebuild. If it is &ldquo;that is neat,&rdquo; you do not have the problem yet.</p>
+<h2 id="what-does-the-ax-story-actually-prove">What does the AX story actually prove?</h2>
+<p>It proves that a serious infrastructure vendor now treats agent execution as a systems problem rather than a prompting problem. The five native capabilities Google claims — durable execution, secure isolation, session consistency, connection recovery, and trajectory branching from checkpoints — are all statements about process lifecycle, not about intelligence. The single-writer architecture and the append-only event log exist so that a client can reconnect and backfill from the last sequence it saw, which is a property of distributed systems.</p>
+<p>It also proves that the community will not accept the pitch uncritically. The top responses to AX were not about features; they were about a cluster requirement hiding under an ergonomics headline, a company&rsquo;s track record of discontinuing projects, and whether opting into Substrate means rebuilding workloads. Those are fair objections, and Google&rsquo;s maintainers engaged them with specifics — Substrate is not exclusive to Kubernetes, identities are moving to SPIFFE, the layer is being donated to CNCF — rather than dismissing them.</p>
+<p>The unresolved question is the one that matters for anyone reading this in 2026. AX solves a real and expensive problem: paying full compute for agents that are idle. Whether the answer is a new runtime with its own actor model, or the existing Kubernetes ecosystem growing the same capability, is not yet settled. What is settled is that the problem is now named, and that the vocabulary of orchestrator, runtime, harness, and framework has been usefully separated.</p>
+<h2 id="faq">FAQ</h2>
+<h3 id="do-i-need-google-cloud-or-gemini-to-run-ax">Do I need Google Cloud or Gemini to run AX?</h3>
+<p>No. AX is Apache-2.0 and runs on any Kubernetes cluster you control, with the Model primitive abstracting the provider and holding the credential secret reference. Google&rsquo;s egress gateway design assumes you are running the open-source stack on VMs you buy and manage, which is the business model the CNCF application states explicitly. What you are adopting is an early-stage, unsupported project rather than a product with a support commitment — the repository carries no support disclaimer, which is not the same as carrying a promise.</p>
+<h3 id="is-ax-a-replacement-for-langgraph-or-google-adk">Is AX a replacement for LangGraph or Google ADK?</h3>
+<p>No, and the co-creator says so directly: &ldquo;AX is a layer that is closer to job orchestration&hellip; It&rsquo;s NOT an agentic framework.&rdquo; After the Gateway resource was removed in September 2026, the primitives are Task, Workspace, and Model — there is no planner, graph, memory, or prompt abstraction anywhere in the surface. You can run LangGraph as the Task command inside AX and keep your entire framework investment; what changes is that the sandbox and its state survive when the Python process does not.</p>
+<h3 id="how-much-does-the-kubernetes-dependency-actually-cost-me">How much does the Kubernetes dependency actually cost me?</h3>
+<p>The hard requirement is a cluster, <code>ko</code>, a registry your nodes can pull from, and a reachable Agent Substrate control API. On top of that, the workload model changes: Kubernetes Jobs do not run inside a secure runtime, there are no CRDs on the hot path, and inbound routing works by rewriting the request&rsquo;s <code>:authority</code> to the actor&rsquo;s pod IP rather than through per-task Services. For a platform team already running Kubernetes, that is a week of learning. For a solo developer, it is a day before hello world and a much larger rebuild after.</p>
+<h3 id="why-did-a-project-announced-in-may-2026-go-viral-in-september-2026">Why did a project announced in May 2026 go viral in September 2026?</h3>
+<p>Because the announcement and the attention were four months apart. Google&rsquo;s Cloud blog post by Jaana Dogan and Ethan Bao landed on 2026-05-20; the Hacker News thread reached #1 on 2026-09-21 with 664 points and 299 comments. In between, the project shipped a v0.2 and v0.3 line, added a documented install path and roadmap, and accumulated enough practitioner experience to argue about. Late write-ups that call September the launch date are misdating it.</p>
+<h3 id="is-ax-production-ready-in-late-2026">Is AX production-ready in late 2026?</h3>
+<p>Not by most definitions. The project is pre-1.0 and its README warns of major breaking changes prior to a stable release; the release line went from v0.1.0 to v0.3.1 between July and September 2026. Documented alpha-state defects include <code>WorkspaceReady</code> reporting ready on an empty git clone (issue #347), no clean Task secret-mount story (issue #348 territory), an egress allowlist that can block all TLS, and a security report (#337) about the per-request harness overlay spawning processes via <code>mcp_servers</code>. It is ready for evaluation on a scratch cluster and for platform teams who can absorb churn — not for a regulated production deployment that needs per-task SPIFFE identity today.</p>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Google Cloud Blog — &ldquo;Agent Executor: Google&rsquo;s distributed agent runtime&rdquo; (Jaana Dogan, Ethan Bao, 2026-05-20): <a href="https://cloud.google.com/blog/products/ai-machine-learning/agent-executor-googles-distributed-agent-runtime">https://cloud.google.com/blog/products/ai-machine-learning/agent-executor-googles-distributed-agent-runtime</a></li>
+<li>Agent Executor landing page: <a href="https://agentexecutor.io/">https://agentexecutor.io/</a></li>
+<li>google/ax repository and DESIGN.md: <a href="https://github.com/google/ax">https://github.com/google/ax</a> and <a href="https://raw.githubusercontent.com/google/ax/main/DESIGN.md">https://raw.githubusercontent.com/google/ax/main/DESIGN.md</a></li>
+<li>google/ax roadmap: <a href="https://raw.githubusercontent.com/google/ax/main/docs/roadmap.md">https://raw.githubusercontent.com/google/ax/main/docs/roadmap.md</a></li>
+<li>google/ax issue tracker (#337, #347, #348, #395 removing the Gateway resource): <a href="https://github.com/google/ax/issues">https://github.com/google/ax/issues</a></li>
+<li>google/ax API surface, <code>pkg/apis/v1alpha1/ax.proto</code>: <a href="https://raw.githubusercontent.com/google/ax/main/pkg/apis/v1alpha1/ax.proto">https://raw.githubusercontent.com/google/ax/main/pkg/apis/v1alpha1/ax.proto</a></li>
+<li>InfoQ — &ldquo;Google&rsquo;s AX orchestrator&rdquo; (2026-09): <a href="https://www.infoq.com/news/2026/09/google-ax-orchestrator/">https://www.infoq.com/news/2026/09/google-ax-orchestrator/</a></li>
+<li>Forkast / Yahoo Tech — &ldquo;Google&rsquo;s open agentic orchestrator hit&hellip;&rdquo; (2026-09): <a href="https://tech.yahoo.com/ai/gemini/articles/google-open-agentic-orchestrator-hit-072928739.html">https://tech.yahoo.com/ai/gemini/articles/google-open-agentic-orchestrator-hit-072928739.html</a></li>
+<li>Hacker News discussion, &ldquo;AX — Google&rsquo;s Open Agentic Orchestrator&rdquo; (2026-09-21): <a href="https://news.ycombinator.com/item?id=49780797">https://news.ycombinator.com/item?id=49780797</a></li>
+<li>Tutorial — &ldquo;AX: Google Open Agentic Orchestrator&rdquo; step-by-step setup: <a href="https://www.qwe.edu.pl/tutorial/ax-google-open-agentic-orchestrator-tutorial/">https://www.qwe.edu.pl/tutorial/ax-google-open-agentic-orchestrator-tutorial/</a></li>
+<li>Medium — &ldquo;Google&rsquo;s Agent Orchestrator Treats Your Harness as a Workload&rdquo;: <a href="https://medium.com/@sebuzdugan/googles-agent-orchestrator-treats-your-harness-as-a-workload-6d27b9418f00">https://medium.com/@sebuzdugan/googles-agent-orchestrator-treats-your-harness-as-a-workload-6d27b9418f00</a></li>
+<li>besthub — &ldquo;How Google&rsquo;s New Open Source Projects Make AI Agents Production Ready&rdquo;: <a href="https://www.besthub.dev/articles/how-google-s-new-open-source-projects-make-ai-agents-production-ready-b373cc8d3d52">https://www.besthub.dev/articles/how-google-s-new-open-source-projects-make-ai-agents-production-ready-b373cc8d3d52</a></li>
+<li>CNCF Sandbox application for Agent Substrate: <a href="https://github.com/cncf/sandbox/issues/523">https://github.com/cncf/sandbox/issues/523</a></li>
+<li>Agent Substrate repository: <a href="https://github.com/agent-substrate/substrate">https://github.com/agent-substrate/substrate</a></li>
+<li>Agent Substrate resume flow documentation: <a href="https://learn.agentsubstrate.dev/flows/resume-actor">https://learn.agentsubstrate.dev/flows/resume-actor</a></li>
+<li>GitHub API — google/ax, agent-substrate/substrate, kagent-dev/kagent, GoogleCloudPlatform/scion repository metrics</li>
+</ul>
+]]></content:encoded></item></channel></rss>
