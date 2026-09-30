@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Rust Event Bus Four Dispatch on RockB</title><link>https://baeseokjae.github.io/tags/rust-event-bus-four-dispatch/</link><description>Recent content in Rust Event Bus Four Dispatch on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Wed, 30 Sep 2026 01:08:59 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/rust-event-bus-four-dispatch/index.xml" rel="self" type="application/rss+xml"/><item><title>Rutis Review: A Five-Pillar Agent Kernel in Idiomatic Rust, Not a Full 'rust agent framework'</title><link>https://baeseokjae.github.io/posts/rutis-five-pillar-agent-kernel-rust/</link><pubDate>Wed, 30 Sep 2026 01:08:59 +0000</pubDate><guid>https://baeseokjae.github.io/posts/rutis-five-pillar-agent-kernel-rust/</guid><description>Rutis is a Rust reimplementation of the Cordis five-pillar plugin kernel with a minimal agent on top. Trial the kernel; hold it as an agent framework.</description><content:encoded><![CDATA[<p>Rutis is a Rust reimplementation of the Cordis five-pillar plugin kernel — plugin, fiber, typed service registry, four-semantics event bus, and dependency-driven reload — with a deliberately minimal coding agent layered on top. If you arrived searching for a &ldquo;rust agent framework,&rdquo; the honest answer is that rutis is an agent <em>kernel</em>: the lifecycle machinery is the product, the agent is a sample.</p>
+<p>That distinction decides everything about whether you should try it. Rutis does not compete with Rig or AutoAgents on agent features — no multi-agent orchestration, no tool sandbox, no guardrails, exactly two built-in tools. What it offers instead is loadable, unloadable capability plugins with automatic dependency-driven eviction, backed by an unusually rigorous parity audit against upstream Cordis. The verdict below is <strong>trial for plugin hosts, hold for agent builders</strong>.</p>
+<h2 id="what-is-rutis-and-is-it-actually-a-rust-agent-framework">What is rutis, and is it actually a rust agent framework?</h2>
+<p>No — and the project says so itself. The current README titles the repository &ldquo;A plugin framework for Rust&rdquo; and files <code>rutis-agent</code> and <code>rutis-cli</code> under a &ldquo;Built with rutis&rdquo; heading. That is not modesty; it is an accurate description of the crate graph.</p>
+<p>The workspace contains 11 crates in the current <code>arcships/rutis</code> repository (version 0.5.0, last push 2026-09-29): <code>rutis</code>, <code>rutis-agent</code>, <code>rutis-cli</code>, <code>rutis-cordis</code>, <code>rutis-dsh</code>, <code>aimux-llm</code>, <code>rutis-sdk</code>, <code>rutis-dylib</code>, <code>rutis-dylib-launcher</code>, <code>rutis-xtask</code>, and <code>rutis-interop</code>, plus example and dylib-fixture members. The kernel crate <code>rutis</code> is what you are evaluating. The agent crate is a demonstration that the kernel holds up under a real workload — a coding loop with LLM calls, streaming, tool dispatch, and cancellation.</p>
+<p>The origin story matters for context. The project started at <code>eric8810/rutis</code> on 2026-08-18, reached 243 commits from a single contributor in roughly five weeks, and then moved to the <code>arcships</code> organization on 2026-09-22. The crates.io <code>repository</code> field was repointed alongside the move. The arcships org is small — 10 public repos created 2026-04-01 — but includes <code>aimux</code> (195 stars, the unified LLM access layer rutis consumes) and <code>dimcode</code> (37 stars, a multi-model CLI coding agent).</p>
+<p>So what is the actual target user? Hysen Labs, the only independent analyst to cover the project, put it precisely: &ldquo;Rust developers building a host process that loads and unloads capability plugins at runtime, not someone who wants an agent binary.&rdquo; Treat that as the acceptance criterion.</p>
+<h2 id="what-are-the-five-pillars-of-rutis">What are the five pillars of rutis?</h2>
+<p>The Cordis paradigm rutis ports rests on five concepts. Each maps to a concrete Rust mechanism here.</p>
+<p><strong>Plugin as the unit of assembly.</strong> A plugin&rsquo;s <code>apply()</code> function provides services, registers listeners, and registers cleanup — exactly once. There is no separate &ldquo;initialize then register&rdquo; dance; assembly and teardown are declared together.</p>
+<p><strong>Fiber as lifecycle container.</strong> Every plugin instance runs inside a fiber with a six-state machine: Pending, Loading, Active, Failed, Unloading, Disposed. Fibers gate on dependencies, cascade their unload to dependents, and run exactly-once LIFO cleanup with atomic rollback if a plugin half-registered its resources before failing. This is the mechanism that makes everything else work.</p>
+<p><strong>Service as typed registry.</strong> Services are identified by a <code>TypeKey</code> — by type, not by string name. The consequences are that a service lookup cannot silently return the wrong thing at runtime, and qualified keys let you hold multiple instances of one interface (two LLM providers, distinguished, both typed).</p>
+<p><strong>Event bus with four dispatch semantics.</strong> Rutis exposes <code>emit</code> (ordered per key), <code>parallel</code> (concurrent fan-out), <code>serial</code> (first-value short-circuit), and <code>waterfall</code> (middleware chain with <code>next()</code>). Upstream Cordis documents five modes including <code>bail</code>, which rutis folded into <code>serial</code>&rsquo;s first-value short-circuit rather than exposing separately.</p>
+<p><strong>Dependency-driven reload.</strong> This is the headline capability. When a provider unloads, its consumers are evicted and reloaded automatically, without application code touching them. No code path in your host process says &ldquo;now restart the LLM plugin.&rdquo; The kernel derives that from the dependency graph it already owns.</p>
+<p>The trade is explicit and you should read it as the price of the product, not a footnote. Hysen Labs stated it well: &ldquo;your plugins have to declare dependencies in the kernel&rsquo;s terms, and the kernel owns their lifetime.&rdquo; You are handing over your start/stop schedule. In exchange, reload correctness is not your problem anymore.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Pillar</th>
+          <th>Rust mechanism</th>
+          <th>What it buys you</th>
+          <th>What it costs</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Plugin</td>
+          <td><code>apply()</code> provides services, listeners, cleanup once</td>
+          <td>Assembly and teardown declared together</td>
+          <td>Everything must be a plugin-shaped unit</td>
+      </tr>
+      <tr>
+          <td>Fiber</td>
+          <td>Six-state machine + dependency gating</td>
+          <td>Exactly-once LIFO cleanup, atomic rollback</td>
+          <td>Lifetime owned by the kernel</td>
+      </tr>
+      <tr>
+          <td>Service</td>
+          <td><code>TypeKey</code> typed registry, isolate scopes, qualified keys</td>
+          <td>Compile-time-safe lookup; multiple instances per interface</td>
+          <td>Registrations go through the kernel&rsquo;s registry</td>
+      </tr>
+      <tr>
+          <td>Event bus</td>
+          <td><code>emit</code> / <code>parallel</code> / <code>serial</code> / <code>waterfall</code></td>
+          <td>Dispatch semantics are explicit and reviewable</td>
+          <td>Four modes to learn; <code>bail</code> folded into <code>serial</code></td>
+      </tr>
+      <tr>
+          <td>Reload</td>
+          <td>Dependency graph drives eviction + reload</td>
+          <td>Provider swap needs zero application code</td>
+          <td>Dependency declarations must be authored in kernel terms</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="why-is-the-kernel-the-product-the-fiber-state-machine-and-exactly-once-cleanup">Why is the kernel the product? The fiber state machine and exactly-once cleanup</h2>
+<p>Most frameworks in the Rust agent space treat lifecycle as an afterthought — you construct a struct, you drop it, <code>Drop</code> runs, done. That works until the thing you are dropping made partial progress: opened a connection, registered a handler, spawned a task, then failed on step four of six.</p>
+<p>Rutis makes the failure path a first-class state. A fiber that fails during loading transitions to Failed, and the resources it already registered are rolled back rather than leaked. A fiber that unloads runs its cleanup handlers in strict LIFO order, exactly once. Dependents cascade.</p>
+<p>There is one deliberate divergence from upstream Cordis worth flagging, because it is a design choice rather than a port artifact: rutis runs cross-effect cleanup <strong>strictly serially in LIFO order</strong>, where upstream Cordis runs those effects concurrently. That is a determinism-for-throughput trade. Serial LIFO cleanup gives you a reproducible teardown order you can reason about and test; concurrent cleanup gives you faster shutdown with less predictable interleaving. For a kernel whose selling point is lifecycle correctness, choosing determinism is defensible — but it <em>is</em> a divergence, and anyone porting Cordis plugins should know it.</p>
+<p>A second divergence is more structural. Per-key <code>emit</code> ordering had to be rebuilt explicitly in rutis because JavaScript&rsquo;s object key ordering — the property Cordis relies on — has no Rust equivalent. This is the kind of detail that tells you whether a port is real work or a transliteration. It is real work here.</p>
+<h2 id="how-faithful-is-the-cordis-port-the-spec-parity-ruling-96-reviewed-58-locked-38-refused">How faithful is the Cordis port? The spec parity ruling (96 reviewed, 58 locked, 38 refused)</h2>
+<p>This is the strongest and most verifiable thing in the entire repository, and it is completely invisible from the star count.</p>
+<p>The rutis team read all 96 upstream Cordis spec cases line by line and produced a ruling table with three outcomes: 58 language-agnostic invariants locked by automated parity tests (31 full, 27 partial), and 38 explicitly <strong>not ported</strong>, each with a declared reason.</p>
+<p>The 38 refusals are all JavaScript-specific mechanisms that have no meaningful Rust analogue: Proxy, string event names, <code>internal/*</code> internals, sync bail, traceable/caller-shadow, <code>Context.filter</code>, <code>intercept</code>, async generator effects, and update-config semantics. Publishing a non-goals table with one reason per refusal is unusual. Almost no young open-source project does it — most leave you to discover the gaps from a failing test.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Parity outcome</th>
+          <th>Count</th>
+          <th>Meaning for a Rust adopter</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Reviewed upstream specs</td>
+          <td>96</td>
+          <td>The full Cordis behavioural surface was read, not sampled</td>
+      </tr>
+      <tr>
+          <td>Invariants locked by parity tests</td>
+          <td>58</td>
+          <td>31 full + 27 partial; regression-guarded automatically</td>
+      </tr>
+      <tr>
+          <td>Explicitly not ported</td>
+          <td>38</td>
+          <td>JS-only mechanisms (Proxy, string event names, caller-shadow, async generator effects) each with a reason</td>
+      </tr>
+      <tr>
+          <td>Deliberate strengthenings</td>
+          <td>2</td>
+          <td>Serial LIFO cross-effect cleanup; per-key emit ordering rebuilt explicitly</td>
+      </tr>
+  </tbody>
+</table>
+<p>The kernel additionally carries 141 contract and differential tests per the current README. Note the discrepancy with third-party coverage: Hysen Labs reports 115, because its editorial is dated 2026-08-26 and its data snapshot predates the 0.3.0 and 0.5.0 releases. The 115 figure is stale, not contradictory — but it is a useful data point about how fast this project moves relative to the coverage of it.</p>
+<h2 id="what-does-the-rutis-agent-framework-actually-include">What does the rutis agent framework actually include?</h2>
+<p>Strip away the framing and the shipped agent is six elements:</p>
+<p><strong>LLM backend.</strong> An <code>Arc&lt;dyn LanguageModel&gt;</code> service obtained from <code>aimux</code>, consumed rather than re-declared. Rutis-agent writes no HTTP clients, no auth, no streaming protocol of its own — that all lives in <code>aimux-core</code> / <code>aimux-providers</code>.</p>
+<p><strong>ToolRegistry as a plugin.</strong> Tools are registered as a plugin, which means they participate in the same lifecycle as everything else.</p>
+<p><strong>Session.</strong> In-memory, ordered messages, and deliberately <strong>not</strong> a plugin. The design doc is explicit: the session is the single source of truth for the loop and lives in the driver&rsquo;s fiber. That is a considered refusal, not an oversight — making the session reloadable would make it ambiguous.</p>
+<p><strong>Agent loop as a driver plugin</strong> implementing the <code>Agent</code> interface.</p>
+<p><strong>Event observation</strong> via <code>agent/*</code> broadcasts plus waterfalls at <code>agent/pre-step</code>, <code>agent/request</code>, <code>tools/pre-execute</code>, <code>execute</code>, and <code>post-execute</code>. If you want to intercept or instrument the loop, these are the seams.</p>
+<p><strong>Minimal-mode tools:</strong> <code>bash</code> and <code>replace_text</code>. Two tools.</p>
+<p>The TUI is <code>rutui</code> on ratatui 0.29 / crossterm 0.28, with streaming output, tool-call visibility, and Esc-to-cancel. That is a real, usable terminal harness — it is just a small one.</p>
+<p>If you want a fully-featured coding agent from the same org, look at <code>dimcode</code> (37 stars) or the incumbent CLIs. Rutis-agent&rsquo;s own README calls it &ldquo;a minimal coding agent sample,&rdquo; which is the correct expectation to hold.</p>
+<h2 id="what-do-you-get-in-the-box-and-how-well-is-it-tested">What do you get in the box, and how well is it tested?</h2>
+<p>Verification is where this project punches above its weight class. There are three layers, and they are honest about their own limits:</p>
+<p><strong>Unit layer.</strong> <code>ScriptedLlm</code> implements the real <code>LanguageModel</code> trait — including <code>do_stream</code> — so loop logic, multi-turn history, <code>max_steps</code>, cancellation, and failure feedback are all tested without a network.</p>
+<p><strong>Integration layer.</strong> <code>aimux</code>&rsquo;s <code>MockReplayModel</code> does record-and-replay, covering dual gating, the unload-llm-triggers-evict-and-reload path, fiber unload cancelling in-flight work, and event observation.</p>
+<p><strong>Real end-to-end layer.</strong> Marked <code>#[ignore]</code>, requires <code>DEEPSEEK_API_KEY</code>, and <strong>does not run in CI</strong>.</p>
+<p>That last sentence is the one an adopter has to sit with. The mechanism most worth trusting — a real provider round trip through the real loop — is the one that is not continuously verified. It is not a scandal; it is a normal resource constraint for a single-maintainer project. But &ldquo;the reload works&rdquo; and &ldquo;the loop works against a real model&rdquo; are verified at different levels of rigour, and the gap is exactly where integration bugs live.</p>
+<h2 id="what-do-rutiss-own-benchmarks-show-and-which-benchmark-suite-is-it-missing-from">What do rutis&rsquo;s own benchmarks show, and which benchmark suite is it missing from?</h2>
+<p>Rutis publishes its own event-dispatch microbenchmark, and the document is unusually careful.</p>
+<p>The measured costs in nanoseconds per operation, for sync dispatch by listener count, run 412.8 (0 listeners) / 475.0 (1) / 971.8 (8) / 4345.7 (64). Sync waterfall dispatch runs 420.5 / 543.8 / 1085.2 / 5248.2 across the same listener counts, with a keyed no-listener waterfall at 458.6 ns/op. Prefix-pattern serial dispatch runs 94.1 (0 prefixes) / 568.7 (1) / 563.2 (8) / 702.6 (64) / 2309.9 (1024). Comparing the 0.3.0 line to the 0.4.0 development line on exact-key dispatch: 55.2 → 58.5 ns/op at zero listeners (+5.9%), 112.6 → 97.8 at one (−13.1%), 273.3 → 262.7 at eight (−3.9%), 1589.7 → 1605.5 at 64 (+1.0%).</p>
+<p>Now the caveats, which the authors attach themselves. The benchmark ran on an Intel Core Ultra X7 358H with rustc 1.98.1, release build, Tokio limited to two worker threads, <code>taskset</code> to CPU 0, <strong>no fixed CPU frequency, and no confidence intervals</strong>. The document states outright that nanosecond differences must not be read as cross-machine conclusions.</p>
+<p>Take them at their word. The +5.9% regression on the empty dispatch path is reported, not buried — that is the behaviour of a team that would rather be accurate than win an argument. And do not repurpose these numbers as a competitive claim against Rig or AutoAgents, because they measure a different thing entirely: dispatch cost, not agent throughput, memory, or reload latency.</p>
+<p>On that last point, the honest gap. The widely cited Rust-vs-Python agent benchmark suite from January 2026 — 50 requests, 10 concurrent, gpt-5.1, identical hardware — includes Rig, AutoAgents, LangChain, LangGraph, LlamaIndex, PydanticAI, and GraphBit. <strong>Rutis is not in it.</strong> The headline structural results from that suite belong to other projects: Rust frameworks peak at roughly 1.0–1.1 GB against every Python framework exceeding 4.7 GB (AutoAgents 1,046 MB and Rig 1,019 MB versus LangChain 5,706 MB, LangGraph 5,570 MB, PydanticAI 4,875 MB, LlamaIndex 4,860 MB), extrapolating to ~51 GB versus ~279 GB at 50 concurrent instances.</p>
+<p>Cold start in that same suite: AutoAgents and Rig at ~4 ms against 54–63 ms for LlamaIndex, PydanticAI, LangChain, and LangGraph, and 138 ms for GraphBit. Latency clusters tightly between 5.7 s and 7.0 s across all frameworks because the LLM network round trip dominates; framework overhead only becomes visible at P95, where LangGraph&rsquo;s 16,891 ms compares with AutoAgents&rsquo; 9,652 ms.</p>
+<p>Two things follow. First, &ldquo;Rust is 5x lighter&rdquo; is a true and well-evidenced claim — about Rig and AutoAgents, not about rutis. Second, and more importantly, that suite does not measure plugin lifecycle, reload, or eviction cost at all, which is precisely rutis&rsquo;s claim to fame. Rutis has no end-to-end agent throughput or memory benchmark. Neither does anyone measure what rutis is actually for.</p>
+<h2 id="rutis-vs-rig-vs-autoagents-vs-cordis-which-one-should-you-use">rutis vs Rig vs AutoAgents vs Cordis: which one should you use?</h2>
+<p>The keyword &ldquo;rust agent framework&rdquo; pulls four projects into one comparison, and they are not substitutes.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Project</th>
+          <th>Stars</th>
+          <th>Crate downloads</th>
+          <th>Licence</th>
+          <th>What it is for</th>
+          <th>Plugin lifecycle</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>rutis</td>
+          <td>21 (old repo) / 4 (current)</td>
+          <td>197 lifetime (<code>rutis</code>), 54 (<code>rutis-agent</code>), 34 (<code>rutis-cli</code>)</td>
+          <td>MIT</td>
+          <td>Host processes that load/unload capability plugins</td>
+          <td>Yes — six-state fibers, dependency-driven reload</td>
+      </tr>
+      <tr>
+          <td>Cordis</td>
+          <td>8,896</td>
+          <td>n/a (TypeScript/npm)</td>
+          <td>MIT</td>
+          <td>The mature paradigm rutis ports; vendored in DeepSeek Harness</td>
+          <td>Yes — the original</td>
+      </tr>
+      <tr>
+          <td>Rig</td>
+          <td>8,766</td>
+          <td>3,115,669 lifetime / 1,684,403 recent (<code>rig-core</code> v0.42.0)</td>
+          <td>Reported inconsistently (MIT per GitHub API; Apache-2.0 in one comparison table)</td>
+          <td>Building LLM apps and agents in Rust, start to finish</td>
+          <td>No</td>
+      </tr>
+      <tr>
+          <td>AutoAgents</td>
+          <td>761</td>
+          <td>15,196 lifetime (<code>autoagents</code> v0.4.0)</td>
+          <td>Apache-2.0</td>
+          <td>Multi-agent systems with actor-model coordination and WASM sandboxing</td>
+          <td>No</td>
+      </tr>
+  </tbody>
+</table>
+<p>Cordis is the mature option and the reason this paradigm is production-relevant rather than academic: its primer documents it as the plugin framework vendored inside DeepSeek Harness, with 8,896 stars, 554 forks, created 2022-05-17, last push 2026-09-08. Any decision to adopt rutis is really a decision to adopt Cordis semantics in Rust. If your team writes TypeScript, the case for the port is weak.</p>
+<p>Rig is the incumbent answer to &ldquo;I want to build an agent in Rust,&rdquo; and it needs no kernel. Rig.rs positions it as one composable trait system spanning completions, tools, streaming, RAG, and multi-agent workflows, with 20+ providers behind one API, typed tools and structured output, and mock models plus VCR cassette tests for determinism. Its scale — 3.1 million lifetime <code>rig-core</code> downloads against rutis&rsquo;s 197 — is not a popularity contest you can wave away. It is a statement about how many people had a problem Rig solved.</p>
+<p>AutoAgents is what a Rust agent framework looks like when the framework, not the kernel, is the product: Ractor (Erlang/OTP-style actor model) for coordination, typed pub/sub, Basic and ReAct executors, derive macros for tools and structured outputs, sliding-window memory with pluggable backends, sandboxed WASM tool execution with fuel metering, and OpenTelemetry tracing. Its own claims in the benchmark article are 25% better latency than average Python frameworks and 43.7% better than LangGraph.</p>
+<p>Rutis has none of that. It has lifecycle. Rig and AutoAgents have lifecycle as an implementation detail — or not at all. Rutis makes it the interface, and that is the only axis on which it competes.</p>
+<h2 id="what-does-adopting-a-0x-kernel-cost-and-how-is-rutis-licensed">What does adopting a 0.x kernel cost, and how is rutis licensed?</h2>
+<p>Rutis is MIT throughout, inherited from Cordis (authored by Shigma). Commercial use, closed-source use, and redistribution are all permitted with attribution. There is no paid tier, no hosted service, no telemetry, and no cloud dependency. Rutis-agent and rutis-cli consume <code>aimux-core</code> / <code>aimux-providers</code> from crates.io at 0.3.0, so no sibling checkout is required just to build.</p>
+<p>The real cost of adoption is not licence fees. It is API churn. The published crate versions tell the story directly:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Crate</th>
+          <th>Release history</th>
+          <th>Downloads</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>rutis</code> (kernel)</td>
+          <td>0.1.0 (2026-08-19) → 0.2.0–0.2.5 (2026-09-22) → 0.3.0 (2026-09-24) → 0.5.0 (2026-09-28)</td>
+          <td>197 lifetime; 0.5.0 = 28</td>
+      </tr>
+      <tr>
+          <td><code>rutis-agent</code></td>
+          <td>0.1.0 (2026-08-19) → 0.2.0 (2026-09-22)</td>
+          <td>54 lifetime; 0.2.0 = 22</td>
+      </tr>
+      <tr>
+          <td><code>rutis-cli</code></td>
+          <td>0.1.0 (2026-08-19) → 0.2.0 (2026-09-22)</td>
+          <td>34 lifetime; 0.2.0 = 17</td>
+      </tr>
+      <tr>
+          <td><code>rutis-cordis</code>, <code>rutis-dsh</code>, <code>aimux-llm</code></td>
+          <td>Not published — HTTP 404 on crates.io</td>
+          <td>Git-only</td>
+      </tr>
+  </tbody>
+</table>
+<p>Nine versions of the kernel in six weeks — 0.1.0, 0.2.0 through 0.2.5, 0.3.0, and 0.5.0, with 0.4.0 never released separately. Kernel 0.5.0 is 142,358 bytes, declares <code>rust-version</code> 1.85 on edition 2021, and builds on docs.rs.</p>
+<p>Two practical consequences. First, if a component you need is one of the three unpublished crates, you are building from a git dependency, and you own that decision forever. Second, and easy to miss: the published <code>rutis-agent</code> 0.2.0 depends on <code>rutis ^0.2.0</code> plus sibling <code>rutui-*</code> path crates, while the current <code>main</code> workspace is 0.5.0 and uses <code>rutui</code> 0.1.0 from crates.io. <strong>The published agent is older than the repository.</strong> The crates.io <code>rutis-cli</code> 0.2.0 dependency list is just aimux-core, aimux-providers, rutis, rutis-agent, serde_json, and tokio — and the TUI actually lives inside <code>rutis-agent</code>, not the CLI. Pin exactly, or build from git and accept drift.</p>
+<p>In fairness: the repository ships migration guides for both 0.1→0.2 and 0.3→0.5. Shipping migration guides through an API break is unusual honesty for a project this young, and it materially lowers the cost of the churn. It does not eliminate it.</p>
+<h2 id="how-do-you-get-started-with-rutis">How do you get started with rutis?</h2>
+<p>The Rust version requirement is 1.85 with edition 2021 on the kernel crate. For a first evaluation, do not start by wiring up a provider — the point of the first hour is to see the lifecycle, not the model.</p>
+<p><strong>Run the offline demo first.</strong> The CLI supports <code>--scripted</code> and a <code>tui_scripted</code> mode that exercise the full loop without any API key. That means you can inspect the agent loop, the event waterfalls, and the tool dispatch with zero credentials and zero network. Most frameworks cannot be evaluated without a key; this one can.</p>
+<p><strong>Then wire a real backend.</strong> The LLM comes through <code>aimux</code>, which is why provider concerns are absent from rutis-agent. A local model works: <code>AIMUX_PROVIDER=ollama AIMUX_MODEL=qwen3:8b</code>. Rutis delegates all provider handling to <code>aimux</code>, whose repo description claims 325 providers while both rutis READMEs (old and current) say 329 — that discrepancy is unresolved in the sources, so treat &ldquo;hundreds of providers backed by aimux&rdquo; as the accurate claim and verify your specific provider.</p>
+<p><strong>If you hack on a sibling crate locally</strong>, use an uncommitted <code>[patch]</code> at the workspace root; the README documents this explicitly, and it is the intended workflow rather than a workaround.</p>
+<p><strong>Watch the version you pin.</strong> Given that the repository is at 0.5.0 while the published agent trails at 0.2.0, <code>cargo add rutis rutis-agent rutis-cli</code> will build something different from what the README describes. Start from git <code>main</code> if you are evaluating current behaviour; pin published crates only if you need reproducible builds and are content with older agent code.</p>
+<h2 id="what-are-the-risks-and-limitations-of-rutis">What are the risks and limitations of rutis?</h2>
+<p>Everything below is either sourced from the project&rsquo;s own documentation or from absence of evidence. Read it as the other half of the review.</p>
+<p><strong>Governance and bus factor.</strong> One contributor, 243 commits, five weeks. The repo moved organizations mid-flight from <code>eric8810/rutis</code> to <code>arcships/rutis</code> on 2026-09-22, and the crates.io repository field was repointed. That is a normal evolution for a young project, but it means any URL, CI config, or vendored dependency pointing at the old path is now a liability.</p>
+<p><strong>Adoption is unproven.</strong> 21 stars on the origin repo, 4 on the current org repo, 197 lifetime kernel downloads, 54 for the agent crate. There is no Hacker News thread for rutis at all — an Algolia story search returns only rotisserie, rUTI, and Ruby-shell results. Hysen Labs&rsquo; analysis is the sole non-author coverage found, and it already describes superseded facts: it reports 115 contract tests (the README now says 141) and the 2026-08-19 push as latest.</p>
+<p><strong>Naming is an active discovery tax.</strong> The crate name collides with the medical abbreviation rUTI in search results; there is an unrelated <code>routis</code> (a local routing/audit CLI) and a <code>rudis</code> (mini Redis in Rust) on crates.io. For a project whose pitch is &ldquo;adopt this kernel,&rdquo; discoverability sits below the threshold at which evidence gets read.</p>
+<p><strong>Feature gaps, stated plainly.</strong> No multi-agent orchestration. No tool sandbox — AutoAgents has WASM sandboxing with fuel metering; rutis has <code>bash</code> and <code>replace_text</code> running as your process. No guardrails. No documented retry or rollback policy for a <em>failed reload</em> — the kernel handles half-registered resources atomically, but the operational story for &ldquo;reload failed on a live system&rdquo; is not written down. Real-provider tests excluded from CI behind <code>#[ignore]</code>. Two built-in tools.</p>
+<p><strong>The ambitious parts are unfinished.</strong> The dylib SDK design (<code>design-dylib-sdk-2026-09-24.md</code>) promises first-party plugins loadable without republishing the host, shared Rust types with no serialization, and version rejection before load. The protocol-plugins work (<code>design-protocol-plugins-2026-09-25.md</code>) proposes mounting TypeScript Cordis plugins and Rust rutis plugins into one object space through proxies. The protocol work is a design document with <strong>no implementation</strong>. Treat both as roadmap, not feature list.</p>
+<p><strong>The dual-core doctrine is a promise you can hold them to.</strong> The written strategy is that rutis is the Rust spine and dsh (TypeScript) is the laboratory — &ldquo;TS is the lab, Rust graduates&rdquo; — with explicit rustification criteria (semantics converged, mechanism not wording, distribution-sensitive, not npm-bound, on a trust boundary) and an explicit commitment that prompt <em>assembly</em> mechanism rustifies while prompt <em>content</em> never does. That is a testable rule rather than a slogan, which is more than most projects offer. It is still a rule about future work.</p>
+<p><strong>No independent performance evidence.</strong> Self-published microbenchmarks with self-declared caveats, and absence from the one widely cited suite. That is the complete state of the performance case.</p>
+<h2 id="who-should-use-rutis-and-who-should-not">Who should use rutis, and who should not</h2>
+<p><strong>Trial it if</strong> you are building a host process in Rust that must load and unload capability plugins at runtime, and dependency-driven eviction is genuinely part of your requirements. The kernel&rsquo;s lifecycle semantics — six-state fibers, exactly-once LIFO cleanup, atomic rollback of half-registered resources, cascading unload — are the most carefully specified thing in the Rust plugin space, and the 58 locked parity invariants mean you can trust them. The offline <code>--scripted</code> demo lets you validate that in an afternoon.</p>
+<p><strong>Hold — do not adopt yet — if</strong> any of these are true: you need the API to be stable (nine releases in six weeks says no); you need every crate you depend on published to crates.io (three are git-only); you need an SLA or a support contract (one maintainer); you need real-provider behaviour continuously verified (it is <code>#[ignore]</code>d).</p>
+<p><strong>Skip it entirely if</strong> your actual requirement is &ldquo;build an agent in Rust.&rdquo; Use Rig. It is in the millions of downloads, it is actively maintained with a last push of 2026-09-29, and it needs no kernel. If you need multi-agent orchestration or sandboxed tool execution, use AutoAgents. If you are a TypeScript shop and want this paradigm, use Cordis directly — it is 8,896 stars and four years old to rutis&rsquo;s 21 stars and five weeks.</p>
+<p>The single most useful reframing the search results will never give you: the phrase &ldquo;rust agent framework&rdquo; describes what rutis does <em>not</em> primarily do. It is a plugin kernel with an agent-shaped demonstration, and the demonstration is deliberately minimal because its job is to prove the kernel, not to be your coding agent. Judge it as a kernel and it is promising but young. Judge it as an agent framework and it is not one.</p>
+<h2 id="faq">FAQ</h2>
+<p><strong>Is rutis free to use?</strong>
+Yes. Rutis is MIT-licensed throughout, with the licence inherited from Cordis (authored by Shigma). That permits commercial use, closed-source use, modification, and redistribution with attribution. There is no paid tier, no hosted offering, and no telemetry.</p>
+<p><strong>Does rutis need an API key to run?</strong>
+No. The CLI supports <code>--scripted</code> and a <code>tui_scripted</code> mode that run the full agent loop offline with no credentials — which is how you should evaluate the kernel. A real backend requires a key (or a local model via <code>AIMUX_PROVIDER=ollama AIMUX_MODEL=qwen3:8b</code>), and the <code>#[ignore]</code>d end-to-end tests require <code>DEEPSEEK_API_KEY</code> but are excluded from CI.</p>
+<p><strong>What Rust version does rutis require?</strong>
+The kernel crate 0.5.0 declares <code>rust-version</code> 1.85 on edition 2021. The published package is 142,358 bytes and docs.rs builds it successfully.</p>
+<p><strong>Does rutis work with local models?</strong>
+Yes. All provider handling is delegated to <code>aimux</code>, the unified LLM access layer from the same organization, so rutis-agent contains no HTTP clients, auth code, or streaming protocol of its own. Setting <code>AIMUX_PROVIDER=ollama</code> with something like <code>AIMUX_MODEL=qwen3:8b</code> runs against a local server. Note that <code>aimux</code>&rsquo;s repository description says 325 providers while both rutis READMEs say 329 — verify your specific provider rather than relying on the headline number.</p>
+<p><strong>Is rutis the same thing as Cordis?</strong>
+No. Cordis is the TypeScript framework the paradigm comes from — 8,896 stars, created 2022, and documented as the plugin framework vendored inside DeepSeek Harness. Rutis is an idiomatic Rust implementation of that paradigm, not a translation. It reviewed 96 upstream spec cases and locked 58 language-agnostic invariants in automated parity tests, explicitly refusing the other 38 for JavaScript-specific reasons such as Proxy, string event names, caller-shadow, and async generator effects. It also diverges deliberately in two places: cross-effect cleanup runs strictly serial LIFO where Cordis runs effects concurrently, and per-key emit ordering was rebuilt from scratch because JavaScript object key ordering does not exist in Rust.</p>
+]]></content:encoded></item></channel></rss>
