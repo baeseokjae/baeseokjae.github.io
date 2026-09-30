@@ -1,0 +1,322 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Zcode Glm Coding Agent Git History on RockB</title><link>https://baeseokjae.github.io/tags/zcode-glm-coding-agent-git-history/</link><description>Recent content in Zcode Glm Coding Agent Git History on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 29 Sep 2026 22:26:53 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/zcode-glm-coding-agent-git-history/index.xml" rel="self" type="application/rss+xml"/><item><title>ZCode GLM Coding Agent Silently Uploads Your Git History: What It Means</title><link>https://baeseokjae.github.io/posts/zcode-glm-coding-agent-git-history-leak-2026/</link><pubDate>Tue, 29 Sep 2026 22:26:53 +0000</pubDate><guid>https://baeseokjae.github.io/posts/zcode-glm-coding-agent-git-history-leak-2026/</guid><description>ZCode silently packaged users&amp;#39; workspaces, encrypted them with a server-held key and shipped them to Alibaba Cloud OSS. Here is what that means for you.</description><content:encoded><![CDATA[<p>The ZCode GLM coding agent silently uploaded user Git history: client version 3.12.3 packaged each logged-in user&rsquo;s whole workspace, encrypted it with an RSA key supplied by Z.ai&rsquo;s own server, and POSTed the archive straight to Alibaba Cloud OSS. No consent prompt. No policy disclosure. No working opt-out.</p>
+<p>The short version of the verdict, before the detail: this was not inference-context transmission, the ordinary and largely unavoidable process of sending code to a model so it can reason about it. It was unattended whole-repository exfiltration, of a repository the user never selected, encrypted with a key the user can never use — which is also why the vendor&rsquo;s &ldquo;we deleted it&rdquo; assurance is not falsifiable from outside. The full timeline runs from a subscriber noticing 700MB of disk growth on 2026-09-17 to an Apache-2.0 source drop on 2026-09-21 and a follow-up client release on 2026-09-23.</p>
+<p>What follows is the mechanism as reverse-engineered and packet-captured by a paying subscriber, the part of the payload that actually matters (it was your <code>.git</code>, not your source files), what Z.ai asserted versus what has been independently established, and a concrete checklist if you ever ran ZCode against a private repository.</p>
+<h2 id="what-zcode-was-caught-doing-end-to-end">What ZCode was caught doing, end to end</h2>
+<p>On 2026-09-18 a paying GLM Coding Plan subscriber publishing as ferstar (J. F. Zhang) published a teardown of ZCode, Z.ai&rsquo;s first-party desktop coding agent for GLM. The trigger was mundane: while freeing disk space on a 256GB MacBook Air, the researcher noticed that <code>~/.zcode</code> had grown past 700MB, with <code>v2/checkpoints/</code> alone accounting for roughly 303MB.</p>
+<p>Disassembling <code>app.asar</code> and capturing traffic produced the upload flow:</p>
+<ol>
+<li>The client called <code>POST /api/v1/snapshot/upload-credential</code> on <code>zcode.z.ai</code>.</li>
+<li>The server replied with a <code>snapshot_id</code>, an RSA <strong>public</strong> key, a size cap, a set of signed OSS form fields, and a callback URL.</li>
+<li>The client packed the workspace into a <code>tar.gz</code>, encrypted it with AES-256-CTR, and wrapped the symmetric key with RSA-OAEP-SHA256 using the server&rsquo;s public key.</li>
+<li>The client POSTed <code>tar.gz.enc</code> <strong>directly to Alibaba Cloud OSS</strong> via form POST, bypassing Z.ai&rsquo;s application servers entirely.</li>
+<li>OSS called the Z.ai backend back to register the snapshot.</li>
+</ol>
+<p>Two design details separate this from ordinary telemetry. First, the capture was unconditional: the sidecar process was instantiated at startup with no gating on user preferences, and the only precondition was a valid JWT from the token provider. Triggers were <code>captureBeforePrompt</code>, which fires before every prompt, and task completion tagged <code>repo-wiki-update</code>. Session logs showed up to 62 capture events from a single active session. Second, the encryption was envelope-style with a server-supplied public key, so the corresponding private key never touched the user&rsquo;s machine.</p>
+<p>The primary teardown is at <a href="https://blog.ferstar.org/en/posts/zcode-silent-workspace-snapshot-upload/">blog.ferstar.org</a>. Independent framing and additional forensics appear in the <a href="https://tokenstead.ai/guides/zcode-silent-git-history-upload">tokenstead.ai account</a> and the <a href="https://cellcog.ai/blog/zcode-open-sourced-after-git-uploads/">cellcog.ai claim-graded write-up</a>.</p>
+<p>One correction matters here, because a widely syndicated secondary write-up got it wrong: the headline 313MB commercial-repository snapshot <strong>failed 564 times and never left the machine</strong>. The researcher confirmed via router connection tracking that it sat in a local pending queue. The archive that the server actually <em>accepted</em> was a separate small public-repo workspace of 538 files, roughly 15KB after compression and encryption. The mechanism is damning enough on its own; it does not need the exaggeration, and repeating the exaggeration is the fastest way to lose an argument with someone who has read the original.</p>
+<h2 id="why-a-313mb-archive-sat-on-the-users-disk-that-he-could-not-open">Why a 313MB archive sat on the user&rsquo;s disk that he could not open</h2>
+<p>Start here, not with the upload. The encrypted archive on the researcher&rsquo;s own disk could not be decrypted by him, or by the application that had just created it, because the decryption key lived only in Z.ai&rsquo;s cloud. That single property carries most of the analysis.</p>
+<p>Everything downstream follows from it. The user could not inspect the payload before it left, verify what had left after, or independently confirm that anything was deleted later. He could delete the local pending file — and did — but a fresh 313MB archive was re-packaged within 30 minutes, with the retry counter advancing from 564 to 565. Deleting the artifact is whack-a-mole against a supervisor process that recreates it.</p>
+<p>The mitigation that actually held was kernel-level: setting an immutable flag on <code>~/.zcode/v2/checkpoints</code> (<code>chattr +i</code> on Linux, <code>chflags uchg</code> on macOS). The trade-off is explicit and worth stating: that also disables ZCode&rsquo;s checkpoint rollback and timeline UI, because the same directory serves both.</p>
+<h2 id="the-real-payload-was-your-git-not-your-source-files">The real payload was your <code>.git</code>, not your source files</h2>
+<p>This is the section that converts a privacy story into an incident-response task. A snapshot of &ldquo;your code&rdquo; sounds bounded. A snapshot of the git object store is not: it is the entire lineage of the repository since its first commit.</p>
+<p>In the archive the researcher dissected, the manifest was 42,411 files:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Component</th>
+          <th>Size</th>
+          <th>Share of payload</th>
+          <th>Why it matters</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>.git/lfs</code></td>
+          <td>196.1 MB</td>
+          <td>56.8%</td>
+          <td>Every large binary ever fetched, including assets not currently checked out</td>
+      </tr>
+      <tr>
+          <td><code>.git/objects</code></td>
+          <td>102.2 MB</td>
+          <td>29.6%</td>
+          <td>The full content-addressed history, all branches, including rewritten commits</td>
+      </tr>
+      <tr>
+          <td><code>.git/logs</code> (reflogs)</td>
+          <td>0.6 MB</td>
+          <td>0.2%</td>
+          <td>Records of checkouts, resets and rebase operations that &ldquo;removed&rdquo; a secret</td>
+      </tr>
+      <tr>
+          <td>Source code and docs</td>
+          <td>46.2 MB</td>
+          <td>13.4%</td>
+          <td>The working tree — the only part users typically imagine was shared</td>
+      </tr>
+  </tbody>
+</table>
+<p>The <code>.git</code> directory alone was about 86.6% of the payload. Practically, that means a workspace upload ships:</p>
+<ul>
+<li><strong>Credentials deleted in later commits.</strong> A database password removed in a follow-up commit is still a blob in the object store, retrievable by anyone holding the history.</li>
+<li><strong>Unpushed branch names.</strong> Branch names leak unreleased product plans, customer names, ticket identifiers and internal codenames, even when the branches themselves were never pushed to a remote.</li>
+<li><strong><code>.git/config</code> contents.</strong> Internal hostnames, remote URLs, sometimes embedded tokens in remote URLs, and local repository paths that reveal directory structure outside the repository.</li>
+<li><strong>The LFS cache.</strong> Every binary asset ever fetched, which is why LFS was the single largest component of the archive.</li>
+<li><strong>Reflog archaeology.</strong> The reflog tells a reader when you force-pushed, what you reset away, and roughly when.</li>
+</ul>
+<p>The operational consequence is blunt: if ZCode touched a repository, the safe assumption is that <strong>every secret that ever appeared anywhere in that repository&rsquo;s history has been exposed</strong>, not merely the secrets in the current <code>HEAD</code>. Rotating only the secrets visible in your present working tree is an incomplete response.</p>
+<h2 id="which-key-holds-the-private-half-settles-the-it-was-backup-defense">Which key holds the private half settles the &ldquo;it was backup&rdquo; defense</h2>
+<p>Envelope encryption with a server-delivered public key is a decisive technical fact, and it is the cleanest test for any future claim of this kind.</p>
+<p>Legitimate backup and cross-device synchronization put keys in the user&rsquo;s hands. Git remotes authenticate as you; Time Machine keys are yours; encrypted cloud backup hands you a recovery key. In this flow, the client generated an AES-256-CTR key, wrapped it with an RSA public key that arrived from the server during credential negotiation, and shipped the wrapped key alongside the ciphertext. The private key needed to unwrap it existed only on Z.ai&rsquo;s side. No key anywhere on the researcher&rsquo;s system could open his own archive.</p>
+<p>A system where only the vendor can decrypt your data is not a backup. It is collection with a backup&rsquo;s user-visible shape. And it produces a specific, unfixable epistemic problem: &ldquo;we destroyed it immediately&rdquo; is unverifiable from outside by construction, because nobody outside the vendor can read the data or audit its lifecycle. Reuters noted precisely this — users could not open, verify or independently confirm deletion of their own uploaded files, which is why the company&rsquo;s statements could not settle the matter.</p>
+<h2 id="the-two-toggles-that-do-not-turn-it-off">The two toggles that do not turn it off</h2>
+<p>ZCode shipped two settings that read like an off switch. Neither is one:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Setting</th>
+          <th>Internal flag</th>
+          <th>What it actually controls</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>&ldquo;Optimize Experience&rdquo;</td>
+          <td><code>optimizeAgentExperienceEnabled</code></td>
+          <td>Authorization for using data in <strong>model training</strong> only</td>
+      </tr>
+      <tr>
+          <td>&ldquo;Repo Snapshot Indexing&rdquo;</td>
+          <td><code>repoSnapshotIndexingEnabled</code></td>
+          <td>Server-side indexing of snapshots that have <strong>already been uploaded</strong></td>
+      </tr>
+  </tbody>
+</table>
+<p>Both toggles govern what happens <em>after</em> data exists on the server. Neither gates the sidecar that creates and uploads the archive, which was instantiated unconditionally at startup with no preference check. There was, in the audited build, no user-reachable setting that stopped the capture/upload path — the only precondition being a valid login token.</p>
+<p>The generalizable rule is worth carrying to every other agent harness you evaluate: <strong>a privacy control you cannot verify in source code or by packet capture is marketing, not a control.</strong> Toggle labels are a claim about behavior; a network capture is evidence of behavior.</p>
+<p>The second corroborating finding is just as sharp. A captured copy of ZCode&rsquo;s system prompt and tool schema — a ~131KB prompt and a 31-tool surface archived by <a href="https://github.com/Continuum-AI-Corp/OrcaPromptVault">OrcaPromptVault</a> — contains no snapshot, upload or telemetry tool at all, and no mention of Aliyun, OSS, uploads or privacy anywhere in the instructions. The upload pipeline lived outside the agent&rsquo;s tool loop, as a host-level sidecar. That is exactly why no agent-level permission prompt, approval gate, or tool-call review could ever have surfaced it to the user: the agent never performed the upload, so the agent could never ask about it.</p>
+<h2 id="what-is-the-repo-wiki-explanation-and-does-it-hold-up">What is the &ldquo;Repo Wiki&rdquo; explanation, and does it hold up?</h2>
+<p>Z.ai did not dispute that uploads occurred. On 2026-09-18 at 17:44 Beijing time it posted a statement in its Feishu user community attributing the traffic to &ldquo;codebase indexing&rdquo; for a Repo Wiki feature, saying the data was &ldquo;destroyed immediately&rdquo; after wiki generation, that the feature had defaulted on earlier in the product&rsquo;s life, and that the issue &ldquo;has been fixed.&rdquo; It promised an open-source release, third-party review, and an extra weekly quota reset for affected users.</p>
+<p>The sequence that followed is documented well enough to grade claim by claim:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Date (UTC)</th>
+          <th>Event</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>2026-07-01</td>
+          <td>ZCode launches publicly on Hacker News as &ldquo;ZCode – Harness for GLM-5.2&rdquo; (511 points, 355 comments), positioned as a first-party Claude Code competitor for GLM</td>
+      </tr>
+      <tr>
+          <td>2026-09-17</td>
+          <td>Subscriber notices <code>~/.zcode</code> past 700MB</td>
+      </tr>
+      <tr>
+          <td>2026-09-18 10:35 +0800</td>
+          <td>Teardown published; the thread reaches 342 points and 115 comments, the post passes 1.6M impressions</td>
+      </tr>
+      <tr>
+          <td>2026-09-18 17:44 +0800</td>
+          <td>Feishu statement: Repo Wiki indexing, data destroyed immediately, issue fixed</td>
+      </tr>
+      <tr>
+          <td>2026-09-20 12:01</td>
+          <td><code>github.com/zai-org/ZCode</code> repository created</td>
+      </tr>
+      <tr>
+          <td>2026-09-20 21:14</td>
+          <td>&ldquo;feat: open source&rdquo; commit lands — 6,973 files, roughly 1.03M lines, in a single commit; PRs locked, issues disabled</td>
+      </tr>
+      <tr>
+          <td>2026-09-21 01:23</td>
+          <td>ZCode account statement: remediation complete, apology, cites CAICT and NSFOCUS findings</td>
+      </tr>
+      <tr>
+          <td>2026-09-22</td>
+          <td>Reuters and The Register publish; Reuters reports Z.ai disabled certain features</td>
+      </tr>
+      <tr>
+          <td>2026-09-23</td>
+          <td>Client v3.14.3 ships; public repo gains a matching commit</td>
+      </tr>
+  </tbody>
+</table>
+<p>There is an internal contradiction in the explanation that the published code does not resolve in the vendor&rsquo;s favor. Z.ai&rsquo;s stated rationale was that checkpoint restore required the uploads. But in the code as published, checkpoints are local git diffs under <code>~/.zcode/checkpoints/</code> produced by the bundled git CLI — not a server-dependent mechanism. A local-only checkpoint implementation is not a reason to ship a workspace archive to object storage.</p>
+<p>The timing of the Repo Wiki attribution is also worth noting against the capture triggers: <code>captureBeforePrompt</code> fires before <em>every</em> prompt, and session logs showed up to 62 capture events in one session. A wiki-indexing feature that runs once per repository is a poor fit for a hook that fires on every prompt.</p>
+<h2 id="what-i-verified-in-the-published-source-myself">What I verified in the published source myself</h2>
+<p>Claims about open-source remediation deserve direct checking rather than repetition of the vendor&rsquo;s summary. My own read of <code>zai-org/ZCode</code> via the GitHub API and code search on 2026-09-29:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Check</th>
+          <th>Result</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Repository history</td>
+          <td>3 commits total — &ldquo;Initial commit&rdquo; (2026-09-20), &ldquo;feat: open source&rdquo; (2026-09-20), &ldquo;feat: update v3.14.3&rdquo; (2026-09-23). One tag: v3.14.3. License Apache-2.0.</td>
+      </tr>
+      <tr>
+          <td>Collaboration surface</td>
+          <td><code>has_issues=false</code>, <code>has_wiki=false</code>, <code>has_discussions=false</code> — issues disabled, PRs locked</td>
+      </tr>
+      <tr>
+          <td>Traction</td>
+          <td>7,163 stars, 2,171 forks, 44 watchers</td>
+      </tr>
+      <tr>
+          <td><code>repoSnapshot</code> in code</td>
+          <td>0 hits</td>
+      </tr>
+      <tr>
+          <td><code>snapshot/upload</code> in code</td>
+          <td>0 hits</td>
+      </tr>
+      <tr>
+          <td><code>aliyuncs</code> in code</td>
+          <td>0 hits (the single match elsewhere is a model-API base URL config, unrelated to OSS)</td>
+      </tr>
+      <tr>
+          <td>Sanity control</td>
+          <td><code>gitCheckpointService</code> = 9 hits, <code>ripgrep</code> = 31 hits — the search does find real strings, so the zeros are meaningful</td>
+      </tr>
+  </tbody>
+</table>
+<p>So the vendor&rsquo;s claim that the automatic repo-snapshot pipeline is absent from the published source is consistent with the code as published. Two refinements matter for anyone who wants to reason precisely:</p>
+<p><strong>Absence of the caller is not removal of the capability.</strong> The published client still ships a real OSS form-POST upload path in <code>packages/services/src/feedback/feedbackHttpClient.ts</code>, implementing <code>/feedback/attachment/upload-credential</code>, <code>buildOssFormFields()</code> and <code>uploadOssForm()</code> — used for user-initiated feedback attachments with a ticket ID and a size cap. That is a distinct, user-triggered feature and not the sidecar, but it means the OSS form-upload plumbing itself was never removed, only the automatic workspace caller. There are also residual <code>upload-credential</code> tokens, one of them (<code>networkTelemetryAggregator.ts</code>) a bare string inside a network-error classifier vocabulary — a classifier, not an upload path.</p>
+<p><strong>Matching version tags do not make a binary reproducible.</strong> The repo&rsquo;s only tag is v3.14.3, matching the 2026-09-23 commit message and the shipped client. But as ferstar notes, a matching version tag does not prove a proprietary compiled binary is byte-identical to public source. A Hacker News item on 2026-09-25 explicitly raises this divergence question. Treat &ldquo;the public source is what shipped&rdquo; as unproven.</p>
+<p>The open-source release is genuinely inspectable, and the inspection supports the remediation claims. It is not, however, auditability of the change: with two commits at release and a flattened dump, nobody can diff how the pipeline was excised, review the original implementation, or see what else traveled on the same code path. Open-sourcing after an incident is damage control that happens to be verifiable. It is not a security property, and it should not be scored as one.</p>
+<h2 id="if-you-ran-zcode-against-a-private-repo-do-this">If you ran ZCode against a private repo, do this</h2>
+<p>This is the durable part, and it does not expire with the news cycle.</p>
+<p><strong>1. Rotate every secret that ever appeared anywhere in the repository&rsquo;s history.</strong> Not the secrets in your current tree — every one that has ever been committed. Use <code>git log -p</code> plus <code>git rev-list --all --objects</code> and a secret scanner over full history, not just <code>HEAD</code>. Include database passwords, API keys, cloud credentials, JWT signing keys, CI tokens, and webhook secrets. Deleting a commit is not deletion.</p>
+<p><strong>2. Lock the checkpoint directory if the client is still installed.</strong> <code>chattr +i ~/.zcode/v2/checkpoints</code> on Linux or <code>chflags uchg</code> on macOS. Accept the cost: checkpoint rollback and timeline features stop working. Deleting archives manually does not work; a fresh archive reappeared within 30 minutes in the observed case.</p>
+<p><strong>3. Keep secrets out of versioned paths entirely.</strong> Use <a href="https://github.com/getsops/sops">sops</a> or a secrets manager CLI (1Password CLI, Vault) so live credentials are injected at runtime rather than stored in the repository. If a secret is never in the working tree, it cannot enter the object store.</p>
+<p><strong>4. Sandbox or containerize any proprietary harness on repositories you do not own outright.</strong> Give it a working directory that contains only what the task needs, e.g. <code>git clone --depth 1</code> into a scratch path or <code>git worktree</code>, with no access to your full history. A short clone is not just a speed trick; it is a blast-radius limit.</p>
+<p><strong>5. Separate &ldquo;I want GLM&rdquo; from &ldquo;I will run Z.ai&rsquo;s closed harness.&rdquo;</strong> The open weights remain available through harnesses you control or can inspect. This is the entire content of the open-weights argument, and it only pays off if you exercise it.</p>
+<p><strong>6. Establish a client-code boundary policy before adopting any agent harness.</strong> For repositories containing third-party or customer code, the simplest hard boundary is keeping the agent signed out, or off the machine, when source cannot leave your network.</p>
+<p>That last point connects to the most underweighted dimension of this incident. Reuters reported a corporate complaint from Chengming Technology that six company coding workspaces had been uploaded without consent, including complete source code, database passwords and employees&rsquo; personal information. That claim was later reported as retracted on the basis of &ldquo;wrong evidence,&rdquo; and it should be presented as a reported-and-retracted claim rather than as established fact. The structural risk it describes is real regardless of the retraction: a developer installing an agent harness transfers third-party customer code and colleague PII across a border and into a bucket the company does not control, with no data-processing agreement, no disclosure, and no opt-out. If you run engineering for a company that handles client code, that is a policy gap you own.</p>
+<h2 id="the-line-this-crosses-inference-context-versus-whole-repo-capture">The line this crosses: inference context versus whole-repo capture</h2>
+<p>There is a real and reasonable defense of AI coding tools in general: to answer a question about code, a model must see code, and sending relevant context to inference is inherent to the product category. Every tool in this space does it, including the open-weight ones.</p>
+<p>That defense does not apply here, and the distinction is worth keeping clean:</p>
+<table>
+  <thead>
+      <tr>
+          <th></th>
+          <th>Inference-context transmission</th>
+          <th>ZCode workspace snapshotting (3.12.3)</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Scope</td>
+          <td>Files the agent reads to answer the current request</td>
+          <td>Entire workspace, <code>.git</code> included, regardless of relevance</td>
+      </tr>
+      <tr>
+          <td>Timing</td>
+          <td>During the request</td>
+          <td>At startup and before every prompt, up to 62 events per session</td>
+      </tr>
+      <tr>
+          <td>Consent</td>
+          <td>Implicit in using the assistant on a file</td>
+          <td>None — no prompt, no disclosure, no effective toggle</td>
+      </tr>
+      <tr>
+          <td>Visibility</td>
+          <td>Usually represented by a policy describing submitted code</td>
+          <td>Policy mentioned only &ldquo;text, files, and code submitted during conversations&rdquo;</td>
+      </tr>
+      <tr>
+          <td>Decryptability</td>
+          <td>Server-side processing (ordinary)</td>
+          <td>Encrypted with a vendor-only key, unreadable by the user</td>
+      </tr>
+      <tr>
+          <td>Retention claim</td>
+          <td>Vendor policy</td>
+          <td>&ldquo;Destroyed immediately&rdquo; — unverifiable from outside</td>
+      </tr>
+  </tbody>
+</table>
+<p>Consenting to send code to a model to get an answer is not consent to ship the repository, its history, and its LFS cache to an object storage bucket. The privacy policy in force covered the first and never described the second — no mention of whole-workspace snapshots, the git object database, reflogs, or repeated background uploads tied to login state, in the policy, the FAQ or the changelog.</p>
+<h2 id="open-weights-are-not-an-open-harness">Open weights are not an open harness</h2>
+<p>The sharpest way to read this incident is against the sales narrative. Z.ai launched ZCode in July 2026 explicitly as a first-party harness for GLM, weeks after the Claude Code hidden-telemetry controversy had made closed-harness trust the live issue in the developer community. Open weights were the argument: no kill switch, no vendor able to degrade your model, no black box between you and your inference. An executive publicly answered on X that the company would not implement anything beyond what was listed on the ZCode website.</p>
+<p>Workspace snapshotting was never listed on the ZCode website. The harness is where the trust boundary actually lives — weights you can download tell you nothing about a client you cannot read, and the client is what has filesystem access, a login token, and network reach. &ldquo;Do not trust closed-source AI harnesses,&rdquo; as security commentator Petri Kuittinen put it, is not a slogan about licensing philosophy; it is a statement about which component can silently act on your disk.</p>
+<p>Z.ai&rsquo;s January 2026 listing on the Hong Kong Stock Exchange explains the intensity of the reputational response, but not the technical severity. The technical severity is moderate: one small public-repo workspace was confirmed accepted by a bucket that has since been emptied and deleted, plus an upload pipeline that most clearly demonstrates the <em>capability</em>, not a mass-scale leak. The trust cost is high because the gap between what was sold (open weights as the escape from vendor-controlled tooling) and what shipped (an undocumented, non-optional, vendor-keyed upload path) is exactly the gap the sales pitch promised to close.</p>
+<h2 id="verdict-what-is-confirmed-what-is-company-claim-what-is-unproven">Verdict: what is confirmed, what is company claim, what is unproven</h2>
+<p>Graded honestly, because the difference between these three columns is the difference between a fact and a press release:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Claim</th>
+          <th>Grade</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>ZCode uploaded users&rsquo; workspace data</td>
+          <td>Confirmed — by Z.ai&rsquo;s own statements, and by Reuters reporting that Z.ai disabled features after the issue</td>
+      </tr>
+      <tr>
+          <td>The <code>.git</code> object store, LFS cache and reflogs were in the payload</td>
+          <td>Confirmed — local plaintext manifest from the researcher&rsquo;s own machine</td>
+      </tr>
+      <tr>
+          <td>The upload used a server-supplied public key with a private key only Z.ai held</td>
+          <td>Confirmed — reverse-engineering and packet capture, independently consistent with Reuters&rsquo; account of why users could not open their own files</td>
+      </tr>
+      <tr>
+          <td>&ldquo;It was the Repo Wiki codebase-indexing feature&rdquo;</td>
+          <td>Company account, and a poor fit for a sidecar that fired before every prompt</td>
+      </tr>
+      <tr>
+          <td>&ldquo;Data was destroyed immediately&rdquo;</td>
+          <td>Unverifiable from outside, by construction</td>
+      </tr>
+      <tr>
+          <td>&ldquo;The 313MB commercial repository was uploaded&rdquo;</td>
+          <td><strong>Wrong</strong> — 564 failed attempts, never left the machine. Correcting this strengthens the case</td>
+      </tr>
+      <tr>
+          <td>&ldquo;Fully open source&rdquo;</td>
+          <td>Code is public and the pipeline is absent from it; history is a flattened dump with issues disabled, and binary-versus-source equivalence is unproven</td>
+      </tr>
+      <tr>
+          <td>&ldquo;The code was never used to train GLM&rdquo;</td>
+          <td>Company denial, no external check available</td>
+      </tr>
+      <tr>
+          <td>The bucket was emptied and all objects deleted</td>
+          <td>Third-party audit findings, cited by Z.ai: CAICT found the bucket in a zero-data state; NSFOCUS found the bucket and all objects deleted with no remaining path transmitting local files</td>
+      </tr>
+  </tbody>
+</table>
+<p>What the audits cannot do is as important as what they show. A bucket audit performed on 2026-09-20 cannot reconstruct the lifecycle of data uploaded before 2026-09-18, cannot answer who held the RSA private key or for how long, and cannot test a &ldquo;destroyed immediately&rdquo; claim that was made two days before the audit. Both full CAICT and NSFOCUS reports were still unpublished as of the September 21 statement, which leaves the primary evidence for the remediation as an assertion relayed by the vendor.</p>
+<p>Threads worth following if you care how this resolves: publication of the full audit reports, a reproducible build so the shipped binary can be compared against the published source, and any third-party review of the current client.</p>
+<p>The durable lesson fits in a sentence. The vulnerability was not that a model saw your code. It was that a client you could not read, running with your credentials, had permission to decide what left your machine — and that no toggle, policy or agent-level approval could have shown it to you.</p>
+<h2 id="faq">FAQ</h2>
+<p><strong>Did ZCode actually upload my code?</strong></p>
+<p>ZCode versions up to and including 3.12.3 packaged the whole workspace of any logged-in user, encrypted it with a server-supplied RSA public key, and uploaded it to Alibaba Cloud OSS. Z.ai has not disputed that uploads occurred — it attributed them to a &ldquo;Repo Wiki&rdquo; codebase-indexing feature. In the specific workspace the researcher dissected, the large 313MB commercial-repo archive failed 564 times and never left the machine; a separate small public-repo workspace of 538 files was accepted by the server.</p>
+<p><strong>Is ZCode open source now, and does that fix it?</strong></p>
+<p>The source is public under Apache-2.0, but the release is a flattened dump: 6,973 files in a single &ldquo;feat: open source&rdquo; commit on 2026-09-20, with the repository&rsquo;s prior development history absent, pull requests locked, and issues disabled. My own code search on 2026-09-29 confirmed zero hits for <code>repoSnapshot</code>, <code>snapshot/upload</code> and <code>aliyuncs</code>, which supports the claim that the automatic pipeline was removed. It does not prove the shipped binary matches the public source.</p>
+<p><strong>Which settings in ZCode disable the upload?</strong></p>
+<p>In the audited build, none. &ldquo;Optimize Experience&rdquo; (<code>optimizeAgentExperienceEnabled</code>) governs model-training authorization only, and &ldquo;Repo Snapshot Indexing&rdquo; (<code>repoSnapshotIndexingEnabled</code>) governs server-side indexing of snapshots already uploaded. The snapshot sidecar was instantiated at startup with no preference gating and needed only a valid login token, so there was no user-reachable switch that stopped the capture and upload path. Remediation came in the client updates, not as a toggle.</p>
+<p><strong>If I ran ZCode on a private repository, what should I do first?</strong></p>
+<p>Rotate every secret that ever appeared anywhere in that repository&rsquo;s history, not only the ones in your current working tree — roughly 86.6% of the uploaded payload was the <code>.git</code> directory, which contains deleted-in-a-later-commit credentials, unpushed branch names, reflogs and the LFS cache. Then lock <code>~/.zcode/v2/checkpoints</code> with <code>chattr +i</code> (Linux) or <code>chflags uchg</code> (macOS) if the client is still installed, accepting that checkpoint rollback stops working.</p>
+<p><strong>Why does the encryption key matter so much?</strong></p>
+<p>Because it determines whether the vendor&rsquo;s statements are checkable. Each snapshot was encrypted with a locally generated AES-256-CTR key that was then wrapped with an RSA public key delivered by Z.ai&rsquo;s server; the matching private key never touched the user&rsquo;s machine. The user therefore could not read his own uploaded archive, could not verify what it contained, and cannot independently confirm that it was deleted. A system only the vendor can decrypt is collection rather than backup — and it makes &ldquo;we deleted it&rdquo; unfalsifiable from the outside.</p>
+<h2 id="related-reading">Related reading</h2>
+<ul>
+<li><a href="/posts/self-hosted-ai-coding-comparison-2026/">Self-hosted AI coding: open weights versus managed harnesses</a></li>
+<li><a href="/posts/composable-ai-coding-stack-cursor-claude-codex-2026/">Building a composable AI coding stack: Cursor, Claude Code, Codex</a></li>
+<li><a href="/posts/agent-skills-supply-chain-security-guide-2026/">Agent skills supply chain security</a></li>
+<li><a href="/posts/secure-ai-agents-least-privilege-2026/">Securing AI agents with least privilege</a></li>
+</ul>
+<p>Sources: <a href="https://blog.ferstar.org/en/posts/zcode-silent-workspace-snapshot-upload/">ferstar teardown</a> (primary reverse engineering and packet capture), <a href="https://tokenstead.ai/guides/zcode-silent-git-history-upload">tokenstead.ai</a>, <a href="https://cellcog.ai/blog/zcode-open-sourced-after-git-uploads/">cellcog.ai</a>, <a href="https://www.reuters.com/legal/litigation/chinas-zai-disables-ai-coding-assistant-features-after-security-issue-2026-09-21/">Reuters</a>, <a href="https://www.theregister.com/security/2026/09/22/zai-says-sorry-for-slurping-up-your-code-open-sources-zcode/5298300/">The Register</a>, <a href="https://runtimewire.com/article/zai-zcode-uploads-git-history-without-opt-out">runtimewire</a>, <a href="https://github.com/zai-org/ZCode">zai-org/ZCode on GitHub</a>, <a href="https://github.com/Continuum-AI-Corp/OrcaPromptVault">OrcaPromptVault</a>.</p>
+]]></content:encoded></item></channel></rss>
