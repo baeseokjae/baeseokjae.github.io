@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Pi Coding Agent Memory Plugin on RockB</title><link>https://baeseokjae.github.io/tags/pi-coding-agent-memory-plugin/</link><description>Recent content in Pi Coding Agent Memory Plugin on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Wed, 30 Sep 2026 20:52:59 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/pi-coding-agent-memory-plugin/index.xml" rel="self" type="application/rss+xml"/><item><title>Zero-Mem for Pi Review: Zero-Token Memory for a Coding Agent (2026)</title><link>https://baeseokjae.github.io/posts/zero-mem-pi-coding-agent-memory/</link><pubDate>Wed, 30 Sep 2026 20:52:59 +0000</pubDate><guid>https://baeseokjae.github.io/posts/zero-mem-pi-coding-agent-memory/</guid><description>Zero-Mem for Pi gives the Pi coding agent long-term memory with zero LLM tokens per memory operation, using raw traces plus local NER and embeddings.</description><content:encoded><![CDATA[<p>Zero-Mem for Pi is a community extension that gives the Pi coding agent long-term memory without spending a single LLM token on memory operations. It keeps every finished session as a raw trace, indexes those traces with local NER and embedding models, and injects a small number of retrieved snippets into later prompts — so the model is called once, for the answer.</p>
+<p>That is the whole idea, and it is narrower than the marketing line suggests. The architecture comes from the paper <em>Zero-Mem: Zero-Token Memory Operations for LLM Agents</em> (arXiv:2607.29377v1, 31 July 2026, CC BY-NC-SA 4.0), which reports a 57.6% reduction in memory-operation time cost versus the fastest baseline at matched final-answer quality. Two independent Pi ports exist as of this writing: <code>skorotkiewicz/zero-mem</code> (the early adaptation, roughly two stars, README package name <code>pi-zero-mem</code>) and <code>woolcoxm/zero-mem-pi</code> (a self-described &ldquo;faithful reimplementation&rdquo;, 38 stars). Both are architectural adaptations of a paper whose reference implementation is still pending peer review, and both say so.</p>
+<p>The headline finding of this review is not the token savings. It is that Zero-Mem removes generative rewriting from memory entirely: the original interaction traces stay the source of record, so a retrieved fact can be traced back to the message it came from instead of to a summary that quietly dropped it. That distinction is what makes the extension worth understanding even if you never install it.</p>
+<h2 id="what-does-zero-mem-pi-agent-actually-describe">What Does &ldquo;Zero Mem Pi Agent&rdquo; Actually Describe?</h2>
+<p>It describes a memory layer for the Pi coding agent in which no LLM is invoked to write memory, summarize memory, or score a retrieval. Every step outside final question answering is deliberately non-generative: an encoder embeds text, an entity extractor tags it, a graph walk and a lexical/dense ranker select evidence, and a deterministic calibration step keeps the reader grounded in what was retrieved.</p>
+<p>The paper states the constraint precisely: &ldquo;no step outside final question answering invokes an LLM or consumes LLM input or output tokens,&rdquo; with encoder computation accounted separately. The abstract frames the motivation as a data-structure problem rather than a modelling problem — generating intermediate records and mediating their retrieval adds recurring token and time costs, and omitted or merged details can obscure the original evidence.</p>
+<p>Pi is an unusually good host for that idea because Pi ships no memory model at all. According to a source-level analysis of <code>earendil-works/pi</code> (revision f9bcd351, analyzed 15 September 2026), Pi is a branchable session substrate: a JSONL session tree that forks and clones, deterministic file manifests on compaction, and more than 20 ExtensionAPI lifecycle events. Searching its SDK documentation for &ldquo;memory&rdquo; returns only <code>SessionManager.inMemory()</code> and <code>InMemoryCredentialStore</code> — storage backends, not agent memory. Any memory behaviour has to be built on <code>context</code>, <code>session_start</code>, and <code>session_before_compact</code>.</p>
+<h2 id="what-does-the-zero-mem-paper-claim-with-numbers">What Does the Zero-Mem Paper Claim, With Numbers?</h2>
+<p>Three claims matter, and they are separable.</p>
+<p>First, zero LLM tokens for memory. In the paper&rsquo;s efficiency comparison (Table 2, GPT-4o-mini, same concurrency and hardware), Zero-Mem consumes zero LLM input/output tokens for memory operations, while GAM — the strongest quality baseline — burned 28,570,674 memory tokens and 18,552.39 seconds of total overhead. Even LightMem, the most token-efficient baseline in the comparison, burned 877,086 tokens.</p>
+<p>Second, lower wall-clock cost, not just lower token cost. Zero-Mem&rsquo;s total memory-operation time was 334.77 s, or 0.22 s per query, against LightMem&rsquo;s 788.76 s and 0.51 s per query — the source of the 57.6% figure. Encoder inference, indexing, retrieval and calibration still consume CPU or GPU time; what disappears is the <em>LLM-mediated</em> cost.</p>
+<p>Third, quality is not sacrificed. In the same efficiency setting Zero-Mem also posted the best quality: 59.15 F1 and 52.96 BLEU-1, which the paper reports as +10.0% F1 and +11.5% BLEU-1 over GAM. That is the sentence to hold onto: eliminating LLM-based memory operations did not degrade answer quality in their setup.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Method (Table 2, GPT-4o-mini)</th>
+          <th>Memory tokens</th>
+          <th>Total memory-op time</th>
+          <th>Per-query time</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Zero-Mem</td>
+          <td>0</td>
+          <td>334.77 s</td>
+          <td>0.22 s</td>
+      </tr>
+      <tr>
+          <td>LightMem</td>
+          <td>877,086</td>
+          <td>788.76 s</td>
+          <td>0.51 s</td>
+      </tr>
+      <tr>
+          <td>GAM</td>
+          <td>28,570,674</td>
+          <td>18,552.39 s</td>
+          <td>not reported</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="what-does-zero-token-really-mean--and-what-still-costs">What Does &ldquo;Zero-Token&rdquo; Really Mean — and What Still Costs?</h2>
+<p>&ldquo;Zero-token&rdquo; is a scope claim, not a magic claim. Zero-Mem eliminates LLM calls and LLM tokens <em>from memory operations only</em>: entity extraction, embedding, graph construction, retrieval and calibration all still cost compute — 334.77 s across the paper&rsquo;s full run. If your constraint is a hard API bill, the promise holds. If your constraint is a GPU budget on a laptop, the promise is about the model calls, not about free compute.</p>
+<p>Two practical consequences follow for a Pi user.</p>
+<p>The first is that the only memory tokens you pay per turn are the injected snippets. In <code>woolcoxm/zero-mem-pi</code>, retrieval injects up to three snippets by default as a <code>## Prior session memory</code> block in the system prompt, and the README puts that at roughly 103 tokens per turn — the entire recurring memory cost of the system, versus per-turn or per-query LLM maintenance calls in LLM-managed designs. The broader market numbers Zero-Mem is aimed at are large: LangMem reportedly spends about 3.26M tokens per session and xMemory about 118k tokens per query (VentureBeat figures as relayed by Sesame Disk, 5 August 2026 — secondary sourcing).</p>
+<p>The second is that if the local Python environment is missing, the <code>skorotkiewicz</code> port falls back to BM25 lexical retrieval rather than calling a model to substitute for the missing components. Degradation means &ldquo;worse recall&rdquo;, not &ldquo;a surprise API bill&rdquo;.</p>
+<h2 id="how-does-zero-mem-work-traces-two-views-and-calibration">How Does Zero-Mem Work? Traces, Two Views, and Calibration</h2>
+<p>The architecture is best understood as four deterministic stages plus one LLM call.</p>
+<p><strong>Raw traces as the source of record.</strong> Zero-Mem preserves original interaction traces rather than summarizing them. Nothing is merged, nothing is abstracted away at write time. This is the design decision that the Hacker News thread picked up on most, and the reason auditability improves: retrieval is grounded in evidence rather than in a summary&rsquo;s omissions.</p>
+<p><strong>An entity–context graph.</strong> The first view exposes connections across interactions. Entities — people, tools, files, projects, decisions — become nodes that let retrieval follow structure between sessions.</p>
+<p><strong>A temporal hierarchy.</strong> The second view preserves conversational locality and session state, so a query can recover the surrounding context of a turn rather than only its matching chunk.</p>
+<p><strong>Query-dependent routing and evidence closure.</strong> For each query Zero-Mem weighs the two views (the fusion weight <code>rho</code> defaults to 0.6), retrieves from both, and then follows their structure outward to recover supporting relations or adjacent context. This is the &ldquo;closure&rdquo; step the ablation tests.</p>
+<p><strong>Deterministic calibration.</strong> Before the reader sees anything, calibration discards conflicting evidence and keeps the final answer grounded in the retrieved traces. Only then is the LLM invoked — once, on the final QA step.</p>
+<p>The community ports mirror these defaults: <code>rho = 0.6</code>, <code>gamma = 0.6</code>, and top-5 retrieved evidence, matching the parameters cited in the Rust clean-room port (<code>ptaranat/zeromem</code>) as well as the paper.</p>
+<h2 id="what-do-the-benchmarks-and-ablations-show">What Do the Benchmarks and Ablations Show?</h2>
+<p>On LoCoMo, Zero-Mem takes the best average F1 and BLEU-1 under both readers: 59.15 / 52.96 with GPT-4o-mini (+5.40 F1, +5.45 BLEU-1 over GAM) and 57.57 / 51.41 with Qwen2.5-14B (+4.87 / +4.86). The benchmark covers single-hop, multi-hop, temporal and open-domain questions — the last two being where a temporal hierarchy is supposed to earn its keep.</p>
+<p>On HotpotQA, Zero-Mem holds the highest F1 across all readers as context grows from 56K to 448K tokens, averaging +5.52 F1 over the strongest baseline. The ablation at 56K context with GPT-4o-mini is the most informative single table in the paper:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Configuration (HotpotQA, 56K, GPT-4o-mini)</th>
+          <th>F1</th>
+          <th>BLEU-1</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Full Zero-Mem</td>
+          <td>72.07</td>
+          <td>69.66</td>
+      </tr>
+      <tr>
+          <td>Graph view only (no hierarchy)</td>
+          <td>62.50</td>
+          <td>59.90</td>
+      </tr>
+      <tr>
+          <td>Temporal hierarchy only (no graph)</td>
+          <td>54.88</td>
+          <td>51.40</td>
+      </tr>
+      <tr>
+          <td>Without evidence closure</td>
+          <td>67.90</td>
+          <td>65.43</td>
+      </tr>
+      <tr>
+          <td>Without calibration</td>
+          <td>70.13</td>
+          <td>66.45</td>
+      </tr>
+  </tbody>
+</table>
+<p>The two views are complementary rather than redundant, and on HotpotQA the graph does the heavier lifting — dropping the hierarchy costs 9.6 F1, while dropping the graph costs 17.2. The retrieval-budget study is equally practical: performance improves sharply from top-1 to top-5, peaks in the average around top-10, then flattens. The paper uses top-5 to match its baselines, which is also where the Pi ports sit.</p>
+<h2 id="why-does-this-matter-more-on-pi-than-on-other-coding-agents">Why Does This Matter More on Pi Than on Other Coding Agents?</h2>
+<p>Because Pi hands the problem to the extension author instead of solving it internally. Pi&rsquo;s own surface area is a session tree — sessions fork, clone, and compact — and compaction is the moment when a coding agent normally loses fidelity: history is replaced by a generated checkpoint.</p>
+<p>Both Pi ports treat that moment as a hook rather than a loss. In the <code>skorotkiewicz</code> port, Pi compaction becomes a <em>fixed non-generative</em> checkpoint, and the original branch traces stay retrievable afterwards, including sibling branches and messages that compaction would otherwise hide. In <code>woolcoxm/zero-mem-pi</code>, every finalized message is captured as a trace unit with provenance (session, project, time) plus entities, and a derived &ldquo;identity slot&rdquo; is injected on the first turn so the agent starts a session with project context it did not have to re-read.</p>
+<p>Neither port claims to reproduce the paper&rsquo;s benchmarks. <code>skorotkiewicz/zero-mem</code> states outright that it is a &ldquo;Pi-oriented implementation of the architecture, not a reproduction of the paper&rsquo;s reported benchmark. It does not rewrite final agent answers.&rdquo; That honesty is worth more than a star count.</p>
+<h2 id="how-do-the-two-pi-implementations-compare">How Do the Two Pi Implementations Compare?</h2>
+<p>They differ in ways that matter to how you would run them.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Aspect</th>
+          <th>skorotkiewicz/zero-mem (early adaptation)</th>
+          <th>woolcoxm/zero-mem-pi (faithful reimplementation)</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Shape</td>
+          <td>TypeScript extension (<code>extensions/zero-mem.ts</code>, ~41 KB) plus a Python NLP worker</td>
+          <td>Self-contained TypeScript</td>
+      </tr>
+      <tr>
+          <td>NER</td>
+          <td>spaCy</td>
+          <td>compromise-style JS extraction</td>
+      </tr>
+      <tr>
+          <td>Embeddings</td>
+          <td>BGE-M3</td>
+          <td>bge-small-en-v1.5 (earlier MiniLM); int8-quantized sidecar</td>
+      </tr>
+      <tr>
+          <td>Ranking</td>
+          <td>Hybrid BM25 + BGE-M3</td>
+          <td>Hybrid BM25 + dense + session-adjacent turn closure, no recency prior</td>
+      </tr>
+      <tr>
+          <td>Graph routing</td>
+          <td>Five primary traces plus bounded graph/local neighbours</td>
+          <td>Personalized PageRank per the paper&rsquo;s Eq. 8–10; full temporal hierarchy only partially realized</td>
+      </tr>
+      <tr>
+          <td>Injected context</td>
+          <td>Retrieved snippets, XML-escaped, with instruction-like traces rejected</td>
+          <td>Up to 3 snippets as <code>## Prior session memory</code>, ~103 tokens/turn</td>
+      </tr>
+      <tr>
+          <td>Storage</td>
+          <td>Pi&rsquo;s session JSONL stays the source of record</td>
+          <td>Project-scoped <code>~/.pi/agent/zero-mem/store.json</code> + int8 embedding sidecar; switches to pure-JS HNSW above ~10k units</td>
+      </tr>
+      <tr>
+          <td>Safety filter</td>
+          <td>Deterministic rejection of &ldquo;instruction-like&rdquo; historical traces (prompt-injection guard)</td>
+          <td>Not documented to the same degree</td>
+      </tr>
+      <tr>
+          <td>Inspection</td>
+          <td><code>/zero-mem</code> command shows route, engine, selected count, blocked instructions</td>
+          <td>Identity slot on first turn; retention policy (<code>maxAgeMs</code>/<code>maxUnits</code>)</td>
+      </tr>
+      <tr>
+          <td>Degraded mode</td>
+          <td>BM25 fallback if the Python env is missing</td>
+          <td>Pure-JS path</td>
+      </tr>
+      <tr>
+          <td>Adoption</td>
+          <td>~2 stars, 0 issues, 29 commits, all 6–8 August 2026</td>
+          <td>38 stars, 2 forks, created 13 August 2026, last push 14 August 2026</td>
+      </tr>
+  </tbody>
+</table>
+<p>The <code>skorotkiewicz</code> port&rsquo;s instruction-trace rejection is the most underrated feature in either codebase: it deterministically refuses to re-inject historical text that reads like an instruction, which closes the obvious prompt-injection channel a retrieved-memory system opens by design. The <code>woolcoxm</code> port has the better engineering story for scale — int8 embeddings, an HNSW switch, a retention policy — and the larger audience.</p>
+<h2 id="how-do-you-install-zero-mem-on-pi">How Do You Install Zero-Mem on Pi?</h2>
+<p>Both ports follow Pi&rsquo;s extension model, so the shape is the same: clone the extension, make the local retrieval dependencies available, point Pi at it, then restart Pi properly.</p>
+<ol>
+<li>Install the extension into Pi&rsquo;s agent directory — for <code>woolcoxm/zero-mem-pi</code>, symlinking the repo into <code>~/.pi/agent/extensions/zero-mem/</code> is supported and is the least surprising layout.</li>
+<li>For the <code>skorotkiewicz</code> port, set up the Python side: <code>uv sync</code> in the repo, then download the spaCy model the worker expects.</li>
+<li>If the Python interpreter is not on the default path, set <code>ZERO_MEM_PYTHON</code> so the extension can find it. If it is missing entirely, expect the BM25 fallback rather than an error.</li>
+<li>Restart Pi <em>fully</em> — not <code>/reload</code>. The documented gotcha in the <code>woolcoxm</code> README is that code changes are not picked up by a reload; a full restart is required, and this is the single most common &ldquo;it does not work&rdquo; report in early adoption.</li>
+<li>Verify with the inspection command. <code>/zero-mem</code> in the <code>skorotkiewicz</code> port prints the retrieval route, the engine in use, how many traces were selected, and how many historical instructions were blocked — which is exactly the output you want when memory returns nothing useful.</li>
+</ol>
+<p>Storage defaults are conservative: <code>woolcoxm/zero-mem-pi</code> keeps everything project-scoped under <code>~/.pi/agent/zero-mem/</code>, with retention limits you can tune; the <code>skorotkiewicz</code> port keeps Pi&rsquo;s own session JSONL as the record of truth and treats the index as derived state.</p>
+<h2 id="zero-mem-vs-other-pi-memory-options">Zero-Mem vs Other Pi Memory Options</h2>
+<p>The Pi memory ecosystem is small and fragmented. Zero-Mem is not the only option, and for some workflows it is not the right one.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Option</th>
+          <th>Storage model</th>
+          <th>Retrieval</th>
+          <th>Honest positioning</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>zero-mem (either port)</td>
+          <td>Raw traces + entity graph + embeddings</td>
+          <td>Hybrid lexical/dense plus graph walk</td>
+          <td>Best fit when you want memory without model calls and traces that stay auditable</td>
+      </tr>
+      <tr>
+          <td>pi-mem (~79★)</td>
+          <td>Plain Markdown files</td>
+          <td>None documented</td>
+          <td>Simplest to read and edit by hand; no embeddings, so recall depends on the agent reading files</td>
+      </tr>
+      <tr>
+          <td>pi-memory (npm)</td>
+          <td>Note store</td>
+          <td>Semantic search via qmd</td>
+          <td>Semantic recall without building a graph</td>
+      </tr>
+      <tr>
+          <td>Magic Context</td>
+          <td>Context management</td>
+          <td>Not benchmarked here</td>
+          <td>Adjacent tooling rather than a memory store</td>
+      </tr>
+      <tr>
+          <td>pi-agent-memory</td>
+          <td>Session memory</td>
+          <td>Not benchmarked here</td>
+          <td>Listed in the Pi package directory</td>
+      </tr>
+  </tbody>
+</table>
+<p>The trade-off is structural, not a matter of polish. Markdown memory is inspectable and zero-dependency but does not scale; vector-search memory scales but loses provenance; Zero-Mem keeps provenance and structure at the cost of a local encoder and a graph.</p>
+<h2 id="what-are-the-limitations-and-open-questions">What Are the Limitations and Open Questions?</h2>
+<p>The paper&rsquo;s reference implementation is not released yet — the abstract says code and implementation details will be available <em>after peer review</em>. Everything discussed here is a community port, and both ports disclaim benchmark parity in writing.</p>
+<p>Mutation and contradiction remain unproven. The sharpest critique in the Hacker News thread (from <code>russlan</code>) argues that if an entity&rsquo;s attributes change across sessions, the graph plus temporal hierarchy must preserve both states, surface the conflict, and show which trace justified the answer. The paper&rsquo;s calibration step discards conflicting evidence, which is the right default for grounded QA but is not the same as conflict <em>reporting</em>. A production agent arguably needs both.</p>
+<p>Stale, conflicting and adversarial traces are unmeasured in public. The community&rsquo;s suggested benchmark — unsupported-answer rate and evidence recall on adversarial memory — does not exist yet for either port. <code>skorotkiewicz</code>&rsquo;s instruction-trace filter is a good start, but one deterministic rule is not a red-team result.</p>
+<p>Adoption is thin. Roughly two stars on one port and 38 on the other, with zero issues on the early one, means there is very little real-world mileage to generalize from — no reports from long-running monorepos, no migration stories, no deletion semantics. Pi itself has no memory contract to inherit: there is no scope primitive and no deletion hook, so every plugin invents its own, and uninstalling cleanly is your problem.</p>
+<p>Finally, the &ldquo;zero-token&rdquo; framing invites the wrong comparison. The alternatives the HN thread surfaced are attention-level and cache-level retrieval — storing conversation KV caches and retrieving on attention scores (reported SOTA on LoCoMo and LongMemEval by one commenter&rsquo;s project), or an approach one commenter described as ~0.3 s retrieval over a few million pre-chunked tokens needing roughly 200 GB of RAM/VRAM. Those attack latency, not token spend, and they are not deployable on a developer laptop. Zero-Mem&rsquo;s bet is that a deterministic structure gets most of the recall for none of the API cost.</p>
+<h2 id="verdict-who-should-install-zero-mem-for-pi-today">Verdict: Who Should Install Zero-Mem for Pi Today?</h2>
+<p>Install it if you already live in Pi, you care about the API bill of long-running sessions, and you want memory you can audit back to the original message. The <code>woolcoxm/zero-mem-pi</code> port is the better-supported starting point: more adoption, simpler dependency story, quantized embeddings, retention controls, and an HNSW escape hatch as your store grows. Reach for <code>skorotkiewicz/zero-mem</code> if the determinism story is what you are evaluating — its instruction-trace rejection and <code>/zero-mem</code> inspection command are the clearest expression of the auditability argument, and its Python worker is easier to read if you intend to modify retrieval.</p>
+<p>Wait if you need conflict handling, deletion guarantees, or evidence from production workloads before you trust a memory layer with your project history. The paper&rsquo;s efficiency claims are specific and well-argued, the auditability argument is stronger than the cost argument, and neither is yet backed by a released, peer-reviewed implementation. Treat the Pi ports as an unusually clean architectural preview, not as a drop-in memory product.</p>
+<h2 id="faq">FAQ</h2>
+<p><strong>Is Zero-Mem for Pi really zero tokens — nothing at all?</strong></p>
+<p>Memory operations consume zero LLM input/output tokens, which is the claim the paper makes and the ports preserve: no summarization call at write time, no scoring call at read time. You still pay tokens for the one final answer, plus the injected snippets — about 103 tokens per turn in the <code>woolcoxm</code> default of three snippets. Local encoder and indexing compute is real, it just is not billed as LLM tokens.</p>
+<p><strong>Does it work offline, and does it need a GPU?</strong></p>
+<p>The retrieval pipeline is local by design: entity extraction plus embedding models running on your machine, with no network call for memory. The reference embeddings used by the ports (<code>bge-small-en-v1.5</code>, BGE-M3, MiniLM variants) run acceptably on CPU for developer-scale stores, and the <code>skorotkiewicz</code> port degrades to BM25 if its Python environment is unavailable. Where you will want a GPU is the final answering model, which is unchanged from Pi&rsquo;s normal behaviour.</p>
+<p><strong>Does Zero-Mem replace Pi&rsquo;s compaction?</strong></p>
+<p>No. It changes what compaction means. Both ports keep the original branch traces retrievable and treat the compacted checkpoint as a fixed, non-generative artifact rather than a generated summary, so compaction stops being the moment your history is permanently rewritten. Messages hidden by compaction remain in the retrievable trace set.</p>
+<p><strong>Does it work with Claude Code, Codex, or Hermes instead of Pi?</strong></p>
+<p>The architecture is host-agnostic, but both implementations shipped so far are Pi extensions built on Pi&rsquo;s lifecycle events (<code>context</code>, <code>session_start</code>, <code>session_before_compact</code>). Porting means re-implementing those hooks against another harness&rsquo;s extension API plus a trace store with provenance. The clean-room Rust port (<code>ptaranat/zeromem</code>) is the most portable starting point if you are evaluating that path.</p>
+<p><strong>How much does it actually help?</strong></p>
+<p>On the paper&rsquo;s benchmarks, memory-operation time drops 57.6% versus the fastest baseline while quality improves rather than degrades — best average F1 and BLEU-1 on LoCoMo under both readers, and the highest F1 on HotpotQA as context scales to 448K tokens. On Pi specifically there is no published before/after, so the honest answer is that the architecture is well-evidenced and the adapters are unmeasured.</p>
+]]></content:encoded></item></channel></rss>
