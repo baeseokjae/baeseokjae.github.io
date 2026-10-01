@@ -1,0 +1,395 @@
+{
+  "topic": "Real SM Utilization for NVIDIA: When nvidia-smi Lies",
+  "slug": "real-sm-utilization-nvidia-smi",
+  "keyword": "NVIDIA SM utilization",
+  "type": "how-to",
+  "competitors": [
+    {
+      "url": "https://devopsbeast.com/blog/dcgm-prometheus-gpu-observability",
+      "key_points": [
+        "Quotes NVIDIA's own definition: utilization.gpu = percent of time over the sample period during which one or more kernels was executing. A time-based occupancy flag, not a work measurement.",
+        "One tiny kernel on 1 of an H100's 132 SMs reads 100% while the other 131 sit idle.",
+        "Ranks the 'utilization' metric chain from least to most honest: DCGM_FI_DEV_GPU_UTIL (the liar) -> DCGM_FI_PROF_GR_ENGINE_ACTIVE -> SM_ACTIVE (breadth) -> SM_OCCUPANCY (depth) -> PIPE_TENSOR_ACTIVE (the money metric) -> DRAM_ACTIVE (bottleneck).",
+        "Worked H100 inference pod example: GPU_UTIL=100, SM_ACTIVE=0.18, SM_OCCUPANCY=0.11, PIPE_TENSOR_ACTIVE=0.04, DRAM_ACTIVE=0.71 => memory-bandwidth-bound, not compute-bound.",
+        "30-second triage rule: tensor high + DRAM moderate = compute-bound; DRAM high + tensor low = memory-bound (batch/quantize/KV-cache before buying hardware); both low while GPU_UTIL=100 = stall (launch overhead or CPU starvation).",
+        "PromQL procurement-ticket detector: DCGM_FI_DEV_GPU_UTIL > 90 and on(gpu,Hostname) DCGM_FI_PROF_PIPE_TENSOR_ACTIVE < 0.1.",
+        "Warns the PROF counters are NOT in the default dcgm-exporter counter set on every install and must be explicitly added to the counters CSV."
+      ]
+    },
+    {
+      "url": "https://gpuaas.com/blog/gpu-utilization-misleading-metric-2026",
+      "key_points": [
+        "One thread looping forever on one SM is enough for nvidia-smi to report 100% utilization — NVIDIA's forum confirms 100% if there is any work in the compute engine.",
+        "Autoregressive decode pins GPU-Util at 100% while SMs run around 15%; this is the normal state of LLM inference, not an edge case.",
+        "Most LLM training lands at 35-45% MFU including frontier-scale runs; a fleet at 100% utilization and 40% MFU is not broken.",
+        "Three metrics close the gap: SM efficiency (DCGM), achieved occupancy (PyTorch Profiler / Nsight Compute), MFU (calculated per run). Power draw is corroborating only, not a work measure.",
+        "Memory reporting misleads in the opposite direction: PyTorch/TF pre-allocate, so nvidia-smi shows high memory use with little actively in use.",
+        "On MIG, GPU-level monitoring is actively wrong rather than imprecise — per-instance DCGM metrics with GPU_I_ID/GPU_I_PROFILE labels are required for per-tenant cost attribution.",
+        "Industry measurement: average enterprise GPU utilization ~5% across 23,000 production clusters; only ~7% of teams exceed 85%."
+      ]
+    },
+    {
+      "url": "https://syseng.io/blog/hpc-gpu-utilization-myth",
+      "key_points": [
+        "States the arithmetic explicitly: a kernel using 5% of SMs for 100% of the time reports 100%; a kernel using 100% of SMs for 50% of the time reports 50%. The metric cannot distinguish them.",
+        "Dataloader-bound training shows 99% utilization because a small fetch/decode kernel runs constantly while the real matmul/attention kernels are blocked.",
+        "Healthy dense-matmul training step: occupancy 70-90%. Dataloader-bound step: occupancy in single digits even when utilization reads 100%.",
+        "Three-metric hierarchy: nvidia-smi Util = was anything happening; SM occupancy = were compute units occupied; Tensor Core utilization = were Tensor Cores doing matmul work.",
+        "Points to nvidia-smi dmon -s pucvmet -d 1 (pwr|gtemp|sm|mem|enc|dec|mclk|pclk) as a better first look, and dcgmi dmon -e 1004,1005,1009,1010 for tensor pipe activity.",
+        "Sustained low Tensor Pipe Active on a matmul-heavy workload is the smoking gun for FP32 instead of BF16/FP16, or custom kernels that do not target Tensor Cores.",
+        "Five-step diagnostic routine: read both dmon outputs -> Nsight Systems on a few iterations -> fix dataloader -> check precision/autocast -> replace memory-bound kernels with fused variants."
+      ]
+    },
+    {
+      "url": "https://netdata.cloud/guides/nvidia-gpu/nvidia-gpu-memory-bandwidth-bound",
+      "key_points": [
+        "The memory-bound signature is the combination, not any single metric: DRAM active high (~0.9) while SM active and Tensor active are low, with utilization still reading 100%.",
+        "Arithmetic intensity is the governing concept: FLOPs per byte transferred. Elementwise ops, reductions, norms, unfused attention, embedding lookups, and moderate-batch inference all live in the low-intensity regime.",
+        "There is no NVML API that returns memory bandwidth in GB/s — tools give a time-based activity ratio; on HBM parts (fixed memory clock) multiplying the ratio by theoretical peak is a reasonable estimate.",
+        "No operational knob adds HBM bandwidth: raising SM clocks, raising the power limit, or adding GPUs running the same kernel shape does nothing for a memory-bound workload.",
+        "Lookalikes to rule out first: HBM thermal throttling (check temperature.memory vs max, clocks.current.memory vs max) and host starvation (low SM AND low DRAM with bursty PCIe and high host CPU).",
+        "Read-only quick checks: nvidia-smi --query-gpu=utilization.gpu,utilization.memory --format=csv,noheader,nounits -l 2 and dcgmi dmon -e 1002,1004,1005 -c 10 -d 1000.",
+        "Profiling fields are not available on every GPU and require the DCGM profiling module plus sufficient privileges; blanks/errors mean verify GPU support before concluding anything."
+      ]
+    },
+    {
+      "url": "https://dev.to/alialp/your-gpus-are-lying-to-you-the-brutal-economics-of-ai-on-kubernetes-id6",
+      "key_points": [
+        "Reproduces the one-thread experiment with numbers: spin loop on 1 of 132 SMs -> GPU_UTIL 100%, SM Active 0.76% (exactly 1/132), Tensor ~0, MFU ~0, 0 tok/s.",
+        "Batch-1 vLLM 7B: GPU_UTIL 90%, SM Active 54.59%, Tensor 1.62%, DRAM 62.3%, MFU 0.23%, 148 tok/s.",
+        "Batch-64 same workload: GPU_UTIL 85% (lower!), SM Active 62.07%, Tensor 11.18%, MFU 11.6%, 7,485 tok/s — 50x the work with a lower lie-number.",
+        "Explains why batch-1 decode is physics, not sloppy code: writing one word reads all 15 GB of weights; 15.2 GFLOP of math ~15 microseconds vs ~6.8 ms to read weights at 2.2 TB/s.",
+        "An H100 needs ~295 operations per byte read before it becomes compute-bound; batch-1 decode uses each byte exactly once.",
+        "SM Active is nearly blind to batching (54.59% -> 62.07% while throughput rose 50x) because DCGM counts warps waiting on memory as active.",
+        "Billed-hour cost breakdown: gpu_util_pct_avg 86.2, sm_active 57.9, tensor_active 6.8, mfu 5.89, cost_usd 4.42, cost_that_did_work_usd 0.26, cost_of_idle_silicon_usd 4.16, idle_pct 94.1."
+      ]
+    },
+    {
+      "url": "https://arthurchiao.art/blog/understanding-gpu-performance/",
+      "key_points": [
+        "NVML header defines GPU util as 'Percent of time over the past sample period during which one or more kernels was executing on the GPU' — a duty cycle, not capacity use.",
+        "Reproduces the canonical demo: a kernel launched with gridDim=1, blockDim=1 (one SM, one thread) makes nvidia-smi print GPU-Util 100% on a V100.",
+        "Maps nvidia-smi's definition onto the USE methodology (utilization = time busy, saturation = queued work), which is why '100%' never implies 'no more work can be accepted'.",
+        "Shows dcgm-exporter output for the same workload: GPU util 100% while SM occupancy is <20% and FP32/FP16/TensorCore activity is near zero.",
+        "Conclusion: for production, use DCGM-based metrics (dcgm-exporter) rather than nvidia-smi utilization."
+      ]
+    },
+    {
+      "url": "https://developer.nvidia.com/blog/measuring-the-gpu-occupancy-of-multi-stream-workloads/",
+      "key_points": [
+        "NVIDIA's own recommended path for SM-level utilization is Nsight Systems with --gpu-metrics-devices, which samples the percentage of all SMs in use (SM Active) at up to 10 kHz.",
+        "SM Active is an average: 50% can mean all SMs active half the time, or half the SMs active all the time, or anything between.",
+        "Defines gross GPU utilization (sum/num samples), net GPU utilization (excluding windows where SM usage is zero, e.g. host->device copies), and effective GPU utilization time (ratio * duration).",
+        "Worked example: gross ~40%, net 79% SM activity on a multi-stream workload.",
+        "Explicit caveat: 'A high percentage of SM utilization does not imply that the SMs are used efficiently' — stalls still count as active."
+      ]
+    },
+    {
+      "url": "https://docs.nvidia.com/datacenter/dcgm/latest/learn/modules/profiling.html",
+      "key_points": [
+        "Authoritative definitions: PROF_SM_ACTIVE (1002) = fraction of time at least one warp was active on an SM, averaged over all SMs; PROF_SM_OCCUPANCY (1003) = resident warps relative to the theoretical maximum; PROF_PIPE_TENSOR_ACTIVE (1004) = fraction of cycles the tensor (HMMA/IMMA) pipe was active; PROF_DRAM_ACTIVE (1005) = fraction of cycles device memory was sending/receiving.",
+        "Critical semantic: 'active' does NOT mean computing — warps waiting on memory requests are still counted as active.",
+        "Thresholds given by NVIDIA: SM activity >= 0.8 is necessary but not sufficient for effective GPU use; < 0.5 likely indicates ineffective usage.",
+        "Shows that N blocks over the whole interval, N/5 blocks over the whole interval, and N blocks over one fifth of the interval all report the same 0.2 SM activity — the metric is insensitive to threads-per-block (use SM_OCCUPANCY for that).",
+        "Documents multiplexing: dcgmi profile -l -i 0 lists which fields can be collected together without extra replay passes."
+      ]
+    },
+    {
+      "url": "https://arxiv.org/abs/2609.12923",
+      "key_points": [
+        "KTH paper (Siavashi et al., submitted 11 Sep 2026) profiling vLLM + FlashAttention-3 + cuBLASLt on an H100 NVL across cold prefill, warm prefill and decode with four production models.",
+        "Central finding: Nsight Compute's sm__throughput.avg.pct_of_peak_sustained_elapsed (sm_busy_pct) is an elapsed-cycle pipeline-throughput proxy — NOT the sm__cycles_active '>=1 warp resident' counter, not occupancy, and not useful matmul throughput.",
+        "On Hopper, bf16 GMMA runs in fixed 64-row fragments, so small-batch decode fills a tiny fraction of each fragment with real token rows; zero-padded math is charged as full hardware utilization.",
+        "Measured productive arithmetic throughput in decode lands between 0.11% and 12.5% of the H100's 835 TFLOP/s dense BF16 ceiling, while dashboards read 91% GPU-Util.",
+        "Cold prefill sustains 73-97% SM utilization (mean 92%); warm prefill with prefix-cache hits collapses to 8-11% at small token counts (mean 33%) because cuBLASLt selects smaller tiles.",
+        "Occupancy has two denominators that differ ~5x: architectural 64 warps/SM vs the kernel's resource cap (typically 8-12); FA3 main at 7.6 warps/SM is 12% of the architectural limit but 95% of its resource cap.",
+        "Recommends replacing sm_busy_pct in dashboards with useful-FLOP efficiency and HBM bandwidth saturation (dram__bytes.sum.per_second vs 3.9 TB/s)."
+      ]
+    },
+    {
+      "url": "https://devopsbeast.com/blog/dcgm-prometheus-gpu-observability",
+      "key_points": [
+        "Frames the 'metric ladder' from least to most honest: DCGM_FI_DEV_GPU_UTIL (the liar) -> DCGM_FI_PROF_GR_ENGINE_ACTIVE -> DCGM_FI_PROF_SM_ACTIVE (breadth) -> DCGM_FI_PROF_SM_OCCUPANCY (depth) -> DCGM_FI_PROF_PIPE_TENSOR_ACTIVE (the money metric) -> DCGM_FI_PROF_DRAM_ACTIVE.",
+        "Worked H100 inference example: GPU_UTIL=100, SM_ACTIVE=0.18, SM_OCCUPANCY=0.11, PIPE_TENSOR_ACTIVE=0.04, DRAM_ACTIVE=0.71 — i.e. memory-bandwidth-bound with near-idle tensor cores.",
+        "Gives a 30-second triage rule: graph tensor-active against DRAM-active; tensor high/DRAM moderate = compute-bound; DRAM high/tensor low = memory-bound; both low with util 100% = stall (launch overhead, host bottleneck, dataloader).",
+        "Warns that the PROF metrics are not in dcgm-exporter's default counter set on every install and must be explicitly added to the counters CSV; profiling carries a small sampling overhead and on older GPUs cannot run concurrently with Nsight.",
+        "MIG warning: nvidia-smi reports at the physical-GPU level while workloads run in MIG instances; per-instance metrics need the GPU_I_ID / GPU_I_PROFILE labels."
+      ]
+    }
+  ],
+  "stats": [
+    {
+      "fact": "nvidia-smi utilization.gpu is defined as 'Percent of time over the past sample period during which one or more kernels was executing on the GPU. The sample period may be between 1 second and 1/6 second depending on the product.'",
+      "source": "NVIDIA nvidia-smi documentation — https://docs.nvidia.com/deploy/nvidia-smi/"
+    },
+    {
+      "fact": "A single thread block running a kernel drives nvidia-smi/NVML GPU utilization to at or near 100%, yet running two instances of the same kernel simultaneously takes the same wall time — proving the GPU had spare capacity while reporting full utilization.",
+      "source": "ETH EASL gpu-util-interference benchmark, pitfall_nvidia_smi — https://github.com/eth-easl/gpu-util-interference/blob/af1fa502/pitfalls/pitfall_nvidia_smi/README.md"
+    },
+    {
+      "fact": "NVIDIA (DCGM maintainer) states DCGM_FI_DEV_GPU_UTIL is roughly equal to DCGM_FI_PROF_GR_ENGINE_ACTIVE, that GR_ENGINE_ACTIVE is higher precision and works on MIG, that DCGM_FI_DEV_MEM_COPY_UTIL should be avoided (CUDA kernel-based copies bypass the copy engine and it does not work on MIG), and that DCGM_FI_PROF_DRAM_ACTIVE is the accurate DRAM bandwidth metric.",
+      "source": "NVIDIA/DCGM GitHub Issue #64 — https://github.com/NVIDIA/DCGM/issues/64"
+    },
+    {
+      "fact": "DCGM_FI_PROF_SM_ACTIVE is defined as the fraction of time at least one warp was active on a multiprocessor, averaged over all multiprocessors. NVIDIA's guidance: 0.8 or greater is necessary but not sufficient for effective GPU use; less than 0.5 likely indicates ineffective usage.",
+      "source": "NVIDIA DCGM documentation, as quoted in DCGM exporter analyses — https://youngju.dev/split/gpu-cuda/2026-08-12-gpuops-dcgm-exporter"
+    },
+    {
+      "fact": "DCGM_FI_PROF_SM_ACTIVE and DCGM_FI_PROF_SM_OCCUPANCY are commented out of the dcgm-exporter default counters CSV — the most useful truth metrics are not collected unless explicitly enabled.",
+      "source": "DCGM exporter default metrics.csv analysis — https://youngju.dev/split/gpu-cuda/2026-08-12-gpuops-dcgm-exporter"
+    },
+    {
+      "fact": "Per-process NVML utilization is not reliable for concurrently running processes; NVIDIA support states process utilization is calculated only for a single running process in GPU and is not supported for concurrent running processes.",
+      "source": "NVIDIA Developer Forums, Questions on per-process GPU utilization — https://forums.developer.nvidia.com/t/questions-on-per-process-gpu-utilization/265460/1"
+    },
+    {
+      "fact": "A DCGM user reported DCGM_FI_PROF_SM_ACTIVE (SMACT, field 1002) showing ~1.29 (129%) on a MIG device — MIG per-instance SM activity values can exceed 1.0 and must not be read as a plain percentage.",
+      "source": "NVIDIA/DCGM GitHub Issue #152 — https://github.com/NVIDIA/DCGM/issues/152"
+    },
+    {
+      "fact": "DCGM profiling metrics can be collected at up to 10 Hz; Nsight Systems GPU metrics (GR_ACTIVE, SM_ACTIVE) can be collected up to 200 kHz (not sustainable on all GPUs).",
+      "source": "NVIDIA Developer Forums, GPU utilization — https://forums.developer.nvidia.com/t/gpu-utilization/368787"
+    },
+    {
+      "fact": "On A100 and H100, nvidia-smi reports the average of only the past 25 ms every 100 ms for power — meaning 75% of the runtime is not sampled at all, and the reported value can lag actual activity.",
+      "source": "arXiv 2312.02741, Part-time Power Measurements: nvidia-smi's Lack of Attention — https://arxiv.org/html/2312.02741"
+    },
+    {
+      "fact": "Roofline ridge points: A100 (312 TFLOP/s BF16, ~2.0 TB/s HBM) needs ~156 FLOP per byte to be compute-bound; H100 SXM (~990 TFLOP/s dense BF16, ~3.35 TB/s HBM3) needs ~295 FLOP per byte. Arithmetic intensity of a weight matmul in bf16 is simply the number of tokens sharing that weight read.",
+      "source": "The LLM Stack, The Roofline Model & Performance Engineering — https://prakashkagitha.github.io/llm-stack-book/04-kernels-efficiency/01-roofline-performance.html"
+    },
+    {
+      "fact": "MFU = (model FLOPs per step x steps per second) / (peak FLOPs of the GPU x number of GPUs); for a dense transformer, model FLOPs per step is ~6 x parameters x tokens (global batch size x sequence length), from the PaLM paper convention. Use the dense peak, not the 'with sparsity' figure.",
+      "source": "CoreWeave docs, Measure MFU and job performance — https://docs.coreweave.com/products/sunk/optimize_workloads/measuring-mfu-and-job-performance"
+    },
+    {
+      "fact": "Reported large-scale pretraining MFU: GPT-3 175B on V100 = 21.3%; Megatron-Turing NLG 530B on 2,240 A100 = 30.2%; PaLM 540B on 6,144 TPU v4 = 46.2%; Llama 3 405B on 8,192-16,384 H100 = 38%-43% (BF16).",
+      "source": "PaLM paper Table 3 and Llama 3 paper Table 4, via CoreWeave docs — https://docs.coreweave.com/products/sunk/optimize_workloads/measuring-mfu-and-job-performance"
+    },
+    {
+      "fact": "Typical MFU by configuration: well-optimised dense transformer on a single GPU 0.50-0.70; multi-GPU DDP small model 0.40-0.60; pipeline parallel 0.30-0.50; tensor parallel (Megatron-style) 0.45-0.65; MoE training 0.20-0.40. Below 0.20 on a dense transformer almost always indicates a fixable bottleneck.",
+      "source": "TechnoLynx, Model FLOPS Utilization: What MFU Tells You and What It Doesn't — https://technolynx.com/post/model-flops-utilization-ai-training"
+    },
+    {
+      "fact": "Average enterprise GPU utilization is around 5% across 23,000 production clusters, and only about 7% of teams achieve above 85% utilization — idle most of the time, and inefficient when busy.",
+      "source": "gpuaas.com, Why Your GPU Utilization Says 100% and Throughput Is Low — https://gpuaas.com/blog/gpu-utilization-misleading-metric-2026"
+    },
+    {
+      "fact": "Worked H100 inference-pod metric set: DCGM_FI_DEV_GPU_UTIL = 100, SM_ACTIVE = 0.18, SM_OCCUPANCY = 0.11, PIPE_TENSOR_ACTIVE = 0.04, DRAM_ACTIVE = 0.71 — the signature of a memory-bandwidth-bound workload.",
+      "source": "devopsbeast.com, Your GPU Dashboard Says 100% Utilized. It's Lying. Welcome to DCGM. — https://devopsbeast.com/blog/dcgm-prometheus-gpu-observability"
+    },
+    {
+      "fact": "SM counts for context: H100 = 132 SMs, A100 = 108 SMs, RTX 4090 = 128 SMs. A100 has 7 compute (SM) slices and 8 memory slices, which is why MIG profiles are named {compute}g.{memory}gb.",
+      "source": "packet.ai, GPU Utilization: The Lie Your Dashboard Tells You (SM counts); whatap.io, How to Measure GPU Utilization in MIG-Enabled Environments (A100 slice counts) — https://packet.ai/blog/gpu-utilization-the-lie-your-dashboard-tells , https://whatap.io/en/blog/mig-gpu-usage-monitoring"
+    },
+    {
+      "fact": "For MIG, nvidia-smi reports at the physical-GPU level while workloads run inside instances. Per-instance GPU utilization can be reconstructed as the sum of each instance's DCGM_FI_PROF_GR_ENGINE_ACTIVE times its compute-slice ratio (e.g. on a 7-slice A100).",
+      "source": "whatap.io, How to Measure GPU Utilization in MIG-Enabled Environments — https://whatap.io/en/blog/mig-gpu-usage-monitoring"
+    },
+    {
+      "fact": "On MIG-enabled GPUs, querying encoder, decoder, jpeg, ofa, gpu, and memory utilization through the standard NVML/nvidia-smi path is not currently supported.",
+      "source": "NVIDIA nvidia-smi documentation — https://docs.nvidia.com/deploy/nvidia-smi/"
+    },
+    {
+      "fact": "NVML's own definition of GPU utilization (nvmlUtilization_t.gpu) is 'Percent of time over the past sample period during which one or more kernels was executing on the GPU' — a binary busy/not-busy duty cycle with no weighting for how much of the hardware the kernel used.",
+      "source": "NVML API reference / nvmlUtilization_t struct doc, quoted in https://arthurchiao.art/blog/understanding-gpu-performance/"
+    },
+    {
+      "fact": "The NVML sample period is between 1 second and 1/6 second depending on the product, so short kernels can hide entirely between samples or be smeared across them.",
+      "source": "NVML nvmlUtilization_t documentation (struct comment)"
+    },
+    {
+      "fact": "A kernel launched with gridDim=1 and blockDim=1 (a single thread on a single SM) reports GPU-Util 100% on a Tesla V100 — the other SMs are idle but the metric cannot see them.",
+      "source": "NVIDIA Developer Forums 'Some questions on GPU utilization' https://forums.developer.nvidia.com/t/some-questions-on-gpu-utilization/191025"
+    },
+    {
+      "fact": "H100 (SXM/NVL) has 132 streaming multiprocessors; a single small kernel resident on one SM keeps DCGM_FI_DEV_GPU_UTIL at 100% while the other 131 SMs idle.",
+      "source": "devopsbeast.com DCGM observability analysis; gpuaas.com; H100 SM count corroborated by arXiv:2609.12923 (132 SMs, 528 Tensor Cores, 835 TFLOP/s BF16, 3.9 TB/s HBM3)"
+    },
+    {
+      "fact": "DCGM_FI_PROF_SM_ACTIVE (field 1002) = the ratio of cycles an SM has at least 1 warp assigned (computed from number of cycles and elapsed cycles); DCGM_FI_PROF_SM_OCCUPANCY (1003) = the ratio of number of warps resident on an SM to the theoretical maximum warps per elapsed cycle.",
+      "source": "NVIDIA DCGM Field Identifiers docs https://docs.nvidia.com/datacenter/dcgm/latest/dcgm-api/dcgm-api-field-ids.html and dcgm-api/dcgm-api-profiling.html"
+    },
+    {
+      "fact": "SM activity is insensitive to threads-per-block — a kernel using N blocks for the whole interval, N/5 blocks for the whole interval, and N blocks for one fifth of the interval all report the same 0.2 (20%). Disambiguating how full the SMs are requires PROF_SM_OCCUPANCY.",
+      "source": "NVIDIA DCGM profiling module docs https://docs.nvidia.com/datacenter/dcgm/latest/learn/modules/profiling.html"
+    },
+    {
+      "fact": "'Active' does not mean 'actively computing': warps stalled waiting on memory requests are still counted as active, so SM activity alone cannot distinguish a compute-bound kernel from a memory-bound one.",
+      "source": "NVIDIA DCGM profiling module docs (PROF_SM_ACTIVE definition and note)"
+    },
+    {
+      "fact": "NVIDIA's own thresholds: SM activity of 0.8 or greater is necessary but not sufficient for effective GPU use; a value less than 0.5 likely indicates ineffective GPU usage.",
+      "source": "NVIDIA DCGM profiling module docs"
+    },
+    {
+      "fact": "On an H100 NVL running vLLM, productive arithmetic throughput during autoregressive decode measures 0.11%-12.5% of the 835 TFLOP/s dense BF16 ceiling, while nvidia-smi simultaneously reports 91% GPU-Util — because Hopper's bf16 GMMA path executes in fixed 64-row fragments and small-batch decode leaves most rows zero-padded.",
+      "source": "arXiv:2609.12923 'Dissecting GPU Utilization for LLM Inference on Nvidia Hopper' (Siavashi et al., KTH), submitted 11 Sep 2026"
+    },
+    {
+      "fact": "SM utilization is phase-dependent on the same model: cold prefill sustains 73-97% (mean 92%), while warm prefill with prefix-cache hits collapses to 8-11% at small token counts (mean 33%) because cuBLASLt switches to smaller thread-block tiles.",
+      "source": "arXiv:2609.12923"
+    },
+    {
+      "fact": "Nsight Compute's sm__throughput.avg.pct_of_peak_sustained_elapsed is a pipeline-throughput proxy over elapsed cycles (max over SM sub-pipelines, ideal-SMSP load balance) — it is NOT sm__cycles_active ('>=1 warp resident') and is not an occupancy counter, despite being commonly labelled 'SM utilization'.",
+      "source": "arXiv:2609.12923; NVIDIA Nsight Compute Compute Triage Guide https://docs.nvidia.com/nsight-compute/ComputeTriage/"
+    },
+    {
+      "fact": "Achieved occupancy can be normalized two ways that differ by ~5x: the architectural limit (64 warps/SM) versus the kernel's resource cap (typically 8-12 warps/SM). FlashAttention-3 main at 7.6 warps/SM is 12% of the architectural limit yet 95% of its resource cap.",
+      "source": "arXiv:2609.12923"
+    },
+    {
+      "fact": "NVIDIA's Nsight Compute triage guide treats sm__throughput below ~60% as the low/latency-risk regime and above ~80% as the high/near-limit regime, and requires any pct_of_peak_sustained_* significantly above 100% or negative to be treated as untrustworthy (multi-pass replay inaccuracy).",
+      "source": "NVIDIA Nsight Compute Compute Triage Guide https://docs.nvidia.com/nsight-compute/ComputeTriage/"
+    },
+    {
+      "fact": "An H100 inference pod can report DCGM_FI_DEV_GPU_UTIL=100 with SM_ACTIVE=0.18, SM_OCCUPANCY=0.11, PIPE_TENSOR_ACTIVE=0.04 and DRAM_ACTIVE=0.71 — the signature of a memory-bandwidth-bound workload with near-idle tensor cores.",
+      "source": "devopsbeast.com DCGM observability analysis (worked example)"
+    },
+    {
+      "fact": "A DRAM-active ratio of 0.9 on an A100 80GB implies roughly 1.8 TB/s in flight against about 2 TB/s of theoretical HBM bandwidth; there is no NVML API that returns bandwidth in GB/s, only a time-based activity ratio.",
+      "source": "netdata.cloud NVIDIA GPU memory-bandwidth-bound guide https://netdata.cloud/guides/nvidia-gpu/nvidia-gpu-memory-bandwidth-bound"
+    },
+    {
+      "fact": "Most LLM training runs land at 35-45% Model FLOP Utilization (MFU), including frontier-scale runs — so a fleet at 100% reported utilization and 40% MFU is normal, not broken.",
+      "source": "gpuaas.com 'Why Your GPU Utilization Says 100% and Throughput Is Low'"
+    },
+    {
+      "fact": "An analysis of 118,276 jobs on Perlmutter at NERSC (DCGM telemetry sampled every 10 s joined to scheduler records) found mean peak GPU utilization of 71.77% but mean peak GPU memory utilization of only 28.64%, with 37.12% of jobs never exceeding 15% memory utilization.",
+      "source": "Boston University / LBNL study as reported by optops.ai https://optops.ai/resources/blogs/gpu-utilization-metrics-dcgm-mig"
+    },
+    {
+      "fact": "NVIDIA's own engineering teams joined real-time DCGM telemetry with Slurm job metadata to build a per-job GPU idle-waste metric and reported reducing GPU waste from roughly 5.5% to about 1% on internal research clusters (one organisation's internal result, not an industry benchmark).",
+      "source": "optops.ai, reporting NVIDIA internal DCGM + Slurm work"
+    },
+    {
+      "fact": "In dcgm-exporter's shipped default counter set (etc/default-counters.csv), DCGM_FI_PROF_SM_ACTIVE and DCGM_FI_PROF_SM_OCCUPANCY are COMMENTED OUT (disabled), while DCGM_FI_PROF_PIPE_TENSOR_ACTIVE and DCGM_FI_PROF_DRAM_ACTIVE are enabled. A default install therefore cannot see real SM utilization until the counters file is edited.",
+      "source": "Verified directly from https://raw.githubusercontent.com/NVIDIA/dcgm-exporter/main/etc/default-counters.csv (126 lines, 23 DCGM_FI_PROF entries, the SM_ACTIVE/SM_OCCUPANCY lines prefixed with '#')"
+    },
+    {
+      "fact": "NVML v520+ added GPU Performance Monitoring (GPM) metrics that expose DCGM-like SM utilization, SM occupancy, tensor and memory-bandwidth signals through the NVML driver interface — without a running DCGM service. Enum values: NVML_GPM_METRIC_GRAPHICS_UTIL=1, NVML_GPM_METRIC_SM_UTIL=2 ('Percentage of SMs that were busy'), NVML_GPM_METRIC_SM_OCCUPANCY=3, plus per-pipe *_CYCLES_ACTIVE counters (SM=249, MMA=250, HMMA=252, FP32=259, FP16=260).",
+      "source": "NVML API Reference Guide GPM Enums https://docs.nvidia.com/deploy/nvml-api/group__nvmlGpmEnums.html ; RWTH Aachen paper 'Leveraging NVML GPM for NVIDIA GPU Monitoring' https://publications.rwth-aachen.de/record/1035634/files/1035634.pdf"
+    },
+    {
+      "fact": "The NVML GPM paper validates metrics against Nsight Compute and reports that raw SM utilization / SM occupancy differ from reference by 28.35 %pt and 8.74 %pt respectively, improving to 2.31 %pt and 0.95 %pt after post-processing — i.e. the GPM counters need an averaging fix and NVIDIA's docs are inaccurate in places.",
+      "source": "RWTH Aachen 'Leveraging NVML GPM for NVIDIA GPU Monitoring' (4 weeks of job data + targeted benchmarking)"
+    },
+    {
+      "fact": "DCGM_FI_PROF_SM_ACTIVE can read above 100% (e.g. 1.294, i.e. 130%) on MIG instances, and tensor activity shows the same overshoot — an open issue on NVIDIA/DCGM (#152), meaning MIG per-instance PROF values need care before being plotted as percentages.",
+      "source": "https://github.com/NVIDIA/DCGM/issues/152 (open, reported Feb 2024)"
+    },
+    {
+      "fact": "nvidia-smi dmon's 'sm' column is NOT the same quantity as the GPU-Util column: the header's u group exposes SM, memory, encoder and decoder utilization, and the sm value is the percentage of time at least one SM was busy — a rough proxy that still says nothing about occupancy or Tensor Core usage.",
+      "source": "nvidia-smi.txt (NVIDIA driver docs, SM/memory/encoder/decoder utilization group) + syseng.io 'GPU Says 100%, Job Still Slow' https://syseng.io/blog/hpc-gpu-utilization-myth"
+    },
+    {
+      "fact": "Host-to-device memory copies run on dedicated copy engines, not SMs, so utilization.gpu reads 0% during data transfer; utilization.memory measures the memory controller, not the copy engine, and can stay low during host-to-device copies. A dataloader-bound training loop therefore shows a sawtooth.",
+      "source": "netdata.cloud NVIDIA GPU low-utilization / data-starvation guide https://netdata.cloud/guides/nvidia-gpu/nvidia-gpu-low-utilization-data-starvation"
+    },
+    {
+      "fact": "DCGM profiling fields are ratios of active cycles and are not available on every GPU; they require the profiling module loaded and sufficient privileges, and on Ampere-and-older hardware some field groups cannot be watched concurrently (DCGM multiplexes with statistical sampling).",
+      "source": "NVIDIA DCGM profiling docs (dcgmi profile -l grouping, multiplexing note) + netdata.cloud memory-bandwidth guide"
+    }
+  ],
+  "angles": [
+    "The one-thread proof: a spin loop on 1 of 132 SMs reports 100% utilization — a reproducible demo that settles the argument in 20 seconds.",
+    "Field-ID cheat sheet: DCGM_FI_PROF_SM_ACTIVE (1002), SM_OCCUPANCY (1003), PIPE_TENSOR_ACTIVE (1004), DRAM_ACTIVE (1005), GR_ENGINE_ACTIVE — with copy-paste dcgmi dmon commands for each.",
+    "Replace one number with three: breadth (SM_ACTIVE), depth (SM_OCCUPANCY), money (PIPE_TENSOR_ACTIVE), plus DRAM_ACTIVE to name the bottleneck.",
+    "The default-config trap: SM_ACTIVE and SM_OCCUPANCY ship commented out of the dcgm-exporter CSV, so most dashboards can never show the truth even though the metric exists.",
+    "Translate the lie into dollars: batch-1 vs batch-64 billing window — same card, 50x the tokens, lower utilization number, $4.16 of a $4.42 hour spent on idle silicon.",
+    "Prefill vs decode: one model, two opposite resource profiles — decode is memory-bandwidth-bound, so 'buy a bigger GPU' often cannot help.",
+    "The sampling-window blind spot: 1 s to 1/6 s sample periods, and nvidia-smi power sampling that captures only 25 ms out of every 100 ms.",
+    "Diagnosis tree: high GPU_UTIL with low SM_ACTIVE — is it dataloader-bound, host-starved, transfer-bound, throttled, or launch-overhead-bound? Different fixes for each.",
+    "MFU as the procurement number: why 100% utilization plus 40% MFU is normal, and why capacity decisions should be signed off on MFU, not utilization.",
+    "MIG is actively wrong, not merely imprecise: per-instance DCGM labels (GPU_I_ID / GPU_I_PROFILE) are the only way per-tenant cost attribution works at all.",
+    "Alert patterns that page nobody but open the right ticket: GPU_UTIL > 90 AND SM_ACTIVE < 0.3, or PIPE_TENSOR_ACTIVE < 0.1 sustained.",
+    "The lookalikes you must rule out first: HBM thermal throttling and host/PCIe starvation both masquerade as 'the GPU is idle'.",
+    "The three-number rule: stop asking 'is the GPU busy?' and start asking three separate questions — breadth (SM_ACTIVE: how many SMs have a live warp), depth (SM_OCCUPANCY: how full is each SM's warp slots), and value (PIPE_TENSOR_ACTIVE: are the units that cost money actually firing). nvidia-smi answers only the first, badly.",
+    "Duty cycle vs capacity: NVML's definition is a per-sample binary busy flag averaged over time, so it can only distinguish 'something ran' from 'nothing ran'. Anything that optimizes the metric without changing the workload (more small kernels, a keep-alive kernel, non-overlapping streams) raises the number without raising throughput — the metric is gameable by construction.",
+    "The honest counter is still a proxy: even Nsight Compute's sm__throughput.avg.pct_of_peak_sustained_elapsed, which most dashboards label 'SM utilization', measures elapsed-cycle pipeline throughput and charges zero-padded tensor cycles as real work. Useful-FLOP efficiency (FLOPs on non-padded token rows / peak) is the number that survives scrutiny — 0.11%-12.5% on H100 decode against a 91% dashboard reading.",
+    "Two denominators, one word: 'occupancy' is normalized either against the 64-warps/SM architectural limit or against the kernel's resource cap (typically 8-12 warps/SM). Reports that say 'occupancy is only 12%' and 'occupancy is near saturation' can describe the same kernel. Always state the denominator before drawing a conclusion.",
+    "Memory-bound is not broken: when DRAM_ACTIVE is pinned near 1.0 while SM_ACTIVE is modest, the workload is at its architectural ceiling, not wasting the GPU. Teams that read the utilization percentage alone buy hardware they cannot use; the fixes are algorithmic (batching, quantization, KV-cache placement) and can be validated without new silicon.",
+    "The one-line dashboard fix with a documented failure mode: the shipped dcgm-exporter default counters file has DCGM_FI_PROF_SM_ACTIVE and DCGM_FI_PROF_SM_OCCUPANCY commented out. Many teams believe they monitor SM efficiency and in fact never enabled it — the series is simply absent, and a missing series graphs as silence, not as zero.",
+    "No-DCGM path for locked-down containers: NVML GPM (driver v520+) returns SM_UTIL/SM_OCCUPANCY/tensor/DRAM signals through NVML without a DCGM service or CAP_SYS_ADMIN, which makes real SM utilization measurable in managed training containers (e.g. SageMaker) where the DCGM profiling module is not available. Caveat: the raw counters need post-processing.",
+    "MIG is a correctness problem, not a precision problem: GPU-level utilization metrics describe the wrong entity entirely when tenants run in MIG instances, and DCGM's per-instance PROF values can even exceed 100%. Per-instance attribution (GPU_I_ID / GPU_I_PROFILE) is required before any cost-per-tenant number is trustworthy.",
+    "Field-ID folklore is actively wrong in the wild: several widely-cited blog posts map 1004 = SM activity and 1005 = SM occupancy. The official DCGM field table is 1002 = SM activity, 1003 = SM occupancy, 1004 = tensor pipe, 1005 = DRAM — copying those blogs produces a mislabelled dashboard that looks plausible.",
+    "The practical runbook: reproduce the illusion (one-block kernel -> 100%), then classify with a four-quadrant read of tensor-active vs DRAM-active, then go per-kernel with Nsight Compute only after the quadrant tells you what to look for. Utilization is a tripwire, not a diagnosis; it is only discriminative at the extremes."
+  ],
+  "keywords": [
+    "NVIDIA SM utilization",
+    "nvidia-smi GPU utilization misleading",
+    "what does nvidia-smi utilization mean",
+    "DCGM_FI_PROF_SM_ACTIVE",
+    "DCGM_FI_PROF_PIPE_TENSOR_ACTIVE",
+    "DCGM_FI_PROF_SM_OCCUPANCY",
+    "DCGM_FI_PROF_DRAM_ACTIVE",
+    "DCGM profiling metrics not enabled by default",
+    "GPU utilization 100% but low throughput",
+    "how to measure real GPU utilization",
+    "SM activity vs SM occupancy",
+    "tensor core utilization metric",
+    "nvidia-smi dmon sm column",
+    "GPU memory bandwidth bound diagnosis",
+    "compute bound vs memory bound GPU",
+    "nvidia-smi sample period 1 second",
+    "MFU calculation H100 A100",
+    "model FLOPs utilization formula",
+    "dcgm-exporter prometheus GPU utilization alert",
+    "MIG GPU utilization monitoring per instance",
+    "GPU dataloader bottleneck detection",
+    "nvidia-smi utilization accuracy single thread",
+    "idle GPU cost optimization",
+    "nsight compute sm__throughput vs tensor active",
+    "nvidia-smi lies GPU utilization",
+    "nvidia-smi says 100% but GPU slow",
+    "SM active vs SM occupancy",
+    "dcgmi dmon 1002 1003 1004 1005",
+    "sm__throughput.avg.pct_of_peak_sustained_elapsed",
+    "sm_busy_pct meaning",
+    "tensor core active metric DCGM",
+    "DRAM active memory bandwidth bound GPU",
+    "nvidia-smi dmon sm column meaning",
+    "gpu util 100% low tokens per second",
+    "MFU model flops utilization training",
+    "achieved occupancy vs SM utilization",
+    "nvml GPM SM_UTIL nvmlGpmMetricsGet",
+    "dcgm-exporter default counters prof metrics missing",
+    "per-instance MIG GPU utilization metrics",
+    "GPU utilization memory bound LLM decode batching"
+  ],
+  "outline": [
+    "H2: What nvidia-smi's GPU-Util Actually Measures (and Doesn't)",
+    "H2: The One-Thread Experiment That Proves the Metric Lies",
+    "H2: SM Utilization vs SM Activity vs SM Occupancy: Getting the Terms Right",
+    "H2: The Metrics That Tell the Truth — DCGM Field IDs and Copy-Paste Commands",
+    "H2: Step 1 — Read SM Activity and SM Occupancy Together",
+    "H2: Step 2 — Check Tensor Core Activity: The Metric You Actually Pay For",
+    "H2: Step 3 — Check DRAM Activity to Name the Bottleneck",
+    "H2: Prefill vs Decode: Why the Same GPU Shows Opposite Profiles",
+    "H2: The Default-Config Trap: Why Your Dashboard Can't See SM_ACTIVE",
+    "H2: A Practical Diagnostic Routine (Dataloader, Precision, Memory, Throttling)",
+    "H2: Reading the Numbers in Dollars: Utilization vs MFU",
+    "H2: MIG Changes Everything: Why GPU-Level Monitoring Is Actively Wrong",
+    "H2: Prometheus and Grafana: Queries and Alerts Worth Wiring Up",
+    "H2: What to Do When SM Activity Is Genuinely Low (Fixes, Not Hardware)",
+    "H2: Reference Table: Every Metric, What It Answers, and Where to Get It",
+    "H2: When nvidia-smi Says 100% and Your SMs Are Mostly Idle",
+    "H2: What nvidia-smi Actually Measures (the nvmlUtilization_t Definition, Verbatim)",
+    "H2: The Metric Ladder: GPU-Util, SM Active, SM Occupancy, Tensor Active, DRAM Active",
+    "H2: Step 1 - Reproduce the Illusion with a One-Block Kernel",
+    "H2: Step 2 - Read Real SM Utilization with DCGM (dcgmi dmon -e 1002,1003,1004,1005)",
+    "H2: Step 3 - Turn On the PROF Metrics Your dcgm-exporter Dashboard Silently Dropped",
+    "H2: Step 4 - No DCGM Allowed? Use NVML GPM on Driver v520 or Newer",
+    "H2: Step 5 - Per-Kernel Truth with Nsight Compute (and the sm__throughput Trap)",
+    "H2: Classifying the Four States: Compute-Bound, Memory-Bound, Starved, and Padded",
+    "H2: The LLM Inference Case: 100% Utilization at 15% SM Activity",
+    "H2: MIG and Multi-Tenant Traps: When GPU-Level Metrics Are Actively Wrong",
+    "H2: A 30-Second Triage Runbook (Copy-Paste Commands)",
+    "H2: DCGM Field-ID Reference Table (and the Common Mis-Mapping)",
+    "H2: FAQ: What Should SM Utilization Actually Be?"
+  ],
+  "research_date": "2026-10-01",
+  "merge_provenance": [
+    "researcher:BLO-3551"
+  ]
+}
