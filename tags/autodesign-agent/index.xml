@@ -1,0 +1,518 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Autodesign Agent on RockB</title><link>https://baeseokjae.github.io/tags/autodesign-agent/</link><description>Recent content in Autodesign Agent on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Wed, 30 Sep 2026 23:58:57 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/autodesign-agent/index.xml" rel="self" type="application/rss+xml"/><item><title>AutoDesign Agent Review: The Open-Source Design Agent That Beats Claude Design (2026)</title><link>https://baeseokjae.github.io/posts/autodesign-open-source-design-agent/</link><pubDate>Wed, 30 Sep 2026 23:58:57 +0000</pubDate><guid>https://baeseokjae.github.io/posts/autodesign-open-source-design-agent/</guid><description>AutoDesign is an open-source design agent scoring 78.32 on PosterBench vs Claude Design&amp;#39;s 70.87. A full 2026 review of the harness, costs, and limits.</description><content:encoded><![CDATA[<p>The AutoDesign agent is an open-source design agent that turns one research paper into four editable artifacts — a poster, a slide deck, a webpage, and a narrated captioned video. Its authors report 78.32 on their own PosterBench benchmark against 70.87 for Anthropic&rsquo;s closed-source Claude Design, with model weights frozen the entire time.</p>
+<p>That last clause is the part worth your attention. AutoDesign did not win by training a better model. It won by optimizing the system <strong>around</strong> a fixed model — the scaffold, the tools, the critics, the loop control — and then publishing that scaffold so it can be attached to Codex, Claude Code, Kimi Code, OpenCode, or DeepSeek Harness. The leaderboard number is the marketing. The reusable harness is the actual contribution.</p>
+<p>This review covers what AutoDesign is, how the meta-harness optimization loop works, which comparisons hold up, which numbers are author-reported rather than third-party verified, and who should actually install it.</p>
+<h2 id="what-is-the-autodesign-agent">What Is the AutoDesign Agent?</h2>
+<p>AutoDesign is an open-source agentic design system from a 14-author team spanning Meituan, MBZUAI, HUST, Peking University, Tsinghua, CUHK, and SJTU, published as the paper <em>AutoDesign: Meta-Harness Optimization for Long-Horizon Agentic Design</em> (arXiv:2608.13560, submitted 13 August 2026) and released publicly on GitHub on 2026-08-14.</p>
+<p>It ships two things that are frequently confused with each other:</p>
+<ul>
+<li><strong>The product</strong>: a local-first application that takes a paper and produces an editable academic poster, slide deck, research webpage, or narrated 1080p video.</li>
+<li><strong>DesignHarness</strong>: the reusable, model-agnostic artifact-production harness the project evolved for itself, portable into other coding agents.</li>
+</ul>
+<p>The repository reports 229 stars, 10 forks, 3 releases, and 2 contributors as of 2026-09-30, with its last push on 2026-09-05. It contains an MIT <code>LICENSE</code> file (&ldquo;Copyright (c) 2026 Yaxin Luo&rdquo;) — I verified that file directly at the repository&rsquo;s raw URL. One caveat: GitHub&rsquo;s license API field reported <code>NOASSERTION</code> for the same repository on 2026-09-30, so if you are planning commercial or client work, confirm terms with the authors rather than trusting either signal alone.</p>
+<p>Documentation ships in English, Simplified Chinese, and Korean, which is unusual for a research-adjacent agent project and a real signal for non-English research communities.</p>
+<h2 id="why-is-the-harness-not-the-model-the-real-story">Why Is the Harness, Not the Model, the Real Story?</h2>
+<p>Because attaching DesignHarness to seven matched code-agent/model configurations improved <strong>every single</strong> configuration, by +5.01 to +19.56 points on PosterBench. The average score across those seven setups rose from 54.99 to 67.39 — a 12.40-point gain, roughly 22.6% relative, achieved without a single gradient update.</p>
+<p>The largest gain is +19.56 points for Claude Code paired with DeepSeek V4 Pro (34.73 → 54.29). Native Codex with GPT-5.5 rose 75.87 → 81.46. Claude Code with Kimi K2.7 rose 57.20 → 70.12.</p>
+<p>This is the most transferable finding in the paper, and it is not really about posters. If a learned scaffold can move seven different model stacks by 5 to 20 points on a design benchmark, then &ldquo;which model is best&rdquo; is the wrong first question for anyone building an agentic pipeline. The system design around the model is a lever of the same order of magnitude, and it is the cheaper one to pull — you can rewrite a harness in an afternoon; you cannot retrain Claude.</p>
+<p>The paper&rsquo;s framing is explicit: a <strong>design harness</strong> is the system around a fixed LLM or MLLM that converts a multimodal source into a human-facing artifact through an execution trajectory. A <strong>meta-harness</strong> improves that surrounding system. AutoDesign learns from complete rollouts while keeping weights frozen.</p>
+<h2 id="how-does-the-autodesign-pipeline-actually-work">How Does the AutoDesign Pipeline Actually Work?</h2>
+<p>The architecture is two nested loops, five optimizable components, and four production stages. That decomposition is what makes it auditable rather than a black box.</p>
+<h3 id="what-are-the-two-nested-loops">What are the two nested loops?</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Loop</th>
+          <th>What it improves</th>
+          <th>Mechanism</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Inner loop — artifact generation</strong></td>
+          <td>One editable artifact under a fixed harness</td>
+          <td>A <strong>Designer</strong> revises the artifact; a <strong>Critic</strong> returns localized feedback; their interaction forms an execution trajectory</td>
+      </tr>
+      <tr>
+          <td><strong>Outer loop — harness optimization</strong></td>
+          <td>The reusable harness across many tasks</td>
+          <td>A <strong>MetaHarnessOptimizer</strong> analyzes trajectories, evaluator scores, a persistent optimization record, and optional human guidance</td>
+      </tr>
+  </tbody>
+</table>
+<p>Every outer-loop iteration runs four stages: <strong>rollout → evaluation → update proposal → acceptance</strong>. The optimizer acts as a planner and code editor, updates <strong>exactly one</strong> harness component per iteration, and keeps the candidate only when training performance improves without regressing on an independent development set. Development trajectories are hidden from the update proposer — that is the anti-overfitting gate, and it is the detail that separates this from &ldquo;we ran an agent in a loop and it got better.&rdquo;</p>
+<h3 id="what-are-the-five-harness-components">What are the five harness components?</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Component</th>
+          <th>What gets optimized</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Context and Memory</strong></td>
+          <td>Multimodal source management, task prompts, skills, reusable assets, persistent revision state</td>
+      </tr>
+      <tr>
+          <td><strong>Tools and Specifications</strong></td>
+          <td>Editable-artifact tools and specs for layout, typography, and provenance</td>
+      </tr>
+      <tr>
+          <td><strong>Execution Runtime</strong></td>
+          <td>Workspace and runtime for authoring, rendering, validating, exporting</td>
+      </tr>
+      <tr>
+          <td><strong>Orchestration</strong></td>
+          <td>Task routing, attempt budgets, loop control, candidate selection, fallback, finalization</td>
+      </tr>
+      <tr>
+          <td><strong>Evaluation and Feedback</strong></td>
+          <td>Rule-based validation, model-based critique, localized revision feedback</td>
+      </tr>
+  </tbody>
+</table>
+<h3 id="what-happens-in-the-four-pipeline-stages">What happens in the four pipeline stages?</h3>
+<p>The optimized DesignHarness runs: <strong>provenance-aware source ingestion</strong> → <strong>iterative editable HTML generation and revision</strong> → <strong>validation with dual critics</strong> → <strong>self-contained finalization</strong>. Paper metadata, claims, figures, tables, and source locations become provenance-aware context. A coding-agent Designer edits native HTML. A rule-based validator plus a VLM critic return localized feedback. The best valid candidate is then made self-contained for delivery.</p>
+<p>The current implementation permits up to <strong>12 refinement attempts</strong>. Blocking checks cover unsafe or missing assets, broken provenance, severe overflow or overlap, and required typography or layout constraints. If nothing passes within budget, the retained attempt history supports a constrained fallback before the same finalization stage.</p>
+<p>The paper traces one real poster run across five selected attempts: the critic identifies a clipped analysis lane at attempt A1, A3 restores the fit, A5 refits the header, A6 rescales evidence, and A9 preserves the repaired composition and is accepted. Diagnostics drive localized edits, and valid layout plus source-derived content survive across revisions.</p>
+<h2 id="what-does-the-posterbench-leaderboard-actually-say">What Does the PosterBench Leaderboard Actually Say?</h2>
+<p>PosterBench has two tracks: a 100-paper Main Track across five disciplines (AI/ML, biomedicine and health, climate and earth environment, economics and policy, physics and astronomy), and PosterBench-mini, a fixed 10-paper subset for controlled comparison. Every output is rendered to a common poster format before scoring.</p>
+<p>Here is the full-scale Main Track, exactly as published in the AutoDesign README:</p>
+<table>
+  <thead>
+      <tr>
+          <th style="text-align: right">Rank</th>
+          <th style="text-align: right">Score</th>
+          <th>System</th>
+          <th>Design harness</th>
+          <th>Coding agent</th>
+          <th>Model</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td style="text-align: right">1</td>
+          <td style="text-align: right">78.32</td>
+          <td>AutoDesign</td>
+          <td>DesignHarness</td>
+          <td>Claude Code</td>
+          <td>Claude 4.8</td>
+      </tr>
+      <tr>
+          <td style="text-align: right">2</td>
+          <td style="text-align: right">77.97</td>
+          <td>AutoDesign</td>
+          <td>DesignHarness</td>
+          <td>Codex</td>
+          <td>GPT-5.5</td>
+      </tr>
+      <tr>
+          <td style="text-align: right">3</td>
+          <td style="text-align: right">73.37</td>
+          <td>Codex</td>
+          <td>—</td>
+          <td>Codex</td>
+          <td>GPT-5.5</td>
+      </tr>
+      <tr>
+          <td style="text-align: right">4</td>
+          <td style="text-align: right">70.87</td>
+          <td>Claude Design</td>
+          <td>Claude Design</td>
+          <td>Claude Code</td>
+          <td>Claude 4.8</td>
+      </tr>
+      <tr>
+          <td style="text-align: right">5</td>
+          <td style="text-align: right">70.01</td>
+          <td>Claude Code</td>
+          <td>—</td>
+          <td>Claude Code</td>
+          <td>Claude 4.8</td>
+      </tr>
+      <tr>
+          <td style="text-align: right">6</td>
+          <td style="text-align: right">69.45</td>
+          <td>OpenDesign</td>
+          <td>OpenDesign</td>
+          <td>Claude Code</td>
+          <td>Claude 4.8</td>
+      </tr>
+      <tr>
+          <td style="text-align: right">7</td>
+          <td style="text-align: right">62.17</td>
+          <td>OpenDesign</td>
+          <td>OpenDesign</td>
+          <td>Codex</td>
+          <td>GPT-5.5</td>
+      </tr>
+      <tr>
+          <td style="text-align: right">8</td>
+          <td style="text-align: right">61.14</td>
+          <td>Doubao</td>
+          <td>—</td>
+          <td>Claude Code</td>
+          <td>Seed 2.1</td>
+      </tr>
+      <tr>
+          <td style="text-align: right">9</td>
+          <td style="text-align: right">56.71</td>
+          <td>PosterGen</td>
+          <td>—</td>
+          <td>—</td>
+          <td>Claude 4.8</td>
+      </tr>
+      <tr>
+          <td style="text-align: right">10</td>
+          <td style="text-align: right">52.22</td>
+          <td>GLM</td>
+          <td>—</td>
+          <td>Claude Code</td>
+          <td>GLM 5.2</td>
+      </tr>
+      <tr>
+          <td style="text-align: right">11</td>
+          <td style="text-align: right">51.46</td>
+          <td>Kimi</td>
+          <td>—</td>
+          <td>Claude Code</td>
+          <td>Kimi K2.7</td>
+      </tr>
+      <tr>
+          <td style="text-align: right">12</td>
+          <td style="text-align: right">49.09</td>
+          <td>Any2Poster</td>
+          <td>—</td>
+          <td>—</td>
+          <td>Claude 4.8</td>
+      </tr>
+      <tr>
+          <td style="text-align: right">13</td>
+          <td style="text-align: right">46.01</td>
+          <td>DeepSeek</td>
+          <td>—</td>
+          <td>Claude Code</td>
+          <td>DeepSeek V4 Pro</td>
+      </tr>
+      <tr>
+          <td style="text-align: right">14</td>
+          <td style="text-align: right">44.61</td>
+          <td>Paper2Poster</td>
+          <td>—</td>
+          <td>—</td>
+          <td>Claude 4.8</td>
+      </tr>
+  </tbody>
+</table>
+<p>On the fixed 10-paper subset the ordering shifts: AutoDesign scores <strong>81.46</strong> with Codex + GPT-5.5, native Codex 75.87, AutoDesign 74.56 with Claude Code + Claude 4.8, OpenDesign 70.36, native Claude Code 69.55, Claude Design 66.83, OpenDesign with Codex 60.58, Kimi 57.20, Doubao 54.01, PosterGen 51.82, GLM 50.32, Any2Poster 46.88, Paper2Poster 42.06, DeepSeek V4 Pro 34.73.</p>
+<p>The scores are computed across seven weighted dimensions — <strong>Faithfulness 10, Coverage 10, Density 15, Visual Evidence 10, Layout 20, Readability 25, Aesthetics 10</strong> — aggregated from programmatic evidence plus source-conditioned VLM judgments, and then capped by the strictest active ceiling for severe layout damage, insufficient presentation viability, confirmed visible failure, or protected render integrity. The mandated fair-comparison judge model is <code>gemini-3.5-flash</code>, and official runs must not pass <code>--allow-degraded-detectors</code>.</p>
+<p>Two points of discipline matter here. First, the weight distribution tells you what the benchmark values: Readability (25) and Layout (20) carry 45% of the score, more than Faithfulness and Coverage combined. PosterBench is a design-quality benchmark as much as a content-fidelity one. Second, the metadata-only manifests are published on Hugging Face as <code>YaxinLuo/PosterBench</code> and <code>YaxinLuo/PosterBench-mini</code> — paper PDFs are not redistributed, so anyone reproducing the numbers supplies their own corpus.</p>
+<h2 id="autodesign-vs-claude-design-what-changes-when-the-design-agent-is-open">AutoDesign vs Claude Design: What Changes When the Design Agent Is Open?</h2>
+<p>Claude Design launched on 2026-04-17 as an Anthropic Labs research preview, powered by Claude Opus 4.7, cloud-only, paid, and locked to Anthropic&rsquo;s model and skills. It established the artifact-first mental model that AutoDesign, OpenDesign, and Open CoDesign all now copy: stop writing prose, ship a design artifact.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Dimension</th>
+          <th>AutoDesign</th>
+          <th>Claude Design</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>License / cost model</td>
+          <td>Open source (repo ships MIT <code>LICENSE</code>)</td>
+          <td>Commercial, paid, cloud-only</td>
+      </tr>
+      <tr>
+          <td>Where it runs</td>
+          <td>Local-first; hosted demo retired</td>
+          <td>Anthropic cloud only</td>
+      </tr>
+      <tr>
+          <td>Model choice</td>
+          <td>Model-agnostic (Codex, Claude Code, Kimi Code, OpenCode, DeepSeek Harness)</td>
+          <td>Locked to Anthropic models</td>
+      </tr>
+      <tr>
+          <td>PosterBench (100 papers)</td>
+          <td>78.32 (author-reported)</td>
+          <td>70.87</td>
+      </tr>
+      <tr>
+          <td>Scope</td>
+          <td>Academic artifacts: poster, deck, webpage, video</td>
+          <td>Briefs → designs, prototypes, slides, one-pagers</td>
+      </tr>
+      <tr>
+          <td>Provenance</td>
+          <td>Claims, figures, tables keep source location beside the run</td>
+          <td>Not documented</td>
+      </tr>
+      <tr>
+          <td>Editable output</td>
+          <td>Native HTML, text, tables, named assets</td>
+          <td>Design artifacts in Anthropic&rsquo;s environment</td>
+      </tr>
+  </tbody>
+</table>
+<p>The honest framing is narrower than &ldquo;open source beats commercial.&rdquo; AutoDesign beats Claude Design <strong>on academic poster production</strong>, on a benchmark its own authors built. Claude Design is a general design product with a hosted experience, Anthropic&rsquo;s model pipeline, and no install cost. If your job is an A0 conference poster from a manuscript, AutoDesign is the better tool by its own measurements. If your job is a product landing page, neither product&rsquo;s validation covers you — and Claude Design is not claiming to be a poster tool.</p>
+<h2 id="autodesign-vs-opendesign-academic-specialist-or-general-workspace">AutoDesign vs OpenDesign: Academic Specialist or General Workspace?</h2>
+<p>OpenDesign is the mainstream &ldquo;open-source Claude Design alternative,&rdquo; and the adoption gap is not close: <strong>98,937 stars and 11,459 forks</strong> against AutoDesign&rsquo;s 229 stars as of 2026-09-30. It is Apache-2.0, TypeScript, created 2026-04-28, actively pushed 2026-09-30, with 1,165 open issues. It auto-detects 16 coding-agent CLIs (Claude Code, Codex, Cursor Agent, Gemini CLI, OpenCode, Qwen, Copilot CLI, Kimi, Pi, Kiro, Kilo, Hermes ACP, DeepSeek TUI, and more), drives them over stdio, and falls back to a BYOK proxy mode when no CLI is present. A commercial layer, the OpenDesign Go plan, starts around $8 for the first month with monthly credits across 10+ models.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Dimension</th>
+          <th>AutoDesign</th>
+          <th>OpenDesign</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Stars / forks (2026-09-30)</td>
+          <td>229 / 10</td>
+          <td>98,937 / 11,459</td>
+      </tr>
+      <tr>
+          <td>License</td>
+          <td>Repo ships MIT <code>LICENSE</code> (API field: NOASSERTION)</td>
+          <td>Apache-2.0</td>
+      </tr>
+      <tr>
+          <td>Scope</td>
+          <td>Academic artifacts from a paper</td>
+          <td>General product design: prototypes, landing pages, dashboards, slides, images, video</td>
+      </tr>
+      <tr>
+          <td>PosterBench Main Track</td>
+          <td>78.32</td>
+          <td>69.45 (Claude Code + Claude 4.8), 62.17 (Codex + GPT-5.5)</td>
+      </tr>
+      <tr>
+          <td>PosterBench 10-paper</td>
+          <td>81.46 / 74.56</td>
+          <td>70.36 / 60.58</td>
+      </tr>
+      <tr>
+          <td>Maintenance signal</td>
+          <td>2 contributors, last push 2026-09-05</td>
+          <td>Actively pushed 2026-09-30, 1,165 open issues</td>
+      </tr>
+      <tr>
+          <td>Team workflow</td>
+          <td>Single-user local run</td>
+          <td>Collaborative workspace, design systems, plugins</td>
+      </tr>
+  </tbody>
+</table>
+<p>This is a scope difference, not just a score difference. OpenDesign is a design workspace where your coding agent is the engine; AutoDesign is a paper-to-artifact specialist with a published poster benchmark. AutoDesign wins academic posters. OpenDesign wins product design, team collaboration, and ecosystem maturity.</p>
+<p>A third option worth naming: <strong>Open CoDesign</strong> (7,984 stars, 838 forks, 88 open issues, MIT, local-first Electron desktop app) targets UI prototypes, decks, and prompt-to-artifact work, positioned against Claude Design, v0, Lovable, Bolt, and Figma AI. It is neither a poster tool nor a general workspace.</p>
+<h2 id="autodesign-vs-paper2poster-p2p-and-postergen-what-is-the-academic-lineage">AutoDesign vs Paper2Poster, P2P and PosterGen: What Is the Academic Lineage?</h2>
+<p>AutoDesign did not invent paper-to-poster. The real research lineage runs PosterBot (AAAI-22) → Paper2Poster / PosterGen / Any2Poster (2025) → AutoDesign + PosterBench (2026).</p>
+<ul>
+<li><strong>Paper2Poster</strong> (3,972 stars, NeurIPS 2025 Datasets and Benchmarks Track, arXiv 2505.21497) introduced the first benchmark and metric suite for poster generation, with a Parser → Planner → Painter-Commenter pipeline. Its efficiency claim still stands: a 22-page paper to an editable <code>.pptx</code> for roughly <strong>$0.005</strong> using open-source Qwen-2.5 variants, with 87% fewer tokens than GPT-4o multi-agent systems. On PosterBench it scores 44.61 — the lowest-ranked academic baseline in the comparison, and the clearest illustration that &ldquo;first benchmark&rdquo; is not &ldquo;best system.&rdquo;</li>
+<li><strong>PosterGen</strong> (arXiv:2508.17188) is the closest architectural predecessor: a four-agent Parser/Curator → Layout → Stylist → Renderer pipeline with a VLM-based rubric for layout balance, readability, and aesthetic coherence — the direct ancestor of PosterBench&rsquo;s dimension scoring. It scores 56.71.</li>
+<li><strong>P2P</strong> (56 stars, ICLR 2026) takes the competing evaluation philosophy: three specialized agents (Figure, Section, Orchestrate) with checker modules and reflection loops producing HTML posters, plus <strong>P2PEVAL</strong> (1,738 checklist items) and <strong>P2PINSTRUCT</strong> (~30,000 instruction examples). Its human-preference numbers set the bar AutoDesign is now measured against: 83.05% preferred-or-tied against Tencent YuanBao and 57.63% against original author-made posters. That is human-annotated checklist evaluation, not a weighted rubric with score ceilings.</li>
+</ul>
+<p>The benchmark-philosophy split is the interesting one. PosterBench is a seven-dimension weighted rubric with a mandated judge model and record-level ceilings; P2PEVAL is a large human-annotated checklist with a trained preference model. Neither is obviously correct, and the disagreement is exactly why you should treat any single poster benchmark score as provisional.</p>
+<h2 id="how-much-does-the-designharness-actually-add">How Much Does the DesignHarness Actually Add?</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Fixed code agent + model</th>
+          <th style="text-align: right">Without DesignHarness</th>
+          <th style="text-align: right">With DesignHarness</th>
+          <th style="text-align: right">Gain</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Codex + GPT-5.5</td>
+          <td style="text-align: right">75.87</td>
+          <td style="text-align: right">81.46</td>
+          <td style="text-align: right">+5.59</td>
+      </tr>
+      <tr>
+          <td>Claude Code + Kimi K2.7</td>
+          <td style="text-align: right">57.20</td>
+          <td style="text-align: right">70.12</td>
+          <td style="text-align: right">+12.92</td>
+      </tr>
+      <tr>
+          <td>Claude Code + DeepSeek V4 Pro</td>
+          <td style="text-align: right">34.73</td>
+          <td style="text-align: right">54.29</td>
+          <td style="text-align: right">+19.56</td>
+      </tr>
+      <tr>
+          <td><strong>Average across 7 configurations</strong></td>
+          <td style="text-align: right"><strong>54.99</strong></td>
+          <td style="text-align: right"><strong>67.39</strong></td>
+          <td style="text-align: right"><strong>+12.40</strong></td>
+      </tr>
+  </tbody>
+</table>
+<p>The gain band is +5.01 to +19.56 points. Notice the shape of it: the harness helps the <em>weaker</em> model stacks the most. DeepSeek V4 Pro behind Claude Code gains nearly 20 points; native Codex + GPT-5.5, already strong, gains 5.59. That is a scaffolding effect — the harness compensates for what the underlying agent does not do well on its own, and its ceiling value is highest exactly where the model is cheapest. Controlled tracks on the 10-paper subset point the same way: holding AutoDesign and GLM 5.2 fixed, choosing Kimi Code as the coding harness yields 82.31 versus 64.33 for Claude Code and 69.53 for ZCode.</p>
+<h2 id="what-does-one-poster-cost-in-time-and-money">What Does One Poster Cost in Time and Money?</h2>
+<p>A fully autonomous long-horizon run executes <strong>253 tool calls and 11 editing turns in about 40 minutes for under $3</strong> per paper (arXiv:2608.13560 abstract). Compare that to the baseline it replaces: commercial poster-tool documentation puts manual conference-poster production at <strong>6–12 hours</strong> per poster, most of it layout rather than intellectual work.</p>
+<p>The cost-performance Pareto frontier on the fixed 10-paper subset is the practically useful table for a lab choosing a model route:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Model route</th>
+          <th style="text-align: right">PosterBench (10 papers)</th>
+          <th style="text-align: right">Normalized designer-only cost</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>LongCat 2.0</td>
+          <td style="text-align: right">55.13</td>
+          <td style="text-align: right">$0.27</td>
+      </tr>
+      <tr>
+          <td>Doubao Seed 2.1 Pro</td>
+          <td style="text-align: right">71.83</td>
+          <td style="text-align: right">$2.75</td>
+      </tr>
+      <tr>
+          <td>Claude 4.8</td>
+          <td style="text-align: right">74.56</td>
+          <td style="text-align: right">$7.63</td>
+      </tr>
+      <tr>
+          <td>GPT-5.5</td>
+          <td style="text-align: right">81.46</td>
+          <td style="text-align: right">$10.02</td>
+      </tr>
+  </tbody>
+</table>
+<p>Doubao Seed 2.1 Pro reaches <strong>88% of the GPT-5.5 score at 27% of its normalized designer-only API cost</strong>. For most labs producing conference posters on a deadline, that is the rational pick; GPT-5.5 buys the last 9.6 points at 3.6× the price. LongCat 2.0 at $0.27 is the floor — 55.13 points, roughly where a bare agent stack with no harness sits.</p>
+<p>One caveat on the arithmetic: the &ldquo;under $3&rdquo; figure in the abstract is a single fully autonomous run, while the Pareto table reports normalized designer-only API cost on the 10-paper subset. They are different accounting scopes. Do not multiply $2.75 by your poster count and expect to match the $3 headline.</p>
+<h2 id="does-the-benchmark-match-human-taste">Does the Benchmark Match Human Taste?</h2>
+<p>Partly — and the paper reports the gap itself, which is unusual and worth crediting.</p>
+<p>The system-blind human study collected <strong>936 responses from 11 volunteer reviewers</strong>: 933 ranking judgments and 3 skips. AutoDesign holds the highest Bradley–Terry estimate at <strong>64.0%</strong> (95% interval 55.2–77.8%). Its tie-adjusted empirical preference is 61.3% versus Claude Code, 63.1% versus OpenDesign, and <strong>67.6% versus Claude Design</strong>.</p>
+<p>Then the honesty: PosterBench correlates only <strong>r = 0.34</strong> (95% interval 0.22–0.44) with human preference. Agreement with the benchmark-preferred poster is <strong>51.9%</strong> when the score gap is 0–3 points — essentially a coin flip — and rises to <strong>74.4%</strong> only when the gap reaches 20 points or more.</p>
+<p>The practical translation: a 7.45-point PosterBench lead over Claude Design is real evidence, but it is not a guarantee that a human will see a better poster. If you are choosing between two systems within a few points of each other, the benchmark cannot decide it for you — render both on your own paper and look.</p>
+<h2 id="one-paper-four-artifacts--and-what-is-actually-validated">One Paper, Four Artifacts — and What Is Actually Validated?</h2>
+<p>The &ldquo;Paper All-in-One&rdquo; claim is one paper in, four artifacts out:</p>
+<ul>
+<li><strong>Poster</strong> — editable HTML, one-page PDF, preview, provenance</li>
+<li><strong>Slide deck</strong> — 24-slide formal academic talk as editable HTML, native editable PPTX, PDF</li>
+<li><strong>Webpage</strong> — responsive editorial research project page, local HTML plus assets, desktop/mobile QA</li>
+<li><strong>Video</strong> — six-minute 1080p narrated MP4 with AAC audio, transcript, and timed SRT/VTT subtitles, plus an editable HyperFrames project</li>
+</ul>
+<p>The validation boundary is the part the marketing tends to skip, and AutoDesign&rsquo;s own README states it plainly: PosterBench formally validates <strong>academic posters only</strong>. Slides, webpages, and videos are pilot outputs whose research claims still lack medium-specific source–output data, evaluators, rendering and validation gates, and communication objectives to match the poster pipeline. The demo artifacts — AutoDesign&rsquo;s own paper rendered into its own Figure 2 poster, a 24-slide talk, a landing page, and a six-minute conference video — are real outputs, not mockups, but they are demonstrations, not benchmarked claims.</p>
+<p>There is also a concrete design constraint worth knowing before you install: all four standalone Agent Skills require an <strong>opaque white primary canvas</strong> with no background image or paint effect that changes the rendered white. That exists so the paper&rsquo;s usual white-background figures stay visually coherent. Restrained light cards, panels, controls, captions, and overlays are allowed as local surfaces. If you want a dark-mode poster, the Skills edition is not the workflow for you.</p>
+<h2 id="how-do-you-install-and-run-it">How Do You Install and Run It?</h2>
+<p>The hosted demo has been retired. <code>designanything.ai</code> now states generation is local-install only, so papers, API keys, and results stay on your machine. That is a genuine selling point for unpublished or confidential manuscripts — and it moves install and maintenance cost onto you.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Route</th>
+          <th>Prerequisites</th>
+          <th>Commands</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>One-command launcher</td>
+          <td>Node.js 22+, <code>ffmpeg</code>/<code>ffprobe</code></td>
+          <td><code>curl -fsSL https://designanything.ai/install.sh | bash</code> then <code>autodesign start</code>; verify with <code>autodesign doctor</code></td>
+      </tr>
+      <tr>
+          <td>Source build</td>
+          <td>Python 3.10+, <code>uv</code>, Node.js 22+, npm, Playwright browsers, <code>ffmpeg</code>/<code>ffprobe</code></td>
+          <td><code>uv sync</code>; <code>uv run python scripts/install_playwright_browsers.py</code>; <code>cd runtime/video &amp;&amp; npm ci --omit=dev</code>; <code>cd ../../web &amp;&amp; npm install</code></td>
+      </tr>
+      <tr>
+          <td>Agent Skills only</td>
+          <td>An existing coding agent (Codex, Claude Code, DeepSeek Harness)</td>
+          <td>Install the standalone <code>autodesign-poster</code>, <code>-ppt</code>, <code>-webpage</code>, or <code>-video</code> Skill; no AutoDesign server required</td>
+      </tr>
+  </tbody>
+</table>
+<p>The launcher installs under <code>~/.local/share/autodesign</code>, keeps state under <code>~/.autodesign</code>, and migrates existing <code>~/.designanything</code> state with a compatibility symlink. Single-run output lives under <code>out/runs/&lt;run_id&gt;/</code>, ignored by Git. The canonical module and launcher names are <code>autodesign</code> and <code>AUTODESIGN_*</code> environment variables; the older <code>design_anything</code> / <code>designanything</code> aliases are deprecated.</p>
+<p>The <strong>Agent Skills</strong> route is the one most people should try first. Version 0.2.0 (2026-08-19) ships four independently installable, checksum-verified archives that run inside your existing coding agent, keeping editable artifacts, evidence, attempts, and review state in an output directory you choose, with no application server. The project&rsquo;s own guidance is explicit and worth repeating: the Skill edition is the convenient portable way to use part of AutoDesign, and it is <strong>not</strong> a replacement for the full harness when you are judging output quality.</p>
+<h2 id="what-are-the-honest-limits">What Are the Honest Limits?</h2>
+<ul>
+<li><strong>Author-run evaluation.</strong> The team that built the harness also built PosterBench and ran the evaluation, using their own judge protocol (<code>gemini-3.5-flash</code>). Treat 78.32 vs 70.87 as author-reported, not third-party verified. The mitigations are real — a frozen protocol distinct from the optimization-time evaluator, a fixed 10-paper subset, a mandated judge model, a documented train/development split — but they are self-imposed.</li>
+<li><strong>Benchmark–human alignment is weak.</strong> r = 0.34, with 51.9% agreement on close scores. Quote that next to any score.</li>
+<li><strong>Maturity.</strong> 229 stars, 10 forks, 2 contributors, last push 2026-09-05. This is a research artifact with a paper attached, not a maintained product. Compare with OpenDesign&rsquo;s actively pushed repository and 1,165 open issues of lived friction.</li>
+<li><strong>Poster-only validation.</strong> Slides, webpages, and videos are pilots without medium-specific evaluation.</li>
+<li><strong>Autonomy still loses to a competent human nudge.</strong> A commentary on the paper reports a representative case moving 49.00 (bare starting harness) → 80.88 (autonomous plateau) → <strong>88.39</strong> once a human redirects the search. Build the review step in; do not trust the loop blindly.</li>
+<li><strong>License metadata is ambiguous.</strong> A MIT <code>LICENSE</code> file exists (verified directly), while GitHub&rsquo;s API reports <code>NOASSERTION</code>. Confirm before commercial use.</li>
+<li><strong>The print-production last mile is unsolved across the category.</strong> Roundups of AI poster generators find almost no tool stating a DPI figure, and one explicitly disclaiming print resolution, colour matching, and bleed. AutoDesign&rsquo;s HTML-first pipeline inherits that same gap: verify output at your conference&rsquo;s print size and DPI yourself.</li>
+<li><strong>The category is nascent.</strong> The AutoDesign arXiv submission drew 2 points and 0 comments on Hacker News; &ldquo;Viable open source Claude Design alternative?&rdquo; (2026-05-14) drew 26 points and 7 comments. The keyword space is genuinely uncrowded — and so is the peer-review space.</li>
+<li><strong>Ecosystem noise.</strong> Several cloned repositories reuse OpenDesign&rsquo;s README copy verbatim, so verify star counts and licenses against the canonical org before citing a project.</li>
+</ul>
+<h2 id="who-should-use-the-autodesign-agent">Who Should Use the AutoDesign Agent?</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Your situation</th>
+          <th>Recommendation</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Researcher producing an A0/A1 conference poster from a manuscript</td>
+          <td>Strong fit. Under $3 and ~40 minutes versus 6–12 hours of manual layout, with editable HTML you can correct instead of regenerate</td>
+      </tr>
+      <tr>
+          <td>Lab standardizing poster production across many papers</td>
+          <td>Strong fit. Use Doubao Seed 2.1 Pro at ~$2.75 for the quality/cost knee, or GPT-5.5 if the last 9.6 points matter</td>
+      </tr>
+      <tr>
+          <td>Unpublished or embargoed work that cannot leave the machine</td>
+          <td>Strong fit. Local-first with your own API keys, hosted demo retired</td>
+      </tr>
+      <tr>
+          <td>You want editable output, not a flattened image</td>
+          <td>Strong fit. Native HTML, text, tables, and named assets stay revision-capable</td>
+      </tr>
+      <tr>
+          <td>You need project webpages or conference videos</td>
+          <td>Conditional. Pilots only, without PosterBench-grade validation</td>
+      </tr>
+      <tr>
+          <td>Product/UI design, landing pages, team collaboration</td>
+          <td>Not this. Use OpenDesign (98.9k stars, Apache-2.0) or Open CoDesign (MIT)</td>
+      </tr>
+      <tr>
+          <td>You need a hosted, zero-install experience</td>
+          <td>Not available. The demo is retired; expect Node 22+, ffmpeg, and maintenance</td>
+      </tr>
+      <tr>
+          <td>You need commercial license clarity before client work</td>
+          <td>Confirm with the authors first — the license metadata is ambiguous</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="verdict">Verdict</h2>
+<p>AutoDesign is the most substantiated open-source claim in the paper-to-artifact category right now, and it is substantiated in an unusual way. It beat a closed commercial design system — 78.32 against Claude Design&rsquo;s 70.87 — not by out-training it, but by evolving the scaffold around frozen weights across 7 days of traces, 224 subagent invocations, 123+ recursive iterations, and 54 accepted harness updates. The reusable result, DesignHarness, then lifted seven different code-agent/model stacks by 5 to 20 points.</p>
+<p>The right response to a leaderboard like this is not to quote 78.32. It is to install it, render your own poster, and compare the result against the 6–12 hours you currently spend on layout. The paper tells you where to look: at 51.9% human agreement on close score gaps, the benchmark cannot see a 7-point lead — only your eyes at print size can.</p>
+<p>If you want the harness-not-model lesson without the poster workflow, the transferable takeaway stands on its own. Attaching a learned scaffold to a fixed model moved scores more than most model upgrades move them. That is worth testing on your own agent stack before you spend the next budget cycle on a bigger model.</p>
+<h2 id="faq">FAQ</h2>
+<p><strong>Is AutoDesign really open source?</strong>
+Yes, with a caveat. The repository ships an MIT <code>LICENSE</code> file reading &ldquo;Copyright (c) 2026 Yaxin Luo,&rdquo; which I verified directly at the raw URL. GitHub&rsquo;s license API field reported <code>NOASSERTION</code> for the same repository on 2026-09-30. For personal and academic use this is a non-issue; for commercial or client work, confirm terms with the authors first.</p>
+<p><strong>Does AutoDesign actually beat Claude Design?</strong>
+On PosterBench&rsquo;s 100-paper Main Track, AutoDesign scores 78.32 versus Claude Design&rsquo;s 70.87 — a 7.45-point lead, with Claude Code + Claude 4.8 held fixed for the primary comparison. That result is author-reported on a benchmark the same team built. It is also not a guarantee of visible quality: PosterBench correlates only r = 0.34 with human preference, and reviewers agree with the benchmark just 51.9% of the time on score gaps of 0–3 points.</p>
+<p><strong>Can I use AutoDesign with Codex or Claude Code instead of its own runtime?</strong>
+Yes, two ways. DesignHarness is harness-agnostic and model-agnostic, benchmarked across Codex, Claude Code, Kimi Code, ZCode, and OpenCode with Claude 4.8, GPT-5.5, Kimi K2.7, GLM 5.2, Seed 2.1 Pro, LongCat 2.0, and DeepSeek V4 Pro. Separately, four standalone Agent Skills (<code>autodesign-poster</code>, <code>-ppt</code>, <code>-webpage</code>, <code>-video</code>) install directly into Codex, Claude Code, or DeepSeek Harness without running the AutoDesign server. The project warns that the Skills edition does not replace the full harness when judging output quality.</p>
+<p><strong>What does it cost to generate one poster?</strong>
+A fully autonomous run executes 253 tool calls and 11 editing turns in about 40 minutes for under $3 per poster. Model choice moves that materially: on the fixed 10-paper subset, the Pareto frontier runs from LongCat 2.0 (55.13 points at $0.27) through Doubao Seed 2.1 Pro (71.83 at $2.75) and Claude 4.8 (74.56 at $7.63) to GPT-5.5 (81.46 at $10.02). Budget for your own API key — the hosted demo is retired and everything runs locally.</p>
+<p><strong>Does AutoDesign produce print-ready posters I can send to a conference printer?</strong>
+It produces editable HTML, a one-page PDF, and a preview, with poster canvas controls for aspect ratios and exact pixel sizes added on 2026-08-19. That is far better than a flattened image. But the project&rsquo;s validation covers poster design quality, not print production: no DPI, colour-matching, or bleed guarantee is published. Convert the HTML to print-resolution PDF at your conference&rsquo;s required size and verify the result yourself before submitting.</p>
+<h2 id="sources-and-methodology">Sources and Methodology</h2>
+<ul>
+<li><a href="https://github.com/Yaxin9Luo/AutoDesign">AutoDesign repository</a> — README, <code>agent_skills/README.md</code>, <code>eval/README.md</code>, <code>LICENSE</code> (fetched 2026-09-30)</li>
+<li><a href="https://arxiv.org/abs/2608.13560">AutoDesign: Meta-Harness Optimization for Long-Horizon Agentic Design</a> (arXiv:2608.13560, 13 August 2026)</li>
+<li><a href="https://huggingface.co/datasets/YaxinLuo/PosterBench">PosterBench dataset</a> and PosterBench-mini on Hugging Face (metadata only)</li>
+<li><a href="https://github.com/nexu-io/open-design">OpenDesign repository</a>; <a href="https://github.com/OpenCoworkAI/open-codesign">Open CoDesign repository</a></li>
+<li><a href="https://github.com/Paper2Poster/Paper2Poster">Paper2Poster</a> (NeurIPS 2025 D&amp;B, arXiv:2505.21497); <a href="https://github.com/multimodal-art-projection/P2P">P2P</a> (ICLR 2026); PosterGen (arXiv:2508.17188); PosterBot (AAAI-22)</li>
+<li><a href="https://www.anthropic.com/news/claude-design-anthropic-labs">Claude Design announcement</a> (Anthropic Labs, 2026-04-17)</li>
+<li>Commercial poster-generator documentation: <a href="https://www.chatslide.ai/guides/research-poster-presentation-ai-guide">ChatSlide research poster guide</a>, <a href="https://paperbanana.me/scientific-poster-maker">PaperBanana scientific poster maker</a>, <a href="https://scispace.com/agents/scientific-poster-generator-vl135up1">SciSpace poster generator</a></li>
+<li>Repository metrics via the GitHub API and repository pages on 2026-09-30; Hacker News interest via the HN Algolia API on 2026-09-30</li>
+</ul>
+<p>Methodology note: all PosterBench scores, human-evaluation figures, cost figures, transfer gains, and repository metrics in this article are reported by their respective sources and are reproduced with attribution. Where a figure is author-reported rather than independently verified, the article says so in the sentence that carries the number. License status was checked two ways — the raw <code>LICENSE</code> file and GitHub&rsquo;s license API field — and the discrepancy is reported rather than resolved.</p>
+]]></content:encoded></item></channel></rss>
