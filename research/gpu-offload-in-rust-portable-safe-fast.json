@@ -1,0 +1,193 @@
+{
+  "topic": "GPU Offload in Rust: Portable, Safe, and Fast",
+  "slug": "gpu-offload-in-rust-portable-safe-fast",
+  "keyword": "GPU offload Rust",
+  "type": "how-to",
+  "competitors": [
+    {
+      "url": "https://arxiv.org/abs/2608.13759",
+      "key_points": [
+        "Source paper: 'GPU Offload in Rust: Portable, Safe, and Fast' by Manuel S. Drehwald (U. Toronto / LLNL / Vector), Marcelo Dominguez (URJC), Kevin Sala (LLNL), Alan Aspuru-Guzik (U. Toronto), Johannes Doerfert (LLNL). Submitted 13 Aug 2026, cs.PL, 13 pages, 5 figures, arXiv:2608.13759v1.",
+        "Thesis: GPU programming has always forced a choice between speed and memory safety; Rust's ownership + noalias guarantees are used as the optimization input, so safe Rust kernels stay competitive with hand-tuned CUDA/HIP.",
+        "Implementation is in-tree: GPU offload built into rustc itself on top of LLVM's Offload infrastructure (the same infrastructure already used by OpenMP for C++/Fortran), not a bolted-on side project.",
+        "Three interfaces: (A) compiler-managed offload with automatic data movement from Rust types; (B) interoperability with vendor libraries (cuBLAS/rocBLAS); (C) explicit type-staged memory control via preload/preload_mut handles.",
+        "Data direction comes from the type system, not pragmas: &T / *const T lower to an OpenMP MapTo (device-only) mapping, &mut T / *mut T lower to MapToFrom (bidirectional), and scalars up to 64 bits are passed by value.",
+        "Kernels can be written without raw pointers: Region<T, PartitioningStrategy> partitions a slice into disjoint per-thread subregions (Linear1D, etc.), so the indexing is safe Rust even though mutable data is shared across threads. PartitioningStrategy itself is an unsafe trait whose implementors must guarantee disjointness.",
+        "Two-pass compilation (device pass for nvptx64/amdgcn, then host pass for x86-64) is deliberate: it keeps host and device target semantics independent, at the cost of explicit cross-pass communication. Single-pass was rejected because rustc expects one target per invocation.",
+        "Cross-pass monomorphization is solved with a new rustc query that serializes kernel DefIds + concrete type substitutions during the host pass so the device pass can seed its monomorphization roots.",
+        "Known ABI landmine: x86_64 and amdgcn lower a slice as (ptr, len) but nvptx64 lowers it as [i64; 2] — the divergence shows why cross-boundary ABI validation is required before adding struct support.",
+        "Benchmarks: RAJAPerf ported to pure Rust, run on AMD MI250X, NVIDIA H100 and RTX A2000/A2000-class hardware, compiled with a rustc based on LLVM 23.1.0-rc1."
+      ]
+    },
+    {
+      "url": "https://doc.rust-lang.org/std/offload/offload/index.html",
+      "key_points": [
+        "The feature is real and documented: std::offload is a nightly-only experimental API gated on `gpu_offload` (tracking issue rust-lang/rust#131513).",
+        "Usage today is a two-step pattern: annotate the kernel with #[offload_kernel] (which generates a host-side dispatch wrapper plus the device-side kernel), then launch it with the core::intrinsics::offload intrinsic specifying grid and block dimensions.",
+        "Documented limitations are the practical gotchas for a how-to: only types supported by the current device-mapping implementation, no generics and no dyn Trait in kernels, and launching is restricted to intrinsics usage which is discouraged outside std.",
+        "The canonical example still dereferences a raw pointer inside an `unsafe` block for a *mut [f64; N] kernel, so raw pointers appear when the interface is used at the lowest level."
+      ]
+    },
+    {
+      "url": "https://rustc-dev-guide.rust-lang.org/offload/internals.html",
+      "key_points": [
+        "Single-source, two-pass design: kernels compile first for the device (nvptx64, amdgcn-amd-amdhsa, Intel later), then the host compile emits calls into the OpenMP offload runtime with a simplified type tree describing type layouts.",
+        "Data direction is derived from the type system, with &[f32; 1024] moving only to the device and &mut [f64] moving both ways — the compiler decides the transfers, the programmer does not write mapping clauses.",
+        "Kernel artifacts must be handed to the second (host) rustc invocation by path, so a small cargo wrapper is required; the guide explicitly argues a ~5-line wrapper beats teaching all of rustc that every symbol may have two implementations.",
+        "Current rough edges stated upstream: `#[cfg(target_os = \"\")]` annotations are still needed on kernels, and the device pass does not yet use rustc's query system so kernels are always recompiled.",
+        "Development target is a safe, convenient and fast-by-default Rusty GPU interface with automatic data movement first, and more explicit/unsafe control surfaces later."
+      ]
+    },
+    {
+      "url": "https://github.com/tracel-ai/cubecl/blob/main/README.md",
+      "key_points": [
+        "CubeCL is the practical 'use it this afternoon' answer for GPU offload in Rust: a single #[cube] function is a JIT-compiled kernel that targets CUDA, ROCm/HIP, Metal, Vulkan/SPIR-V, WebGPU/WGSL and CPU SIMD from one codebase.",
+        "Ecosystem proof: CubeCL powers the Burn deep-learning framework, so it is not a toy — latest release v0.11.0-pre.4 (2026-09-22), 2.4k GitHub stars, ~1.31M crates.io downloads.",
+        "Portability model is four orthogonal axes — Vector, Plane, CubeDim, CubeCount — so a kernel reads the runtime maxima at compile time and specializes itself; hardcoding `warpSize == 32` is called out as the classic CUDA antipattern that breaks on AMD's 64-lane warps.",
+        "Its niche is explicitly between low-level wrappers (wgpu, cudarc) and high-level frameworks (Burn): write a kernel library once, reuse it across backends."
+      ]
+    },
+    {
+      "url": "https://crates.io/crates/wgpu",
+      "key_points": [
+        "The stable, portable baseline: wgpu 30.0.1 with ~37.8M crates.io downloads and 18.2k GitHub stars is the most-used GPU crate in the Rust catalog; one compute API across Vulkan, Metal, DirectX 12, OpenGL and the browser.",
+        "Compute in wgpu means writing the kernel in WGSL, not Rust — the Rust host is memory-safe, the shader is a separate language, which is exactly the split the offload work tries to remove.",
+        "Its hard ceiling is documented in the ecosystem tracker: no tensor cores through WebGPU, and Firefox still ships WebGPU disabled by default.",
+        "The two-buffer pattern is the part every tutorial must explain: a STORAGE|COPY_SRC storage buffer plus a MAP_READ|COPY_DST staging buffer, then copy_buffer_to_buffer before mapping and reading back."
+      ]
+    },
+    {
+      "url": "https://rust-gpu.github.io/blog/2025/07/25/rust-on-every-gpu/",
+      "key_points": [
+        "The strongest portability demo to date: one shared Rust codebase (bitonic sort) running on CUDA, SPIR-V/Vulkan, Metal, DirectX 12, WebGPU and a CPU fallback, written entirely in regular Rust with no shader language.",
+        "Three projects do the work — Rust GPU (Rust to SPIR-V), Rust CUDA (Rust to NVVM IR), and Naga (the wgpu team's translation layer between WGSL/SPIR-V/GLSL/MSL/HLSL).",
+        "Ecosystem status matters for the how-to: the original EmbarkStudios/rust-gpu repo is archived (read-only since 2025-10-31, 107 open issues), and work continues under Rust-GPU/rust-gpu (3.4k stars, active as of 2026-09-30).",
+        "Rust-GPU/rust-cuda is separately active at 5.4k stars — but the source paper's critique stands: it requires raw pointers for all mutable arguments, so kernels are not memory-safe."
+      ]
+    },
+    {
+      "url": "https://arewelearningyet.com/gpu",
+      "key_points": [
+        "The de-facto status board for the space, and it is honest about the split: writing the host side in Rust is solved, writing the kernel in Rust is the newer, still-moving half.",
+        "NVIDIA itself now ships two Rust kernel tracks — cuda-oxide (Rust to PTX through MIR + pliron + LLVM) and cuTile Rust (tile-based DSL) — which puts a vendor behind Rust kernels, not just the community.",
+        "Repo reality check for 2026: cuda-oxide (github.com/NVIDIA/cuda-rust) 3.6k stars, pushed 2026-10-01, Apache-2.0; cuTile Rust 1.0k stars; wgpu/naga 18k stars with 11.6M naga downloads/90d.",
+        "It points at the same 2026 paper (arXiv 2608.13759) as the signal that Rust GPU compilation is moving into rustc and the LLVM backends rather than living beside them."
+      ]
+    }
+  ],
+  "stats": [
+    {
+      "fact": "On AMD MI250X, Rust Offload is between 32% faster and 43% slower than the RAJA baseline when measuring whole benchmark runtime rather than isolated kernel time.",
+      "source": "arXiv 2608.13759, Section 6 Evaluation (Figure 3)"
+    },
+    {
+      "fact": "On NVIDIA H100, Rust Offload is between 11% faster and 46% slower than the base CUDA implementation; its worst cases are the micro-benchmarks FIR (-44%) and LTIMES (-46%), which are unroll-sensitive.",
+      "source": "arXiv 2608.13759, Section 6 Evaluation (Figure 4)"
+    },
+    {
+      "fact": "The same two micro-benchmarks are where Rust beats base HIP by 15% (FIR) and 32% (LTIMES) on AMD — the spread is a compiler-unrolling artifact, not a portability artifact.",
+      "source": "arXiv 2608.13759, Section 6 Evaluation"
+    },
+    {
+      "fact": "Using Interface A (automatic per-launch data movement) naively can be more than 400x slower than the explicit Interface C on MI250X — transfer-per-kernel-launch, not kernel code, is the cost.",
+      "source": "arXiv 2608.13759, Sections 5 and 6"
+    },
+    {
+      "fact": "On H100 RAJA issues 55 host-to-device transfers totalling 468 MB versus Rust's 53 transfers / 423 MB, but Rust's transfers take 46 ms against RAJA's 16 ms — fewer bytes did not mean less time, because of memory-kind and async-transfer differences.",
+      "source": "arXiv 2608.13759, Section 6 (Memory Transfer Sizes)"
+    },
+    {
+      "fact": "Average kernel register usage on RTX 2070 across 13 RAJAPerf kernels: 33 for Rust versus 28 for RAJA-CUDA; the paper attributes the gap to extra bounds checks, and measured no runtime impact from bounds checking in these kernels.",
+      "source": "arXiv 2608.13759, Section 6 (Register Usage)"
+    },
+    {
+      "fact": "Experimental algebraic floating-point ops (Rust's safe alternative to C++ fast-math, which is disallowed because nnan/ninf would be UB in safe code) give a 2x speedup on the FIR kernel and about 20% on DEL_DOT_VEC_2D, VOL3D and MATVEC3D on an RTX A2000.",
+      "source": "arXiv 2608.13759, Section 6 (Fast-Math Impact, Figure 5)"
+    },
+    {
+      "fact": "The GPU-offload tracking issue rust-lang/rust#131513 ('Tracking Issue for GPU-offload') was opened 2024-10-10 and is still open, labelled C-tracking-issue and B-experimental, last updated 2026-09-15.",
+      "source": "github.com/rust-lang/rust issue 131513 via GitHub API"
+    },
+    {
+      "fact": "std::offload remains a nightly-only experimental API, and the rustc dev guide states users currently still need to invoke another compiler such as clang to finish the compilation process.",
+      "source": "doc.rust-lang.org/std/offload and rustc-dev-guide.rust-lang.org/offload/internals.html"
+    },
+    {
+      "fact": "The prototype used a rustc based on LLVM 23.1.0-rc1, evaluating on AMD MI250X, NVIDIA H100 and RTX A2000-class GPUs.",
+      "source": "arXiv 2608.13759, Section 6 Evaluation"
+    },
+    {
+      "fact": "wgpu 30.0.1 (published 2026-08-22) has ~37.8M crates.io downloads and 18,166 GitHub stars; naga has 11.6M downloads in 90 days.",
+      "source": "crates.io API and github.com/gfx-rs/wgpu API"
+    },
+    {
+      "fact": "CubeCL is at v0.11.0-pre.4 (2026-09-22) with ~1.31M downloads and 2,404 stars, and 210 points / 41 comments on Hacker News; it is the kernel layer under the Burn framework (16,008 stars).",
+      "source": "crates.io API, GitHub API, HN Algolia API"
+    },
+    {
+      "fact": "cudarc (thin CUDA bindings, the unsafe path) sits at 0.19.10 with ~9.0M downloads; huggingface/candle at 21,127 stars; burn at 16,008 stars.",
+      "source": "crates.io API and GitHub API"
+    },
+    {
+      "fact": "The original EmbarkStudios/rust-gpu repository is archived and read-only (pushed_at 2025-10-31, 107 open issues); active development continues at Rust-GPU/rust-gpu with 3,383 stars, updated 2026-09-30.",
+      "source": "GitHub API, repos/EmbarkStudios/rust-gpu and repos/Rust-GPU/rust-gpu"
+    },
+    {
+      "fact": "NVIDIA's Rust kernel tracks are live in the vendor's own org: cuda-oxide (NVIDIA/cuda-rust) 3,635 stars pushed 2026-10-01, and NVlabs/cutile-rs 1,042 stars.",
+      "source": "GitHub API"
+    },
+    {
+      "fact": "The paper was covered outside academia within weeks of publication: Phoronix ('Offloading Rust To GPUs Proves Capable Of High Performance With Memory Safety'), XenoSpectrum and AlphaXiv, and a 245-point Hacker News thread.",
+      "source": "phoronix.com/news/LLVM-Offload-Rust-Performance and HN Algolia API"
+    }
+  ],
+  "angles": [
+    "The safety argument inverts the usual pitch: ownership is not a tax you pay for correctness, it is the source of the noalias metadata that LLVM optimizes with — safe Rust references get restrict-style info for free, which C++/CUDA programmers annotate by hand or forget.",
+    "The 400x number is the real lesson of the paper and most articles bury it: in GPU offload your kernel is rarely the bottleneck, your data movement pattern is. Interface A (automatic) vs Interface C (explicit) is the whole tutorial.",
+    "Portability is now a spectrum with four distinct rungs a reader must choose between, and the choice is about where the kernel is written: WGSL under wgpu (stable, portable, not Rust kernels), #[cube] under CubeCL (Rust kernels today), rustc/LLVM offload (Rust kernels, needs nightly), cudarc/cuda-oxide (Rust kernels, vendor-locked or unsafe).",
+    "Type-driven offload is the conceptual novelty worth a section: &T vs &mut T deciding MapTo vs MapToFrom means the compiler derives your OpenMP mapping clauses from the borrow checker, and a mutation bug becomes a compile error instead of silent host-device divergence.",
+    "The 'two-pass vs single-pass' design debate is a genuine engineering trade-off story (rustc wants one target per invocation; cuda-oxide trades independent target semantics for simplicity), and it explains why the toolchain needs a cargo wrapper at all.",
+    "Rust's fast-math problem is an under-discussed practical constraint: safe Rust cannot enable nnan/ninf, so the 2x speedup on FIR comes from experimental algebraic floats rather than the -ffast-math flag you would reach for in C++.",
+    "Honest status framing beats hype: the feature is nightly, gated on issue #131513 open since Oct 2024, needs clang in the pipeline, and the current documented API still launches kernels through a discouraged intrinsic — 'portable, safe, fast' is a research result plus a nightly preview, not a production path.",
+    "The ecosystem split inside Rust GPU itself is a useful 'which crate do I actually use' decision table — and note the archived EmbarkStudios repo still outranks the active successor in search results, a trap for anyone following an older tutorial.",
+    "Bounds checks on the GPU: Rust pays ~5 extra registers on average and the paper measured no runtime cost in these kernels, but the reason (explicit thread/block indexing defeats the usual iterator trick) is worth explaining to anyone porting CPU Rust to a kernel.",
+    "NVIDIA shipping two Rust kernel tracks (cuda-oxide, cuTile Rust) is the strongest signal in the story that Rust GPU kernels crossed from community experiment into vendor roadmaps."
+  ],
+  "keywords": [
+    "GPU offload Rust",
+    "Rust GPU offload",
+    "Rust GPU programming",
+    "rustc GPU offload",
+    "std::offload Rust",
+    "gpu_offload feature flag",
+    "Rust GPU kernels",
+    "write GPU kernels in Rust",
+    "Rust CUDA alternative",
+    "wgpu compute shader Rust",
+    "CubeCL Rust kernels",
+    "portable GPU computing Rust",
+    "safe GPU kernels Rust",
+    "noalias Rust GPU",
+    "Rust vs CUDA performance",
+    "cuda-oxide Rust PTX",
+    "rust-gpu SPIR-V",
+    "cudarc Rust CUDA bindings",
+    "rustc offload tracking issue 131513",
+    "Region PartitioningStrategy Rust GPU"
+  ],
+  "outline": [
+    "H2: What 'GPU offload in Rust' actually means in 2026 (three different things people call by the same name)",
+    "H2: The research result: rustc + LLVM Offload, and what the paper proved on H100 and MI250X",
+    "H2: How the type system replaces data-mapping pragmas (&T vs &mut T, MapTo vs MapToFrom)",
+    "H2: Writing a kernel without raw pointers: Region, PartitioningStrategy and safe sliced indexing",
+    "H2: The three interfaces, and why the automatic one can be 400x slower than the explicit one",
+    "H2: Two-pass vs single-pass compilation — why the toolchain needs a cargo wrapper and clang",
+    "H2: Trying it today: prerequisites, the nightly feature flag, and a minimal offloaded kernel",
+    "H2: If you cannot use nightly: the four practical alternatives compared (wgpu, CubeCL, cudarc, cuda-oxide/rust-gpu)",
+    "H2: Performance tuning that matters: async transfers, LICM for kernels in loops, read-only storage, and compute timestamps",
+    "H2: The limits to know before committing — generics/dyn Trait, device ABI mismatch, no std on the GPU, no safe fast-math",
+    "H2: Register usage and bounds checks: what safe Rust costs on a GPU, and how to measure it",
+    "H2: Verdict and decision table: which Rust GPU path to pick for your workload"
+  ],
+  "research_date": "2026-10-01"
+}
