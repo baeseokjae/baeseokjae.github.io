@@ -1,0 +1,590 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Checkpoint-Aware Agent Routing on RockB</title><link>https://baeseokjae.github.io/tags/checkpoint-aware-agent-routing/</link><description>Recent content in Checkpoint-Aware Agent Routing on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 01 Oct 2026 00:33:08 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/checkpoint-aware-agent-routing/index.xml" rel="self" type="application/rss+xml"/><item><title>A2A Routing Agents: State-Aware Mid-Execution Routing with Sprix SAGE Router</title><link>https://baeseokjae.github.io/posts/a2a-agent-network-routing-sprix-sage/</link><pubDate>Thu, 01 Oct 2026 00:33:08 +0000</pubDate><guid>https://baeseokjae.github.io/posts/a2a-agent-network-routing-sprix-sage/</guid><description>A2A routing agents pick who works after execution has started. A hands-on guide to the Sprix SAGE router, its three modes, and its benchmark limits.</description><content:encoded><![CDATA[<p>A2A routing agents decide which agent configures, owns, or continues an in-flight task once execution has already begun. The Sprix SAGE Router is a dependency-free Python reference implementation of that policy: it compares SELF, COLLABORATE, and HANDOFF under permission, budget, and deadline constraints, and returns an auditable trace. Its own trajectory replay shows progress-awareness mainly buys restraint — wasted work falls from 0.104 to 0.059 and the switch rate from 80.1% to 58.4%, while utility stays inside overlapping error bars.</p>
+<p>That is the honest headline, and it is more interesting than the marketing version. We cloned the repository, ran its demo, its examples and its 46-test suite, and reproduced a routing flip on our own machine. This guide covers what the router actually is, how its utility function works, what the benchmark does and does not prove, and the integration work it deliberately leaves to you.</p>
+<h2 id="why-a2a-discovery-is-not-enough">Why A2A Discovery Is Not Enough</h2>
+<p>The Agent2Agent protocol solved a directory problem and, in doing so, made a runtime problem visible. Google launched A2A in April 2025; the Linux Foundation took over the project on 23 June 2025 with support from more than 100 technology companies, and A2A Protocol v1.0 — the first stable production-ready version — shipped on 12 March 2026. On 27 August 2026 A2A was accepted as a Growth Stage project at the Agentic AI Foundation. The reference <code>a2aproject/A2A</code> repository passed 25,977 stars and 2,638 forks in that period <a href="https://www.linuxfoundation.org/press/linux-foundation-launches-the-agent2agent-protocol-project-to-enable-secure-intelligent-communication-between-ai-agents">Linux Foundation</a>, <a href="https://a2a-protocol.org/latest/blog/">A2A blog</a>, <a href="https://github.com/a2aproject/A2A">GitHub API</a>.</p>
+<p>What the specification gives you is a way to describe agents and move work between them: Agent Cards at <code>/.well-known/agent-card.json</code>, JSON-RPC 2.0 over HTTPS, SSE streaming, push notifications, and a task lifecycle that runs <code>submitted → working → terminal</code> with a hard rule that a caller waits forever if no terminal event is emitted <a href="https://a2a-protocol.org/latest/specification/">a2a-protocol.org specification</a>. What it does not give you is any statement about <strong>who should be working on the task after the handshake is done</strong>. That omission is structural, not an oversight: a protocol can standardize message shapes and lifecycle events, but it cannot know that the incumbent agent has finished two thirds of a dependency DAG and is about to spend an hour redoing work another agent could reuse.</p>
+<p>The practical symptom shows up as a familiar operations question. A task has been running for twenty minutes. The executing agent is mediocre at the one requirement it has not started yet. A specialist exists and is idle. Do you let it finish, bolt a teammate on, or move the whole task? Most frameworks answer this with a static decision made before the first token: pick a team, then live with it. The runtime question — ownership transfer after progress exists — is where routing agents earn their name.</p>
+<p>Three different things get called routing, so disambiguate before choosing tooling. <strong>Model routing</strong> picks which LLM answers a prompt (RouteLLM and friends). <strong>Provider routing</strong> picks which endpoint or vendor serves the request (gateways, load balancers, price arbitrage). <strong>Agent routing</strong> picks which agent owns a task and in what configuration. SAGE only does the third, and only over a task that is already in flight. If you arrive from an LLM-gateway search, you are in the wrong section of this article.</p>
+<p>The academic version of the same problem is also live. STRMAC, described in <a href="https://arxiv.org/abs/2511.02200">arXiv 2511.02200</a>, is a state-aware routing framework that separately encodes interaction history and agent knowledge and selects the most suitable single agent at each step; its authors report up to 23.8% improvement over baselines and up to 90.1% less data-collection overhead than exhaustive search. STRMAC is a trained router with an encoder and a self-evolving data-generation pipeline. SAGE is the opposite design choice, and that contrast recurs throughout this guide.</p>
+<h2 id="what-the-sprix-sage-router-actually-is">What the Sprix SAGE Router Actually Is</h2>
+<p>Sprix SAGE Router (<code>wang2122/sprix-sage-router</code>) is an MIT-licensed Python package that answers one question: for a task that has already started, should the incumbent continue, recruit a small complementary team, or hand ownership to a peer? The repository is a research preview published on 18 August 2026 by Sprix AI, the A2A initiative of 屿智同行, with v0.3.0 released on 28 August 2026 <a href="https://github.com/wang2122/sprix-sage-router">GitHub API</a>.</p>
+<p>The provenance numbers, checked directly against the GitHub API on 1 October 2026: 4,261 stars, 186 forks, 181 watchers, 43 commits, 2 open issues, eight contributors, last push 28 August 2026, Python 3.10+, MIT license, and — the detail that matters most for adoption — <strong>zero runtime dependencies</strong>. There is no package on PyPI, so installation means cloning the repository.</p>
+<p>SAGE is not a protocol and does not compete with A2A. It reads protocol and marketplace signals and produces a decision:</p>
+<table>
+  <thead>
+      <tr>
+          <th>A2A or marketplace signal</th>
+          <th>What SAGE maps it to</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>AgentCard.skills</code></td>
+          <td>Normalized capability vector, validated against locally supplied scores</td>
+      </tr>
+      <tr>
+          <td>Security requirements</td>
+          <td>Hard <code>permissions</code> eligibility filter</td>
+      </tr>
+      <tr>
+          <td>Supported input/output modes</td>
+          <td>Compatibility filter applied before scoring</td>
+      </tr>
+      <tr>
+          <td>Task status, artifacts, failures</td>
+          <td><code>ExecutionState</code>: ownership, completed nodes, in-flight quality, artifact portability</td>
+      </tr>
+      <tr>
+          <td>Provider quote</td>
+          <td><code>Bid(cost, latency, confidence)</code></td>
+      </tr>
+      <tr>
+          <td>Completed task evaluation</td>
+          <td>Contextual trust, success model, bid-fidelity updates</td>
+      </tr>
+  </tbody>
+</table>
+<p>Two boundaries worth stating up front. First, <code>profile_from_agent_card</code> refuses to invent numbers: it only accepts scores for skill IDs the card actually declares, and it requires you to pass capability, cost, and latency evidence explicitly rather than deriving trust from a card&rsquo;s marketing text. Second, the prototype <strong>decides but does not dispatch</strong>. It does not transmit tasks, authenticate endpoints, or verify signatures; an A2A client remains responsible for <code>message/send</code>, streaming, polling, cancellation, and secure artifact handling <a href="https://github.com/wang2122/sprix-sage-router/blob/main/docs/INTEGRATION.md">docs/INTEGRATION.md</a>.</p>
+<h2 id="the-three-routing-modes-self-collaborate-and-handoff">The Three Routing Modes: SELF, COLLABORATE, and HANDOFF</h2>
+<p>The router evaluates exactly three routes in one objective, and the difference between them is a question of ownership rather than of team size:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Route</th>
+          <th>Ownership</th>
+          <th>Choose it when</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>SELF</strong></td>
+          <td>Incumbent agent keeps everything</td>
+          <td>Existing capability plus accumulated context is already sufficient</td>
+      </tr>
+      <tr>
+          <td><strong>COLLABORATE</strong></td>
+          <td>Incumbent retains ownership, recruits peers</td>
+          <td>A small complementary team covers the requirements the incumbent cannot</td>
+      </tr>
+      <tr>
+          <td><strong>HANDOFF</strong></td>
+          <td>One peer receives full ownership</td>
+          <td>Specialist advantage beats the context-transfer loss</td>
+      </tr>
+  </tbody>
+</table>
+<p>The intuition is easy to misread, so make it concrete. HANDOFF is not the &ldquo;escalate to the better agent&rdquo; button, and COLLABORATE is not &ldquo;add more agents until quality rises.&rdquo; Each route is scored on net utility after paying for its own frictions: coordination overhead for collaboration, context-transfer loss for handoff. A team is only worth forming when its marginal requirement coverage beats that overhead, and a handoff is only worth it when the specialist&rsquo;s advantage is larger than the value of the context being abandoned.</p>
+<p>That is why the modes compete inside one action space rather than forming a ladder, and why SAGE&rsquo;s own progress-masked and static-coalition baselines receive exactly the same registry, budget, and deadline as the full policies. If HANDOFF were free, every task with a better specialist available would switch, and the benchmark&rsquo;s &ldquo;always hand off&rdquo; row shows what that costs: 0.290 utility with 0.130 wasted work, the worst waste figure in the table.</p>
+<p>In our own run of the shipped example (<code>examples/a2a_execution_plan.py</code>), a planner with 0.94 planning capability and a coder with 0.97 coding capability produced <code>COLLABORATE</code> with utility 0.7229, success probability 0.885, coverage 0.697, estimated cost 0.094 against a 0.25 budget, and a single communication edge <code>planner → coder</code>. That last field is the one adopters underestimate: the topology is an output, not an input.</p>
+<h2 id="the-sage-utility-function-explained">The SAGE Utility Function, Explained</h2>
+<p>Every feasible route is ranked by one equation, and reading it is the fastest way to understand the router&rsquo;s biases:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 472 41"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>U</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>(</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>z</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>E</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>)</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>=</text>
+<text text-anchor='middle' x='88' y='20' fill='currentColor' style='font-size:1em'>−</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>V</text>
+<text text-anchor='middle' x='104' y='20' fill='currentColor' style='font-size:1em'>λ</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>·</text>
+<text text-anchor='middle' x='112' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='120' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='120' y='20' fill='currentColor' style='font-size:1em'>·</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>̂</text>
+<text text-anchor='middle' x='128' y='20' fill='currentColor' style='font-size:1em'>C</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>θ</text>
+<text text-anchor='middle' x='144' y='4' fill='currentColor' style='font-size:1em'>(</text>
+<text text-anchor='middle' x='144' y='20' fill='currentColor' style='font-size:1em'>−</text>
+<text text-anchor='middle' x='152' y='4' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>=</text>
+<text text-anchor='middle' x='160' y='20' fill='currentColor' style='font-size:1em'>λ</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='168' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='176' y='20' fill='currentColor' style='font-size:1em'>·</text>
+<text text-anchor='middle' x='184' y='4' fill='currentColor' style='font-size:1em'>|</text>
+<text text-anchor='middle' x='184' y='20' fill='currentColor' style='font-size:1em'>L</text>
+<text text-anchor='middle' x='200' y='4' fill='currentColor' style='font-size:1em'>x</text>
+<text text-anchor='middle' x='200' y='20' fill='currentColor' style='font-size:1em'>−</text>
+<text text-anchor='middle' x='208' y='4' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='216' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='216' y='20' fill='currentColor' style='font-size:1em'>λ</text>
+<text text-anchor='middle' x='224' y='4' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='224' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='232' y='4' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='232' y='20' fill='currentColor' style='font-size:1em'>·</text>
+<text text-anchor='middle' x='240' y='4' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='240' y='20' fill='currentColor' style='font-size:1em'>R</text>
+<text text-anchor='middle' x='248' y='4' fill='currentColor' style='font-size:1em'>z</text>
+<text text-anchor='middle' x='256' y='4' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='256' y='20' fill='currentColor' style='font-size:1em'>−</text>
+<text text-anchor='middle' x='264' y='4' fill='currentColor' style='font-size:1em'>E</text>
+<text text-anchor='middle' x='272' y='4' fill='currentColor' style='font-size:1em'>)</text>
+<text text-anchor='middle' x='272' y='20' fill='currentColor' style='font-size:1em'>λ</text>
+<text text-anchor='middle' x='280' y='20' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='288' y='20' fill='currentColor' style='font-size:1em'>·</text>
+<text text-anchor='middle' x='296' y='20' fill='currentColor' style='font-size:1em'>H</text>
+<text text-anchor='middle' x='312' y='20' fill='currentColor' style='font-size:1em'>−</text>
+<text text-anchor='middle' x='328' y='20' fill='currentColor' style='font-size:1em'>λ</text>
+<text text-anchor='middle' x='336' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='344' y='20' fill='currentColor' style='font-size:1em'>·</text>
+<text text-anchor='middle' x='352' y='20' fill='currentColor' style='font-size:1em'>O</text>
+<text text-anchor='middle' x='368' y='20' fill='currentColor' style='font-size:1em'>−</text>
+<text text-anchor='middle' x='384' y='20' fill='currentColor' style='font-size:1em'>λ</text>
+<text text-anchor='middle' x='392' y='20' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='400' y='20' fill='currentColor' style='font-size:1em'>·</text>
+<text text-anchor='middle' x='408' y='20' fill='currentColor' style='font-size:1em'>U</text>
+<text text-anchor='middle' x='424' y='20' fill='currentColor' style='font-size:1em'>+</text>
+<text text-anchor='middle' x='440' y='20' fill='currentColor' style='font-size:1em'>β</text>
+<text text-anchor='middle' x='448' y='20' fill='currentColor' style='font-size:1em'>·</text>
+<text text-anchor='middle' x='456' y='20' fill='currentColor' style='font-size:1em'>B</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>In words: start from task value <code>V</code> multiplied by the model&rsquo;s predicted success probability, then subtract calibrated cost <code>C</code>, critical-path latency <code>L</code>, risk <code>R</code>, context-transfer loss <code>H</code>, and coordination overhead <code>O</code>, subtract an uncertainty penalty <code>U</code>, and add an exploration bonus <code>B</code>. <code>λ</code> weights are how you express policy — a latency-sensitive workload raises <code>λl</code>, a cost-obsessed one raises <code>λc</code>.</p>
+<p>Two mechanics inside the equation carry most of the real behavior. The first is the reuse model. For requirement <code>r</code>, if the current owner has completed fraction <code>f_r</code> and a candidate owner can reuse fraction <code>η_r</code> of it, the expected quality for the assigned owner becomes:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 400 25"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>q</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>̄</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>(</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>)</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>=</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>η</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>·</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>q</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='144' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='152' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='176' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='184' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='192' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='200' y='4' fill='currentColor' style='font-size:1em'>(</text>
+<text text-anchor='middle' x='208' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='216' y='4' fill='currentColor' style='font-size:1em'>)</text>
+<text text-anchor='middle' x='248' y='4' fill='currentColor' style='font-size:1em'>(</text>
+<text text-anchor='middle' x='256' y='4' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='272' y='4' fill='currentColor' style='font-size:1em'>−</text>
+<text text-anchor='middle' x='288' y='4' fill='currentColor' style='font-size:1em'>η</text>
+<text text-anchor='middle' x='296' y='4' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='304' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='312' y='4' fill='currentColor' style='font-size:1em'>)</text>
+<text text-anchor='middle' x='328' y='4' fill='currentColor' style='font-size:1em'>·</text>
+<text text-anchor='middle' x='344' y='4' fill='currentColor' style='font-size:1em'>q</text>
+<text text-anchor='middle' x='352' y='4' fill='currentColor' style='font-size:1em'>(</text>
+<text text-anchor='middle' x='360' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='368' y='4' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='376' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='384' y='4' fill='currentColor' style='font-size:1em'>)</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>where <code>η_r = f_r</code> when the owner is retained and <code>η_r = f_r · τ_r</code> when ownership changes, and <code>τ_r</code> is the artifact&rsquo;s portability. The same reused fraction reduces projected remaining cost and duration, so abandoned work is not charged twice inside the success estimate. Practically: switching owners does not reset the clock to zero, but it does discount the finished work by how portable it was.</p>
+<p>The second mechanic is coverage assignment. Only the assigned owner contributes requirement coverage, and adding an unassigned teammate no longer creates a noisy-OR quality gain. A famous agent with no role in the DAG adds cost and coordination without adding quality. That single rule is why teams stay small.</p>
+<p>Search is bounded deliberately. A hard permission-first filter removes unavailable, failed, and unauthorized agents before ranking; cost and latency quotes are inflated by learned bid-fidelity posteriors and current load; a deterministic quote-only prefilter then keeps the incumbent, active executors, and the highest-relevance peers up to <code>candidate_limit</code> (12 by default), turning the expensive combinatorial search into an <code>O(n|R|)</code> pass. After a team is formed, workload-sensitive team cost and DAG critical-path latency are re-checked, so a high learned score can never override permissions or availability.</p>
+<p>When no plan satisfies budget and deadline, the default API returns the least-violating <strong>authorized</strong> plan with <code>feasible=False</code> and explicit <code>constraint_violations</code>; set <code>allow_degraded=False</code> to fail closed instead. Degraded routing never relaxes permissions, failure state, or availability, which is the correct ordering — a router should not be able to buy its way through an access-control boundary by being over budget.</p>
+<h2 id="checkpoint-aware-replanning-why-progress-changes-the-decision">Checkpoint-Aware Replanning: Why Progress Changes the Decision</h2>
+<p>This is the repository&rsquo;s actual research claim: checkpoint-specific execution state improves runtime reconfiguration decisions. The state object is more specific than a percentage:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> sprix_sage <span style="color:#f92672">import</span> ExecutionState
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>state <span style="color:#f92672">=</span> ExecutionState(
+</span></span><span style="display:flex;"><span>    active_agents<span style="color:#f92672">=</span>(<span style="color:#e6db74">&#34;planner&#34;</span>,),
+</span></span><span style="display:flex;"><span>    active_assignments<span style="color:#f92672">=</span>{<span style="color:#e6db74">&#34;plan&#34;</span>: <span style="color:#e6db74">&#34;planner&#34;</span>, <span style="color:#e6db74">&#34;build&#34;</span>: <span style="color:#e6db74">&#34;planner&#34;</span>},
+</span></span><span style="display:flex;"><span>    completed_requirements<span style="color:#f92672">=</span>frozenset({<span style="color:#e6db74">&#34;plan&#34;</span>}),
+</span></span><span style="display:flex;"><span>    inflight_requirement<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;build&#34;</span>,
+</span></span><span style="display:flex;"><span>    inflight_progress<span style="color:#f92672">=</span><span style="color:#ae81ff">0.60</span>,
+</span></span><span style="display:flex;"><span>    inflight_quality<span style="color:#f92672">=</span><span style="color:#ae81ff">0.74</span>,
+</span></span><span style="display:flex;"><span>    artifact_transferability<span style="color:#f92672">=</span>{<span style="color:#e6db74">&#34;plan&#34;</span>: <span style="color:#ae81ff">0.95</span>, <span style="color:#e6db74">&#34;build&#34;</span>: <span style="color:#ae81ff">0.40</span>},
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre></div><p>Note the fields that a naive integration would skip. <code>inflight_quality</code> must come from an artifact evaluator or another observable signal, not from a hidden ground truth — the repository says so explicitly, because a router fed true quality would be reporting a grade rather than making a decision. <code>artifact_transferability</code> should describe what a new owner can actually consume: serialization, tool state, files, context. When those fields are absent the router falls back to a coarser scalar <code>progress</code> path for backward compatibility, which is exactly the progress-masked behavior the benchmark measures.</p>
+<p>Does state-aware routing change decisions in practice? We reproduced a flip on a two-agent DAG with a strong specialist (incumbent 0.92 planning / 0.55 coding, specialist 0.35 / 0.96), holding everything constant except the in-flight fraction:</p>
+<table>
+  <thead>
+      <tr>
+          <th style="text-align: right">In-flight fraction</th>
+          <th>Mode</th>
+          <th style="text-align: right">Predicted utility</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td style="text-align: right">0.0</td>
+          <td>HANDOFF to specialist</td>
+          <td style="text-align: right">0.7286</td>
+      </tr>
+      <tr>
+          <td style="text-align: right">0.2</td>
+          <td>HANDOFF to specialist</td>
+          <td style="text-align: right">0.7370</td>
+      </tr>
+      <tr>
+          <td style="text-align: right">0.4</td>
+          <td>SELF</td>
+          <td style="text-align: right">0.7563</td>
+      </tr>
+      <tr>
+          <td style="text-align: right">0.6</td>
+          <td>SELF</td>
+          <td style="text-align: right">0.7938</td>
+      </tr>
+      <tr>
+          <td style="text-align: right">0.8</td>
+          <td>SELF</td>
+          <td style="text-align: right">0.8228</td>
+      </tr>
+      <tr>
+          <td style="text-align: right">0.9</td>
+          <td>SELF</td>
+          <td style="text-align: right">0.8366</td>
+      </tr>
+  </tbody>
+</table>
+<p>The router hands the work to a specialist 0.96 versus 0.55 at the start, and refuses to move it once enough of the work exists. That is the continuation/handoff boundary the repository&rsquo;s controlled intervention is designed to isolate, and it is also why the word &ldquo;rerouting&rdquo; is misleading: most of what a checkpoint-aware router does is decline to reroute.</p>
+<p>The controlled intervention in <code>docs/BENCHMARKING.md</code> holds task, registry, difficulty, artifact portability, budget, and deadline fixed and moves only the in-flight fraction from 0.0 to 0.9. Progress-aware minus progress-masked utility goes from <code>+0.0000</code> at 0.0, to <code>+0.0307</code> at 0.2, <code>+0.0463</code> at 0.5, <code>+0.0684</code> at 0.9. The two policies are identical when nothing has been completed. Any claimed benefit of checkpoint-awareness is therefore conditional on there being work worth preserving — a small, clean, unusually falsifiable result.</p>
+<h2 id="requirement-conditioned-trust-one-reputation-score-is-not-enough">Requirement-Conditioned Trust: One Reputation Score Is Not Enough</h2>
+<p>SAGE tracks reliability per agent <strong>per requirement</strong> instead of one reputation number per agent, and this is the design choice with the strongest measured separation. Both models receive the same exogenous round-robin evidence stream, so the per-requirement model cannot win by spending more on exploration. After 500 observations per seed in the heterogeneous specialist scenario:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Trust model</th>
+          <th style="text-align: right">Brier score</th>
+          <th style="text-align: right">Selection regret</th>
+          <th style="text-align: right">Mean identification observations</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Per-requirement</strong></td>
+          <td style="text-align: right"><strong>0.0125 ± 0.0018</strong></td>
+          <td style="text-align: right"><strong>0.0094 ± 0.0008</strong></td>
+          <td style="text-align: right"><strong>20.0</strong></td>
+      </tr>
+      <tr>
+          <td>Single reputation</td>
+          <td style="text-align: right">0.0355 ± 0.0008</td>
+          <td style="text-align: right">0.0310 ± 0.0359</td>
+          <td style="text-align: right">38.2</td>
+      </tr>
+  </tbody>
+</table>
+<p>The gap is roughly a factor of three on calibration and a factor of three on regret, and the per-requirement model identifies which agent is actually good at which requirement in about half as many observations. Then comes the negative control, which is the most credible thing in the repository: in a homogeneous setting where no specialization exists, <strong>both</strong> models have zero routing regret. The benchmark does not manufacture an advantage when there is nothing to learn. It also reports that per-requirement trust has <em>higher</em> Brier error in that homogeneous case, because it carries more parameters and has no specialization to fit — a finding a marketing team would have deleted.</p>
+<p>This matches what practitioners see in A2A marketplaces. A card says an agent is excellent, and the vendor quote confirms the price, but neither tells you whether that excellence transfers to your requirement. Requirement-conditioned trust is how a router learns that the same agent is a 0.94 on extraction and a 0.61 on summarization, and why a single leaderboard score is a poor routing input.</p>
+<h2 id="a2a-integration-from-agent-card-to-executionplan">A2A Integration: From Agent Card to ExecutionPlan</h2>
+<p>The integration flow in <code>docs/INTEGRATION.md</code> is deliberately staged, and the staging is the point: discovery, local evidence, routing, execution, and evaluation stay separate so that each can be audited and versioned independently.</p>
+<ol>
+<li>Discover an Agent Card through an authenticated registry or trusted endpoint.</li>
+<li>Verify identity, signature, security schemes, supported modes, and policy requirements <strong>outside</strong> the router.</li>
+<li>Combine declared skill IDs with locally calibrated capability, cost, latency, permission, availability, and load evidence.</li>
+<li>Call <code>route_with_trace</code> for the selected route, feasible alternatives, and excluded-agent reasons.</li>
+<li>Convert the selected route into an <code>ExecutionPlan</code>.</li>
+<li>Dispatch plan steps through an A2A client, preserving dependency and cancellation semantics.</li>
+<li>Evaluate completed artifacts and feed the strongest available evidence to <code>record_outcome</code>.</li>
+<li>Persist learned state with <code>export_state</code>.</li>
+</ol>
+<p>Step 5 is where the router hands off to transport. The plan is transport-neutral and carries ownership, assignments, DAG dependencies, communication edges, estimated resources, and rationale:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> sprix_a2a <span style="color:#f92672">import</span> execution_plan
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>trace <span style="color:#f92672">=</span> router<span style="color:#f92672">.</span>route_with_trace(task, bids, state)
+</span></span><span style="display:flex;"><span>audit_record <span style="color:#f92672">=</span> trace<span style="color:#f92672">.</span>to_dict()
+</span></span><span style="display:flex;"><span>plan <span style="color:#f92672">=</span> execution_plan(task, trace<span style="color:#f92672">.</span>selected)
+</span></span><span style="display:flex;"><span>transport_payload <span style="color:#f92672">=</span> plan<span style="color:#f92672">.</span>to_dict()
+</span></span></code></pre></div><p><code>RoutingTrace.to_dict()</code> is JSON-serializable and contains the selected mode, team, assignments, topology, utility, and rationale; <strong>all</strong> feasible alternatives ranked by utility; every eligible agent; excluded agents with hard-filter reasons such as missing permissions, failure, or availability; the locally prefiltered agent IDs; and the <code>feasible</code> flag with explicit <code>constraint_violations</code> for degraded plans.</p>
+<p>That record is the deliverable most teams actually need. When a task is reassigned at 60% progress and lands badly, the question asked in the post-mortem is never &ldquo;what was the success probability&rdquo; — it is &ldquo;which agents were considered, which were excluded and why, and what did the router think it was buying.&rdquo; A trace with excluded-agent reasons answers that. A confidence score does not.</p>
+<h2 id="hands-on-your-first-routing-decision-in-python">Hands-On: Your First Routing Decision in Python</h2>
+<p>Adoption cost here is genuinely low — clone, run, read. No package install, no framework, no encoder to train.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>git clone https://github.com/wang2122/sprix-sage-router.git
+</span></span><span style="display:flex;"><span>cd sprix-sage-router
+</span></span><span style="display:flex;"><span>python demo.py            <span style="color:#75715e"># readable end-to-end routing decision</span>
+</span></span><span style="display:flex;"><span>python -m unittest -v     <span style="color:#75715e"># 46 tests on our run, all passing</span>
+</span></span></code></pre></div><p>A minimal in-flight decision, run against our clone, produced a real switch:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> sprix_sage <span style="color:#f92672">import</span> Agent, ExecutionState, Requirement, SAGERouter, Task
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>agents <span style="color:#f92672">=</span> [
+</span></span><span style="display:flex;"><span>    Agent(<span style="color:#e6db74">&#34;planner&#34;</span>, {<span style="color:#e6db74">&#34;planning&#34;</span>: <span style="color:#ae81ff">0.92</span>, <span style="color:#e6db74">&#34;coding&#34;</span>: <span style="color:#ae81ff">0.55</span>}, cost<span style="color:#f92672">=</span><span style="color:#ae81ff">0.08</span>, latency_ms<span style="color:#f92672">=</span><span style="color:#ae81ff">900</span>),
+</span></span><span style="display:flex;"><span>    Agent(<span style="color:#e6db74">&#34;coder&#34;</span>,   {<span style="color:#e6db74">&#34;planning&#34;</span>: <span style="color:#ae81ff">0.35</span>, <span style="color:#e6db74">&#34;coding&#34;</span>: <span style="color:#ae81ff">0.96</span>}, cost<span style="color:#f92672">=</span><span style="color:#ae81ff">0.12</span>, latency_ms<span style="color:#f92672">=</span><span style="color:#ae81ff">1200</span>),
+</span></span><span style="display:flex;"><span>]
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>task <span style="color:#f92672">=</span> Task(
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;build-feature&#34;</span>,
+</span></span><span style="display:flex;"><span>    requirements<span style="color:#f92672">=</span>(
+</span></span><span style="display:flex;"><span>        Requirement(<span style="color:#e6db74">&#34;planning&#34;</span>, <span style="color:#ae81ff">0.4</span>),
+</span></span><span style="display:flex;"><span>        Requirement(<span style="color:#e6db74">&#34;coding&#34;</span>, <span style="color:#ae81ff">0.6</span>, depends_on<span style="color:#f92672">=</span>(<span style="color:#e6db74">&#34;planning&#34;</span>,)),
+</span></span><span style="display:flex;"><span>    ),
+</span></span><span style="display:flex;"><span>    value<span style="color:#f92672">=</span><span style="color:#ae81ff">1.0</span>, budget<span style="color:#f92672">=</span><span style="color:#ae81ff">0.30</span>, deadline_ms<span style="color:#f92672">=</span><span style="color:#ae81ff">4000</span>, progress<span style="color:#f92672">=</span><span style="color:#ae81ff">0.35</span>,
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>router <span style="color:#f92672">=</span> SAGERouter(agents, incumbent_id<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;planner&#34;</span>)
+</span></span><span style="display:flex;"><span>state <span style="color:#f92672">=</span> ExecutionState(
+</span></span><span style="display:flex;"><span>    active_agents<span style="color:#f92672">=</span>(<span style="color:#e6db74">&#34;planner&#34;</span>,),
+</span></span><span style="display:flex;"><span>    active_assignments<span style="color:#f92672">=</span>{<span style="color:#e6db74">&#34;planning&#34;</span>: <span style="color:#e6db74">&#34;planner&#34;</span>, <span style="color:#e6db74">&#34;coding&#34;</span>: <span style="color:#e6db74">&#34;planner&#34;</span>},
+</span></span><span style="display:flex;"><span>    completed_requirements<span style="color:#f92672">=</span>frozenset({<span style="color:#e6db74">&#34;planning&#34;</span>}),
+</span></span><span style="display:flex;"><span>    inflight_requirement<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;coding&#34;</span>,
+</span></span><span style="display:flex;"><span>    inflight_progress<span style="color:#f92672">=</span><span style="color:#ae81ff">0.35</span>,
+</span></span><span style="display:flex;"><span>    inflight_quality<span style="color:#f92672">=</span><span style="color:#ae81ff">0.72</span>,
+</span></span><span style="display:flex;"><span>    artifact_transferability<span style="color:#f92672">=</span>{<span style="color:#e6db74">&#34;planning&#34;</span>: <span style="color:#ae81ff">0.95</span>, <span style="color:#e6db74">&#34;coding&#34;</span>: <span style="color:#ae81ff">0.40</span>},
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>trace <span style="color:#f92672">=</span> router<span style="color:#f92672">.</span>route_with_trace(task, state<span style="color:#f92672">=</span>state)
+</span></span><span style="display:flex;"><span>print(trace<span style="color:#f92672">.</span>selected<span style="color:#f92672">.</span>mode<span style="color:#f92672">.</span>value, trace<span style="color:#f92672">.</span>selected<span style="color:#f92672">.</span>assignments, trace<span style="color:#f92672">.</span>selected<span style="color:#f92672">.</span>utility)
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># -&gt; handoff {&#39;coding&#39;: &#39;coder&#39;} 0.7433</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>router<span style="color:#f92672">.</span>record_outcome(trace<span style="color:#f92672">.</span>selected, ExecutionOutcome(
+</span></span><span style="display:flex;"><span>    success<span style="color:#f92672">=</span><span style="color:#ae81ff">0.9</span>,
+</span></span><span style="display:flex;"><span>    requirement_scores<span style="color:#f92672">=</span>{<span style="color:#e6db74">&#34;planning&#34;</span>: <span style="color:#ae81ff">0.95</span>, <span style="color:#e6db74">&#34;coding&#34;</span>: <span style="color:#ae81ff">0.86</span>},
+</span></span><span style="display:flex;"><span>    actual_cost<span style="color:#f92672">=</span><span style="color:#ae81ff">0.19</span>,
+</span></span><span style="display:flex;"><span>    actual_latency_ms<span style="color:#f92672">=</span><span style="color:#ae81ff">1450</span>,
+</span></span><span style="display:flex;"><span>))
+</span></span><span style="display:flex;"><span>snapshot <span style="color:#f92672">=</span> router<span style="color:#f92672">.</span>export_state()
+</span></span></code></pre></div><p>Three observations from actually running it, which the README does not spell out. The shipped <code>examples/</code> scripts import the top-level modules directly, so run them with <code>PYTHONPATH=.</code> from the clone root (or <code>pip install -e .</code>) or they fail with <code>ModuleNotFoundError: No module named 'sprix_a2a'</code>. The decision object exposes <code>explanation</code>, not <code>rationale</code>. And the router is genuinely dependency-free: the whole test suite finished in about one second on Python 3.12 with nothing installed.</p>
+<p><code>record_outcome</code> is the loop-closing call and the easiest one to get wrong. Feeding it a self-reported success number trains the router on the executor&rsquo;s own opinion of its work. Feeding it an artifact evaluator&rsquo;s score — or a human override signal — trains it on something the router did not already believe.</p>
+<h2 id="benchmarks-what-the-numbers-do-and-do-not-prove">Benchmarks: What the Numbers Do and Do Not Prove</h2>
+<p><code>sage</code> ships three separate synthetic studies, and the repository is explicit that none of them is a public benchmark. Read the trajectory replay first, because it is the one that tests the actual research claim.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Strategy</th>
+          <th style="text-align: right">Utility</th>
+          <th style="text-align: right">Added cost / budget</th>
+          <th style="text-align: right">Recovery latency / deadline</th>
+          <th style="text-align: right">Wasted work</th>
+          <th style="text-align: right">Switch rate</th>
+          <th style="text-align: right">Deadline miss</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Progress-aware SAGE</strong></td>
+          <td style="text-align: right"><strong>0.298 ± 0.021</strong></td>
+          <td style="text-align: right"><strong>0.191 ± 0.006</strong></td>
+          <td style="text-align: right">0.425 ± 0.015</td>
+          <td style="text-align: right"><strong>0.059 ± 0.004</strong></td>
+          <td style="text-align: right">58.4%</td>
+          <td style="text-align: right"><strong>23.3%</strong></td>
+      </tr>
+      <tr>
+          <td>Progress-masked SAGE</td>
+          <td style="text-align: right">0.291 ± 0.021</td>
+          <td style="text-align: right">0.204 ± 0.005</td>
+          <td style="text-align: right">0.434 ± 0.018</td>
+          <td style="text-align: right">0.104 ± 0.010</td>
+          <td style="text-align: right">80.1%</td>
+          <td style="text-align: right">23.6%</td>
+      </tr>
+      <tr>
+          <td>Always continue</td>
+          <td style="text-align: right">0.085 ± 0.025</td>
+          <td style="text-align: right">0.159 ± 0.005</td>
+          <td style="text-align: right">0.627 ± 0.036</td>
+          <td style="text-align: right">0.017 ± 0.003</td>
+          <td style="text-align: right">0.0%</td>
+          <td style="text-align: right">34.4%</td>
+      </tr>
+      <tr>
+          <td>Always hand off</td>
+          <td style="text-align: right">0.290 ± 0.017</td>
+          <td style="text-align: right">0.237 ± 0.008</td>
+          <td style="text-align: right">0.508 ± 0.034</td>
+          <td style="text-align: right">0.130 ± 0.010</td>
+          <td style="text-align: right">100.0%</td>
+          <td style="text-align: right">30.5%</td>
+      </tr>
+      <tr>
+          <td>Static greedy team</td>
+          <td style="text-align: right">0.239 ± 0.031</td>
+          <td style="text-align: right">0.248 ± 0.009</td>
+          <td style="text-align: right">0.541 ± 0.035</td>
+          <td style="text-align: right">0.080 ± 0.007</td>
+          <td style="text-align: right">63.4%</td>
+          <td style="text-align: right">27.7%</td>
+      </tr>
+      <tr>
+          <td>Static coalition enumeration</td>
+          <td style="text-align: right">0.286 ± 0.026</td>
+          <td style="text-align: right">0.265 ± 0.005</td>
+          <td style="text-align: right">0.487 ± 0.034</td>
+          <td style="text-align: right">0.104 ± 0.004</td>
+          <td style="text-align: right">94.0%</td>
+          <td style="text-align: right">27.4%</td>
+      </tr>
+      <tr>
+          <td>Hidden-state dynamic oracle</td>
+          <td style="text-align: right">0.375 ± 0.019</td>
+          <td style="text-align: right">0.243 ± 0.010</td>
+          <td style="text-align: right"><strong>0.409 ± 0.014</strong></td>
+          <td style="text-align: right">0.085 ± 0.005</td>
+          <td style="text-align: right">90.0%</td>
+          <td style="text-align: right">19.6%</td>
+      </tr>
+  </tbody>
+</table>
+<p>Source: 1,000 checkpoints over five seeds, 200 trajectories per seed, scored by <code>benchmark_dynamic_evaluator.py</code>, which never calls the router&rsquo;s switch-loss code.</p>
+<p>Here is how to read that table like an engineer. The headline utility difference between progress-aware (0.298 ± 0.021) and progress-masked (0.291 ± 0.021) is <strong>inside the error bars</strong> — those two policies are statistically indistinguishable on utility. The real signal lives in three other columns: wasted work drops from 0.104 to 0.059, a 43% reduction; added cost falls from 0.204 to 0.191 of budget; and the switch rate falls from 80.1% to 58.4%. Progress-awareness, in other words, mostly teaches the router <strong>restraint</strong> — when it knows what has been finished, it stops thrashing. If you were hoping for a utility jump, that is not what this benchmark shows, and the repository does not claim otherwise.</p>
+<p>Read the baselines with the same skepticism. &ldquo;Always continue&rdquo; is cheap on waste (0.017) but misses 34.4% of deadlines — it never loses work because it never moves. &ldquo;Always hand off&rdquo; scores 0.290 utility, essentially the same as the clever policies, while wasting 0.130, the worst figure in the table. Static coalition enumeration reaches 0.286 utility at 0.265 of budget and a 94% switch rate. The hidden-state oracle caps out at 0.375, so the entire headroom between a naive policy and an omniscient one is roughly nine utility points — this is a narrow optimization problem, not a transformation.</p>
+<p>The regression suite tells a different and more favorable story, and it should be read separately because it is not about mid-execution routing:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Strategy</th>
+          <th style="text-align: right">Quality</th>
+          <th style="text-align: right">Common utility</th>
+          <th style="text-align: right">Cost / budget</th>
+          <th style="text-align: right">Deadline miss</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Incumbent only</td>
+          <td style="text-align: right">0.332 ± 0.009</td>
+          <td style="text-align: right">0.134 ± 0.008</td>
+          <td style="text-align: right">0.245 ± 0.005</td>
+          <td style="text-align: right">38.0%</td>
+      </tr>
+      <tr>
+          <td>Greedy team</td>
+          <td style="text-align: right">0.577 ± 0.007</td>
+          <td style="text-align: right">0.387 ± 0.009</td>
+          <td style="text-align: right">0.435 ± 0.011</td>
+          <td style="text-align: right">23.8%</td>
+      </tr>
+      <tr>
+          <td>Static SAGE</td>
+          <td style="text-align: right">0.491 ± 0.005</td>
+          <td style="text-align: right">0.334 ± 0.008</td>
+          <td style="text-align: right">0.327 ± 0.009</td>
+          <td style="text-align: right">23.6%</td>
+      </tr>
+      <tr>
+          <td><strong>Learned SAGE, no exploration</strong></td>
+          <td style="text-align: right"><strong>0.613 ± 0.005</strong></td>
+          <td style="text-align: right"><strong>0.433 ± 0.008</strong></td>
+          <td style="text-align: right">0.428 ± 0.011</td>
+          <td style="text-align: right">21.7%</td>
+      </tr>
+      <tr>
+          <td>Learned SAGE, random prior</td>
+          <td style="text-align: right">0.447 ± 0.052</td>
+          <td style="text-align: right">0.308 ± 0.049</td>
+          <td style="text-align: right"><strong>0.297 ± 0.034</strong></td>
+          <td style="text-align: right"><strong>15.2%</strong></td>
+      </tr>
+  </tbody>
+</table>
+<p>Learned SAGE beats a greedy team by 3.6 quality points and static SAGE by 12.2 across 2,500 independent tasks, which is a real gap at ±0.005. The interesting anomaly is the random-prior row: it has the lowest cost and the lowest deadline-miss rate in the table precisely because it is random — it fails fast and cheaply. A metric dashboard that optimizes deadline-miss rate would prefer the worst router here, which is a good reason to collect the full metric set rather than one number.</p>
+<p>Now the boundary, stated by the project and worth repeating verbatim in your own evaluation notes: both evaluators are authored with the project, the numbers are &ldquo;regression and falsification evidence only,&rdquo; and they are &ldquo;<strong>not</strong> evidence of real-world superiority.&rdquo; A publishable evaluation still requires repeated checkpointed executions on heterogeneous real endpoints plus an independently governed artifact judge. The roadmap lists that item as unchecked. Treat every figure above as an internal consistency check, not a purchasing decision.</p>
+<h2 id="production-readiness-audit-trails-persistence-and-rollout-gates">Production Readiness: Audit Trails, Persistence, and Rollout Gates</h2>
+<p>The gap between &ldquo;the router returns a decision&rdquo; and &ldquo;the router runs your agent network&rdquo; is the whole production story, and SAGE&rsquo;s status badge says <code>Research Preview</code> for good reason. The prototype does not transmit tasks, authenticate endpoints, or verify signatures. Its roadmap leaves signed Agent Card ingestion, real A2A adapters for discovery and streaming, offline replay on anonymized marketplace traces, adversarial-bid evaluation, and a distributed router service with human approval gates all unchecked.</p>
+<p>What the repository does provide is the auditable middle. <code>export_state()</code> captures contextual reliability, skill beliefs, pair synergy, cost and latency fidelity, and online model parameters; <code>restore_state()</code> validates the schema version and requires an exact agent roster match before touching live state. The snapshot contains no tasks, artifacts, credentials, or random-generator state — meaning it is safe to encrypt and store, and also meaning that a warm restart does not resume in-flight work.</p>
+<p>The operations guide&rsquo;s request lifecycle is the checklist to implement around the router: validate the DAG and cap requirements, <code>candidate_limit</code>, beam width, and collaborator count; retrieve candidates from a trusted registry and treat the quote-only top-k as a second local bound rather than a replacement for indexed retrieval; record the trace with a correlation ID and policy version; require approval for high-risk, destructive, regulated, or high-cost routes; dispatch through an isolated executor with enforced cancellation deadlines; evaluate artifacts independently; and persist snapshots atomically with concurrency control so two workers cannot silently overwrite newer evidence.</p>
+<p>Routing latency is bounded by the post-filter candidate count, not by beam width — keep <code>candidate_limit</code> finite, monitor <code>prefiltered_agents</code>, and run <code>benchmark_scaling.py</code> on your own hardware rather than trusting a number from a blog post. Because the router is pure Python with no dependencies, per-decision latency is measurable in your scheduler, but it is also CPU-bound: a large candidate set with a wide beam will not disappear.</p>
+<p>A rollout sequence that respects those constraints: <strong>offline replay</strong> on recorded trajectories, where every decision is compared against what actually happened without changing production behavior; then <strong>shadow mode</strong>, where the router decides and logs while the existing scheduler acts, and you measure disagreement; then <strong>canary</strong> on a bounded slice of low-risk tasks with human approval on route changes; then bounded production scope with automatic fallback to the incumbent whenever the trace reports <code>feasible=False</code>. Skipping the replay stage is the common mistake, because a router that looks correct on synthetic tables can still be systematically wrong about your artifact portability.</p>
+<h2 id="sage-vs-other-routing-approaches-masrouter-dylan-gptswarm-routellm">SAGE vs. Other Routing Approaches (MasRouter, DyLAN, GPTSwarm, RouteLLM)</h2>
+<p>The repository&rsquo;s own <code>RELATED_WORK.md</code> is unusually candid, and it should shape how you position this tool: SAGE does not claim that coalition formation, noisy-OR coverage, marginal team construction, constrained utility, beam search, Beta beliefs, online logistic regression, Thompson-style exploration, or communication graphs originated here. The focused hypothesis is narrower — checkpoint-specific execution state improves runtime reconfiguration decisions for software agents.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Approach</th>
+          <th>What it routes</th>
+          <th>When it decides</th>
+          <th>What SAGE&rsquo;s authors say</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>SAGE</strong></td>
+          <td>Ownership and configuration of an in-flight task DAG</td>
+          <td>After progress, artifacts, and failures exist</td>
+          <td>Narrow claim; no optimality, mechanism-design, or regret theorem</td>
+      </tr>
+      <tr>
+          <td>MasRouter</td>
+          <td>Collaboration mode, roles, and model choices</td>
+          <td>Learned, before execution</td>
+          <td>SAGE does not claim comparable trained-model evidence</td>
+      </tr>
+      <tr>
+          <td>DyLAN / GPTSwarm / AFlow</td>
+          <td>Dynamic team selection and agent/workflow graphs</td>
+          <td>During execution, mainly topology</td>
+          <td>SAGE evaluates continuation, augmentation, and handoff via artifact reuse</td>
+      </tr>
+      <tr>
+          <td>RouteLLM</td>
+          <td>Which model answers a prompt</td>
+          <td>Before a single call</td>
+          <td>SAGE acts on an in-flight requirement DAG, not one endpoint</td>
+      </tr>
+      <tr>
+          <td>STRMAC</td>
+          <td>Best single agent per step, via a trained encoder</td>
+          <td>Every step, with learned state</td>
+          <td>SAGE is a dependency-free constrained heuristic, not a trained router</td>
+      </tr>
+      <tr>
+          <td>MMA2A modality routing</td>
+          <td>Which modality parts reach which agent</td>
+          <td>At the protocol layer</td>
+          <td>Orthogonal; routing modality is not routing ownership</td>
+      </tr>
+  </tbody>
+</table>
+<p>The STRMAC comparison is the most instructive trade-off. STRMAC trains a router on separately encoded interaction history and agent knowledge, needs a self-evolving data-generation pipeline to accelerate collection of high-quality execution paths, and reports up to 23.8% improvement over baselines with up to 90.1% less data-collection overhead than exhaustive search. SAGE has no learned encoder, no data pipeline, and no paper. In exchange it is auditable line by line, ships with zero dependencies, and can be dropped into an existing scheduler without adopting a framework. If you have labeled trajectories and an ML team, the trained path likely wins on quality. If you have a scheduler, a budget, and a compliance reviewer, the heuristic path is the one that ships this quarter.</p>
+<p>One adjacent result is worth knowing because it bounds what any routing layer can claim. A paper on modality-native routing in A2A networks (<a href="https://arxiv.org/abs/2604.12213">arXiv 2604.12213</a>) reports 20 percentage points of accuracy improvement over text-bottleneck baselines (52% vs 32% on a 50-task benchmark, same LLM backend and tasks) — but only when the downstream reasoning agent can exploit the richer context. Replacing the reasoning agent with keyword matching eliminates the gap entirely (36% vs 36%). Routing is a two-layer requirement: the protocol layer must preserve signal, and the agent layer must be capable enough to use it. A better router cannot compensate for an incapable executor, which is also the honest limit on what SAGE&rsquo;s coverage scoring can promise.</p>
+<h2 id="limitations-risks-and-what-to-watch-next">Limitations, Risks, and What to Watch Next</h2>
+<p>Six limits to write into your evaluation plan before you wire this into anything that spends money.</p>
+<p><strong>Synthetic evidence only.</strong> Both evaluators are authored with the project; the maintainers describe the numbers as regression and falsification evidence rather than proof of real-world superiority. Real-endpoint evaluation is an open roadmap item.</p>
+<p><strong>Utility differences are not statistically separated.</strong> Progress-aware and progress-masked SAGE overlap on utility (0.298 ± 0.021 vs 0.291 ± 0.021). The defensible claims are about wasted work, cost, and switch rate — do not quote a utility win.</p>
+<p><strong>The quality signal must come from outside.</strong> <code>inflight_quality</code> has to be produced by an artifact evaluator or an observable signal. Feed it ground truth and the benchmark is meaningless; feed it the executor&rsquo;s self-report and the router learns to trust confident agents.</p>
+<p><strong>No dispatch, no auth, no verification.</strong> The prototype returns a decision and a transport-neutral plan. Task transmission, endpoint authentication, signature verification, and artifact handling are your responsibility, as is every A2A lifecycle requirement including the &ldquo;always emit a terminal event&rdquo; rule.</p>
+<p><strong>Heuristic, not optimal.</strong> The <code>candidate_limit</code> prefilter, the beam search, and the workload-sensitive quotes are engineering bounds. SAGE makes no coalition-stability or global-optimality claim, and its reference list explicitly credits the prior work in coalition formation, combinatorial allocation, and contextual bandits.</p>
+<p><strong>Adversarial bids are unmeasured.</strong> Quotes are inflated by learned bid-fidelity posteriors, which helps against optimistic vendors but is not a defense against an agent that lies strategically. Adversarial-bid, churn, privacy, and policy-violation evaluation are all listed as unchecked roadmap items.</p>
+<p>What to watch: signed Agent Card ingestion and candidate retrieval, real A2A adapters, offline replay on anonymized marketplace traces, and a distributed router service with observability and approval gates. The repository&rsquo;s trajectory is worth noting — published 18 August 2026, v0.3.0 ten days later, last push 28 August, 4,261 stars and 181 watchers against 43 commits. High attention, small committed core, eight contributors. That is a healthy shape for a research preview and an unhealthy shape for a dependency you cannot replace, which is another argument for treating the router as a replaceable policy behind your own interface.</p>
+<h2 id="faq-a2a-routing-agents">FAQ: A2A Routing Agents</h2>
+<h3 id="what-are-a2a-routing-agents">What are A2A routing agents?</h3>
+<p>A2A routing agents are the decision layer that sits above the Agent2Agent protocol and chooses which agent configuration should execute a task, in which mode, and why. A2A itself standardizes Agent Cards, messages, tasks, artifacts, authentication, and transport; it does not define who should work on a task after execution starts. Routing agents fill that gap by scoring candidate configurations against permissions, budget, deadline, artifact portability, and observed progress.</p>
+<h3 id="how-does-the-sprix-sage-router-differ-from-an-llm-router-like-routellm">How does the Sprix SAGE Router differ from an LLM router like RouteLLM?</h3>
+<p>An LLM router selects which model answers a single prompt before any execution happens. SAGE selects whether an in-flight task should stay with its incumbent (SELF), recruit complementary peers (COLLABORATE), or transfer ownership entirely (HANDOFF), after accounting for completed DAG nodes, reusable artifacts, observed partial quality, failures, budget, and deadline. The input is an execution state, not a prompt embedding, and the output is an ownership configuration, not an endpoint choice.</p>
+<h3 id="is-progress-aware-routing-actually-better-than-ignoring-progress">Is progress-aware routing actually better than ignoring progress?</h3>
+<p>On the project&rsquo;s own trajectory replay, no clear utility advantage exists: progress-aware SAGE scores 0.298 ± 0.021 against 0.291 ± 0.021 for the progress-masked variant, so the error bars overlap. The measurable differences are operational — wasted work falls from 0.104 to 0.059, added cost from 0.204 to 0.191 of budget, and the switch rate from 80.1% to 58.4%. Knowing what has been completed mostly teaches the router to leave work in place.</p>
+<h3 id="can-i-use-sage-in-production-today">Can I use SAGE in production today?</h3>
+<p>Not as an orchestrator, and the project says so. It is an early-stage research preview: the prototype does not transmit tasks, authenticate endpoints, or verify signatures, and you remain responsible for A2A dispatch, streaming, polling, cancellation, and artifact security. What you can deploy responsibly today is a bounded adapter — offline replay, then shadow mode, then a canary slice with human approval — with the router as a replaceable policy behind your own interface, and automatic fallback to the incumbent whenever a trace reports <code>feasible=False</code>.</p>
+<h3 id="how-much-does-it-cost-to-try-the-sage-router">How much does it cost to try the SAGE Router?</h3>
+<p>Nothing but your own time. It is MIT-licensed, depends on nothing at runtime, targets Python 3.10+, and has no PyPI release, so adoption means cloning the repository and running <code>python demo.py</code> plus <code>python -m unittest -v</code> — 46 tests that completed in about a second on our Python 3.12 run. There is no hosted service or paid tier to evaluate, and no vendor account to create, which makes the cheapest honest next step a self-contained spike in your own scheduler.</p>
+]]></content:encoded></item></channel></rss>
