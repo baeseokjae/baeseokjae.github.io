@@ -1,0 +1,464 @@
+{
+  "topic": "unltd-inference: Disk-First CPU-First LLM Inference in Rust",
+  "slug": "unltd-inference-disk-first-cpu-llm",
+  "keyword": "unltd inference Rust",
+  "type": "review",
+  "competitors": [
+    {
+      "url": "https://github.com/unltdev/unltd-inference",
+      "key_points": [
+        "Primary subject repo: open-source (Apache-2.0) Rust runtime for GGUF models, v1.0.0 released 2026-08-18/19, created 2026-08-19, ~8 crates (unltd-tensor, -core, -model-loader, -architectures, -memory, -tokenizer, -generation, -cli).",
+        "Core claim: 'a model can be larger than the configured runtime memory budget and still run successfully' — weights are memory-mapped (memmap2) whole-file views, never copied to heap; dequant is not cached.",
+        "Validated end-to-end on exactly one model: Ornith 1.0 9B Q4_K_M (5.63 GB), Qwen3.5-compatible forward path — 24 recurrent GatedDeltaNet layers + 8 full-attention layers, M-RoPE, GPT-2 byte-level BPE tokenizer from GGUF metadata.",
+        "Explicit memory budget (--memory-budget 512M/1G/2G/4G/8G/raw bytes) accounts KV cache + scratch + runtime state only; refuses impossible configs with 'REFUSING TO RUN' and exit code 2 before allocating.",
+        "Honest limitations published up front: CPU-only, scalar kernels (no SIMD/AVX2), no multithreading, Windows x86-64 only validated, ~73 s prefill and ~14.3 s/token decode, no sampling (temperature=0 only), no MoE, no layer streaming/prefetch/double-buffering, known numerical divergence vs llama.cpp after longer contexts.",
+        "Core thesis: a GGUF model can be LARGER than the configured runtime memory budget and still run correctly; the model file stays on disk and weights are mmap views, never heap copies",
+        "8-crate Rust workspace with one-way dependency direction: unltd-tensor <- unltd-core <- {model-loader, architectures, memory, tokenizer} <- unltd-generation <- unltd-cli",
+        "Validated end-to-end on exactly one model in v1.0.0: Ornith 1.0 9B Q4_K_M (5.63 GB) via a Qwen3.5-compatible forward path (32 layers: 24 GatedDeltaNet recurrent + 8 full-attention, M-RoPE)",
+        "`--memory-budget 4G` (also tested at 3G) against a 5.63 GB model produced ~113.19 MB of controlled runtime memory and ~5.24 GB peak working set; minimum viable controlled budget is 113.06 MB, and `--memory-budget 32M` is correctly refused with `REFUSING TO RUN` + exit code 2",
+        "Explicitly NOT implemented in v1.0.0: layer streaming, prefetching, double buffering, expert streaming, MoE execution — 'disk-first' here means mmap + OS demand paging (the same mechanism llama.cpp uses by default), not runtime-controlled streaming",
+        "`memory budget != process RSS` and `!= mapped virtual bytes`; the whole model file is still mapped into virtual address space, and the OS page cache is not governed by `--memory-budget`",
+        "Measured performance: ~73 s prefill and ~14.3 s/token decode — roughly 0.07 tok/s, i.e. a correctness/measurement instrument, not a chat runtime",
+        "Correctness-first contract: 107 workspace tests, tokenizer bit-exact vs llama.cpp for the validated prompt, first 11 greedy steps match the llama.cpp oracle exactly, later divergence documented openly (scalar reference path vs AVX2/repacked kernels, argmax near-tie flips)",
+        "Scalar-only kernels (Q4_K/Q6_K/Q8_0), no SIMD/AVX2, no multithreading, no GPU, greedy only (temperature=0), Windows x86-64 is the only end-to-end validated platform — Linux is not validated",
+        "Apache-2.0, MSRV Rust 1.80, v1.0.0 released 2026-08-18; the repo is brand new (created 2026-08-19) with ~1 star and 0 forks, so no third-party adoption or independent reproduction exists yet"
+      ],
+      "title": "unltdev/unltd-inference — Disk-first, CPU-first LLM inference runtime in Rust (primary source)"
+    },
+    {
+      "url": "https://github.com/ggml-org/llama.cpp/discussions/19163",
+      "key_points": [
+        "The baseline it is measured against: llama.cpp mmaps GGUF weights by default, so oversized models are demand-paged from disk rather than explicitly offloaded.",
+        "Community consensus: with mmap enabled weights are read on demand; with mmap disabled you get an OOM crash and no disk fallback. --no-mmap is recommended when the model fits fully in RAM.",
+        "Correction raised in-thread by digitalstudium (May 2026): the kernel does not write mapped weights back to disk — evicted read-only pages are simply re-read, so mmap model traffic does not consume SSD write endurance (swap does)."
+      ]
+    },
+    {
+      "url": "https://github.com/ggml-org/llama.cpp/issues/5207",
+      "key_points": [
+        "Long-standing upstream feature request (Jan 2024, closed/stale) to run large GGUF files on low-RAM machines, proposing per-layer split loading with the Mixtral MoE argument (only 2 of 8 experts active per token).",
+        "Shows the design space unltd-inference enters: llama.cpp never grew explicit layer/expert streaming, which is why external engines fill the gap."
+      ]
+    },
+    {
+      "url": "https://news.ycombinator.com/item?id=49130892",
+      "key_points": [
+        "HN thread on 'Run Kimi K3 using 29 GB of RAM at 0.50 tok/s' (341 pts, 166 comments) — the exact skeptic argument a review of unltd-inference must answer.",
+        "mappu: standard llama.cpp can mmap the GGUF and the kernel page cache keeps the hot 'resident trunk' in memory, so what does a custom engine add?",
+        "jnwatson: the counter-argument — engines that manage their own backing cache (like database engines) report roughly 10x gains because the kernel's paging is generic and on-demand while a runtime knows the access pattern and can prefetch/pipeline.",
+        "walrus01 raises SSD wear from swap; mappu answers that weights are a read workload, while KV cache/context are the write workloads."
+      ]
+    },
+    {
+      "url": "https://github.com/sqliteai/waste",
+      "key_points": [
+        "WARP (formerly WASTE), C engine, no third-party runtime deps: keeps the model trunk in memory, streams only selected experts from a repacked container (one aligned read per expert), uses leftover RAM as a bounded expert LRU cache with lookahead-router prefetch that changes timing, not the result.",
+        "Scale comparison that frames unltd's scope: full 2.78T Kimi K3 at ~0.6 tok/s on a 64 GB MacBook Pro (1.42 TB of published weights re-containerized to 982 GB), DeepSeek-V4.1-Flash 552B at ~3.8 tok/s, GLM-5.3-Flash 313B at ~3.9 tok/s; example run reports 38% expert-cache hit ratio."
+      ]
+    },
+    {
+      "url": "https://github.com/mithun50/ALLM",
+      "key_points": [
+        "Closest Rust peer: CPU/RAM layerwise inference that streams transformer blocks through a byte-budgeted LRU cache with a background prefetch thread — 'AirLLM for CPU/RAM'.",
+        "A device controller measures RAM, CPU, storage speed, thermal and battery state to choose cache size and thread count under a hard memory budget, explicitly to avoid OOM-kill on phones/Termux.",
+        "Contrast with unltd v1.0.0: ALLM implements real streaming + prefetch; unltd deliberately ships plain mmap demand paging first, with streaming listed on the roadmap.",
+        "Explicitly frames itself as 'AirLLM for CPU/RAM': a transformer block is used for milliseconds then not needed until the next token, so blocks are streamed through a byte-budgeted LRU cache with a background prefetch thread hiding I/O latency",
+        "Enforces a HARD memory budget ceiling so the process is not OOM-killed on constrained devices such as phones running Termux — the same 'budget as a first-class constraint' design goal as unltd-inference",
+        "Cargo workspace with swappable trait seams: ComputeBackend (CandleBackend CPU in production, ScalarBackend proving the trait swaps and marking where NEON/AVX kernels go), StorageBackend (MmapStorage, DirectReadStorage, CompressedChunkStorage, CallbackStorage), PolicyStrategy (DeviceProfile -> StreamingPolicy), TokenSource",
+        "An adaptive controller measures the device (RAM, CPU, storage speed, thermal and battery state) and chooses cache size and thread count automatically",
+        "Honest head-to-head on the same machine (Qwen2.5-0.5B Q4): llama.cpp (b9849, 12 threads) ~222 tok/s prefill / ~32-36 tok/s decode vs ALLM 0.1.0 resident and streaming-256MiB at 8.5 tok/s, and streaming-64MiB at 2.2 tok/s under heavy eviction",
+        "Concludes llama.cpp is 4-10x faster on decode and supports GPUs, far more architectures/tokenizers, and ships a server — the same candid comparison stance unltd-inference takes toward llama.cpp",
+        "Same three front ends (CLI, C API, Python) over one engine — an integration story unltd-inference has not started",
+        "MIT licensed; ~6 stars, created 2026-07-01 — another young, single-author research runtime rather than a production incumbent"
+      ],
+      "title": "mithun50/ALLM — CPU/RAM layerwise LLM inference in Rust under a hard memory budget"
+    },
+    {
+      "url": "https://github.com/FareedKhan-dev/kimi-k3-in-c",
+      "key_points": [
+        "The acknowledged conceptual inspiration (explicitly not a fork, port, or code source): portable C99, ~5k LOC engine, no BLAS/framework/GPU, runs the 2.78T Kimi K3 checkpoint (1.56 TB on disk) from 8.24 GB to 224 GB peak RSS with byte-identical output across the memory ladder (26.5 s/token at 8 GB → 5.6 s/token at 128 GB+).",
+        "Techniques unltd-inference audited and adopted selectively: pinned trunk prefix + 2-slot ring with a reader thread, O_DIRECT pread, never dequantizing to cache (17.55 MB packed slot vs 132 MB unpacked = 7.5x capacity), explicit pread instead of mmap precisely because mmap makes RSS unmeasurable at 1.56 TB.",
+        "The most-starred artifact in this niche (~8.8k stars, C99): runs a 2.78-trillion-parameter Kimi K3 MoE on a single CPU in 8.24 GB of RAM, streaming ~1.45 TB of routed experts from disk, with no BLAS, no framework, no GPU",
+        "unltd-inference's own docs explicitly inherit kimi-k3-in-c's measurement protocol (docs/AUDIT.md, PERFORMANCE.md) — this is the intellectual parent of the unltd design",
+        "Its central transferable lesson is the measurement discipline: in streaming workloads background noise is enormous — the same run varied 14.78/14.67/20.14 s/token with no change, i.e. a 33% noise floor, so any number without the protocol is anecdotal",
+        "The protocol unltd-inference adopts: a machine.txt per run (exact CPU, RAM model/channels, SSD model+firmware, kernel/OS, binary version, commit), minimum 3 repetitions reported as median with range, byte-for-byte identical output across repetitions, budget enforced by cgroup MemoryMax + MemorySwapMax=0 rather than by the program, cold/warm disk cache declared, and per-token metrics (s/token, MB read/token, true hit rate, peak RSS via getrusage not the plan)",
+        "K3 in its regime (1.56 TB -> 8.24 GB) lands at ~14.7 s/token with a 40-60% I/O share — the same order of magnitude as unltd-inference's 14.3 s/token, which contextualizes unltd's decode number as normal for disk-backed execution rather than a defect",
+        "There is also a Rust port (undeemed/kimi-k3-in-rust, 24 stars) — evidence that the Rust-vs-C choice is not the differentiator in this niche, the memory policy is",
+        "Its scale shows the ceiling of the approach: it proves correctness and feasibility at extreme model/ RAM ratios, at throughput that is batch-job-only"
+      ],
+      "title": "FareedKhan-dev/kimi-k3-in-c — 2.78T-parameter Kimi K3 on a single CPU in 8.24 GB RAM (the reference project"
+    },
+    {
+      "url": "https://arxiv.org/html/2504.08791v1",
+      "key_points": [
+        "PRIMA.CPP (arXiv:2504.08791): distributed 70B-scale inference on home clusters; uses mmap to manage weights plus piped-ring parallelism with prefetching to hide disk loading, and Halda layer assignment; reports memory pressure below 6% and beats llama.cpp, exo and dllama on 30B+ models.",
+        "Academic framing for the same thesis: mmap alone is the floor, prefetch/pipelining plus access-pattern awareness is where the wins are."
+      ]
+    },
+    {
+      "url": "https://github.com/NextTokens/WayInfer",
+      "key_points": [
+        "Native C GGUF engine that streams weights from SSD via mmap and AVX2 8-thread kernels; markets an 80 GB model loading in under 1 second and running on 48 GB or less, derived from the WayOS tiered memory manager.",
+        "Useful foil for the review: WayInfer pairs mmap with SIMD and multithreading, the two things unltd-inference v1.0.0 explicitly does not have."
+      ]
+    },
+    {
+      "url": "https://github.com/y0sif/ramvamp",
+      "title": "y0sif/ramvamp — Rust runtime that streams MoE experts from NVMe (closest functional competitor)",
+      "key_points": [
+        "Runs Qwen3-30B-A3B Q4_K_M (~17.35 GiB on disk) inside a hard 3 GB cgroup (memory.max=3G, memory.swap.max=0) with a cold page cache — a real ~6x memory saving on a 30B MoE, no GPU",
+        "Runs on Linux x86_64 + NVMe (Intel Core Ultra 9 185H reference machine); common weights are mmap'd and stay resident (~1,023 MiB covering embeddings, attention, routers, norms, lm_head), while routed experts live on disk in a page-aligned packed .rvmp layout and are fetched with io_uring + O_DIRECT only on router hits",
+        "Small per-layer LFU expert cache; misses go out as one batched O_DIRECT read that bypasses the page cache so it costs the memory budget nothing, and hit compute hides the I/O latency",
+        "Measured on a DRAM-less QLC NVMe: decode ~2 tok/s (1.43-2.19 over ctx 64-3,961) and prefill 11.25 tok/s at ctx 512; peak RAM 2,497-2,929 MiB of the 3,072 MiB ceiling",
+        "Validated against llama.cpp on identical weights: mean full-vocab KL 1.04e-2, top-1 agreement 8/8 — i.e. it does real MoE inference, not a toy path",
+        "Ships a serving surface (`ramvamp serve`) exposing the OpenAI Chat Completions API on loopback with streaming SSE, tool calls, and named config profiles — a product surface unltd-inference lacks entirely",
+        "Repacker accepts only qwen3moe-architecture GGUFs and refuses anything else by name; Gemma 4 26B-A4B is roadmap, not implemented — the same honest scope-discipline that unltd-inference practices",
+        "Throughput is stated per-drive on purpose because decode is I/O-bound: ~1.6 GB/s sustained at decode read geometry, which is why no tok/s number is published without its drive",
+        "Contrast with unltd-inference: ramvamp actually implements explicit expert streaming via io_uring/O_DIRECT, exactly the mechanism unltd-inference lists as unimplemented in v1.0.0"
+      ]
+    },
+    {
+      "url": "https://blog.victorbona.dev/compendium/cpu-llm-inference/rust-ecosystem",
+      "title": "Rust for LLM Inference — Ecosystem Readiness, Crate Landscape, and Gap Analysis (CPU LLM Inference Research Compendium)",
+      "key_points": [
+        "Provides the definitive map of the Rust ecosystem for a CPU-native LLM inference runtime, with an explicit target spec of 9B parameters, 2 vCPUs, 6 GB RAM, 2-5 tok/s — coincidentally almost exactly the regime unltd-inference operates in (9B, 5.63 GB, disk-backed)",
+        "Documents the strategic split that unltd-inference effectively follows: build the inference core from scratch (SIMD kernels ~800 LOC, streaming weight executor with mmap + madvise ~600 LOC, model architectures ~1,200 LOC) and use production crates for infrastructure only",
+        "Rates Candle (HuggingFace) as adaptable for model architectures but NOT its CPU backend: it uses ndarray/ BLAS-style dense ops with limited SIMD for k-quants, tensors are Arc<RwLock<CpuStorage>> (reference-counted, write-locked, heap-allocated) adding per-op overhead, and there is NO mmap — all weights go into Vec<u8>, so no streaming capability at all",
+        "Estimates Candle CPU at ~60-70% of llama.cpp throughput on Q4_K_M and blames ndarray-based dense ops plus weak k-quant SIMD",
+        "Rates burn as excellent for training but poor for inference (no GGUF/Q-quant support, no SIMD kernels, limited LLM model coverage) and mistral.rs as having an adaptable production-quality axum OpenAI-compatible streaming API while its PagedAttention impl is 'wrong for CPU, study only'",
+        "Lists concrete Rust-vs-C++ parity gaps to counter with get_unchecked in unsafe kernels, arena/pre-allocation to avoid Vec drop overhead, and #[inline(never)] to control generic monomorphization — directly relevant to unltd-inference's scalar-only v1.0.0 kernels",
+        "Frames the real ecosystem split as 'inference core from scratch, infrastructure from crates', which is a fair description of why a from-scratch Rust runtime is defensible rather than NIH"
+      ]
+    },
+    {
+      "url": "https://github.com/ggml-org/llama.cpp/discussions/18758",
+      "title": "llama.cpp — mmap vs direct I/O for MoE models larger than RAM (the incumbent's own evidence)",
+      "key_points": [
+        "The incumbent baseline every disk-first runtime is measured against: llama.cpp has ~130k stars, 146 registered GGUF architectures, and 28,500+ published GGUFs, and mmaps model files by default so a model larger than RAM already 'just works' with no configuration",
+        "Its design position is that the OS page cache IS the policy, deliberately and documented — the direct opposite of unltd-inference's 'explicit memory accounting' thesis",
+        "Community measurements show mmap beating direct I/O for MoE models at 100-150% of RAM: prefetch tries to read the whole model into RAM and causes thrashing, while O_DIRECT bypasses caching and makes repeated loads at least 10x slower",
+        "On-disk expert layout turns out to matter more than the syscall: replaying the exact per-token read pattern cold, co-activation-ordered expert layout cut reads/token from 1,418 to 775, and an interleaved layout cut it to ~370 for 2.23x faster cold decode I/O (mbolt, Qwen3-Next-80B-A3B IQ3_XXS)",
+        "Explicit slice reads beat page faults by 13-14% end-to-end on both stock and rewritten files, because 16 KiB faults plus kernel readahead are layout-blind — so the win is reading slices rather than faulting pages, plus a layout that makes those slices contiguous",
+        "llama.cpp's own streaming attempt, PR #26003 'llama : add --lazy-experts for MoE models larger than RAM' (opened 2026-07-22, 160 additions across 9 files), is CLOSED and was NOT merged as of 2026-09-07 after 7 comments — meaning runtime-level expert streaming is still an open gap in the incumbent",
+        "This is the single most important competitive fact for unltd-inference: llama.cpp covers the resident case supremely well and has NOT shipped explicit over-RAM streaming, which is precisely the gap unltd-inference targets on its roadmap (while noting it has not shipped it either in v1.0.0)"
+      ]
+    }
+  ],
+  "stats": [
+    {
+      "fact": "unltd-inference validated model: Ornith 1.0 9B GGUF Q4_K_M at 5.63 GB (5,629,108,704 bytes), fully validated end-to-end in v1.0.0",
+      "source": "https://github.com/unltdev/unltd-inference (README, Validated models)"
+    },
+    {
+      "fact": "Validated budget tests: 4 GB and 3 GB budgets with a 5.63 GB model; minimum viable controlled budget 113.06 MB; controlled runtime memory ~113.19 MB; KV cache ~524 KB at tested context",
+      "source": "https://github.com/unltdev/unltd-inference (README, Real results) + docs/PHASE-9-10-CHECKPOINT.md"
+    },
+    {
+      "fact": "Peak working set measured at ~5.24 GB while the controlled budget was 3-4 GB — RSS exceeds the budget because the mapped file is included; memory budget != process RSS != mapped virtual bytes",
+      "source": "docs/PHASE-9-10-CHECKPOINT.md, https://github.com/unltdev/unltd-inference"
+    },
+    {
+      "fact": "Impossible configuration is refused before allocation: --memory-budget 32M vs required minimum 113.06 MB prints REFUSING TO RUN with the full number breakdown and exits 2 (CLI contract: 1 = load/usage error, 2 = budget refusal, 3 = RUN INVALID)",
+      "source": "docs/PHASE-9-10-CHECKPOINT.md"
+    },
+    {
+      "fact": "v1.0.0 performance on the validated setup: prefill ~73 s, decode ~14.3 s/token, CPU-only scalar kernels — roughly 70x slower per token than the same-class kimi-k3-in-c engine's 26.5 s/token at 8 GB on far larger hardware",
+      "source": "https://github.com/unltdev/unltd-inference (README, Performance)"
+    },
+    {
+      "fact": "Test suite: 107 passed / 0 failed, split across tokenizer 27, generation 11, model-loader 17, tensor 35, architectures 4, memory 13",
+      "source": "https://github.com/unltdev/unltd-inference (README, Testing)"
+    },
+    {
+      "fact": "Oracle agreement with llama.cpp: tokenizer bit-exact for the validated prompt; first 11 greedy steps match exactly; later divergence is documented and attributed to scalar reference kernels vs AVX2/repacked kernels with argmax near-tie flips",
+      "source": "https://github.com/unltdev/unltd-inference (README, Validation against llama.cpp) + docs/PHASE-7-8-CHECKPOINT.md"
+    },
+    {
+      "fact": "Architecture actually exercised: 32 layers = 24 recurrent GatedDeltaNet layers + 8 full-attention layers with M-RoPE (Qwen3.5-compatible path); GGUF is a container format, not an architecture guarantee, so no universal GGUF support is claimed",
+      "source": "https://github.com/unltdev/unltd-inference (CHANGELOG 1.0.0, docs/MODEL-SUPPORT.md)"
+    },
+    {
+      "fact": "Repo age and traction: created 2026-08-19, last push 2026-08-19, 21 commits, 1 star, 0 forks, 0 open issues, single release v1.0.0 (2026-08-19), Apache-2.0, 105 files, default branch main",
+      "source": "GitHub REST API /repos/unltdev/unltd-inference + /releases + /commits?per_page=100"
+    },
+    {
+      "fact": "The name 'disk-first LLM inference' as a GitHub search term returns exactly one repository in the world — this one (unltd-inference); a broader 'out-of-core llm inference' search returns only 6 repos",
+      "source": "GitHub search API repositories?q=disk-first+llm+inference and ?q=out-of-core+llm+inference (2026-10-01)"
+    },
+    {
+      "fact": "Reference point for the memory ladder: kimi-k3-in-c runs a 2.78T model (1.56 TB checkpoint) at 32.69 s/token in 8.24 GB peak RSS and 10.69 s/token at 127.92 GB, with byte-identical output at every budget",
+      "source": "https://github.com/FareedKhan-dev/kimi-k3-in-c (README, measured run logs)"
+    },
+    {
+      "fact": "MoE-aware counterpart at the top of the range: WARP runs full 2.78T Kimi K3 at ~0.60 tok/s on a 64 GB MacBook Pro with a 17.56 GB expert cache (9000 hits / 14552 misses = 38%), 552B DeepSeek-V4.1-Flash at ~3.8 tok/s, 313B GLM-5.3-Flash at ~3.9 tok/s",
+      "source": "https://github.com/sqliteai/waste (WARP README)"
+    },
+    {
+      "fact": "mmap does not wear out an SSD: evicted read-only mapped weight pages are re-read, not written back; KV cache and context are the write-side workloads and are not mmap-backed in llama.cpp",
+      "source": "https://news.ycombinator.com/item?id=49130892 (mappu, walrus01) + llama.cpp discussion #19163 (digitalstudium)"
+    },
+    {
+      "fact": "Custom backing-cache engines claim roughly 10x over relying on generic kernel paging, because the runtime knows the access pattern and can prefetch/pipeline what the kernel pages in only on demand",
+      "source": "https://news.ycombinator.com/item?id=49130892 (jnwatson); corroborated by PRIMA.CPP arXiv:2504.08791 piped-ring prefetch"
+    },
+    {
+      "fact": "llama.cpp is the de facto baseline the review is written against: 130k stars, 23.9k forks on ggml-org/llama.cpp as of 2026-10-01, mmap on by default",
+      "source": "https://github.com/ggml-org/llama.cpp (repo header) + discussion #19163"
+    },
+    {
+      "fact": "Honest-telemetry norm is spreading through this niche: weight-streaming reports a 104 GB DeepSeek-V4-Flash at 1.48-1.89 tok/s on 64 GB RAM + RTX 3060 and proves the bottleneck with OS page-fault counters (36,000-77,000 faults/token)",
+      "source": "https://github.com/i-mrDed/weight-streaming (README, EXP-012)"
+    },
+    {
+      "fact": "The v1.0.0 release ran a 5.63 GB Ornith 1.0 9B Q4_K_M GGUF with a configured budget of 3 GB and 4 GB, reaching ~113.19 MB of controlled runtime memory against a ~5.24 GB peak working set — a 0.113 GB controlled footprint for a 5.63 GB model",
+      "source": "github.com/unltdev/unltd-inference README (v1.0.0, 2026-08-18)"
+    },
+    {
+      "fact": "The minimum viable controlled memory budget for the validated model is 113.06 MB; passing --memory-budget 32M is correctly refused with 'REFUSING TO RUN' and exit code 2",
+      "source": "github.com/unltdev/unltd-inference docs/PHASE-9-10-CHECKPOINT.md"
+    },
+    {
+      "fact": "The memory budget governs only runtime-controlled memory (KV cache, scratch, runtime state, controlled caches). It explicitly does not govern process RSS or mapped virtual bytes, and the OS page cache is not governed by --memory-budget",
+      "source": "github.com/unltdev/unltd-inference README, 'Memory budget' section"
+    },
+    {
+      "fact": "Measured performance on the validated setup is ~73 s prefill and ~14.3 s/token decode — about 0.07 tokens/second, unusable for interactive chat but normal for disk-backed execution",
+      "source": "github.com/unltdev/unltd-inference README, 'Performance' section"
+    },
+    {
+      "fact": "v1.0.0 passes 107 workspace tests, 0 failed, broken down as tensor 35, tokenizer 27, model-loader 17, memory 13, generation 11, architectures 4",
+      "source": "github.com/unltdev/unltd-inference README, 'Testing' section"
+    },
+    {
+      "fact": "The tokenizer is bit-exact against llama.cpp for the validated prompt and the first 11 greedy generation steps match the oracle exactly; divergence appears later when an argmax near-tie flips due to scalar-vs-AVX2 numerical accumulation",
+      "source": "github.com/unltdev/unltd-inference README, 'Validation against llama.cpp'"
+    },
+    {
+      "fact": "v1.0.0 does NOT implement explicit layer streaming, prefetching, double buffering, expert streaming, or MoE execution — its 'disk-first' claim rests on mmap plus OS demand paging, the same default mechanism as llama.cpp",
+      "source": "github.com/unltdev/unltd-inference README, 'Disk-first execution' + docs/ROADMAP.md"
+    },
+    {
+      "fact": "The validated architecture is a Qwen3.5-compatible hybrid: 32 layers made of 24 recurrent GatedDeltaNet layers plus 8 full-attention layers with M-RoPE, and a GPT-2 byte-level BPE tokenizer rebuilt from GGUF metadata with qwen35 pre-tokenizer behavior",
+      "source": "github.com/unltdev/unltd-inference CHANGELOG.md [1.0.0]"
+    },
+    {
+      "fact": "unltdev/unltd-inference was created 2026-08-19, is Apache-2.0, is ~1 star with 0 forks and 2679 KB of code (Rust 336 KB / Python 52 KB), with exactly one merged PR (docs templates) and 0 open issues — no independent reproduction or third-party adoption exists yet",
+      "source": "GitHub REST API repos/unltdev/unltd-inference"
+    },
+    {
+      "fact": "MSRV is Rust 1.80, edition 2021, workspace version 1.0.0; external dependencies are deliberately few (half, bytemuck, serde, serde_json, thiserror, anyhow, clap, memmap2, rayon, regex) with thin LTO and codegen-units=1 in release",
+      "source": "github.com/unltdev/unltd-inference Cargo.toml"
+    },
+    {
+      "fact": "Windows x86-64 is the only end-to-end validated platform in v1.0.0 and CPU execution is scalar-only (Q4_K/Q6_K/Q8_0, with Q4_K the validated path); there is no SIMD/AVX2, no multithreading, no GPU, and no sampling (temperature=0 only)",
+      "source": "github.com/unltdev/unltd-inference README, 'Build requirements' + 'Limitations'"
+    },
+    {
+      "fact": "ramvamp runs Qwen3-30B-A3B Q4_K_M (~17.35 GiB on disk) inside a 3 GB cgroup with swap disabled, hitting ~2 tok/s decode and 11.25 tok/s prefill with peak RAM 2,497-2,929 MiB — and validates against llama.cpp at mean full-vocab KL 1.04e-2 with 8/8 top-1 agreement",
+      "source": "github.com/y0sif/ramvamp README + docs/benchmarks.md"
+    },
+    {
+      "fact": "ramvamp keeps only ~1,023 MiB of common weights resident and streams routed experts from NVMe with io_uring + O_DIRECT through a per-layer LFU cache, sustaining ~1.6 GB/s at decode read geometry — the explicit streaming architecture unltd-inference lists as unimplemented",
+      "source": "github.com/y0sif/ramvamp README"
+    },
+    {
+      "fact": "ALLM measures llama.cpp (b9849, 12 threads) at ~222 tok/s prefill and ~32-36 tok/s decode versus its own 0.1.0 resident/streaming-256MiB at 8.5 tok/s and streaming-64MiB at 2.2 tok/s on Qwen2.5-0.5B Q4 — a 4-10x decode gap for a pure layerwise-streaming Rust runtime",
+      "source": "github.com/mithun50/ALLM README"
+    },
+    {
+      "fact": "kimi-k3-in-c runs a 2.78T-parameter Kimi K3 MoE on a single CPU in 8.24 GB of RAM by streaming ~1.45 TB of routed experts from disk; its regime lands at ~14.7 s/token with a 40-60% I/O share",
+      "source": "github.com/FareedKhan-dev/kimi-k3-in-c (docs/PERFORMANCE.md as cited by unltd-inference)"
+    },
+    {
+      "fact": "The kimi-k3-in-c measurement protocol records a 33% noise floor: the identical run varied 14.78/14.67/20.14 s/token with no change, which is why single-run streaming benchmarks are anecdotal and unltd-inference mandates 3+ repetitions reported as median with range",
+      "source": "github.com/unltdev/unltd-inference benchmarks/README.md"
+    },
+    {
+      "fact": "llama.cpp is the dominant incumbent with ~130,000 stars, ~24,000 forks, 146 registered GGUF architectures and 28,500+ published GGUFs, and it mmaps models by default so an over-RAM model already runs with no configuration",
+      "source": "GitHub REST API repos/ggml-org/llama.cpp + unltd-inference docs/MODEL-SUPPORT.md"
+    },
+    {
+      "fact": "llama.cpp's runtime-level expert streaming attempt, PR #26003 'llama : add --lazy-experts for MoE models larger than RAM', was opened 2026-07-22 with 160 additions across 9 files and is CLOSED and NOT merged (updated 2026-09-07, 7 comments) — the over-RAM streaming gap in the incumbent remains open",
+      "source": "GitHub REST API repos/ggml-org/llama.cpp/pulls/26003"
+    },
+    {
+      "fact": "For MoE models at 100-150% of RAM, llama.cpp community measurements found mmap with no direct I/O faster than direct I/O, because prefetch tries to read the whole model into RAM and thrashes while O_DIRECT bypasses caching and makes repeat loads at least 10x slower",
+      "source": "github.com/ggml-org/llama.cpp/discussions/18758"
+    },
+    {
+      "fact": "On-disk expert layout can beat the syscall choice: cold replay of the exact per-token read pattern showed co-activation-ordered expert layout cutting reads/token from 1,418 to 775, and an interleaved layout cutting it to ~370 for 2.23x faster cold decode I/O, while explicit slice reads beat page faults by 13-14% end-to-end",
+      "source": "github.com/ggml-org/llama.cpp/discussions/18758 (mbolt measurements, Qwen3-Next-80B-A3B IQ3_XXS)"
+    },
+    {
+      "fact": "A 460-line user-space LRU expert cache measured 2.4x SLOWER than 15 lines of madvise prefetch on an 8 GB M2 MacBook Air (0.24 vs 0.57 tok/s) because the cache duplicated data and stole RAM from the OS page cache — 'don't fight the OS page cache, coach it'",
+      "source": "huggingface.co/waltgrace/llama-cpp-expert-sniper"
+    },
+    {
+      "fact": "Stock llama.cpp produced 0 tok/s (indefinite thrash) on an 8 GB M2 MacBook Air running Qwen3.5-35B-A3B IQ2_M (10.6 GB), while a no-op eval callback alone reached 0.46 tok/s and madvise prefetch reached 0.57 tok/s — even a no-op callback prevents thrashing by incidentally warming mmap pages",
+      "source": "huggingface.co/waltgrace/llama-cpp-expert-sniper"
+    },
+    {
+      "fact": "llama.cpp's own mmap loading behaviour is inconsistent across runs: on DGX Spark, loading GPT-OSS-120B-MXFP4 took ~110 s on the first mmap load and ~67 s on subsequent loads, while an async DirectIO PR delivered a consistent ~10.5 s — mmap load time depends on whether the page cache already holds the model",
+      "source": "github.com/ggml-org/llama.cpp/pull/18012"
+    },
+    {
+      "fact": "Two-thirds of Hugging Face model downloads go to models at or under 1B parameters (66.8%) and about 78.2% to 7B or under, with the median sized model at ~900M parameters — a ≤7B Q4 model is ~4 GB, so most actual inference workloads fit in commodity CPU RAM",
+      "source": "ranjithrajv/awesome-cpu-first-ai docs/ecosystem-evidence.md (HF Landscape crawl: 2.9M models, 66.4B downloads, week of 2026-07-13)"
+    },
+    {
+      "fact": "Streaming a model larger than memory from SSD in llama.cpp measured 1 to 2 tok/s — 'fine for a batch job, useless for chat' — the same practical verdict that applies to unltd-inference's ~14.3 s/token at larger model sizes",
+      "source": "pinggy.io, 'Self-Hosting LLMs on the 512GB M5 Ultra Mac Studio'"
+    },
+    {
+      "fact": "For a fully offloaded dense model the mmap offload strategy collapses, because every token logically touches the entire weight file so per-token latency approaches model size divided by storage bandwidth; MoE models fare better because the per-token working set is only the routed experts",
+      "source": "groundy.com, 'Running a 104GB LLM on a 48GB Mac: What Expert Streaming Costs'"
+    },
+    {
+      "fact": "Candle's CPU backend is a poor fit for this niche: it uses ndarray-based dense ops with limited k-quant SIMD, stores tensors as Arc<RwLock<CpuStorage>> (reference-counted, write-locked, heap-allocated), and has NO mmap — all weights land in a Vec<u8>, so it has no streaming capability at all, estimated at ~60-70% of llama.cpp throughput on Q4_K_M",
+      "source": "blog.victorbona.dev CPU LLM Inference Research Compendium, 'Rust for LLM Inference'"
+    },
+    {
+      "fact": "The Rust CPU-inference research target spec (9B parameters, 2 vCPUs, 6 GB RAM, 2-5 tok/s) is almost exactly unltd-inference's validated regime, which makes a from-scratch Rust runtime defensible rather than redundant",
+      "source": "blog.victorbona.dev CPU LLM Inference Research Compendium"
+    },
+    {
+      "fact": "A pure-Rust llama.cpp alternative already exists (cool-japan/oxillama, ~38 stars, ~165k LOC, 20 architectures, 25 quants), so 'reimplement llama.cpp in Rust' is not a differentiator — memory policy and instrumentation are",
+      "source": "github.com/cool-japan/oxillama + unltd-inference docs/MODEL-SUPPORT.md §4"
+    },
+    {
+      "fact": "unillm demonstrates the modular-trait approach in Rust with 47 model architectures behind a single Model trait across four crates (runtime: TensorCore/ModelCore/WeightLoaderCore, inference, kv with RadixAttention+PagedAttention, scheduler with continuous batching) where adding architecture 48 means implementing one trait",
+      "source": "cognisoc.com/blog/llm-inference-in-rust"
+    },
+    {
+      "fact": "Ornith 1.0 9B is a genuinely popular model, not an obscure fixture: ornith-ai/Ornith-1.0-9B-GGUF shows ~2.6M downloads and Ornith-1.0-35B ~1.5M on Hugging Face, so validating against it is a credible choice rather than a convenience pick",
+      "source": "huggingface.co/api/models?search=Ornith-1.0"
+    },
+    {
+      "fact": "The Ornith 1.0 family is superseded by Ornith 1.5 (Ornith-1.5-9B-GGUF shows ~5.05M downloads), so a runtime pinned to the 1.0 9B validation artifact is already one model generation behind the ecosystem's current default",
+      "source": "huggingface.co/api/models?search=Ornith-1.5"
+    }
+  ],
+  "angles": [
+    "It does not beat llama.cpp and never claims to: the review's spine is that unltd-inference is a measurement instrument, not a faster runtime — prefill ~73 s and ~14.3 s/token are published as documentation, not as a performance claim.",
+    "The real contribution is the memory-budget contract: unlike llama.cpp (where 'mmap is on' is the whole story), unltd turns controlled memory into a first-class, pre-validated resource with a hard refusal path and concrete numbers (exit 2, REFUSING TO RUN, 32M vs 113.06 MB required).",
+    "The 5.63 GB model on a 3 GB budget demo only looks impressive until you read what the budget covers: weights contribute 0 bytes because they are mmap views, so the honest headline is 'a 5.63 GB model runs while the runtime itself controls ~113 MB' — and RSS still peaked at 5.24 GB.",
+    "The skeptic's question from HN is the article's central tension: standard llama.cpp can mmap an oversized GGUF too, so is a purpose-built disk-first runtime worth anything before layer streaming, prefetch and double buffering land? The project's own docs answer honestly — mmap is one policy, not the mechanism.",
+    "Disk-first is not the same as disk-cheap: page-cache thrash is uncontrollable, and at 14.3 s/token the practical use case is studying memory behaviour and constrained-hardware viability, not interactive chat.",
+    "The Windows-only validation is a real trap for readers on Linux/macOS — the docs say Linux is not yet validated end-to-end in v1.0.0, and the CLI examples in the README are PowerShell.",
+    "Provenance story worth a section: the project grew out of a full source-level audit of kimi-k3-in-c, and its design decisions (adopt/reject table) are written down — including rejecting mmap as the sole mechanism and never dequantizing weights to cache them.",
+    "Where the field is actually moving: MoE expert streaming with prefetch (WARP at 2.78T, weight-streaming proving disk-bound behaviour with page-fault telemetry). unltd-inference v1.0.0 sits at the dense, scalar, single-model end of that spectrum — its roadmap is the interesting part.",
+    "The trust signal that separates this from the usual 'runs a 70B on a laptop' post: 107 tests, an oracle comparison workflow, a published divergence point (11 greedy steps then a documented near-tie flip), and an exit-code contract.",
+    "The headline claim needs careful reading: 'runs a 5.63 GB model on a 4 GB budget' is true but the working set peaks at ~5.24 GB. The budget governs ~113 MB of runtime-controlled memory (KV, scratch, runtime state, caches), NOT RSS and NOT mapped virtual bytes. This is explicit memory accounting, not memory elimination — and the article must say so or it becomes misleading.",
+    "v1.0.0 'disk-first' means mmap plus OS demand paging, the same default llama.cpp has shipped for years. Layer streaming, prefetching, double buffering, and expert streaming are all explicitly not implemented. The honest framing is 'explicit memory accounting runtime with mmap-backed execution', not 'streaming runtime'.",
+    "Measured throughput of ~73 s prefill / ~14.3 s/token is ~0.07 tok/s — roughly two orders of magnitude slower than a resident 9B on the same CPU. The gap is explained by a scalar-only reference path with no SIMD, no multithreading, and 5.63 GB of page-faulted reads per token. This is a research instrument, and the review should be blunt that it is not a daily driver.",
+    "Where unltd-inference is genuinely unlike anything else: it is the only runtime in this space that treats determinism across memory budgets as the primary CI assertion, and it refuses impossible configurations with concrete numbers instead of failing at runtime. 'Refuse rather than guess' as a product philosophy is a real, rare differentiator.",
+    "The competitor that actually ships the thesis: ramvamp streams MoE experts from NVMe with io_uring + O_DIRECT under a 3 GB cgroup at ~2 tok/s, and validates at KL 1.04e-2 vs llama.cpp. If the article is about disk-first inference as a technique, ramvamp is the stronger proof point; unltd-inference is the cleaner reference architecture.",
+    "The incumbent's gap is real and measured: llama.cpp's only runtime-level over-RAM expert streaming attempt (PR #26003, --lazy-experts) is closed and unmerged after a year of the project's attention. That is the honest reason a new runtime is worth writing in 2026 — not throughput, coverage, or language.",
+    "The page cache is the real policy engine and it is smarter than a naive user-space cache: 15 lines of madvise beat a 460-line LRU cache by 2.4x because the LRU duplicated data and stole RAM from the OS. Any article claiming 'explicit memory control beats the OS' must contend with this measurement, and unltd-inference's own docs concede the point by planning Direct I/O as opt-in-and-measured rather than as dogma.",
+    "On-disk layout can beat the syscall choice: co-activation-ordered expert layout cut reads/token from 1,418 to 775 and an interleaved layout to ~370 (2.23x faster cold decode I/O). This is the most under-reported lever in disk-first inference and a genuinely novel angle for readers who assume the I/O mechanism is the whole story.",
+    "Measurement methodology is the transferable lesson: kimi-k3-in-c's 33% noise floor (14.78/14.67/20.14 s/token on identical runs) means single-run streaming benchmarks are meaningless, and unltd-inference's 3-repetition median-with-range protocol plus cgroup-enforced budgets is a template readers can reuse for any memory-constrained benchmark.",
+    "The Rust question answers itself: oxillama already reimplements llama.cpp in pure Rust (~165k LOC, 20 architectures, 25 quants), so Rust is not the differentiator. Meanwhile Candle is actively unsuitable for over-RAM work because it has no mmap at all — tensors are Arc<RwLock<CpuStorage>> in heap Vec<u8>. The review should reject 'it's Rust' as a value proposition and locate the value in memory policy plus instrumentation.",
+    "Scope discipline is a feature readers can trust: unltd-inference validates exactly one 9B model on exactly one platform (Windows x86-64), declares Linux unvalidated, refuses unknown architectures, and documents that its own output diverges from the oracle after ~11 tokens. That candour is the opposite of the usual launch post and is worth highlighting as a credibility signal.",
+    "The counterweight to all this rigor: the repository has ~1 star, 0 forks, one documentation PR, and zero independent reproductions. Everything above rests on the author's own measurements. The review must label the performance and memory numbers as self-reported and unreplicated, and tell readers what it would take to trust them.",
+    "Practical fit: two-thirds of Hugging Face downloads are models at or under 1B parameters (78.2% at or under 7B). The overwhelming majority of what people actually run fits in RAM at 4-bit, so disk-first execution is a research and edge-deployment technique, not a mainstream need — which is exactly why a correctness-first reference implementation is more useful than a faster one.",
+    "Model lifecycle risk: unltd-inference pins its validation to Ornith 1.0 9B, but the Ornith family has already moved to 1.5 (5.05M downloads for the 9B GGUF). A single-artifact validation path ages fast, and readers evaluating the project should know the validated model is a generation behind the current default."
+  ],
+  "keywords": [
+    "unltd inference Rust",
+    "unltd-inference GGUF",
+    "disk-first LLM inference",
+    "CPU-first LLM inference Rust",
+    "memory budget LLM inference",
+    "mmap GGUF inference",
+    "run LLM larger than RAM",
+    "GGUF mmap demand paging",
+    "out-of-core LLM inference",
+    "inference runtime memory accounting",
+    "unltd-inference review",
+    "unltd-inference vs llama.cpp",
+    "Qwen3.5 GGUF runtime Rust",
+    "memory-mapped LLM weights disk-first",
+    "constrained hardware LLM inference runtime",
+    "refuse rather than guess inference",
+    "Rust LLM inference runtime",
+    "GGUF memory budget",
+    "run LLM larger than RAM on CPU",
+    "memory-mapped GGUF inference",
+    "mmap vs O_DIRECT LLM",
+    "layer streaming LLM Rust",
+    "expert streaming MoE disk",
+    "constrained memory LLM inference",
+    "llama.cpp alternative Rust",
+    "refuse rather than guess memory planning",
+    "Ornith 1.0 9B GGUF",
+    "Qwen3.5 hybrid recurrent attention inference",
+    "disk-backed LLM inference benchmark",
+    "CPU inference memory accounting",
+    "LLM inference memory budget vs RSS",
+    "ramvamp vs unltd-inference"
+  ],
+  "outline": [
+    "H2: What unltd-inference actually is (and what it deliberately is not)",
+    "H2: The core claim: model_size > memory_budget, explained without marketing",
+    "H2: How the memory budget works — what it controls, what it ignores, and why RSS can exceed it",
+    "H2: Real numbers from v1.0.0: 5.63 GB model, 3 GB budget, ~113 MB controlled, ~5.24 GB peak working set",
+    "H2: Disk-first in practice: mmap and OS demand paging versus explicit layer streaming",
+    "H2: unltd-inference vs llama.cpp — the honest comparison, including the case where llama.cpp already does this",
+    "H2: Where it sits against the field: kimi-k3-in-c, WARP, ALLM, WayInfer and PRIMA.CPP",
+    "H2: What is missing in v1.0.0: SIMD, multithreading, sampling, MoE, Linux validation, and the known oracle divergence after 11 greedy steps",
+    "H2: Who should actually use it, and the roadmap worth watching",
+    "H2: Verdict: a correctness-first reference runtime, not a daily driver",
+    "H2: What Is UNLTD Inference? Disk-First, CPU-First LLM Inference Written in Rust",
+    "H2: How It Works: GGUF, mmap, OS Demand Paging, and the Bounded Memory Budget",
+    "H2: What the --memory-budget Actually Controls (and What It Does Not)",
+    "H2: Verified v1.0.0 Results: A 5.63 GB Model on a 3-4 GB Budget",
+    "H2: Performance Reality: ~73 s Prefill and ~14.3 s per Token",
+    "H2: Correctness Before Speed: The llama.cpp Oracle Contract and Its Known Divergence",
+    "H2: How UNLTD Inference Compares to llama.cpp, ramvamp, ALLM, and kimi-k3-in-c",
+    "H2: The Rust Inference Ecosystem in 2026: Candle, oxillama, unillm, and Where the Gap Really Is",
+    "H2: Why On-Disk Layout Beats Syscall Choice (and Why the OS Page Cache Is Hard to Beat)",
+    "H2: Limitations, Unvalidated Platforms, and Unreplicated Claims",
+    "H2: Should You Use UNLTD Inference? Verdict for Researchers, Hobbyists, and Production Teams",
+    "H2: Roadmap: SIMD, Multithreading, Expert Streaming, and Linux Validation"
+  ],
+  "research_date": "2026-10-01",
+  "merge_provenance": {
+    "writer_run": "bf17729b-1b81-47b0-965b-bf5509fc7ba9 (duplicate/unassigned spawn)",
+    "merged_at": "2026-10-01",
+    "note": "Created with O_CREAT|O_EXCL from scratch; if a sibling run had already written a thinner brief, lossless union merge (URL-normalized competitors, fact-text dedupe for stats/angles/keywords, no key deletion).",
+    "competitor_url_consolidation": {
+      "before": 15,
+      "after": 12,
+      "rule": "normalized-url union of key_points, richer title kept, no key deleted"
+    }
+  },
+  "schema_version": "1.0",
+  "primary_source": {
+    "repo": "https://github.com/unltdev/unltd-inference",
+    "version": "1.0.0 (released 2026-08-18)",
+    "license": "Apache-2.0",
+    "language": "Rust (MSRV 1.80)",
+    "validated_model": "Ornith 1.0 9B Q4_K_M (5.63 GB)",
+    "validated_platform": "Windows x86-64, CPU, scalar kernels",
+    "tests": "107 passing, 0 failed"
+  },
+  "sources_consulted": [
+    "https://github.com/unltdev/unltd-inference (README, CHANGELOG, Cargo.toml, docs/ARCHITECTURE.md, docs/MEMORY-DESIGN.md, docs/ROADMAP.md, docs/MODEL-SUPPORT.md, docs/PHASE-9-10-CHECKPOINT.md, benchmarks/README.md, GitHub REST API repo/releases/issues)",
+    "https://github.com/y0sif/ramvamp",
+    "https://github.com/mithun50/ALLM",
+    "https://github.com/FareedKhan-dev/kimi-k3-in-c",
+    "https://github.com/undeemed/kimi-k3-in-rust",
+    "https://github.com/ranjithrajv/awesome-cpu-first-ai (README + docs/ecosystem-evidence.md)",
+    "https://blog.victorbona.dev/compendium/cpu-llm-inference/rust-ecosystem",
+    "https://cognisoc.com/blog/llm-inference-in-rust",
+    "https://github.com/ggml-org/llama.cpp/discussions/18758",
+    "https://github.com/ggml-org/llama.cpp/pull/26003",
+    "https://github.com/ggml-org/llama.cpp/pull/18012",
+    "https://github.com/ggml-org/llama.cpp/issues/91",
+    "https://huggingface.co/waltgrace/llama-cpp-expert-sniper",
+    "https://groundy.com/articles/running-a-104gb-llm-on-a-48gb-mac-what-expert-streaming-costs",
+    "https://pinggy.io/blog/self_hosting_llms_on_512gb_m5_ultra_mac_studio/",
+    "https://github.com/cool-japan/oxillama",
+    "https://huggingface.co/api/models?search=Ornith-1.0"
+  ]
+}
