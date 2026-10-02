@@ -1,0 +1,297 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Softlock Detection on RockB</title><link>https://baeseokjae.github.io/tags/softlock-detection/</link><description>Recent content in Softlock Detection on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 01 Oct 2026 00:14:10 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/softlock-detection/index.xml" rel="self" type="application/rss+xml"/><item><title>Walking Dead State Detection: How AI Agents Find Unwinnable Game States (2026)</title><link>https://baeseokjae.github.io/posts/detect-walking-dead-states-ai-agent/</link><pubDate>Thu, 01 Oct 2026 00:14:10 +0000</pubDate><guid>https://baeseokjae.github.io/posts/detect-walking-dead-states-ai-agent/</guid><description>Walking dead state detection proves when a game keeps accepting input but victory is already impossible. How static analysis and AI agents find those states.</description><content:encoded><![CDATA[<p>Walking dead state detection is the practice of proving that a game can reach a state where it still accepts input, still renders, still answers every command — and victory has already become impossible. The player does not know it. The game does not crash. Detection means finding those states from the game&rsquo;s own logic, or from an agent that explores its way into them.</p>
+<h2 id="what-is-a-walking-dead-state-exactly">What Is a Walking-Dead State, Exactly?</h2>
+<p>The term is design criticism, not engineering vocabulary, and it starts with the player rather than the code. Jimmy Maher&rsquo;s <em>The 14 Deadly Sins of Graphic Adventure Design</em> named the <strong>walking-dead syndrome</strong>: the human continues playing a game that has, unbeknownst to them, been rendered unwinnable. His worked example is <em>Uninvited</em> (1986). Walk past the mailbox in the Front Yard without looking inside it, step through the front door, and the door locks behind you forever. The mailbox held an item you now cannot get. As Maher puts it, &ldquo;as soon as you go inside, you become a walking dead.&rdquo;</p>
+<p>The mechanical condition underneath that experience is what the research literature calls a <strong>softlock</strong>. The FDG 2025 paper <em>Stuck in the Middle: Generating Levels without (or with) Softlocks</em> formalizes it as a state where &ldquo;the player has not won or lost, but cannot make progress toward the goal.&rdquo; The distinction is worth holding onto for the rest of this article: a softlock is a property of the game state, a walking-dead state is a property of the player&rsquo;s situation. One causes the other, and tooling that conflates them is usually tooling that only measures the first.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Failure mode</th>
+          <th>What breaks</th>
+          <th>Does the game stop?</th>
+          <th>Caught by crash telemetry?</th>
+          <th>Does the player know?</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Crash</td>
+          <td>The process</td>
+          <td>Yes, immediately</td>
+          <td>Yes</td>
+          <td>Yes, at once</td>
+      </tr>
+      <tr>
+          <td>Avoidable death</td>
+          <td>The attempt</td>
+          <td>Yes — you reload</td>
+          <td>Sometimes</td>
+          <td>Yes, at once</td>
+      </tr>
+      <tr>
+          <td>Softlock</td>
+          <td>The game state</td>
+          <td>No — everything responds</td>
+          <td>No</td>
+          <td>Eventually, or never</td>
+      </tr>
+      <tr>
+          <td>Walking-dead state</td>
+          <td>The play session</td>
+          <td>No</td>
+          <td>No</td>
+          <td>Usually never — they just stop playing</td>
+      </tr>
+  </tbody>
+</table>
+<p>That last row is why this problem has economic teeth. A walking-dead state does not show up in a bug tracker as a defect. It shows up in a churn chart as a player who &ldquo;lost interest.&rdquo;</p>
+<h2 id="why-does-walking-dead-state-detection-matter-so-much">Why Does Walking-Dead State Detection Matter So Much?</h2>
+<p>Because the failure is structurally invisible to every instrument a live-ops team normally trusts. Bugnet&rsquo;s analysis of softlocks frames it as a data problem rather than a design problem: &ldquo;players get stuck unable to progress while the game keeps running&rdquo; produces no exception, no stack trace, no crash report. It describes the <strong>silent majority</strong> — most players who hit a softlock never report it, they simply leave. The worse the problem, the quieter it is. A quiet inbox proves nothing at all.</p>
+<p>Crash telemetry catches the crash. It cannot catch the player standing in a room that has quietly become a tomb. And the review channel is biased in the same direction: a player who is frustrated by a wall writes a review; a player who has concluded, correctly, that the game is broken and unwinnable often just uninstalls. The worse the bug, the less likely it is to appear in the signal you are watching.</p>
+<p>The engineering justification is simply scale. EA SEED reported that testing all maps and modes of <em>Battlefield V</em> for one hour requires <strong>2,304 man-hours</strong> — the equivalent of 288 people testing every single day. That is the number that makes scripted, human-driven exhaustive coverage impossible, and it is the number that makes an automated detector of unwinnable states worth building. You cannot staff your way to &ldquo;every reachable state was checked.&rdquo;</p>
+<p>The money is real too. NetEase&rsquo;s Wuji team analyzed <strong>1,349 real bugs from four commercial online games</strong>, and reported that one benchmark game carried 30 dedicated testers and roughly <strong>$2M per year in direct bug losses</strong>. Wuji&rsquo;s automated testing found three previously unknown bugs in commercial titles, later confirmed by the developers — evidence that this class of defect survives even heavy manual QA.</p>
+<h2 id="completability-is-not-softlock-freedom--the-one-distinction-everything-rests-on">Completability Is Not Softlock-Freedom — the One Distinction Everything Rests On</h2>
+<p>This is the single idea that separates a toy detector from a real one.</p>
+<p><strong>Completability</strong> asks whether <em>a</em> path exists from the start of the game to the goal. <strong>Softlock-freedom</strong> asks whether a path to the goal exists from <em>every</em> place the player can legally reach. Written out:</p>
+<ul>
+<li>Completability: ∃ a path start → goal.</li>
+<li>Softlock-freedom: ∀ reachable state <em>s</em>, ∃ a path <em>s</em> → goal.</li>
+</ul>
+<p>A level can be perfectly winnable from the start and still strand a player who took a legal detour. This is exactly how adventure games, Metroidvanias and open-world quest chains fail, and it is why &ldquo;we played it through and beat it&rdquo; is not a completeness argument. It proves the existential quantifier and the game needed the universal one.</p>
+<p>The FDG 2025 reachability-categorization work turns that universal into a generation-time constraint: classify every location as forward-reachable (reachable from the start), backward-reachable (can reach the goal), or a sink — an area where the player inevitably loses, like the bottom of a pit. The prevention rule is then mechanical: <strong>every location forward-reachable from the start must also be backward-reachable from the goal, unless it is a sink.</strong> Anything forward-reachable and not backward-reachable is a softlock waiting for a player to find it.</p>
+<p>That constraint is not free, and the cost numbers are the most honest part of the paper. Generating levels with softlock-freedom takes roughly <strong>3–5× longer</strong> than plain path reachability. Allow softlocks in the generator and it costs 3–8×; add the extra requirement that softlocks stay disconnected from sinks and the cost climbs to <strong>3–15×</strong>. Verification is never the cheap part of level generation.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Property</th>
+          <th>Quantifier</th>
+          <th>What it actually guarantees</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Completability</td>
+          <td>∃ path start → goal</td>
+          <td>The game can be won — by someone, on some route</td>
+      </tr>
+      <tr>
+          <td>Softlock-freedom</td>
+          <td>∀ reachable <em>s</em>, ∃ path <em>s</em> → goal</td>
+          <td>No legal play can strand you</td>
+      </tr>
+      <tr>
+          <td>Reachability categorization</td>
+          <td>forward ∧ (backward ∨ sink)</td>
+          <td>Every place you can stand is either winnable from or a deliberate loss</td>
+      </tr>
+      <tr>
+          <td>Walking-dead state detection</td>
+          <td>∀ reachable <em>s</em>, goal ∈ Reach(<em>s</em>)</td>
+          <td>The claim you actually want to make to players</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="the-static-approach-decompile-abstract-interpret-condense-then-hunt-only-the-one-way-edges">The Static Approach: Decompile, Abstract-Interpret, Condense, Then Hunt Only the One-Way Edges</h2>
+<p>The strongest worked example of walking-dead state detection currently in public is <strong>lucasartsifier</strong>, whose README describes it plainly as a &ldquo;Sierra softlock analyzer.&rdquo; It is a static analyzer: it never plays the game. It reads the game. Its pipeline has six stages.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Stage</th>
+          <th>What it does</th>
+          <th>Why it exists</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Decompile</td>
+          <td>Pull typed control-flow ASTs out of SCI bytecode</td>
+          <td>You cannot reason about what you cannot read</td>
+      </tr>
+      <tr>
+          <td>Extract</td>
+          <td>Identify rooms, scripts, items, registers, verbs</td>
+          <td>Build the vocabulary of the game world</td>
+      </tr>
+      <tr>
+          <td>Lift</td>
+          <td>Abstract-interpret player-affected state into guarded transitions</td>
+          <td>Turn imperative script code into a transition relation</td>
+      </tr>
+      <tr>
+          <td>Analyze</td>
+          <td>Tarjan SCC condensation + reachability fixpoints</td>
+          <td>Make the problem finite</td>
+      </tr>
+      <tr>
+          <td>Derive</td>
+          <td>Compute which crossings are unrecoverable</td>
+          <td>Find the actual stranding points</td>
+      </tr>
+      <tr>
+          <td>Patch</td>
+          <td>Compile and install guards, or refuse</td>
+          <td>Fix it, or decline to fix it</td>
+      </tr>
+  </tbody>
+</table>
+<p>The decompiler is a fork of sci-tools on a JSON-IR branch, roughly <strong>277 additive lines</strong>, whose purpose is to keep a typed AST instead of discarding it after printing. The analyzer itself is about <strong>7,200 lines of Python 3 using only the standard library</strong> — Tarjan, breadth-first search and fixpoint iteration, with no numpy, no networkx and no solver bindings. That is worth noting: the algorithmic core of a walking-dead detector is not exotic. It is graph reachability done carefully.</p>
+<h3 id="why-strongly-connected-components-are-the-whole-trick">Why strongly-connected components are the whole trick</h3>
+<p>The key insight, as the project states it, is that <strong>only one-way edges between strongly-connected components can strand you — which is what makes the problem finite.</strong></p>
+<p>Inside a strongly-connected component, everything reaches everything else. You can wander freely and always come back. Nothing inside a single SCC can trap you in a way you cannot also walk out of. The dangerous transitions are the irreversible ones <em>between</em> components: the door that locks behind you, the bridge that collapses, the one-way drop.</p>
+<p>So the algorithm is: condense the room-transition graph into its SCCs, then look only at the edges between them. On <em>Leisure Suit Larry 2</em> the analyzer condensed <strong>101 rooms into 27 strongly-connected components</strong> tracked against <strong>40 gating registers</strong> — the flags and variables that record what the player has done. A 101-room game becomes a 27-node problem, and only a subset of the edges between those nodes need to be scrutinized.</p>
+<p>This is the same idea that shows up in the academic literature under different names. Mawhorter and Smith&rsquo;s <em>Softlock Detection for Super Metroid with Computation Tree Logic</em> (FDG 2021) frames level designs as containing &ldquo;errors called softlocks where a player traversing the level in an unintended manner can become permanently stuck,&rdquo; and uses CTL model checking over a model of the game rather than brute-force play — so detection is exhaustive over the model instead of over a finite set of playthroughs. Their follow-up replaced explicit search with symbolic breadth-first search over a BDD-encoded transition relation, buying reachability queries without paying a cost linear in the number of states. That formulation supports precisely the questions a walking-dead detector needs: <em>can I collect item A without beating boss B?</em> is the complete set of reachable states and shortest-path advice from any reachable state to any goal, asked as a query instead of a search.</p>
+<p>Earlier model-based approaches cited in the same line of work include Petri nets, hyperstate space graphs and computation tree logic — a reminder that this problem has a formal-methods ancestry well before anybody attached an agent to it.</p>
+<h2 id="finding-the-stranding-required-later-obtainable-now-irreversibly-missable">Finding the Stranding: Required Later, Obtainable Now, Irreversibly Missable</h2>
+<p>With the graph condensed, the actual detection rule is a conjunction of three questions about each item or capability:</p>
+<ol>
+<li><strong>Required later?</strong> Is this item or flag needed downstream of some transition you might take?</li>
+<li><strong>Obtainable now?</strong> Can it still be picked up from where you stand?</li>
+<li><strong>Irreversibly missable?</strong> After this crossing, does access to it become permanently impossible?</li>
+</ol>
+<p>All three together is a stranding condition. Any one of them absent is not. An item you cannot get and will never need is scenery. An item you need and can still get is a puzzle. The only thing that matters is the intersection — which is why a naive &ldquo;did the player miss something?&rdquo; checker produces noise, while a reachability-quotient checker produces a short list.</p>
+<p>On the <em>Leisure Suit Larry 2</em> run, that intersection produced <strong>15 item softlocks plus one disjunctive group</strong> — a case where the stranding happens if the player misses any of several items rather than one named item. The full run recompiled <strong>117 of 118 scripts into 10 patch files</strong>.</p>
+<p>The analyzer also carries a design principle worth stealing: <strong>nothing is declared per title.</strong> The start room, victory room, death signal and debug flags are all discovered from the game&rsquo;s own code. Validated across five games spanning both engine eras (SCI0 from 1988 through SCI1.1 in 1992) with no game-specific analysis code — <em>Leisure Suit Larry 2</em>, <em>King&rsquo;s Quest IV</em>, <em>King&rsquo;s Quest VI</em>, <em>Laura Bow 2</em> and <em>King&rsquo;s Quest V</em>. A detector that needs a hand-written config per game has not solved the problem; it has automated one instance of it.</p>
+<h2 id="guard-placement-refuse-at-the-last-moment-the-player-can-still-comply">Guard Placement: Refuse at the Last Moment the Player Can Still Comply</h2>
+<p>Detection is half the job. The other half is what you do about it, and this is where most naive fixes make things worse.</p>
+<p>The rule lucasartsifier uses: <strong>place the guard at the last point where the player can still comply.</strong> Demanding that a player drop something they can no longer drop is a wall, and the project treats a wall as worse than the bug it fixed. A guard that converts a silent walking-dead state into a visible, explainable refusal is good; a guard that converts it into an unexplained &ldquo;you can&rsquo;t go that way&rdquo; for the rest of the game is a different bug with the same name.</p>
+<p>That single rule reshapes the tooling. You are not patching the room where the player got stuck — you are patching upstream, at the last checkpoint where the player still holds agency. Which means the analyzer has to compute, for every proposed guard site, whether the player can still satisfy the guard there. Guard placement is a design decision computed by the analyzer, not a string edit applied by the patcher.</p>
+<p>The patch format is Sierra&rsquo;s own loose <code>script.NNN</code> override, and <code>RESOURCE.MAP</code> and the volume files are never modified — so deleting the overlay files reverts the game completely. Guard modes ship as Full, Lite and Off. Shipping a reversible patch matters more than it sounds: it means a player, a preservationist or a developer can audit the fix by removing it.</p>
+<h2 id="two-sided-guards-when-carrying-an-item-is-the-fatal-mistake">Two-Sided Guards: When Carrying an Item Is the Fatal Mistake</h2>
+<p>Almost every article on softlocks treats the problem as <strong>missing</strong> something. The interesting cases are the mirror image, and this is the detail nearly nobody covers.</p>
+<p>Some items are fatal to <em>hold</em> at a particular location. In <em>Leisure Suit Larry 2</em>, being in possession of the Spinach Dip is lethal in room 138. A correct guard set therefore needs <strong>negative literals</strong> — preconditions of the form &ldquo;refuse this crossing if the player HAS this item&rdquo; — not just the positive form &ldquo;refuse if the player LACKS this item.&rdquo;</p>
+<p>That asymmetry is why you cannot bolt a softlock check onto a simple inventory-requirement system. Requirement systems model what the player needs; walking-dead detection has to model what the player&rsquo;s possession <em>does</em>, in both directions. A guard language that only expresses positive preconditions will silently pass an entire class of unwinnable states — the ones where the player is punished for having been thorough.</p>
+<h2 id="prove-it-or-dont-ship-it-re-verifying-the-guarded-model">Prove It or Don&rsquo;t Ship It: Re-Verifying the Guarded Model</h2>
+<p>The differentiator between a heuristic and an instrument is that an instrument asserts a <em>checked</em> property. Two safety conditions are enforced inside the pipeline itself:</p>
+<ol>
+<li>The guarded model is <strong>re-verified to prove the guards introduce no new softlocks.</strong> The output is an asserted property, &ldquo;NEW softlocks introduced: none,&rdquo; not a hope.</li>
+<li><strong>The pipeline refuses to emit anything</strong> if the guards fail verification, or if a script it edited will not compile.</li>
+</ol>
+<p>That second clause is the important discipline. Most automated repair has no refusal path — it produces output because output is the deliverable. A pipeline that can decline to ship is a pipeline whose output you can trust, because the failure mode of a bad guard is not a cosmetic diff, it is a second softlock in a different room, invisible until a player finds it. You have replaced one walking-dead state with another and made it look like a fix.</p>
+<p>There is no way to verify softlock-freedom by testing alone; the space of legal play is exponential. The only tractable proof obligation is over the model — which is exactly why static analysis earns its keep here, and why the FDG cost multiples (3–5×, up to 3–15×) are the honest price of a guarantee rather than a sample.</p>
+<p>The project also states its limits plainly: <strong>no game has yet had a single continuous start-to-finish run on a patched build.</strong> <em>King&rsquo;s Quest V</em> comes closest, tested row by row. And the analyzer hits real trouble on the <em>Quest for Glory</em> games, where abstract state explosion prevents completion — the authors suspect that abstracting away player stats, combat and health consumables would fix it. Any article that promises &ldquo;just add AI agents&rdquo; without mentioning state explosion is hiding the hard part. The analyzer that handles 101 rooms and 27 components cannot finish a game whose state includes a character sheet.</p>
+<h2 id="know-what-to-leave-alone-do-not-guard-everything">Know What to Leave Alone: Do Not Guard Everything</h2>
+<p>A detector that prevents every possible death is a detector that has destroyed the game.</p>
+<p>The project deliberately keeps avoidable deaths in, and its rule for the distinction is the point: it separates unwinnable states from avoidable deaths <strong>by reachability, not by the death condition.</strong> A death you can still recover from where you stand is not a softlock. It is feedback. It teaches the player what the puzzle wants, and removing it removes the only signal the designer had for communicating the solution.</p>
+<p>Maher observed the same trade-off from the design side: the later Lucasfilm Games adventures strained hardest to make the walking-dead syndrome impossible, and were often forced into contrivances that &ldquo;arguably sacrifice too much of that all-important illusion of freedom.&rdquo; Locking every door behind you and refusing to take items prevents unwinnable states the way a padded room prevents falls. The right target is not &ldquo;no player ever loses.&rdquo; It is &ldquo;no player is ever silently doomed.&rdquo;</p>
+<p>Maher also draws a line worth keeping in the taxonomy: accidental dead ends are different from <strong>intentional traps inserted to pad play length</strong>. The former is the bug. The latter is a design choice that the same tooling can detect just as easily — and would report with equal confidence.</p>
+<h2 id="the-dynamic-approach-rl-and-llm-agents-that-explore-their-way-into-dead-ends">The Dynamic Approach: RL and LLM Agents That Explore Their Way Into Dead Ends</h2>
+<p>Everything above is static. The other half of the field plays the game, and the numbers there have moved a long way.</p>
+<p><strong>TITAN</strong> — <em>Leveraging LLM Agents for Automated Video Game Testing</em> (Zhejiang University, NetEase Fuxi AI Lab, SMU) — is the most useful recent reference because it decomposes the agent rather than reporting a score. Four components:</p>
+<ol>
+<li><strong>Perceive and abstract</strong> high-dimensional game states into something the model can reason about.</li>
+<li><strong>Proactively optimize and prioritize</strong> available actions instead of sampling uniformly.</li>
+<li><strong>Long-horizon reasoning</strong> with action-trace memory and reflective self-correction.</li>
+<li><strong>LLM-based oracles</strong> that detect functional and logic bugs and produce diagnostic reports.</li>
+</ol>
+<p>Reported results: <strong>95% task completion against 82% for the best automated baseline, and 15 bugs detected against 9</strong> — including four previously unknown bugs. The ablation study reports the Reflective Reasoning Module contributes the most, and that all components are indispensable. Most importantly, TITAN is deployed in <strong>eight real-world game QA pipelines</strong>, which is the difference between a benchmark result and something a studio actually runs. Its motivation is explicitly the state-action space and long-horizon reasoning limits of earlier LLM game-playing approaches.</p>
+<p><strong>Reinforcement-learning playtesting</strong> predates the LLM wave and still supplies the deployment-scale numbers. EA/DICE&rsquo;s production experience reported <strong>250 concurrent agents across 5 servers for <em>Battlefield 2042</em>, versus only 7 for <em>Dead Space</em></strong> — and roughly <strong>45 seconds of reset overhead per episode</strong>, which is the unglamorous constraint that dominates any planning: every failed attempt costs you a level load. EA SEED&rsquo;s agents could navigate <strong>80% of test levels within 24 hours of training from scratch</strong>, and found bugs in areas human testers had cleared for weeks.</p>
+<p>EA SEED&rsquo;s most transferable finding is about reward design rather than model architecture: <strong>reward thorough exploration, not the hunting of specific bugs.</strong> A coverage-driven agent finds exploits nobody scripted. A bug-specific reward finds exactly the bugs you already knew about, which is the opposite of what an unknown-defect detector is for.</p>
+<p>Narrower, more measurable dynamic results round out the picture:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Approach</th>
+          <th>Reported result</th>
+          <th>Source</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>DQN playtesting agent (RLBGameTester)</td>
+          <td>92.3% accuracy detecting collision bugs, 88.7% on progression-blocking issues across 15 test levels</td>
+          <td>Wagde &amp; Bide, cited in RL game testing writeup</td>
+      </tr>
+      <tr>
+          <td>EA SEED (RL)</td>
+          <td>80% of test levels navigated within 24h of fresh training</td>
+          <td>EA/aigamingdev summary</td>
+      </tr>
+      <tr>
+          <td>TITAN (LLM agent)</td>
+          <td>95% task completion vs 82% baseline; 15 bugs vs 9</td>
+          <td>arXiv 2509.22170</td>
+      </tr>
+      <tr>
+          <td>VideoGameQA-Bench (VLM)</td>
+          <td>Visual glitch detection rose from 57.2% to 82.8% with GPT-4o; best open-weight (Qwen-2.5-VL) 70.0%</td>
+          <td>Taesiri et al.</td>
+      </tr>
+      <tr>
+          <td>Vendor RL claim</td>
+          <td>~10M unique states/day vs ~2,000/week for a 5-person manual team; 50+ softlock incidents per project</td>
+          <td>Vendor case study — <strong>unverified, treat as marketing</strong></td>
+      </tr>
+  </tbody>
+</table>
+<p>That last row is worth calling out explicitly, because this is exactly where the field&rsquo;s hype lives. A vendor reporting ten million states a day against a five-person manual team&rsquo;s two thousand a week is comparing two different things: state <em>visits</em> (which include trivially similar states) against test <em>cases</em> (which are curated). Without a definition of &ldquo;unique state&rdquo; and an independent audit, the number is not evidence. The peer-reviewed figures above it are small and specific; the marketing figure is enormous and unfalsifiable. Prefer the former.</p>
+<h2 id="static-vs-dynamic-vs-hybrid-which-one-can-you-actually-verify">Static vs Dynamic vs Hybrid: Which One Can You Actually Verify?</h2>
+<p>The tired framing is &ldquo;static analysis versus AI agents.&rdquo; The useful framing is: <strong>which approach can discharge which proof obligation?</strong></p>
+<p>Static analysis gives you exhaustiveness <em>over a model</em> and a re-checkable proof obligation. It can say &ldquo;no state reachable in this abstraction can strand the player&rdquo; and back it with a verification run that a skeptic can repeat. It cannot see anything the model abstracts away — which is exactly why it collapses on games with character stats and consumables.</p>
+<p>Dynamic agents give you coverage of the <em>real</em> system, reproducible traces, and evidence of bugs the model never encoded. They cannot give you a proof, because sampling — however intelligent — does not cover an exponential space.</p>
+<table>
+  <thead>
+      <tr>
+          <th></th>
+          <th>Static analysis</th>
+          <th>RL agent</th>
+          <th>LLM agent</th>
+          <th>Hybrid</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Unit of trust</td>
+          <td>Proof over a model</td>
+          <td>Reproducible trace</td>
+          <td>Reproducible trace + report</td>
+          <td>Proof + trace</td>
+      </tr>
+      <tr>
+          <td>Weakness</td>
+          <td>State explosion; abstraction gaps</td>
+          <td>Reset cost; reward hacking</td>
+          <td>Cost per step; nondeterminism</td>
+          <td>Two systems to maintain</td>
+      </tr>
+      <tr>
+          <td>Best at</td>
+          <td>&ldquo;No reachable state strands you&rdquo;</td>
+          <td>Coverage at scale, 24/7</td>
+          <td>Bug oracles, diagnostics, long-horizon reasoning</td>
+          <td>Guarding what you proved, exploring what you didn&rsquo;t model</td>
+      </tr>
+      <tr>
+          <td>Typical evidence</td>
+          <td>&ldquo;NEW softlocks: none,&rdquo; checked</td>
+          <td>80% of levels in 24h</td>
+          <td>95% completion, 15 bugs vs 9</td>
+          <td>Both artifacts</td>
+      </tr>
+  </tbody>
+</table>
+<p>The honest architecture is hybrid, and it maps cleanly onto the two failure questions: <em>is there a state that strands a player?</em> is a static question with a static answer, and <em>does the game actually behave that way?</em> is a dynamic question that only an agent or a player can answer. Use the agent to find the dead ends and to confirm that the real build behaves as the model claims; use the analyzer to prove the fix does not introduce a new one.</p>
+<h2 id="building-your-own-walking-dead-detector-a-practical-checklist">Building Your Own Walking-Dead Detector: A Practical Checklist</h2>
+<p>If you are constructing this rather than reading about it, the sequence that the public work supports is:</p>
+<ol>
+<li><strong>Model the state, don&rsquo;t just log the actions.</strong> You need the things that gate transitions — flags, items, stats, one-way triggers. Log lines that record &ldquo;player pressed X&rdquo; are not a model.</li>
+<li><strong>Condense before you search.</strong> Find strongly-connected components, then examine only inter-component edges. This is what makes the problem finite; skipping it is what makes it blow up.</li>
+<li><strong>Define the goal explicitly, and prove both quantifiers.</strong> Completability (∃ a path) is table stakes. Softlock-freedom (∀ reachable <em>s</em>) is the deliverable. Report them separately, always.</li>
+<li><strong>Compute the three-condition conjunction per item.</strong> Required later, obtainable now, irreversibly missable. Report only the intersection, ranked by how many rooms are behind the stranding point.</li>
+<li><strong>Place guards at the last point of compliance.</strong> For each guard site, verify the player can still satisfy it. A guard nobody can comply with is a wall, and a wall is worse than the bug.</li>
+<li><strong>Support negative preconditions.</strong> Sometimes the fatal mistake is carrying the item, not missing it. A guard language that cannot say &ldquo;refuse if the player HAS this&rdquo; is incomplete.</li>
+<li><strong>Re-verify the guarded model, and refuse to ship on failure.</strong> Assert &ldquo;new softlocks introduced: none&rdquo; as a checked property. Emit nothing if verification fails or a patched script will not compile.</li>
+<li><strong>Keep the informative deaths.</strong> Decide which deaths survive by reachability, not by the death condition. Deleting feedback is not fixing a bug.</li>
+<li><strong>Instrument the live build anyway.</strong> Add stuck-state detection and an in-game report button so that every failure you did not model is captured with build, device and breadcrumbs. Group identical failures into one ranked issue with an occurrence count, tie each to the build it happened on, and verify the signature disappears in the next release. Assume the dev machine is the least representative device the game will ever run on.</li>
+<li><strong>Budget for the explosion.</strong> If your game has consumable stats and combat, expect the abstraction to explode — the public analyzer simply cannot complete on <em>Quest for Glory</em>. Plan to abstract stats away, or plan to accept incomplete coverage. Do not promise what the state space will not allow.</li>
+</ol>
+<h2 id="frequently-asked-questions-about-walking-dead-state-detection">Frequently Asked Questions About Walking Dead State Detection</h2>
+<h3 id="what-is-a-walking-dead-state-in-a-game">What is a walking dead state in a game?</h3>
+<p>A walking dead state is a situation where the player keeps playing a game that has, without their knowledge, become unwinnable. The term comes from adventure-game design criticism — Jimmy Maher&rsquo;s &ldquo;walking-dead syndrome&rdquo; — and describes the player&rsquo;s situation rather than the code. The mechanical condition that causes it is called a softlock: the FDG 2025 literature defines that as a state where the player has not won or lost, but cannot make progress toward the goal. The game keeps running and keeps accepting input in both cases, which is precisely why neither shows up in crash telemetry.</p>
+<h3 id="is-a-walking-dead-state-the-same-as-a-softlock">Is a walking dead state the same as a softlock?</h3>
+<p>No, and the distinction is useful. A softlock is a property of the game state — a reachable configuration from which the goal is unreachable. A walking dead state is a property of the player&rsquo;s session — a human who has not yet realized they are in that configuration and keeps playing. One softlock can produce many walking-dead states, because the player may wander for hours before giving up. Tooling that only detects the mechanical condition is still correct; tooling that only tracks player behavior is not, because most players in a walking-dead state never report anything at all.</p>
+<h3 id="why-doesnt-crash-reporting-catch-unwinnable-states">Why doesn&rsquo;t crash reporting catch unwinnable states?</h3>
+<p>Because nothing crashes. A softlock produces a game that renders, responds to input, plays audio and saves progress — every subsystem reports healthy. Crash telemetry fires on exceptions and signal faults, and a softlock generates none of them. Bugnet&rsquo;s framing is that softlocks are a data problem rather than a design problem: the stuck player is invisible to the instruments a live-ops team normally trusts, and there is a silent majority who hit the wall and simply stop playing rather than filing anything. The worse and more confusing the bug, the quieter the signal, because the players most affected are the ones who leave.</p>
+<h3 id="can-an-ai-agent-detect-softlocks-by-playing-the-game">Can an AI agent detect softlocks by playing the game?</h3>
+<p>It can detect them and it can demonstrate them, but it cannot prove they are absent. TITAN, an LLM-agent testing system from Zhejiang University, NetEase Fuxi AI Lab and SMU, reports 95% task completion against an 82% automated baseline and 15 bugs detected against 9, and is deployed in eight real-world QA pipelines. Reinforcement-learning approaches have gone further in production — EA/DICE ran 250 concurrent agents on <em>Battlefield 2042</em>. But sampling, however intelligent, does not cover an exponential state space. Agents give you coverage and reproducible traces; only static analysis over a model gives you a proof obligation you can re-check. The workable design is hybrid: agents explore and reproduce, an analyzer proves the resulting guards introduce no new softlocks.</p>
+<h3 id="how-do-you-prevent-a-walking-dead-state-without-ruining-the-game">How do you prevent a walking dead state without ruining the game?</h3>
+<p>By placing guards at the last point where the player can still comply, and by guarding only what actually strands them. In practice that means refusing a crossing while the player can still go back and fix it, never demanding they undo something they can no longer undo, and supporting negative preconditions — refusing a crossing because the player is <em>carrying</em> the wrong item, not only because they lack the right one. Just as importantly, leave avoidable deaths alone: a death you can still recover from is feedback that teaches the puzzle, and the decision about which deaths survive should be made by reachability, not by the death condition. The goal is not to remove all failure. It is to make sure failure is never silent.</p>
+]]></content:encoded></item></channel></rss>
