@@ -1,0 +1,469 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Claude Code Remote Session MCP on RockB</title><link>https://baeseokjae.github.io/tags/claude-code-remote-session-mcp/</link><description>Recent content in Claude Code Remote Session MCP on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 01 Oct 2026 01:48:47 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/claude-code-remote-session-mcp/index.xml" rel="self" type="application/rss+xml"/><item><title>SiloLink MCP Bridge: Run Claude Code Sessions on Remote Machines</title><link>https://baeseokjae.github.io/posts/silolink-mcp-bridge-remote-claude-code/</link><pubDate>Thu, 01 Oct 2026 01:48:47 +0000</pubDate><guid>https://baeseokjae.github.io/posts/silolink-mcp-bridge-remote-claude-code/</guid><description>SiloLink is an MCP bridge that lets you drive Claude Code sessions on remote machines from Slack, Discord, Teams, or SMS. Setup, tools, and gotchas.</description><content:encoded><![CDATA[<p>SiloLink is a local Node daemon that exposes an MCP server on http://localhost:3579/mcp, so a Claude Code session running in tmux on a remote machine can register, poll for messages, and reply into a DSiloed conversation you drive from the web UI, Slack, Discord, Teams, or SMS.</p>
+<p>That single sentence is the whole architecture, and it is also the source of every trade-off worth knowing before you install it. SiloLink does not replace Claude Code, does not proxy your model calls, and does not run a cloud sandbox. It is a bridge in the strict sense: your code, your filesystem, and your API credentials stay on the machine you already use, while the <em>conversation</em> lives in a vendor UI you can reach from a phone.</p>
+<p>This guide covers the install and configuration path, the 14 MCP tools and which of them you should actually call, the poll-loop contract that keeps sessions alive, the headless permissions trap that trips up most first-time users, how SiloLink compares to Anthropic&rsquo;s first-party Remote Control and to self-hosted relays like agent-bridge and claude-relay, and where the trust boundary sits. Every technical claim below traces to the package README, the shipped source tree, or the npm registry.</p>
+<h2 id="what-is-silolink-and-what-problem-does-the-mcp-bridge-solve">What Is SiloLink and What Problem Does the MCP Bridge Solve?</h2>
+<p>SiloLink (npm package <code>@dsiloed/silo-link</code>, CLI binary <code>silolink</code>) is an MIT-licensed local daemon that connects Claude Code sessions to <a href="https://www.dsiloed.com">DSiloed</a> conversations. It was first published on 2026-03-26 and has shipped 98 versions through 2026-09-27, when version 1.19.23 landed. The npm registry reports Node 20 or newer as the engine requirement, and the package has accumulated 16,861 lifetime downloads with roughly 3,600-3,700 per month in steady state (<a href="https://registry.npmjs.org/@dsiloed/silo-link">npm registry</a>).</p>
+<p>The problem it solves is specific. You have a long-running Claude Code session on a box that is not your laptop - a build server, a home workstation, an always-on dev VM. You want to check on it, answer its permission prompts, and send it new instructions without SSH-ing in, without an open terminal, and without exposing the machine to the public internet. SiloLink turns that session into a chat participant you can message from anywhere the DSiloed conversation channels reach.</p>
+<p>What SiloLink is not: it is not a model proxy, it is not a cloud coding environment, and it is not vendor-neutral. The daemon authenticates to the DSiloed backend and registers into that vendor&rsquo;s Agent Dashboard, which is the single biggest editorial caveat for anyone who wants a neutral bridge.</p>
+<h2 id="how-does-the-silolink-mcp-bridge-work-under-the-hood">How Does the SiloLink MCP Bridge Work Under the Hood?</h2>
+<p>The README&rsquo;s own diagram is the clearest explanation. A Claude Code process runs inside a tmux session and speaks MCP to SiloLink on port 3579. SiloLink simultaneously holds a WebSocket connection to the DSiloed backend over ActionCable and a REST control channel, exposing two channels to the server side: a ConversationChannel for messages and a ControlChannel for launch/stop commands.</p>
+<p>Messages therefore flow in two directions at once. Inbound: a human types in the web UI, Slack, Discord, Teams, or SMS; the message lands on DSiloed; ActionCable pushes it to your daemon; SiloLink enqueues it per session; Claude Code picks it up on its next <code>remote_poll</code>. Outbound: Claude Code calls an MCP tool, SiloLink posts to the REST API, and the message appears in the conversation thread.</p>
+<p>Three internal components do the work. A session manager keeps a registry validated across three maps every five minutes. A message queue holds a per-session inbound buffer with an acknowledgment protocol, which is why messages sent while a session is still starting are delivered on registration rather than lost. A launcher family - <code>claude-launcher.ts</code>, <code>gemini-launcher.ts</code>, <code>codex-launcher.ts</code> on top of <code>base-tmux-launcher.ts</code> - spawns and manages the tmux processes.</p>
+<p>The documented defaults matter for debugging: HS256 JWTs with 24-hour validity auto-refreshed every 12 hours, WebSocket reconnection with exponential backoff from 1s to a 60s cap, echo prevention via tracked outbound message IDs plus prefix matching, a 30-second abort on every DSiloed API call, and idle session cleanup after one hour.</p>
+<h3 id="what-actually-leaves-your-machine">What Actually Leaves Your Machine?</h3>
+<p>Source code, filesystem access, and model credentials do not transit the bridge. What does transit is conversation text: every prompt you send and every message Claude Code posts back travels through the DSiloed SaaS over an authenticated WebSocket. The credential that authenticates that channel lives in <code>~/.silolink/config.json</code> at mode 0600 as a JWT - the README states plainly that your password is never written to disk, only the token.</p>
+<p>That is a real trust boundary, not a marketing one, and it is the design choice the self-hosted alternatives deliberately reject. Treat the config file as a production secret.</p>
+<h2 id="what-do-you-need-before-installing-silolink">What Do You Need Before Installing SiloLink?</h2>
+<p>Three prerequisites, none of them exotic:</p>
+<ul>
+<li><strong>Node.js 20 or newer.</strong> The npm package declares <code>engines: { node: &quot;&gt;=20&quot; }</code>.</li>
+<li><strong>tmux.</strong> Every session SiloLink launches is a tmux session named <code>silolink-claude-&lt;timestamp&gt;</code>. Without tmux on the remote box, launching fails.</li>
+<li><strong>A DSiloed / Portablemind account</strong> plus either a user login or an agent token, because the daemon has to authenticate before it can register sessions.</li>
+</ul>
+<p>If you want the <code>mcp-remote</code> client path (covered below), <code>npx</code> needs to be able to fetch that package - it sees roughly 776,000 weekly downloads, so it is a well-trodden dependency.</p>
+<h2 id="how-do-you-install-and-configure-the-silolink-daemon">How Do You Install and Configure the SiloLink Daemon?</h2>
+<p>Installation is one command:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>npm install -g @dsiloed/silo-link
+</span></span></code></pre></div><p>Then run the configuration wizard:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>silolink config
+</span></span></code></pre></div><p>The wizard asks first whether this daemon runs as a <strong>user</strong> or an <strong>agent</strong>, and that answer is persisted as <code>identity_type</code>. It changes where spawned Claude Code sessions start, which matters because that directory is also where Claude Code reads <code>.mcp.json</code> and <code>CLAUDE.md</code> from.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Identity</th>
+          <th>Credential path</th>
+          <th>Session launch directory</th>
+          <th>Best for</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>user</code> (default)</td>
+          <td>Email/username + password, exchanged for a JWT at <code>POST /api/v1/users/login</code></td>
+          <td><code>projects_path</code>, or <code>repo_path</code> when a launch command supplies one</td>
+          <td>One human driving several remotes</td>
+      </tr>
+      <tr>
+          <td><code>agent</code></td>
+          <td>JWT pasted from the LLM Manager UI (&ldquo;Generate SiloLink Token&rdquo;)</td>
+          <td>Staging directory <code>~/.silolink/staging/&lt;env&gt;/</code></td>
+          <td>Machine identities, multi-agent fleets</td>
+      </tr>
+  </tbody>
+</table>
+<p>The user path is the single-environment remote-bridge case and typically pairs with <code>silolink setup-claude-md</code>, which injects the SiloLink protocol section into your <code>CLAUDE.md</code> once. The agent path never touches human credentials - useful when several agents share a host, since each gets its own staging directory instead of competing for one project directory.</p>
+<p>Useful config keys: <code>claude_command</code>, <code>claude_working_directory</code>, <code>claude_auto_respawn</code>, <code>claude_idle_timeout_ms</code> (30,000 by default), <code>agent_provider</code> (<code>claude</code> by default, <code>gemini</code>, or <code>codex</code> - with <code>openai</code> accepted as an alias), <code>codex_command</code>, <code>codex_args</code>, <code>codex_resume_enabled</code> (false by default), and <code>mcp_port</code> (3579).</p>
+<p>Start and inspect it with:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>silolink start --daemon   <span style="color:#75715e"># background</span>
+</span></span><span style="display:flex;"><span>silolink status           <span style="color:#75715e"># connection state and active sessions</span>
+</span></span><span style="display:flex;"><span>silolink sessions         <span style="color:#75715e"># list sessions</span>
+</span></span><span style="display:flex;"><span>curl http://localhost:3579/health
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># { &#34;status&#34;: &#34;ok&#34;, &#34;sessions&#34;: 2, &#34;cable&#34;: &#34;connected&#34; }</span>
+</span></span></code></pre></div><p>The health endpoint is the fastest way to separate &ldquo;daemon down&rdquo; from &ldquo;Claude session down&rdquo;: <code>cable: &quot;connected&quot;</code> proves the ActionCable link is live even when zero sessions are running.</p>
+<h2 id="how-do-you-connect-claude-code-to-the-silolink-mcp-server">How Do You Connect Claude Code to the SiloLink MCP Server?</h2>
+<p>SiloLink&rsquo;s MCP server is Streamable HTTP on <code>http://localhost:3579/mcp</code>, and the documented client snippet routes through the <code>mcp-remote</code> proxy:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;mcpServers&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">&#34;silolink&#34;</span>: {
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;command&#34;</span>: <span style="color:#e6db74">&#34;npx&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#f92672">&#34;args&#34;</span>: [<span style="color:#e6db74">&#34;mcp-remote&#34;</span>, <span style="color:#e6db74">&#34;http://localhost:3579/mcp&#34;</span>]
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>Why a proxy at all? Older and stdio-only MCP client configurations cannot speak HTTP to a server directly. The <a href="https://github.com/geelen/mcp-remote">mcp-remote</a> package exists precisely to bridge that gap, which is why it carries about 1,608 stars and ~776k weekly downloads. Current Claude Code builds accept <code>--transport http</code>, which removes the proxy hop entirely; if you are troubleshooting a SiloLink connection and you are on a recent CLI, try the direct transport before debugging the proxy. The broader MCP transport landscape matters here too: the ecosystem has moved decisively to Streamable HTTP, <a href="https://nordicapis.com/10-interesting-mcp-statistics/">with roughly 93% of servers on that transport</a> versus the deprecated SSE - so this is a client-side gap, not a server-side one. If the terms are still fuzzy, <a href="/posts/api-vs-mcp-difference-guide-2026/">API vs MCP: what actually differs</a> is the right primer first.</p>
+<h3 id="where-should-the-mcp-config-live">Where Should the MCP Config Live?</h3>
+<p>It must be in the directory Claude Code starts in - which, for a SiloLink-launched session, means the <code>projects_path</code> or <code>repo_path</code> the launcher chose. A config in your home directory will not be read by a session that starts in a project folder. This is the first thing to check when Claude Code reports no SiloLink tools.</p>
+<h2 id="how-do-you-launch-your-first-remote-claude-code-session">How Do You Launch Your First Remote Claude Code Session?</h2>
+<p>Two routes, both documented:</p>
+<ul>
+<li><strong>From the CLI:</strong> <code>silolink launch</code> or <code>silolink launch -p &quot;Work on the auth refactor&quot;</code>.</li>
+<li><strong>From the web UI:</strong> click <strong>+</strong> in the SiloLinks section of TeamChat, name the session, optionally add a prompt, then <strong>Launch Session</strong>.</li>
+</ul>
+<p>The lifecycle is the same either way. SiloLink posts &ldquo;Starting session&hellip;&rdquo; then spawns the tmux process; Claude Code registers with the daemon and, roughly 20-30 seconds later, posts &ldquo;Session ready!&rdquo; as it enters the poll loop. You can watch it directly with <code>tmux attach -t silolink-claude-&lt;timestamp&gt;</code> and detach with Ctrl+B, D.</p>
+<p>There is also an auto-launch path worth knowing about: when a message arrives on a SiloLink conversation with no active session, the daemon posts &ldquo;Restarting session&hellip;&rdquo;, spawns Claude Code, and buffers the triggering message until the new session registers. That is what makes the bridge feel like a chat contact rather than a process you have to babysit.</p>
+<p>Sessions are one per conversation, and multiple sessions run simultaneously. Idle sessions are cleaned up after one hour; <code>silolink stop</code> kills every tmux session and completes the agent sessions on DSiloed.</p>
+<h2 id="what-is-the-silolink-poll-loop-contract">What Is the SiloLink Poll-Loop Contract?</h2>
+<p>This is the part every integration gets wrong. SiloLink&rsquo;s own documentation recommends a non-blocking poll loop, and the canonical order for a session that is reattaching to existing work is:</p>
+<ol>
+<li><code>remote_register</code> - register the session and create or attach a conversation. Returns <code>{ session_id, conversation_id, conversation_url }</code>.</li>
+<li><code>remote_load_context</code> - fetch prior history and the last <code>claude_resume_id</code>. Returns <code>{ success, conversation_id, resume_id, message_count, history }</code>.</li>
+<li><code>remote_poll</code> - non-blocking check for the next message, typically in a ~3 second loop.</li>
+</ol>
+<p>The ordering is not cosmetic. Session continuity depends on <code>remote_load_context</code> returning the stored <code>resume_id</code>; skip it and a respawned tmux pane comes back with no idea what it was doing. If you run multiple Claude Code sessions against one repo, the same discipline applies to your session identity - the <a href="/posts/message-your-other-claude-code-sessions/">multi-session guide for Claude Code</a> covers the identity side of that problem.</p>
+<p><code>remote_poll</code> is preferred over <code>remote_wait_for_command</code> for a concrete reason stated in the tool docs: a blocking call that gets cancelled can lose a message, while a poll simply returns <code>{ success: true, pending: true }</code> and tries again. The trade-off is latency and idle token spend - you are paying for a loop instead of being woken by a push.</p>
+<h2 id="which-of-the-14-silolink-mcp-tools-do-you-actually-use">Which of the 14 SiloLink MCP Tools Do You Actually Use?</h2>
+<p>The bridge exposes 14 tools. Medians matter here: MCP servers carry <a href="https://nordicapis.com/10-interesting-mcp-statistics/">a median of about five tools each</a>, so SiloLink sits well above typical surface area.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Tool</th>
+          <th>Blocking?</th>
+          <th>Use it for</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>remote_register</code></td>
+          <td>No</td>
+          <td>Registering the session, attaching a conversation</td>
+      </tr>
+      <tr>
+          <td><code>remote_load_context</code></td>
+          <td>No</td>
+          <td>Restoring history and <code>resume_id</code> after a spawn</td>
+      </tr>
+      <tr>
+          <td><code>remote_notify</code></td>
+          <td>No</td>
+          <td>Fire-and-forget progress messages</td>
+      </tr>
+      <tr>
+          <td><code>remote_ask</code></td>
+          <td>Yes</td>
+          <td>Posting a question and waiting for a human reply</td>
+      </tr>
+      <tr>
+          <td><code>remote_poll</code></td>
+          <td>No</td>
+          <td>The recommended main loop</td>
+      </tr>
+      <tr>
+          <td><code>remote_check_messages</code></td>
+          <td>No</td>
+          <td>Draining all pending messages at once</td>
+      </tr>
+      <tr>
+          <td><code>remote_wait_for_command</code></td>
+          <td>Yes</td>
+          <td>Blocking wait (docs prefer <code>remote_poll</code>)</td>
+      </tr>
+      <tr>
+          <td><code>remote_sessions</code></td>
+          <td>No</td>
+          <td>Listing active sessions</td>
+      </tr>
+      <tr>
+          <td><code>remote_unregister</code></td>
+          <td>No</td>
+          <td>Unregistering and cleaning up</td>
+      </tr>
+      <tr>
+          <td><code>remote_workspace_create</code></td>
+          <td>No</td>
+          <td>Creating an isolated git worktree</td>
+      </tr>
+      <tr>
+          <td><code>remote_workspace_claim</code></td>
+          <td>No</td>
+          <td>Claiming files with conflict detection</td>
+      </tr>
+      <tr>
+          <td><code>remote_workspace_check</code></td>
+          <td>No</td>
+          <td>Auditing claims across all sessions</td>
+      </tr>
+      <tr>
+          <td><code>remote_workspace_merge</code></td>
+          <td>No</td>
+          <td>Merging the worktree branch back</td>
+      </tr>
+      <tr>
+          <td><code>remote_workspace_list</code></td>
+          <td>No</td>
+          <td>Listing active workspaces</td>
+      </tr>
+  </tbody>
+</table>
+<p>In practice a session uses five or six of these on every turn and the workspace tools on demand. <code>remote_ask</code> is the one to use sparingly in headless mode: it blocks, and an unanswered question stalls the session until the timeout.</p>
+<h2 id="how-do-you-reach-claude-code-from-slack-discord-teams-or-sms">How Do You Reach Claude Code From Slack, Discord, Teams, or SMS?</h2>
+<p>Because the conversation lives on DSiloed, the delivery channel is the vendor&rsquo;s problem, not yours. The README names the DSiloed web UI, Slack, SMS, and Discord explicitly, and the <a href="https://www.dsiloed.com/apps/silolink-demo">interactive demo&rsquo;s architecture diagram</a> labels the PortableMind node &ldquo;Web UI / Slack / Teams / SMS&rdquo;. Messages typed in any of those surfaces arrive at the same conversation, and replies from Claude Code appear in the same thread.</p>
+<p>The honest framing: this is a hosted conversation layer, not a Telegram bot you wrote yourself. You do not configure webhooks or bot tokens for the chat side - you configure one DSiloed account and pick a channel inside it. If your requirement is &ldquo;one bridge, no vendor in the message path,&rdquo; this is where SiloLink loses, and peer-to-peer tools win.</p>
+<h2 id="how-do-you-run-parallel-sessions-without-clobbering-each-other">How Do You Run Parallel Sessions Without Clobbering Each Other?</h2>
+<p>SiloLink gives each session an optional git worktree plus advisory file claims:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 576 41"
+      >
+      <g transform='translate(8,16)'>
+<path d='M 244,24 L 252,8' fill='none' stroke='currentColor'></path>
+<path d='M 552,16 L 560,0' fill='none' stroke='currentColor'></path>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='0' y='20' fill='currentColor' style='font-size:1em'>S</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='8' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='16' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='24' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='32' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='40' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='48' y='20' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>A</text>
+<text text-anchor='middle' x='64' y='20' fill='currentColor' style='font-size:1em'>B</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='72' y='20' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='88' y='20' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='96' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='104' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='112' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='120' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='120' y='20' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='128' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='136' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='144' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='144' y='20' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='152' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='152' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='160' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='168' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='176' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='200' y='4' fill='currentColor' style='font-size:1em'>─</text>
+<text text-anchor='middle' x='200' y='20' fill='currentColor' style='font-size:1em'>─</text>
+<text text-anchor='middle' x='208' y='4' fill='currentColor' style='font-size:1em'>─</text>
+<text text-anchor='middle' x='208' y='20' fill='currentColor' style='font-size:1em'>─</text>
+<text text-anchor='middle' x='216' y='4' fill='currentColor' style='font-size:1em'>►</text>
+<text text-anchor='middle' x='216' y='20' fill='currentColor' style='font-size:1em'>►</text>
+<text text-anchor='middle' x='240' y='4' fill='currentColor' style='font-size:1em'>~</text>
+<text text-anchor='middle' x='240' y='20' fill='currentColor' style='font-size:1em'>~</text>
+<text text-anchor='middle' x='248' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='256' y='4' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='256' y='20' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='264' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='264' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='272' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='272' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='280' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='280' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='288' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='288' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='296' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='296' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='304' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='304' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='312' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='312' y='20' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='320' y='4' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='320' y='20' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='328' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='328' y='20' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='336' y='4' fill='currentColor' style='font-size:1em'>w</text>
+<text text-anchor='middle' x='336' y='20' fill='currentColor' style='font-size:1em'>w</text>
+<text text-anchor='middle' x='344' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='344' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='352' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='352' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='360' y='4' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='360' y='20' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='368' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='368' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='376' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='376' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='384' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='384' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='392' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='392' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='400' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='400' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='408' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='408' y='20' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='416' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='416' y='20' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='424' y='4' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='424' y='20' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='432' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='432' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='440' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='440' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='448' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='448' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='456' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='456' y='20' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='464' y='4' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='464' y='20' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='472' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='472' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='480' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='480' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='488' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='488' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='496' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='496' y='20' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='504' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='504' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='512' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='512' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='520' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='520' y='20' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='528' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='528' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='536' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='536' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='544' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='544' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='552' y='4' fill='currentColor' style='font-size:1em'>h</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>Call <code>remote_workspace_create({ repo: &quot;/home/user/myapp&quot;, branch: &quot;feature/auth&quot; })</code> and you get back <code>{ worktree_path, branch }</code>. <code>remote_workspace_claim({ files: [...] })</code> returns <code>{ claimed, conflicts }</code>, <code>remote_workspace_check({})</code> returns <code>{ all_claims }</code> across every session, and <code>remote_workspace_merge({})</code> returns <code>{ success, merged_branch }</code> after folding the branch back.</p>
+<p>Read the word &ldquo;advisory&rdquo; carefully. The claims are soft locks with cross-session conflict notifications - they tell the other session that a file is taken, but they do not block a write. Two agents that ignore the warning will still clobber each other. If you are new to worktree isolation as a concurrency primitive, <a href="/posts/claude-code-worktrees-guide-2026/">the worktree guide</a> is the mechanical background; here the point is that isolation is the hard guarantee and the lock is only a signal.</p>
+<h2 id="why-is---dangerously-skip-permissions-not-enough-for-headless-sessions">Why Is <code>--dangerously-skip-permissions</code> Not Enough for Headless Sessions?</h2>
+<p>This is the highest-value gotcha in the whole setup, and it is documented from the shipped binary rather than the public schema. On every session spawn, SiloLink&rsquo;s <code>ClaudeLauncher.ensureBypassPermissionsConsent()</code> writes two things:</p>
+<ul>
+<li><code>projects.&lt;cwd&gt;.hasTrustDialogAccepted</code> in <code>~/.claude.json</code> - pre-clearing the workspace trust dialog, which never saves trust for the home directory.</li>
+<li>a top-level <code>skipDangerousModePermissionPrompt: true</code> in <code>~/.claude/settings.json</code>.</li>
+</ul>
+<p>The second write is the one people miss. Without that consent on file, Claude Code still re-prompts on the &ldquo;dangerous pattern&rdquo; class - <code>rm -rf</code>, <code>sudo</code>, and friends - even when launched with <code>--dangerously-skip-permissions</code> and even when the in-session footer shows the bypass mode as on. The footer reflects the mode; the consent key is the gate, and Claude Code&rsquo;s internal check reads it at the top level of the settings object, not nested under <code>permissions</code>. The published settings schema does not document the key as of Claude Code 2.1.x.</p>
+<p>Verify it directly:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>python3 -c <span style="color:#e6db74">&#39;import json; print(json.load(open(&#34;&#39;</span><span style="color:#e6db74">&#34;</span>$HOME<span style="color:#e6db74">&#34;</span><span style="color:#e6db74">&#39;/.claude/settings.json&#34;)).get(&#34;skipDangerousModePermissionPrompt&#34;))&#39;</span>
+</span></span></code></pre></div><p>If that prints <code>False</code> or <code>None</code>, restart silolink so the launcher rewrites it. The writes are idempotent and shallow-merge, so theme, plugins, and your <code>permissions</code> block survive.</p>
+<p>Some prompts are unavoidable by design: Claude Code keeps a hardcoded circuit breaker for catastrophic patterns like <code>rm -rf /</code> that re-prompts regardless of settings. Those need a human, which is exactly when the chat channel earns its keep.</p>
+<p>If you would rather not bypass at all, the least-privilege alternative is to allow only the bridge&rsquo;s own tools:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{ <span style="color:#f92672">&#34;permissions&#34;</span>: { <span style="color:#f92672">&#34;allow&#34;</span>: [<span style="color:#e6db74">&#34;mcp__silolink__*&#34;</span>] } }
+</span></span></code></pre></div><h2 id="how-do-you-operate-and-troubleshoot-silolink">How Do You Operate and Troubleshoot SiloLink?</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Symptom</th>
+          <th>Likely cause</th>
+          <th>Check</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Claude Code sees no SiloLink tools</td>
+          <td><code>.mcp.json</code> not in the session&rsquo;s start directory</td>
+          <td><code>silolink status</code>, then confirm the launch dir</td>
+      </tr>
+      <tr>
+          <td><code>mcp-remote</code> hangs or refuses the OAuth callback</td>
+          <td>Proxy transport issue</td>
+          <td>Retry with <code>--transport http</code> on a current CLI</td>
+      </tr>
+      <tr>
+          <td>Session ready but silent</td>
+          <td>Poll loop never started</td>
+          <td><code>tmux attach</code> to the session, inspect the transcript</td>
+      </tr>
+      <tr>
+          <td>Repeated re-prompts for dangerous commands</td>
+          <td>Missing <code>skipDangerousModePermissionPrompt</code></td>
+          <td>The <code>python3</code> check above</td>
+      </tr>
+      <tr>
+          <td><code>cable: &quot;disconnected&quot;</code> in <code>/health</code></td>
+          <td>Token rejected or network down</td>
+          <td>Re-run <code>silolink config</code>; backoff caps at 60s</td>
+      </tr>
+      <tr>
+          <td>Session died mid-task</td>
+          <td>Idle cleanup after one hour</td>
+          <td>Set <code>claude_auto_respawn</code>, confirm <code>remote_load_context</code> is used</td>
+      </tr>
+  </tbody>
+</table>
+<p>For usage and cost tracking, <code>silolink report-usage --cli claude</code> (also <code>gemini</code> and <code>codex</code>) posts the token usage of a session you ran yourself under your DSiloed user, which makes a Stop or SessionEnd hook a natural fit.</p>
+<h2 id="silolink-vs-anthropic-remote-control-vs-agent-bridge-vs-claude-relay">SiloLink vs Anthropic Remote Control vs agent-bridge vs claude-relay</h2>
+<p>Anthropic&rsquo;s first-party <a href="https://code.claude.com/docs/en/remote-control">Remote Control</a> shipped in February 2026 and overlaps SiloLink on the core use case - driving a locally executing Claude Code session from a phone. The differences are structural.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Dimension</th>
+          <th>SiloLink</th>
+          <th>Anthropic Remote Control</th>
+          <th>agent-bridge</th>
+          <th>claude-relay</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Transport path</td>
+          <td>Vendor SaaS (ActionCable + REST)</td>
+          <td>Vendor SaaS</td>
+          <td>Peer-to-peer over SSH</td>
+          <td>Loopback MCP + SSH local-forward</td>
+      </tr>
+      <tr>
+          <td>Sessions</td>
+          <td>Multiple per daemon, one tmux each</td>
+          <td>Multiple, default capacity 32</td>
+          <td>Per-machine agent inboxes</td>
+          <td>One relay, many registered clients</td>
+      </tr>
+      <tr>
+          <td>Chat surfaces</td>
+          <td>Web UI, Slack, Discord, Teams, SMS</td>
+          <td>claude.ai/code, iOS, Android</td>
+          <td>Agent-to-agent channels</td>
+          <td>Terminal agents only</td>
+      </tr>
+      <tr>
+          <td>Auth model</td>
+          <td>HS256 JWT, 24h, 12h refresh</td>
+          <td>Pro/Max/Team/Enterprise subscription</td>
+          <td>Local SSH keys</td>
+          <td>Local registry file</td>
+      </tr>
+      <tr>
+          <td>Works with Bedrock/Vertex/custom <code>ANTHROPIC_BASE_URL</code></td>
+          <td>Yes</td>
+          <td>No</td>
+          <td>Yes</td>
+          <td>Yes</td>
+      </tr>
+      <tr>
+          <td>Message delivery</td>
+          <td>Non-blocking poll (recommended)</td>
+          <td>Vendor-managed</td>
+          <td>Push channel events</td>
+          <td>Content-free Stop hook</td>
+      </tr>
+      <tr>
+          <td>License / maturity</td>
+          <td>MIT, 98 releases since 2026-03</td>
+          <td>Proprietary</td>
+          <td>Open source, 8 stars, created 2026-04-12</td>
+          <td>Open source, 4 stars, active 2026-09-30</td>
+      </tr>
+  </tbody>
+</table>
+<p>The Remote Control constraints are worth stating plainly: it requires a Pro, Max, Team, or Enterprise subscription and does not support API keys; it is unavailable behind Amazon Bedrock, Google Cloud Agent Platform, Microsoft Foundry, and any custom <code>ANTHROPIC_BASE_URL</code> gateway; and it needs the workspace trust dialog accepted from a project directory, never from home. It also cannot be combined with <code>CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC</code> or <code>DISABLE_GROWTHBOOK</code>. SiloLink has none of those constraints, because it is not in the model path at all - which is precisely why it survives in an environment Remote Control refuses to run in.</p>
+<p>Where the self-hosted tools win is the trust boundary. <a href="https://github.com/EthanSK/agent-bridge">agent-bridge</a> keeps config, keys, inboxes, and logs on your own machines and pushes events rather than polling, with an explicit lesson from production: Claude Code&rsquo;s plugin host reaps idle plugins based on MCP tool-call frequency on stdio, so a channel-only plugin gets killed after each notification. <a href="https://github.com/gvorwaller/claude-relay">claude-relay</a> refuses plaintext LAN WebSocket traffic outright and carries everything inside SSH. If &ldquo;no vendor sees my prompts&rdquo; is a hard requirement, choose one of those and accept more setup.</p>
+<h2 id="can-you-bridge-non-claude-agents-like-codex-and-gemini">Can You Bridge Non-Claude Agents Like Codex and Gemini?</h2>
+<p>Yes, and this is the section most coverage of SiloLink skips. <code>agent_provider</code> accepts <code>claude</code> (the default), <code>gemini</code>, or <code>codex</code> - the OpenAI CLI, with <code>openai</code> accepted as an alias - and the source tree ships <code>gemini-launcher.ts</code> and <code>codex-launcher.ts</code> alongside the Claude launcher. You can override per launch with <code>silolink launch -a codex</code>.</p>
+<p>The Codex path differs in an important detail: it does not use the <code>npx mcp-remote</code> bridge. SiloLink writes <code>[mcp_servers.*]</code> tables with <code>url</code> plus <code>http_headers = { Authorization = &quot;Bearer &lt;jwt&gt;&quot; }</code> into <code>$CODEX_HOME/config.toml</code> and launches with <code>env CODEX_HOME=&lt;home&gt; codex ...</code>, because Codex speaks native streamable HTTP. Its tools are also named differently - <code>silolink__remote_register</code> rather than <code>mcp__silolink__remote_register</code>. <code>codex_resume_enabled</code> defaults to false, and <code>codex_args</code> defaults to <code>[&quot;--dangerously-bypass-approvals-and-sandbox&quot;]</code>. The README states the Codex integration was validated against codex-cli 0.141.0.</p>
+<h2 id="silolink-mcp-bridge-who-should-use-it-and-who-should-not">SiloLink MCP Bridge: Who Should Use It and Who Should Not</h2>
+<p>Use it if you want to command long-running coding sessions on remote machines from a chat client, you are comfortable with your conversation text transiting a vendor backend, and you value the multi-session orchestration plus usage reporting that a first-party one-human-one-session tool does not provide.</p>
+<p>Do not use it if your prompts are regulated data, if you need the message path to stay inside your network, or if you need a bridge that is independent of the vendor that built it. In those cases the SSH-carried relays are the honest answer.</p>
+<p>One number puts the security context in perspective: <a href="https://nordicapis.com/10-interesting-mcp-statistics/">38.7% of MCP servers where the auth method could be determined have no authentication at all, and 53% rely on long-lived static secrets</a>. Security concerns are also the top adoption blocker at 64% of surveyed software organizations. SiloLink at least keeps its MCP endpoint on loopback and gates the cloud credential behind a 0600 config file - which is the minimum bar, not a premium feature. If you are still assembling your tooling, <a href="/posts/best-mcp-servers-for-developers-2026/">the practical MCP server shortlist</a> is a reasonable starting point.</p>
+<h2 id="faq">FAQ</h2>
+<h3 id="what-is-a-silolink-mcp-bridge-used-for">What is a SiloLink MCP bridge used for?</h3>
+<p>It connects Claude Code sessions running on a remote machine to a DSiloed conversation, so you can launch, monitor, and instruct those sessions from a web UI, Slack, Discord, Teams, or SMS without SSH or a public inbound port. The MCP server is local on port 3579; the conversation layer is hosted.</p>
+<h3 id="does-silolink-send-my-source-code-to-dsiloed">Does SiloLink send my source code to DSiloed?</h3>
+<p>Source files and model credentials stay on your machine. Conversation text - the prompts you send and the messages Claude Code posts back - transits the DSiloed backend over an authenticated WebSocket, and the authenticating JWT is stored locally at <code>~/.silolink/config.json</code> with mode 0600.</p>
+<h3 id="why-does-claude-code-still-ask-for-permission-when-launched-with---dangerously-skip-permissions">Why does Claude Code still ask for permission when launched with <code>--dangerously-skip-permissions</code>?</h3>
+<p>Because the bypass flag sets the mode but does not record consent. Claude Code&rsquo;s internal check reads a top-level <code>skipDangerousModePermissionPrompt</code> key in <code>~/.claude/settings.json</code>, which SiloLink writes on each spawn via <code>ensureBypassPermissionsConsent()</code>. If that key is missing, dangerous-pattern commands still prompt even though the footer shows bypass as on.</p>
+<h3 id="should-i-use-remote_poll-or-remote_wait_for_command">Should I use <code>remote_poll</code> or <code>remote_wait_for_command</code>?</h3>
+<p>Use <code>remote_poll</code>. It is non-blocking and returns <code>{ success: true, pending: true }</code> when there is nothing new, so a cancelled loop cannot lose a message. <code>remote_wait_for_command</code> blocks until the next message and is documented as the less safe option.</p>
+<h3 id="how-do-i-keep-continuity-when-a-claude-code-session-restarts">How do I keep continuity when a Claude Code session restarts?</h3>
+<p>Call <code>remote_load_context</code> immediately after <code>remote_register</code>. It returns the stored <code>claude_resume_id</code> along with <code>message_count</code> and <code>history</code>, which is what lets a freshly spawned tmux session resume the prior conversation instead of starting cold. Combine it with <code>claude_auto_respawn</code> and a worktree per session for the multi-agent case.</p>
+]]></content:encoded></item></channel></rss>
