@@ -1,4 +1,268 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Local-First on RockB</title><link>https://baeseokjae.github.io/tags/local-first/</link><description>Recent content in Local-First on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Fri, 11 Sep 2026 07:02:01 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/local-first/index.xml" rel="self" type="application/rss+xml"/><item><title>OpenMausBot Review: The Open Source Grok Bot Alternative with a Virtual Machine</title><link>https://baeseokjae.github.io/posts/openmausbot-grok-bot-alternative/</link><pubDate>Fri, 11 Sep 2026 07:02:01 +0000</pubDate><guid>https://baeseokjae.github.io/posts/openmausbot-grok-bot-alternative/</guid><description>OpenMausBot is a free, open-source Grok Bot alternative that reuses your Claude, Codex, or grok CLI subscriptions and gives each bot its own cloud desktop, local VM, or host computer.</description><content:encoded><![CDATA[<p>OpenMausBot is a free, open-source alternative to Grok Bot that reuses the Claude, Codex, or grok CLI subscriptions you already pay for and gives every bot its own computer — a cloud Linux desktop, an isolated local VM, or your own host machine. Instead of a $120-per-month vendor bundle, it manages agents like contacts in a chat app, each with its own model, memory, and personality, while keeping your transcripts, keys, and credentials local in <code>~/.openmausbot</code>.</p>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Local-First on RockB</title><link>https://baeseokjae.github.io/tags/local-first/</link><description>Recent content in Local-First on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 01 Oct 2026 01:59:08 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/local-first/index.xml" rel="self" type="application/rss+xml"/><item><title>Skadoosh Voice Agent Review: A Fully Local Rust Voice Framework (and a 404 Problem)</title><link>https://baeseokjae.github.io/posts/skadoosh-local-voice-agent-rust/</link><pubDate>Thu, 01 Oct 2026 01:59:08 +0000</pubDate><guid>https://baeseokjae.github.io/posts/skadoosh-local-voice-agent-rust/</guid><description>Skadoosh is a fully local Rust voice agent: whisper-rs STT, Silero VAD, Kokoro TTS and Ollama, with no API keys. Strong architecture, but its repo 404s.</description><content:encoded><![CDATA[<p>Skadoosh is a dual-licensed (MIT OR Apache-2.0) Rust crate that runs a complete voice agent on your own machine: cpal microphone capture, Silero VAD, whisper-rs speech recognition, a streaming Ollama LLM, clause-level splitting, and ONNX Kokoro-82M text-to-speech back out through your speakers — with no API keys and no network calls. It is the most feature-complete all-local Rust voice agent published to crates.io, and it is also effectively unmaintained, because its documented GitHub repository returns HTTP 404.</p>
+<p>Both halves of that sentence matter, and a review that only reports one of them is useless. The architecture here is genuinely interesting: 22,255 lines of Rust across 83 source files, <code>#![forbid(unsafe_code)]</code>, 188 test functions, a lock-free barge-in path, and a pluggable engine model that Pipecat fans will recognize immediately. What is not interesting is the distribution story — a vanished repository, two contradictory author identities, a default model whose own card says the project &ldquo;has been deprecated,&rdquo; 389 lifetime downloads, and zero reverse dependencies.</p>
+<p>This review walks the pipeline stage by stage, reproduces the honest latency math on consumer hardware, compares Skadoosh against Pipecat, LiveKit Agents, Hugging Face speech-to-speech, Moshi, pipecrab, Vox, and EchoKit, and explains exactly what you can and cannot verify from a crate whose source of truth is a tarball. Every number below is sourced and labeled — author claims are called author claims, and third-party benchmarks are named as such.</p>
+<h2 id="what-is-skadoosh-and-what-does-local-voice-agent-in-rust-actually-mean">What Is Skadoosh and What Does &ldquo;Local Voice Agent in Rust&rdquo; Actually Mean?</h2>
+<p>Skadoosh is a single Rust binary that closes the loop from microphone to speaker without a transport layer. There is no WebRTC signalling, no SIP bridge, no WebSocket session with a hosted model — the audio device <em>is</em> the transport, and the model runs in a child process on the same box.</p>
+<p>That is a different category from what most &ldquo;voice agent framework&rdquo; articles cover. Pipecat and LiveKit Agents are pipeline and transport products: you assemble stages and connect them to telephony or a browser. Skadoosh skips the assembly and the transport, and ships one opinionated path — microphone in, agent reply out — that you can embed as a library or run as a CLI.</p>
+<p>The crate&rsquo;s own numbers set the scale of the project. Version 0.12.1 (published 2026-08-23) unpacks to a 263,897-byte tarball containing 93 files, 83 of them Rust, with a <code>Cargo.lock</code> pinning 370 packages (<a href="https://crates.io/api/v1/crates/skadoosh">crates.io</a>). rustdoc coverage is complete: 409 of 409 items documented, though only 4 of 210 items carry examples (<a href="https://docs.rs/crate/skadoosh/latest">docs.rs</a>). Its runtime dependencies are mainstream and healthy — whisper-rs (1.37M downloads), cpal (22.3M), ort (20.2M), wasmtime (38.0M), and misaki-rs (72K) — so the supply-chain risk is concentrated in Skadoosh itself, not in what it pulls in.</p>
+<p>Two design choices are unusual enough to note up front. First, the crate declares <code>#![forbid(unsafe_code)]</code> at the crate root, and a grep across <code>src/</code> finds no unsafe blocks at all — only three doc-comment mentions. That is a real constraint for a project that touches realtime audio callbacks, and it is why the barge-in path is built from an atomic epoch rather than a mutex. Second, the model weights are <em>not</em> vendored. You bring your own Ollama model, your own Whisper GGML file, and your own Kokoro ONNX bundle, which keeps the crate small but pushes the real install cost into a <code>download_models.sh</code> step.</p>
+<h2 id="how-does-the-seven-stage-pipeline-actually-work">How Does the Seven-Stage Pipeline Actually Work?</h2>
+<p>The documented pipeline is a straight cascade, and every stage is a boxed trait object: <code>SttEngine</code>, <code>LlmBackend</code>, and <code>TtsEngine</code>. The flow is:</p>
+<ol>
+<li><strong>cpal capture</strong> — 16 kHz mono from the default input device.</li>
+<li><strong>Silero VAD</strong> — voice activity detection gating the utterance boundary.</li>
+<li><strong>whisper-rs STT</strong> — whole-utterance transcription of the captured buffer.</li>
+<li><strong>Streaming LLM</strong> — an OpenAI-compatible chat endpoint, Ollama by default.</li>
+<li><strong>Clause splitting</strong> — the reply text is broken at clause boundaries rather than sentence or paragraph boundaries.</li>
+<li><strong>Kokoro ONNX TTS</strong> — 82M-parameter synthesis via <code>ort</code>, phonemised by the misaki-rs grapheme-to-phoneme port.</li>
+<li><strong>cpal playback</strong> — output through the same audio subsystem, with echo cancellation from aec-rs.</li>
+</ol>
+<p>Two stages deserve scrutiny, because they are where this architecture differs from the 2026 state of the art.</p>
+<p>The VAD stage is cheap and reliable. Silero VAD processes a 30+ ms chunk in under 1 ms on a single CPU thread under an MIT license (<a href="https://github.com/snakers4/silero-vad">silero-vad</a>), which means endpointing contributes essentially nothing to the latency budget. Skadoosh gates utterance end on roughly 300 ms of silence.</p>
+<p>The STT stage is the architectural weak point. Skadoosh transcribes a <em>complete utterance</em> with whisper.cpp after the silence gate closes. whisper.cpp is mature and frugal — 75 MiB of disk and about 273 MB of RAM for <code>tiny</code>, 466 MiB and roughly 852 MB for <code>small</code> (<a href="https://github.com/ggml-org/whisper.cpp">whisper.cpp</a>) — but it is not a streaming recognizer. By 2026, the Python ecosystem had already moved past this: RealtimeSTT&rsquo;s own CPU guidance names sherpa-onnx Nemotron-3.5 streaming (560 ms) and Parakeet TDT int8 as the production profile (<a href="https://github.com/KoljaB/RealtimeSTT">RealtimeSTT</a>), and Hugging Face&rsquo;s speech-to-speech defaults to Parakeet TDT. Skadoosh&rsquo;s design means you pay the silence gate in full before transcription starts, and you get no partial transcripts while the user is still talking. On a fast desktop that is tens of milliseconds of regret. On a loaded machine it is the difference between a conversation and a walkie-talkie.</p>
+<h2 id="the-two-features-that-actually-decide-whether-it-feels-conversational">The Two Features That Actually Decide Whether It Feels Conversational</h2>
+<p>Feature-count comparisons between voice frameworks are mostly noise. In practice, two things determine whether a local agent feels alive or feels like a fax machine: whether TTS can start before the LLM finishes, and whether you can interrupt it.</p>
+<h3 id="does-clause-level-streaming-tts-matter-more-than-model-quality">Does clause-level streaming TTS Matter More Than Model Quality?</h3>
+<p>It matters more than people expect. A 1.5B local model generating at 4-8 tokens per second takes many seconds to write a three-sentence answer, and a pipeline that waits for the final token before synthesizing anything produces dead air for that entire duration.</p>
+<p>Skadoosh splits the streamed reply at clause boundaries and dispatches each clause to Kokoro as soon as it closes. The first clause typically arrives after the opening sentence fragment, so time-to-first-audio tracks the model&rsquo;s time-to-first-token rather than its full generation time. Combined with Kokoro&rsquo;s characteristics — ELO 1059 on Artificial Analysis&rsquo;s speech leaderboard, fractionally ahead of Cartesia Sonic 3 at 1054, at roughly 80-120 ms time-to-first-audio on an M3 Pro (<a href="https://academy.kspl.tech/blog/voice-agents-2026-tts-latency-benchmark">Kokoro benchmark roundup</a>) — the audio starts early and the backlog drains while you listen.</p>
+<p>The trade-off is prosody. Synthesis driven by clause fragments loses the sentence-level intonation contour of a model that sees the whole reply. Skadoosh&rsquo;s README addresses this by modulating TTS speed with the model&rsquo;s emotional tone, which is a reasonable mitigation but not a substitute for whole-reply synthesis.</p>
+<h3 id="is-the-5-10-ms-barge-in-number-real">Is the 5-10 ms Barge-In Number Real?</h3>
+<p>The mechanism is real and verifiable. The barge-in path uses an <code>AtomicU64</code> epoch that the caller increments on interruption; the realtime audio callback reads that epoch and compares it against the epoch it was launched with, and every queued clip push re-checks it before writing to the ring buffer. A stale callback or a stale clip silently discards its data instead of fighting for a lock. This is the correct way to do it in a realtime audio context, because a mutex on the audio thread is a priority-inversion hazard, and a design that <code>forbid</code>s unsafe code cannot reach for lock-free primitives that hide unsafe internally.</p>
+<p>The <em>timing</em>, however, is an author claim. The &ldquo;5-10 ms&rdquo; figure appears in the README and has not been reproduced by any third party. What you can verify is that no lock is taken, no allocation happens in the callback, and the check is a single atomic load. What you cannot verify is the measured cutoff on your hardware, because no published end-to-end benchmark of Skadoosh exists at all.</p>
+<p>The honest position: the crate exposes a <code>StageLatency</code> <code>AgentEvent</code> carrying <code>stt_ms</code>, <code>llm_ms</code>, <code>tts_ms</code>, and <code>playback_ms</code>. That is the right answer to an unverifiable claim — instrument it yourself. Anyone quoting 5-10 ms barge-in as a measured fact is repeating marketing.</p>
+<h2 id="how-do-you-install-and-run-skadoosh">How Do You Install and Run Skadoosh?</h2>
+<p>Build prerequisites are Rust 1.88 or newer plus a native toolchain: <code>cmake</code>, <code>clang</code>, <code>libclang-dev</code>, <code>libasound2-dev</code>, <code>pkg-config</code>, and <code>espeak-ng</code> for Kokoro phonemisation (<a href="https://docs.rs/crate/skadoosh/latest/source/SETUP.md">SETUP.md</a>). The <code>espeak-ng</code> dependency is worth flagging for commercial users — it is GPL-licensed and ships as a runtime requirement for speech synthesis, which needs a licence review before you embed this in a closed-source product.</p>
+<p>After the binary builds, you fetch models with the bundled <code>download_models.sh</code>, pull the default LLM through Ollama, and run <code>skadoosh</code>. Two flags matter for evaluation: <code>--repl</code> for a text-only loop that skips audio entirely (invaluable for isolating whether a problem is your model or your microphone), and <code>--selftest</code> to validate the audio and model paths without holding a conversation.</p>
+<p>On the hardware side, be realistic about the memory footprint. The default LLM is StealthyLM-Emotive, a Qwen2.5-1.5B 4-bit GGUF at 1.54B parameters — call it ~1.5 GB resident. Whisper <code>tiny.en</code> adds about 273 MB, Kokoro ONNX a few hundred megabytes more. Total system requirement lands near 2-3 GB, which is genuinely modest and far below the 16 GB unified memory or ~24 GB VRAM floor that Hugging Face documents for a fully local conversation stack (<a href="https://github.com/huggingface/speech-to-speech">speech-to-speech</a>).</p>
+<h2 id="the-5-line-sdk-vs-the-cli">The 5-Line SDK vs. the CLI</h2>
+<p>The advertised embedding story is short:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-rust" data-lang="rust"><span style="display:flex;"><span><span style="color:#66d9ef">let</span> <span style="color:#66d9ef">mut</span> agent <span style="color:#f92672">=</span> Agent::builder()
+</span></span><span style="display:flex;"><span>    .config(config)
+</span></span><span style="display:flex;"><span>    .build()<span style="color:#f92672">?</span>;
+</span></span><span style="display:flex;"><span>agent.run().<span style="color:#66d9ef">await</span><span style="color:#f92672">?</span>;
+</span></span></code></pre></div><p>Whether that abstraction holds up depends entirely on the traits. <code>SttEngine</code>, <code>LlmBackend</code>, and <code>TtsEngine</code> are the seams, and because every stage is a boxed trait object, you can substitute a different recognizer, a hosted LLM endpoint, or a different synthesizer without forking the pipeline. This is the same pluggability promise Pipecat makes in Python, executed in-process with no FFI marshalling of audio buffers between stages. That is not a cosmetic difference: a Python pipeline crossing into a native VAD or TTS library pays a copy per stage and inherits the interpreter&rsquo;s scheduling jitter, and the GIL means a busy Python stage can delay an audio callback that Rust would service deterministically.</p>
+<p>The CLI is the more pragmatic entry point. <code>--repl</code> gives you a conversational loop with no audio, which is how you should evaluate whether the 1.5B model is good enough for your task before you invest in microphones and echo cancellation.</p>
+<h2 id="beyond-a-basic-agent-wasm-plugins-mesh-rag-and-watchers">Beyond a Basic Agent: WASM Plugins, Mesh, RAG, and Watchers</h2>
+<p>This is where Skadoosh stops resembling its competitors, and it is worth separating features that are genuinely rare from features that are merely listed.</p>
+<p><strong>WASM plugin sandbox.</strong> Tools are implemented as WebAssembly modules executed by wasmtime 30 with no filesystem and no network access, bounded by fuel metering. The LLM calls them as tools. Nothing in the Pipecat, LiveKit, or speech-to-speech feature sets offers an equivalent in-process capability sandbox, and fuel-bounded WASM is a defensible security posture for model-authored actions.</p>
+<p><strong>LAN multi-agent mesh.</strong> UDP discovery plus call forwarding lets several instances find each other and hand off conversations. This is unusual and mostly unproven — no public deployment of it exists.</p>
+<p><strong>Local RAG.</strong> Retrieval over <code>.txt</code> and <code>.md</code> files using an ONNX all-MiniLM-L6-v2 embedder, so your knowledge base never leaves the machine.</p>
+<p><strong>Sandboxed <code>code_exec</code>.</strong> Code execution in a subprocess sandbox, which is the highest-risk surface in the whole crate and the one most worth reading before enabling.</p>
+<p><strong>Proactive <code>--watch</code> triggers.</strong> File, process, and timer watchers that let the agent speak first. Combined with the JSON memory store and hold music during tool calls, the feature list reads like a product roadmap — which is precisely the concern. Shipping breadth this wide in 22 releases over six days means most of these paths have never been exercised outside the author&rsquo;s machine.</p>
+<h2 id="how-does-skadoosh-compare-to-pipecat-livekit-and-the-rest">How Does Skadoosh Compare to Pipecat, LiveKit, and the Rest?</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Framework</th>
+          <th>Language</th>
+          <th>Local-first?</th>
+          <th>Transport</th>
+          <th>Barge-in primitive</th>
+          <th>Ecosystem signal</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>Skadoosh</strong></td>
+          <td>Rust</td>
+          <td>Yes — fully local by default</td>
+          <td>None (device audio)</td>
+          <td>Atomic epoch flush in the audio callback</td>
+          <td>Repo 404s; 389 downloads; 0 reverse deps</td>
+      </tr>
+      <tr>
+          <td><strong>Pipecat</strong></td>
+          <td>Python</td>
+          <td>No — hosted models assumed</td>
+          <td>Bring your own</td>
+          <td>Handled in the pipeline, not the audio layer</td>
+          <td>16,100 stars, BSD-2-Clause, actively pushed</td>
+      </tr>
+      <tr>
+          <td><strong>LiveKit Agents</strong></td>
+          <td>Python</td>
+          <td>No — hosted inference</td>
+          <td>WebRTC/SIP built in</td>
+          <td>Session-level interruption</td>
+          <td>14,434 stars, Apache-2.0, ~500-650 ms P95</td>
+      </tr>
+      <tr>
+          <td><strong>HF speech-to-speech</strong></td>
+          <td>Python</td>
+          <td>Yes, with heavy hardware</td>
+          <td>OpenAI Realtime protocol</td>
+          <td>Realtime event semantics</td>
+          <td>13,359 stars, production on Reachy Mini robots</td>
+      </tr>
+      <tr>
+          <td><strong>Moshi</strong></td>
+          <td>Python</td>
+          <td>Yes, GPU-class</td>
+          <td>Custom full-duplex</td>
+          <td>Two parallel audio streams</td>
+          <td>~160 ms glass-to-glass, 7B backbone</td>
+      </tr>
+      <tr>
+          <td><strong>pipecrab</strong></td>
+          <td>Rust</td>
+          <td>Yes</td>
+          <td>None</td>
+          <td>Interrupt frame overtakes queued work</td>
+          <td>~19 stars; Linux/Windows unverified</td>
+      </tr>
+      <tr>
+          <td><strong>Vox</strong></td>
+          <td>Rust</td>
+          <td>Yes</td>
+          <td>HTTP + WebSocket</td>
+          <td>&ldquo;Live Talk&rdquo;</td>
+          <td>~46 stars; Whisper/Sherpa + multi-backend TTS</td>
+      </tr>
+      <tr>
+          <td><strong>EchoKit</strong></td>
+          <td>Rust</td>
+          <td>Yes</td>
+          <td>ESP32 hardware client</td>
+          <td>Device-level</td>
+          <td>~592 stars; appliance, not a library</td>
+      </tr>
+  </tbody>
+</table>
+<p>The pattern is clear once you lay it out. Frameworks with large ecosystems (Pipecat, LiveKit, speech-to-speech) are Python and assume hosted inference by default; the Rust projects that are genuinely local-first are small, young, and largely unproven. Skadoosh sits at the far end of both axes — maximum local-first purity, minimum ecosystem validation.</p>
+<p>Fora Soft&rsquo;s July 2026 vendor-neutral comparison lands a point that applies to all of them: the framework barely moves latency, because &ldquo;your model choice sets the number.&rdquo; Speech-to-speech architectures land near 300 ms while an STT+LLM+TTS cascade runs 300-800 ms. Skadoosh is a cascade, so it inherits the cascade&rsquo;s floor.</p>
+<h2 id="the-latency-reality-check-where-does-lightning-fast-hold-up">The Latency Reality Check: Where Does &ldquo;Lightning-Fast&rdquo; Hold Up?</h2>
+<p>Human conversational turn-taking averages about 200 ms across ten languages (<a href="https://genalphai.com/voice-agent-latency-designing-beyond-the-800ms-wall">Stivers et al., PNAS 2009</a>), which is why the industry treats sub-800 ms as acceptable and over 1000 ms as broken. The 2026 budget looks like this: VAD/endpointing under 30 ms, streaming ASR first partial under 200 ms, LLM time-to-first-token 300-400 ms, TTS first byte 150-200 ms, barge-in stop under 200 ms, and end-to-end time-to-first-audio under 800 ms at P95.</p>
+<p>Run Skadoosh&rsquo;s stages against that budget on CPU:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Stage</th>
+          <th>Indicative cost</th>
+          <th>Source / status</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Silero VAD</td>
+          <td>&lt; 1 ms per 30+ ms chunk</td>
+          <td>Silero README (third-party)</td>
+      </tr>
+      <tr>
+          <td>Silence gate</td>
+          <td>~300 ms (by design)</td>
+          <td>Skadoosh default</td>
+      </tr>
+      <tr>
+          <td>whisper-rs STT</td>
+          <td>50-150 ms (indicative)</td>
+          <td>Third-party CPU benchmark, different hardware</td>
+      </tr>
+      <tr>
+          <td>LLM TTFT</td>
+          <td>200-350 ms</td>
+          <td>Qwen2.5-1.5B on CPU via Ollama (third-party)</td>
+      </tr>
+      <tr>
+          <td>LLM generation</td>
+          <td>4-8 tokens/s</td>
+          <td>Same benchmark; dominates long replies</td>
+      </tr>
+      <tr>
+          <td>Kokoro TTS first audio</td>
+          <td>40-75 ms CPU / ~80-120 ms M3 Pro</td>
+          <td>Third-party benchmarks</td>
+      </tr>
+      <tr>
+          <td>Kokoro RTF (4 vCPU)</td>
+          <td>0.57 mean (1.8x real time)</td>
+          <td>ONNX Runtime benchmark</td>
+      </tr>
+      <tr>
+          <td>Kokoro RTF (2 ARM cores)</td>
+          <td>0.87-0.93x — <strong>slower than real time</strong></td>
+          <td>ARM benchmark</td>
+      </tr>
+  </tbody>
+</table>
+<p>The verdict is hardware-dependent, and this is the single most important caveat in any Skadoosh review. On a four-core x86 machine the TTS stage keeps ahead of playback and the pipeline can plausibly land near the 800 ms bar. On two ARM cores — the Raspberry Pi and small-laptop class that &ldquo;local voice agent&rdquo; most naturally suggests — Kokoro drops below 1x real time, meaning the agent cannot speak as fast as it generates, and clauses queue up behind a synthesizer that is permanently behind schedule. Sentence splitting costs Kokoro about 8% throughput on that hardware, while Piper holds 8.2x on the same machine (<a href="https://github.com/obole-ia/tts-cpu-benchmark">tts-cpu-benchmark</a>).</p>
+<p>And the model is small. Qwen2.5-1.5B at 4-8 tokens per second is fine for commands, retrieval-grounded answers, and short tool calls. It is not a frontier model, and no amount of pipeline engineering makes it one. &ldquo;Lightning-fast&rdquo; describes the pipeline&rsquo;s latency, not its intelligence.</p>
+<h2 id="what-does-zero-per-minute-cost-actually-buy">What Does Zero Per-Minute Cost Actually Buy?</h2>
+<p>Fully local inference costs $0 per minute once deployed, against roughly $0.10-$2.00 per minute for a cloud voice agent including STT, LLM, TTS, and telephony (<a href="https://buildmvpfast.com/blog/voice-ai-architecture-hybrid-on-device-2026">buildmvpfast</a>). A single voice-agent phone call runs $0.30-$0.50, and managed framework hosting sits near $0.01/min while the models themselves run about $0.04/min.</p>
+<p>The market context explains why this niche exists at all: conversational AI was $11.58B in 2024 and is projected to reach $41.39B by 2030 at a 23.7% CAGR, with the voice-agent segment growing at 34.8%.</p>
+<p>But cost is the weaker half of the local-first argument. The stronger half is regulatory. Voiceprints became a high-risk category under the EU AI Act in August 2025, and GDPR, CPRA, and HIPAA all impose constraints that are trivially satisfied by an architecture where audio never leaves the machine. For a healthcare triage bot or an HR intake agent, &ldquo;no cloud, no API keys, no data leaving the device&rdquo; is an architectural requirement rather than a cost optimization — and it is the one claim about Skadoosh that its 404&rsquo;d repository cannot undermine, because you can audit the crate tarball directly.</p>
+<h2 id="the-honest-concerns-the-github-repository-is-a-404">The Honest Concerns: The GitHub Repository Is a 404</h2>
+<p>This is the part a review has to lead with for anyone considering Skadoosh in production.</p>
+<p>The declared repository, <code>github.com/Hot-Coco/Skadoosh</code>, returns HTTP 404 — verified by raw HTTP, by the GitHub API, and with an authenticated <code>gh</code> CLI token on 2026-10-01. The GitHub account or organization <code>Hot-Coco</code> does not exist either, and no Wayback Machine snapshot was ever captured. That means stars, forks, issues, CI status, and the CI badge printed in the README are all unverifiable.</p>
+<p>The identities are contradictory. crates.io lists the owner as <strong>TheLimeDev</strong> (a GitHub account created 2025-04-16 with 3 public repos and 11 followers), while docs.rs attributes the crate to <strong>Hot-Coco</strong>. Two different identities on the same package is a supply-chain smell, not a crime, but it means there is no accountable party with a public track record.</p>
+<p>The default model&rsquo;s own card is more damning. StealthyLM-Emotive was fine-tuned by the same author, and the README points at <code>huggingface.co/StealthyML/StealthyLM-Emotive</code>, which now redirects to <code>Monster-Code/StealthyLM-Emotive</code> — 278 downloads, 1 like. Its model card opens with &ldquo;Skadoosh unfortunately has been deprecated&rdquo; (<a href="https://huggingface.co/api/models/Monster-Code/StealthyLM-Emotive">HF API</a>). The project&rsquo;s own author has said, in the one public artifact that survives, that the project is over.</p>
+<p>Adoption numbers confirm the stakes. The crate first appeared 2026-08-19 and shipped roughly 22-23 releases (0.1.0 through 0.12.1) in under a week, accumulating <strong>389 lifetime downloads</strong> with per-version counts between 14 and 23. <strong>Zero reverse dependencies.</strong> There is no Hacker News discussion — Algolia returns zero hits for &ldquo;skadoosh voice&rdquo; and for <code>&quot;local voice agent&quot; rust</code>. No third party has published a benchmark, an issue, or a deployment.</p>
+<p>Put together: ~22 releases in six days is churn, not maturity, and 389 downloads with zero dependents means nothing in the ecosystem has validated that any of it works outside the author&rsquo;s machine. Vocode provides the cautionary precedent — a well-starred voice-agent framework (3,797 stars, MIT) whose last push was 2024-11-15. Star counts do not imply maintenance, and the absence of a repository removes even that signal.</p>
+<h3 id="can-you-audit-a-crate-with-no-repository">Can You Audit a Crate With No Repository?</h3>
+<p>Yes, and you should. <code>cargo download skadoosh --version 0.12.1</code>, or fetch <code>static.crates.io/crates/skadoosh/skadoosh-0.12.1.crate</code> directly and unpack it. The tarball is the artifact cargo actually builds, so it is the authoritative source regardless of what any repository claims. What you will find is a well-documented, unsafe-free, heavily tested Rust codebase. What you will not find is a human to file a bug against — which is the whole problem.</p>
+<h2 id="security-licensing-and-supply-chain-review">Security, Licensing, and Supply-Chain Review</h2>
+<p>The licence stack is mostly clean and worth enumerating, because it is one of the crate&rsquo;s genuine strengths:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Component</th>
+          <th>Licence</th>
+          <th>Note</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Skadoosh crate</td>
+          <td>MIT OR Apache-2.0</td>
+          <td>Dual-licensed, standard Rust practice</td>
+      </tr>
+      <tr>
+          <td>Silero VAD</td>
+          <td>MIT</td>
+          <td>Third-party, upstream healthy</td>
+      </tr>
+      <tr>
+          <td>whisper-rs / whisper.cpp</td>
+          <td>MIT</td>
+          <td>1.37M downloads</td>
+      </tr>
+      <tr>
+          <td>Kokoro-82M</td>
+          <td>Apache-2.0</td>
+          <td>11.5M HF downloads, 7,074 likes</td>
+      </tr>
+      <tr>
+          <td>StealthyLM-Emotive weights</td>
+          <td>Third-party model</td>
+          <td>278 downloads; card says deprecated</td>
+      </tr>
+      <tr>
+          <td>espeak-ng (runtime dep)</td>
+          <td><strong>GPL</strong></td>
+          <td>Needs review for closed-source products</td>
+      </tr>
+  </tbody>
+</table>
+<p>The espeak-ng dependency is the one that will bite a commercial integrator: GPL phonemisation shipped as a runtime requirement for TTS can impose obligations your legal team needs to see before, not after, you ship.</p>
+<p>On the security side, <code>#![forbid(unsafe_code)]</code> and rustls everywhere (no OpenSSL) are meaningful reductions in the classic C-dependency attack surface, and the WASM sandbox is genuinely restrictive when configured with fuel limits and no host bindings. The un-sandboxed-ish surfaces to scrutinize are <code>code_exec</code> (subprocess) and the mesh&rsquo;s UDP discovery, neither of which has any published threat model.</p>
+<h2 id="who-should-use-skadoosh-in-2026">Who Should Use Skadoosh in 2026?</h2>
+<p><strong>Use it if</strong> you need a working reference implementation of a fully local Rust voice pipeline, you are comfortable compiling from crates.io and auditing a tarball, your hardware is four-plus x86 cores, and your tasks are short and tool-shaped rather than knowledge-heavy. It is an excellent teaching artifact — the barge-in epoch pattern and the trait-object stage model are worth reading even if you never run the binary.</p>
+<p><strong>Fork it if</strong> you want the local-first architecture but need a maintained dependency. The entire crate is 22,255 lines of MIT/Apache-2.0 Rust with 188 tests and a permissive licence; vendoring it and taking ownership is a realistic option, and it is the path I would take for anything production-facing. While you are in there, swap the whole-utterance whisper stage for streaming ASR, which is the single highest-leverage improvement available.</p>
+<p><strong>Avoid it if</strong> you need a supported dependency, an SLA, a security response process, a bug tracker, telephony, or a model that can reason about a domain. For those, LiveKit Agents gives you WebRTC, scaling, and a maintained stack; Hugging Face speech-to-speech gives you a local pipeline with a real community; Pipecat gives you the largest integration library in the field. None of them give you $0/min and a fully local default, which is exactly the trade you are making.</p>
+<h2 id="verdict">Verdict</h2>
+<p>Skadoosh is the most complete all-local Rust voice agent framework on crates.io and one of the least trustworthy dependencies you could add to a project. The pipeline is well designed, the barge-in mechanism is genuinely correct, the feature breadth (WASM tool sandbox, mesh, RAG, watchers) has no direct equivalent in any competitor, and the licence stack is permissive. Against that: a 404&rsquo;d repository, two conflicting author identities, a default model whose own card announces deprecation, 389 downloads, zero reverse dependencies, no benchmarks, and a TTS stage that falls below real time on the hardware class most people imagine when they hear &ldquo;local voice agent.&rdquo;</p>
+<p>Read it. Build it. Measure it with the <code>StageLatency</code> events it ships. But treat it as a source of architectural ideas and a fork candidate, not as a library you depend on.</p>
+<h2 id="faq">FAQ</h2>
+<h3 id="does-skadoosh-need-a-gpu">Does Skadoosh need a GPU?</h3>
+<p>No — the default path is CPU-only. The bundled LLM is a 4-bit Qwen2.5-1.5B GGUF running through Ollama, and Kokoro-82M with <code>ort</code> runs on CPU. That said, GPU acceleration matters for the user experience: Kokoro reaches roughly RTF 0.03 on GPU (a 10-second clip in about 0.3 seconds) versus 0.57 on four x86 cores and below 1x on two ARM cores. CUDA, CoreML, DirectML, and ROCm features exist, but on a two-core ARM machine text-to-speech will not keep up with playback.</p>
+<h3 id="which-languages-does-it-support">Which languages does it support?</h3>
+<p>The crate is language-agnostic, but every default is English-first: whisper <code>tiny.en</code> for recognition and Kokoro&rsquo;s <code>af</code> voice for synthesis. Changing recognition language means supplying a different Whisper model file, and changing synthesis language means a Kokoro voice key plus working phonemisation through misaki-rs. There is no built-in multilingual routing, and nothing in the project addresses non-English latency.</p>
+<h3 id="does-it-run-on-a-raspberry-pi-or-arm">Does it run on a Raspberry Pi or ARM?</h3>
+<p>It builds and runs, but the TTS stage is the limiting factor. On two Neoverse-N1 ARM cores Kokoro-82M measures 0.87-0.93x real time — slower than it speaks — while Piper holds 8.2x on the same machine. If you are targeting Pi-class hardware, swapping the synthesizer is mandatory rather than optional. Silero VAD and Whisper <code>tiny.en</code> are both comfortable on that class of hardware.</p>
+<h3 id="can-i-point-it-at-a-hosted-llm-instead-of-ollama">Can I point it at a hosted LLM instead of Ollama?</h3>
+<p>Yes. The LLM stage is the <code>LlmBackend</code> trait, backed by a streaming OpenAI-compatible chat client, so any compatible endpoint works. Be aware of what that changes: routing the LLM to a hosted provider removes the &ldquo;no data leaves the machine&rdquo; guarantee that is the main compliance argument for using Skadoosh, since the transcript and the model&rsquo;s reply leave your network even though the audio does not.</p>
+<h3 id="is-skadoosh-maintained">Is Skadoosh maintained?</h3>
+<p>Its own documentation says it was deprecated. The declared GitHub repository returns HTTP 404, the author&rsquo;s model card states the project &ldquo;has been deprecated,&rdquo; and the crate shows 389 lifetime downloads with zero reverse dependencies and no issue tracker. Version 0.12.1, published 2026-08-23, is the last release. Treat the crate tarball as the final state of the project, not as an actively evolving library.</p>
+]]></content:encoded></item><item><title>OpenMausBot Review: The Open Source Grok Bot Alternative with a Virtual Machine</title><link>https://baeseokjae.github.io/posts/openmausbot-grok-bot-alternative/</link><pubDate>Fri, 11 Sep 2026 07:02:01 +0000</pubDate><guid>https://baeseokjae.github.io/posts/openmausbot-grok-bot-alternative/</guid><description>OpenMausBot is a free, open-source Grok Bot alternative that reuses your Claude, Codex, or grok CLI subscriptions and gives each bot its own cloud desktop, local VM, or host computer.</description><content:encoded><![CDATA[<p>OpenMausBot is a free, open-source alternative to Grok Bot that reuses the Claude, Codex, or grok CLI subscriptions you already pay for and gives every bot its own computer — a cloud Linux desktop, an isolated local VM, or your own host machine. Instead of a $120-per-month vendor bundle, it manages agents like contacts in a chat app, each with its own model, memory, and personality, while keeping your transcripts, keys, and credentials local in <code>~/.openmausbot</code>.</p>
 <h2 id="what-is-openmausbot-the-open-source-answer-to-grok-bot">What Is OpenMausBot? The Open-Source Answer to Grok Bot</h2>
 <p>OpenMausBot is an open-core project that rebuilds the Grok Bot experience as a local-first, bring-your-own-agent chat application. The core is Apache-2.0 licensed, with a source-available <code>enterprise/</code> folder that can be deleted while the open-source edition still builds and runs. On GitHub the repo shows 2.5k+ stars, 448 forks, and more than 1,670 commits, with a latest release of v0.1.72 recorded on September 10, 2026.</p>
 <p>Grok Bot itself only launched in beta on August 11, 2026, bundled with SuperGrok, SuperGrok Heavy, and Cursor paid plans. OpenMausBot appeared essentially within hours of that launch — its author, Milind S, shipped an open-source version the same week — and independent review sites confirmed the project was active within days. That speed is the defining trait of this category: an agentic product at Grok Bot&rsquo;s scale rebuilt and published as open source before the vendor bundle was even out of beta.</p>
