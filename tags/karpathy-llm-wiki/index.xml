@@ -1,0 +1,350 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Karpathy LLM Wiki on RockB</title><link>https://baeseokjae.github.io/tags/karpathy-llm-wiki/</link><description>Recent content in Karpathy LLM Wiki on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 01 Oct 2026 02:09:26 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/karpathy-llm-wiki/index.xml" rel="self" type="application/rss+xml"/><item><title>Agent Wiki Kit Memory Review: Repository-Native Memory for Coding Agents</title><link>https://baeseokjae.github.io/posts/agent-wiki-kit-repo-native-memory/</link><pubDate>Thu, 01 Oct 2026 02:09:26 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-wiki-kit-repo-native-memory/</guid><description>Agent Wiki Kit (wikikit) compiles a repo-native Markdown wiki that coding agents read over MCP. What it ships, what it costs, and who should adopt it.</description><content:encoded><![CDATA[<p>Agent Wiki Kit is an MIT-licensed, zero-dependency Python toolkit (its engine is called <strong>wikikit</strong>) that turns a folder of frontmatter Markdown into a governed, lint-checked wiki, then serves it to any MCP client through five read tools. It publishes <code>llms.txt</code> for agent browsing, and it is extremely early: 0 stars, 2 commits, no release, and no PyPI package.</p>
+<p>That is the whole honest verdict in two sentences, and the rest of this review explains why the <em>pattern</em> is worth adopting today even though the <em>kit</em> is not. The repository, <code>AvalancheAI-labs/agent-wiki-kit</code>, was created on 2026-08-13 and last pushed the same day. It contains exactly two commits (&ldquo;wikikit: one zero-dependency engine for every LLM wiki&rdquo; and &ldquo;launch prep: pip-installable packaging, CI, contributing guide&rdquo;), zero tags, zero releases, and both <code>pypi.org/pypi/wikikit/json</code> and <code>pypi.org/pypi/agent-wiki-kit/json</code> return HTTP 404 (<a href="https://pypi.org/pypi/wikikit/json">PyPI JSON API</a>, checked 2026-10-01). So the README&rsquo;s &ldquo;once published&rdquo; caveat about <code>pip install</code> is load-bearing, not provisional.</p>
+<p>If you are searching for &ldquo;agent wiki kit memory&rdquo; you are probably trying to answer one question: <strong>should I give my coding agents a persistent, in-repo knowledge base instead of stuffing everything into <code>AGENTS.md</code>?</strong> The evidence below says yes for knowledge-shaped problems, no for skill-shaped ones, and &ldquo;not yet&rdquo; for this particular kit.</p>
+<h2 id="what-is-agent-wiki-kit-and-what-does-it-actually-ship">What Is Agent Wiki Kit and What Does It Actually Ship?</h2>
+<p>Agent Wiki Kit is a repository-native memory toolkit: it keeps durable project knowledge as Markdown files inside your repo, versioned by Git, and exposes them to coding agents through a CLI and an MCP server. The engine is a real program, not a README with ambitions. The tracked tree holds 40 blobs and eight Python modules, all standard library only, totaling roughly 48 KB:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Module</th>
+          <th>Size</th>
+          <th>Role</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>build.py</code></td>
+          <td>16.4 KB</td>
+          <td>Compiles the wiki into <code>llms.txt</code>, <code>llms-full.txt</code>, <code>index.json</code> and static HTML</td>
+      </tr>
+      <tr>
+          <td><code>mcp_server.py</code></td>
+          <td>7.9 KB</td>
+          <td>Serves five read tools to any MCP client</td>
+      </tr>
+      <tr>
+          <td><code>wiki.py</code></td>
+          <td>6.8 KB</td>
+          <td>Core page model and wiki state</td>
+      </tr>
+      <tr>
+          <td><code>cli.py</code></td>
+          <td>5.3 KB</td>
+          <td><code>init</code>, <code>ingest</code>, <code>lint</code>, <code>status</code>, <code>build</code>, <code>serve</code></td>
+      </tr>
+      <tr>
+          <td><code>lint.py</code></td>
+          <td>3.5 KB</td>
+          <td>Error and warning rules, exit-1 contract</td>
+      </tr>
+      <tr>
+          <td><code>frontmatter.py</code></td>
+          <td>3.3 KB</td>
+          <td>Page contract parsing</td>
+      </tr>
+      <tr>
+          <td><code>ingest.py</code></td>
+          <td>3.1 KB</td>
+          <td>Compiles a new source page into wiki form</td>
+      </tr>
+      <tr>
+          <td><code>search.py</code></td>
+          <td>2.3 KB</td>
+          <td>Lexical search used by <code>wiki_search</code></td>
+      </tr>
+  </tbody>
+</table>
+<p>Source: <code>gh api repos/AvalancheAI-labs/agent-wiki-kit/git/trees/main?recursive=1</code> (2026-10-01).</p>
+<p>The package targets Python 3.10+ and imports nothing outside the standard library — which is a genuine architectural decision, not a stunt. No lockfile rot, no transitive supply-chain surface, and no embedding-API bill. The cost of that decision is that search is lexical rather than semantic, and the <code>ingest</code> command shells out to the external <code>claude</code> CLI to do the non-deterministic compilation step. The engine is deterministic; the writing is not.</p>
+<h2 id="what-is-the-compile-knowledge-once-pattern">What Is the &ldquo;Compile Knowledge Once&rdquo; Pattern?</h2>
+<p>The pattern behind the kit comes from Andrej Karpathy&rsquo;s LLM Wiki idea file: the model incrementally builds and maintains a persistent wiki that sits between you and the raw sources. Knowledge is compiled once and kept current, rather than re-derived from raw chunks on every query. Karpathy&rsquo;s framing is blunt about why that matters: &ldquo;The cross-references are already there. The contradictions have already been flagged. The synthesis already reflects everything you&rsquo;ve read,&rdquo; and his recommended workloop puts the agent on one side and Obsidian on the other — &ldquo;Obsidian is the IDE; the LLM is the programmer; the wiki is the codebase&rdquo; (<a href="https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f">Karpathy&rsquo;s LLM Wiki gist</a>). That gist scored 296 points and 95 comments on Hacker News (2026-04-04), and a Karpathy-style implementation, <code>nex-crm/wuphf</code>, scored 260 points and 114 comments (2026-04-25) — the demand signal is real and unusually strong for a documentation pattern.</p>
+<p>The category this sits in is crowded. A GitHub search on 2026-10-01 returns 6,530 repositories for &ldquo;llm-wiki&rdquo;, 1,004 for &ldquo;agent memory markdown&rdquo;, 319 for &ldquo;wiki memory agent&rdquo; — but only 25 for the exact phrase &ldquo;repository-native memory&rdquo;. The niche is tiny even though the neighborhood is packed.</p>
+<h2 id="inside-the-engine-what-do-the-six-commands-do">Inside the Engine: What Do the Six Commands Do?</h2>
+<p>The kit&rsquo;s CLI is deliberately small and each command has one job:</p>
+<ul>
+<li><strong><code>init</code></strong> scaffolds a wiki directory with <code>wiki.yaml</code> (page types) and starter templates.</li>
+<li><strong><code>ingest</code></strong> compiles a source into a new page using the <code>claude</code> CLI, or the interactive <code>skills/wiki-ingest</code> skill.</li>
+<li><strong><code>lint</code></strong> validates page contracts, links and freshness — errors exit 1.</li>
+<li><strong><code>status</code></strong> reports wiki state, including stale and orphaned pages.</li>
+<li><strong><code>build</code></strong> emits <code>llms.txt</code>, <code>llms-full.txt</code>, <code>index.json</code> and static HTML for the site.</li>
+<li><strong><code>serve</code></strong> runs the MCP server.</li>
+</ul>
+<p>Directories beginning with an underscore (<code>_raw</code>, <code>_meta</code>, <code>_site</code>) are treated as operational and are never served to agents, and <code>[[wikilinks]]</code> are first-class lint targets in both <code>[[slug]]</code> and relative <code>.md</code> link form. That separation matters: your raw scraped sources can live in the repo without ever polluting agent context.</p>
+<h2 id="what-is-the-page-contract-and-why-does-lint-matter">What Is the Page Contract and Why Does Lint Matter?</h2>
+<p>This is the kit&rsquo;s strongest idea and the part most worth stealing regardless of which tool you pick. Every page must carry a contract: <code>title</code>, <code>type</code> (drawn from <code>wiki.yaml</code> page types), <code>status</code> (<code>live | draft | deprecated | planned</code>), <code>last_verified</code> (a date asserting the page was checked against reality on that date), <code>summary</code>, <code>sources</code> and <code>tags</code>.</p>
+<p>Lint then splits violations into two classes. Errors — <code>MALFORMED</code>, <code>MISSING_FIELD</code>, <code>BAD_STATUS</code>, <code>BAD_DATE</code>, <code>UNKNOWN_TYPE</code>, <code>BROKEN_LINK</code> — exit 1, which makes wiki quality a <strong>CI gate</strong>. Warnings — <code>STALE</code>, <code>ORPHAN</code>, <code>NO_SUMMARY</code> — surface hygiene problems without failing the build.</p>
+<p>That is the property nobody else in this category ships in one zero-dependency package: it turns &ldquo;did the agent remember?&rdquo; into something a pipeline can check. A broken link or a page that has not been verified against reality since March is a test failure, not a vague unease.</p>
+<p>One caveat: no test suite is visible in the tracked tree. The only CI artifact is <code>.github/workflows/ci.yml</code>, so &ldquo;lint exits 1, therefore it is CI-able&rdquo; describes the <em>contract</em> the code implements, not a verified test result for the engine itself.</p>
+<h2 id="zero-dependencies-five-mcp-tools-and-llmstxt-output">Zero Dependencies, Five MCP Tools, and llms.txt Output</h2>
+<p>The MCP server exposes five read tools — <code>wiki_list_pages</code>, <code>wiki_read_page</code>, <code>wiki_read_section</code>, <code>wiki_search</code>, <code>wiki_recent</code> — and pages are re-read on each call, so edits go live without restarting the server. If you have ever restarted a memory server to pick up a one-line correction, this detail is worth more than it looks.</p>
+<p><code>build</code> then emits <code>llms.txt</code>, <code>llms-full.txt</code>, <code>index.json</code> and static HTML. That is the quiet distribution unlock. The <a href="https://llmstxt.org/">llms.txt proposal</a> (Jeremy Howard, published 2024-09-03, revised for v2 on 2026-08-10) reports thousands of sites publishing one, documentation platforms generating them automatically, Chrome&rsquo;s Lighthouse auditing sites for one as part of its agentic-browsing checks, and OpenAI, Anthropic and Gemini publishing <code>llms.txt</code> for their own developer docs. &ldquo;Publish your wiki for agents&rdquo; is now a credible deployment story rather than a novelty.</p>
+<h2 id="how-does-agent-wiki-kit-compare-to-other-repo-native-memory-tools">How Does Agent Wiki Kit Compare to Other Repo-Native Memory Tools?</h2>
+<p>The category has two poles: <em>memory as reviewable Markdown</em> and <em>memory as infrastructure</em>. Traction is extremely uneven, and every figure below was read on 2026-10-01 and will move.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Tool</th>
+          <th>Stars</th>
+          <th>Storage</th>
+          <th>Packaging</th>
+          <th>Best for</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><a href="https://github.com/okf-memory/okf-agent-memory">okf-agent-memory</a></td>
+          <td>~740</td>
+          <td>Markdown + YAML frontmatter under <code>knowledge/</code></td>
+          <td>Go binary + embedded MCP (<code>okf mcp</code>)</td>
+          <td>Teams wanting a formal spec (Google OKF v0.2), trust tiers and sub-300µs BM25 search</td>
+      </tr>
+      <tr>
+          <td><a href="https://github.com/esaradev/icarus-memory-infra">icarus-memory-infra</a></td>
+          <td>~291</td>
+          <td>Infrastructure-level store</td>
+          <td>Python library</td>
+          <td>Three-layer memory with explicit supersession and rollback</td>
+      </tr>
+      <tr>
+          <td><a href="https://github.com/fellowgeek/mcp-memory">fellowgeek/mcp-memory</a></td>
+          <td>~218</td>
+          <td>OKF on disk + SQLite FTS5 index</td>
+          <td>MCP server</td>
+          <td>The hybrid: reviewable Markdown <em>plus</em> a fast index</td>
+      </tr>
+      <tr>
+          <td><a href="https://github.com/oliver-zehentleitner/keep-the-why">keep-the-why</a></td>
+          <td>~165</td>
+          <td>Markdown ADRs in repo</td>
+          <td>PyPI CLI + Marketplace Action</td>
+          <td>Capturing <em>why</em> decisions were made and rejected</td>
+      </tr>
+      <tr>
+          <td><a href="https://github.com/JunsW/feature-track">feature-track</a></td>
+          <td>~108</td>
+          <td><code>docs/features/&lt;id&gt;/</code></td>
+          <td>Agent skill (<code>npx skills add</code>)</td>
+          <td>Per-feature current truth, link-first adoption</td>
+      </tr>
+      <tr>
+          <td><a href="https://github.com/syiibfs-hash/cc-agent-brain">cc-agent-brain</a></td>
+          <td>~94</td>
+          <td>SQLite + FTS5, bi-temporal</td>
+          <td>Local engine</td>
+          <td>&ldquo;What was true when&rdquo; queries</td>
+      </tr>
+      <tr>
+          <td><a href="https://github.com/vanillaflava/llm-wiki-skills">llm-wiki-skills</a></td>
+          <td>~68</td>
+          <td>Markdown vault</td>
+          <td>Six agent skills, no engine</td>
+          <td>Lightest possible adoption</td>
+      </tr>
+      <tr>
+          <td><a href="https://github.com/iamsashank09/llm-wiki-kit">iamsashank09/llm-wiki-kit</a></td>
+          <td>~61</td>
+          <td>Markdown</td>
+          <td>Skill/kit</td>
+          <td>Name-collision risk — <strong>unrelated project</strong></td>
+      </tr>
+      <tr>
+          <td><a href="https://github.com/waittim/MemoryCustodian">MemoryCustodian</a></td>
+          <td>~22</td>
+          <td><code>docs/memory/</code> + manifest</td>
+          <td>Rule set + bounded context pack</td>
+          <td>Anti-context-bloat with honest forgetting semantics</td>
+      </tr>
+      <tr>
+          <td><strong>agent-wiki-kit (wikikit)</strong></td>
+          <td><strong>0</strong></td>
+          <td><code>knowledge/</code> wiki + <code>wiki.yaml</code></td>
+          <td>Python engine (stdlib) + MCP</td>
+          <td>Whole governed wiki with lint + build + serve in one binary-free package</td>
+      </tr>
+  </tbody>
+</table>
+<p>Two disambiguations matter if you arrived here from a search engine. <strong>AvalancheAI-labs/agent-wiki-kit is not <code>iamsashank09/llm-wiki-kit</code></strong> (~61 stars) and it is not <strong>llm-wiki.net</strong> (a commercial Claude Code/Codex plugin). Three unrelated projects use near-identical vocabulary — wiki, kit, compounding — so features get conflated constantly.</p>
+<p>The packaging axis is worth drawing explicitly. Repo-native storage inherits Git semantics for free: diff, blame, revert, review, branch. Database-backed tools (<code>cc-agent-brain</code>, <code>mcp-memory</code>) buy speed and bi-temporal queries but reintroduce an opaque artifact that you cannot review in a pull request.</p>
+<h2 id="do-compiled-wikis-actually-beat-raw-rag">Do Compiled Wikis Actually Beat Raw RAG?</h2>
+<p>Yes, on answer accuracy, and the numbers are public. <a href="https://agentwikis.com/why-wikis">agentwikis.com</a> publishes a blind-judged evaluation: 27 tasks on Hermes Agent, the same model, the same token budget and the same retrieval setup per condition, replicated across two model families.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Condition</th>
+          <th>Correct</th>
+          <th>Hallucination</th>
+          <th>Cost/query</th>
+          <th>Latency</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>RAG over a compiled wiki</td>
+          <td>89%</td>
+          <td>7%</td>
+          <td>~$0.0016</td>
+          <td>~1.2s</td>
+      </tr>
+      <tr>
+          <td>RAG over raw sources</td>
+          <td>63%</td>
+          <td>26%</td>
+          <td>—</td>
+          <td>—</td>
+      </tr>
+      <tr>
+          <td>Live web search</td>
+          <td>48%</td>
+          <td>48%</td>
+          <td>~$0.0054</td>
+          <td>~3.6s</td>
+      </tr>
+      <tr>
+          <td>Parametric only (no retrieval)</td>
+          <td>4%</td>
+          <td>85%</td>
+          <td>—</td>
+          <td>—</td>
+      </tr>
+  </tbody>
+</table>
+<p>The decisive comparison is rows one and two: the only change is raw chunks versus compiled pages, and accuracy moves 63% → 89% while hallucination falls 26% → 7%. On change-aware questions — &ldquo;what changed in vX?&rdquo; — the compiled wiki scored 100% against 25% for the alternative. And the wiki route ran roughly 3x cheaper and faster than live web search.</p>
+<p>Vendor honesty is also on display: the same page reports that web search still wins simple lookups on mature, exhaustively documented domains, and that a &ldquo;wiki first, web on gaps&rdquo; routing policy scored <strong>93%</strong> — higher than either channel alone. Treat this as the best public numbers in the category, but remember it is a <em>vendor&rsquo;s</em> eval with 27 tasks on a niche, fast-moving subject. It is strong evidence for the mechanism and weak evidence for any specific percentage.</p>
+<h2 id="do-context-files-help-coding-agents-the-evidence-says-no">Do Context Files Help Coding Agents? The Evidence Says No</h2>
+<p>Here is the uncomfortable half. Three controlled studies of repository context files — <code>AGENTS.md</code> and its relatives — disagree, and the disagreement is not noise.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Study</th>
+          <th>Design</th>
+          <th>Finding</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Gloaguen et al., <a href="https://arxiv.org/abs/2602.11988v2">arXiv 2602.11988v2</a> (ICLR 2026 MemAgents, oral &amp; runner-up best paper)</td>
+          <td>Multiple LLMs and coding agents; LLM-generated and developer-committed files</td>
+          <td><strong>No task-success improvement</strong>; inference cost up <strong>over 20% on average</strong></td>
+      </tr>
+      <tr>
+          <td>Lulla et al., <a href="https://arxiv.org/pdf/2601.20404.pdf">arXiv 2601.20404</a> (ICSE JAWs 2026)</td>
+          <td>10 repositories, 124 pull requests, paired with/without</td>
+          <td>Median wall-clock <strong>−28.64%</strong> (98.57s → 70.34s), median output tokens <strong>−16.58%</strong> (2,925 → 2,440), p &lt; 0.05, at comparable completion</td>
+      </tr>
+      <tr>
+          <td>Khatri, <a href="https://arxiv.org/html/2607.27250v1">arXiv 2607.27250</a></td>
+          <td>288 evaluated runs: 17 tasks × 3 strategies × 3 repeats, Claude Code and Codex, gold-test scoring</td>
+          <td>Context strategy <strong>does not measurably move correctness</strong>; bounded to ≤10–15 percentage points by equivalence testing</td>
+      </tr>
+  </tbody>
+</table>
+<p>Gloaguen et al. add a sharp corollary: instructions <em>are</em> well followed, but repository overviews — the popular, provider-recommended content — are not helpful, and human-written context files should describe only minimal non-inferable requirements. Lulla et al. find the efficiency win concentrates in high-cost runs (mean runtime −20.27%, mean output tokens −20.08%, mean input tokens −9.73%), while medians for input tokens are essentially unchanged.</p>
+<h2 id="how-do-you-reconcile-the-contradiction">How Do You Reconcile the Contradiction?</h2>
+<p>Khatri&rsquo;s failure-mode triage is the key. The null result came from agents failing on <strong>implementation skill</strong> — feature design, pattern selection, exact wiring — not from missing repository knowledge. A manipulation probe found the real <code>AGENTS.md</code> never converted a near-miss into a pass on either agent. Notably, Khatri&rsquo;s &ldquo;selective&rdquo; condition — topic-organized wiki files the agent retrieves on demand through its Read tool — is the closest experimental proxy for the wiki pattern, and it produced no correctness gain in that harness either.</p>
+<p>So the reconciliation is a distinction between two kinds of question:</p>
+<ul>
+<li><strong>Knowledge-shaped</strong> (&ldquo;what is our retry policy?&rdquo;, &ldquo;which auth library do we use?&rdquo;, &ldquo;why was Postgres rejected?&rdquo;) — the wiki wins, and the retrieval numbers above are the evidence.</li>
+<li><strong>Skill-shaped</strong> (&ldquo;write a patch that passes these tests&rdquo;) — the wiki does not help, and you should stop hoping it will.</li>
+</ul>
+<p>Khatri also offers a hypothesis for why the three studies disagree at all: single-agent studies draw tasks from different agents&rsquo; informative difficulty bands, with borderline-task difficulty correlating at Spearman ρ = 0.75. That is a hypothesis, not a resolution — do not read Lulla et al.&rsquo;s efficiency gains as superseding Gloaguen et al.&rsquo;s null, or vice versa.</p>
+<h2 id="why-is-freshness-the-one-unambiguous-win">Why Is Freshness the One Unambiguous Win?</h2>
+<p>Because it has a mechanism, not just a correlation. The kit enforces <code>last_verified</code> on every page and lints <code>STALE</code> and <code>ORPHAN</code> when reality drifts. That maps directly onto the 100% versus 25% gap on change-aware questions, and onto the entire reason add-ons like Kage (a third-party verification/freshness layer for Google&rsquo;s OKF memory) exist — a project that showed on Hacker News at only 4 points, which tells you how early freshness tooling itself is.</p>
+<p>Most knowledge failures in a codebase are not &ldquo;the fact was never written down&rdquo;. They are &ldquo;the fact was written down eighteen months ago and the migration changed it&rdquo;. A wiki with a <code>last_verified</code> field and a lint rule is the only design in this category that makes staleness <em>visible as a build artifact</em>.</p>
+<h2 id="agentsmd-monolith-vs-progressive-disclosure">AGENTS.md Monolith vs Progressive Disclosure</h2>
+<p>The prompt-monolith problem is real and quantified. <code>AGENTS.md</code> is loaded into context on every turn, and <a href="https://agents.md/">agents.md</a> describes it as used by over 60k open-source projects — its Show HN thread scored 837 points and 382 comments (2025-08-20), and &ldquo;Claude Code now reads AGENTS.md if there is no Claude.md&rdquo; scored 741 points and 285 comments (2026-09-18). That ubiquity is the problem: the more you rely on a single always-on file, the more the &gt;20% cost premium from Gloaguen et al. becomes the price of your own growth.</p>
+<p>Two designs in this category answer it head-on. OKF Agent Memory implements a Dual-Memory Agent Architecture: a <em>push</em> layer — a normative ~100–150-token <code>AGENTS.md</code> codex covering invariants, tone and guardrails — plus a <em>pull</em> layer of semantic domain memory retrieved on demand. MemoryCustodian makes the same bet from the other direction with a manifest-routed &ldquo;context pack&rdquo; loaded before work, under the slogan &ldquo;Durable memory. Minimal context.&rdquo;</p>
+<p>wikikit&rsquo;s five MCP tools are the pull layer. The pattern is progressive disclosure: keep the always-on surface tiny, make the deep knowledge fetchable.</p>
+<h2 id="the-cost-arithmetic-2864-faster-1658-fewer-tokens-20-more-expensive">The Cost Arithmetic: 28.64% Faster, 16.58% Fewer Tokens, 20% More Expensive</h2>
+<p>All three numbers are real, and they resolve by asking which file you wrote:</p>
+<table>
+  <thead>
+      <tr>
+          <th>If your context file…</th>
+          <th>Expected effect</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Short-circuits exploration (build commands, gotchas, non-inferable conventions)</td>
+          <td>Runtime and token savings of the Lulla et al. magnitude</td>
+      </tr>
+      <tr>
+          <td>Restates a repository overview the agent could infer</td>
+          <td>The &gt;20% cost premium with no correctness gain</td>
+      </tr>
+      <tr>
+          <td>Contains the wrong stale fact</td>
+          <td>Worst case: confidently wrong, every turn</td>
+      </tr>
+  </tbody>
+</table>
+<p>The net is not a property of context files; it is a property of whether your file removes searching or adds noise. Gloaguen et al.&rsquo;s conclusion — describe only minimal non-inferable requirements — is the operating rule that follows.</p>
+<h2 id="limits-and-risks-0-stars-2-commits-no-release-an-external-ingest-dependency">Limits and Risks: 0 Stars, 2 Commits, No Release, an External Ingest Dependency</h2>
+<p>A review that does not grade this honestly is marketing.</p>
+<ul>
+<li><strong>The kit is unproven.</strong> 0 stars, 0 forks, 0 open issues, 2 commits (both 2026-08-13), 0 tags, 0 releases, and HTTP 404 on PyPI for both names. Nobody has run this at scale in public.</li>
+<li><strong>No visible tests.</strong> 40 tracked blobs; the only CI artifact is the workflow file.</li>
+<li><strong><code>ingest</code> depends on the <code>claude</code> CLI.</strong> The &ldquo;zero-dependency&rdquo; claim covers the engine and the runtime, not the compilation workflow.</li>
+<li><strong>The four instance profiles are roadmap.</strong> Market/competitor wiki, key-account wiki, data-asset wiki and ops wiki are listed as planned in the README — do not describe them as shipped.</li>
+<li><strong>Its own headline evidence is attributed, not verified.</strong> The kit&rsquo;s evidence page claims a roughly 26–30% accuracy gain for structured curated knowledge over raw-text RAG, citing WordLift 2026 and an Amazon KDD 2025 paper. WordLift returned HTTP 403 to automated fetch, and the Amazon paper was not retrieved, so that figure must be quoted as the kit&rsquo;s own claim with its own caveat — which the kit itself supplies, calling the percentage directional rather than universal.</li>
+</ul>
+<p>Against that: the community&rsquo;s own objections are worth reading before you invest in any of this. The 191-point &ldquo;Agent memory as a file format&rdquo; thread produced &ldquo;That&rsquo;s a whole lot of text to say it&rsquo;s markdown&rdquo; and &ldquo;I&rsquo;m not convinced an unstructured collection of memory files is the way to go at all&rdquo;. The 260-point wuphf thread produced the two most useful questions: &ldquo;how does markdown help in durability?&rdquo; and &ldquo;why not an Obsidian vault with a plugin?&rdquo; The answer to the second is CI: a linter with an exit code enforces structure that a vault plugin merely suggests.</p>
+<h2 id="who-should-adopt-repo-native-memory-now--and-who-should-wait">Who Should Adopt Repo-Native Memory Now — and Who Should Wait?</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Your pain</th>
+          <th>Adopt now?</th>
+          <th>What to use</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Onboarding, conventions, &ldquo;why was this rejected&rdquo;</td>
+          <td>Yes</td>
+          <td>Any repo-native wiki; <code>keep-the-why</code> is the most mature for the <em>why</em> layer</td>
+      </tr>
+      <tr>
+          <td>Agents answering the same question wrongly every sprint</td>
+          <td>Yes</td>
+          <td>A compiled wiki with <code>last_verified</code> + lint</td>
+      </tr>
+      <tr>
+          <td>Cross-agent portability (Claude Code, Codex, Cursor, Gemini CLI)</td>
+          <td>Yes</td>
+          <td>Markdown in the repo — it survives a tool switch</td>
+      </tr>
+      <tr>
+          <td>Agents writing patches that fail tests</td>
+          <td>No</td>
+          <td>The evidence says a wiki will not fix implementation skill</td>
+      </tr>
+      <tr>
+          <td>You need sub-millisecond retrieval or bi-temporal queries</td>
+          <td>Not this way</td>
+          <td><code>cc-agent-brain</code> or <code>mcp-memory</code> (SQLite FTS5)</td>
+      </tr>
+      <tr>
+          <td>You want someone else to have run it at scale</td>
+          <td>Wait</td>
+          <td>Watch <code>okf-agent-memory</code> (~740 stars) and re-check this kit in 3–6 months</td>
+      </tr>
+  </tbody>
+</table>
+<p>Cross-agent portability deserves the emphasis it gets in 2026: Claude Code, Codex, Cursor, Gemini CLI and OpenCode all read Markdown files in the repository. A repo-native wiki survives a tool switch in a way that any single vendor&rsquo;s memory feature does not.</p>
+<h2 id="verdict">Verdict</h2>
+<p><strong>Adopt the pattern. Watch the kit.</strong></p>
+<p>Agent Wiki Kit compiles more of the repo-native-memory pattern into one zero-dependency engine than anything else in the category: a page contract, a CI-gateable lint, <code>llms.txt</code> output and an MCP server with five read tools — all stdlib, all diffable in Git. That is a genuinely well-designed 48 KB of Python, and the ideas (contract, freshness, progressive disclosure) are worth copying today even if you never install it.</p>
+<p>But a toolkit with 0 stars, 2 commits, no tests in the tree, no release and no PyPI presence has not earned a production dependency from you. Start by writing a <code>knowledge/</code> folder and linting it in CI — with any of the ten tools in the table above, or with a fifty-line script and <code>mkdocs</code>. If the kit is still there, tested and released, in three to six months, then it becomes a real candidate. Until then, the pattern is the product.</p>
+<h2 id="faq">FAQ</h2>
+<h3 id="what-is-agent-wiki-kit-in-one-sentence">What is Agent Wiki Kit in one sentence?</h3>
+<p>Agent Wiki Kit (engine name: wikikit) is an MIT-licensed, Python-stdlib-only toolkit from AvalancheAI-labs that turns frontmatter Markdown files into a governed wiki — with a page contract, lint rules, <code>llms.txt</code> output and an MCP server exposing five read tools — so coding agents can consult durable project knowledge stored in your repository instead of re-deriving it from raw sources on every query.</p>
+<h3 id="is-agent-wiki-kit-ready-for-production-use-in-2026">Is Agent Wiki Kit ready for production use in 2026?</h3>
+<p>Not yet, and the project&rsquo;s own numbers are the reason. As of 2026-10-01 the repository has 0 stars, 0 forks, 2 commits (both from 2026-08-13), 0 releases and 0 tags, is not published on PyPI (HTTP 404 for both <code>wikikit</code> and <code>agent-wiki-kit</code>), and ships no visible test suite. The engine is real and the design is strong, but nothing third-party has validated its reliability at scale, so the defensible verdict is &ldquo;adopt the pattern, watch the kit.&rdquo;</p>
+<h3 id="do-compiled-wikis-actually-beat-raw-rag-for-coding-agents">Do compiled wikis actually beat raw RAG for coding agents?</h3>
+<p>Yes on answer accuracy, no on coding-task success — and the distinction is the whole story. agentwikis.com&rsquo;s blind-judged eval reports 89% correct and 7% hallucination for RAG over a compiled wiki versus 63% and 26% for RAG over raw sources with the same model and token budget, while Gloaguen et al. (arXiv 2602.11988v2) and Khatri&rsquo;s 288-run ablation (arXiv 2607.27250) find repository context files do not improve whether an agent writes a patch that passes tests.</p>
+<h3 id="why-do-the-agentsmd-studies-disagree-with-each-other">Why do the AGENTS.md studies disagree with each other?</h3>
+<p>Khatri attributes the disagreement partly to task selection: single-agent studies draw their tasks from different agents&rsquo; informative difficulty bands, and borderline-task difficulty correlates at Spearman ρ = 0.75 across them. More usefully, the failure-mode triage shows agents failing on implementation skill — feature design, pattern selection, exact wiring — rather than on missing repository knowledge, so knowledge-oriented context helps knowledge questions and does essentially nothing for skill-shaped ones.</p>
+<h3 id="should-i-write-an-agentsmd-or-build-a-wiki-instead">Should I write an AGENTS.md, or build a wiki instead?</h3>
+<p>Both, with different sizes. Write a short <code>AGENTS.md</code> containing only minimal non-inferable requirements — build commands, gotchas, conventions — the rule Gloaguen et al. arrive at, and keep the deep knowledge in a retrievable wiki, because a repository overview in an always-on file is the content they found unhelpful while costing over 20% more inference. That push-plus-pull split is exactly what OKF Agent Memory&rsquo;s Dual-Memory Agent Architecture and wikikit&rsquo;s five MCP tools implement.</p>
+]]></content:encoded></item></channel></rss>
