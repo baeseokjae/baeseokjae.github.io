@@ -1,0 +1,428 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Dflash Speculative Decoding on RockB</title><link>https://baeseokjae.github.io/tags/dflash-speculative-decoding/</link><description>Recent content in Dflash Speculative Decoding on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 01 Oct 2026 01:13:08 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/dflash-speculative-decoding/index.xml" rel="self" type="application/rss+xml"/><item><title>Muse Glimmer 30B Review: Meta's Always-On Local Agent Model (2026)</title><link>https://baeseokjae.github.io/posts/muse-glimmer-30b-local-agent-model/</link><pubDate>Thu, 01 Oct 2026 01:13:08 +0000</pubDate><guid>https://baeseokjae.github.io/posts/muse-glimmer-30b-local-agent-model/</guid><description>Muse Glimmer 30B is Meta&amp;#39;s Apache 2.0 dense agent model for one GPU. Independent 2026 benchmarks, VRAM math and hands-on speed numbers.</description><content:encoded><![CDATA[<p>Muse Glimmer 30B is Meta&rsquo;s August 2026 open-weights agent model: about 29.6B dense parameters under Apache 2.0, built to run an always-on tool-calling loop on a single 24-32 GB GPU. It leads its size class on MCP Atlas (75.5) and offline tool use, but trails Qwen3.6-27B on terminal and desktop automation.</p>
+<p><strong>The short version:</strong> at 7.8/10, it is the strongest model you can point at your own files and let run unattended on one consumer card. It is also a dense model that pays for every parameter on every token, it hallucinates confidently when it does not know (82% in one independent calibration test), and it loses the GUI-control benchmarks to a cheaper rival. Whether that is a good trade depends entirely on which agent loop you actually run.</p>
+<p><strong>Pros</strong></p>
+<ul>
+<li>Best-in-class tool calling and MCP behavior at this size: MCP Atlas 75.5 vs 62.5 for Qwen3.6-27B and 54.2 for Gemma4-31B.</li>
+<li>Unmodified Apache 2.0 with no acceptable-use policy and no monthly-active-user cutoff.</li>
+<li>Published, measured quantization loss: 0.2% average across 15 benchmarks at the 32 GB K-Quant-Dynamic build, 1.0% for the 17 GB build.</li>
+<li>Exceptionally lean KV cache at roughly 52 KiB per token, which is what makes 131,072-token context resident on a 24-32 GB card.</li>
+<li>Trained for failure recovery: it re-calls a schema-rejecting 400, retries a 503, and falls back when a tool is simply dead.</li>
+</ul>
+<p><strong>Cons</strong></p>
+<ul>
+<li>Dense, not MoE. On an M3 Max it ran near 20 tok/s where a MoE rival hit roughly 70 tok/s on the same machine.</li>
+<li>82% hallucination rate and an AA-Omniscience Index of -33: accurate often enough, poorly calibrated when wrong.</li>
+<li>Loses OSWorld-Verified (65.9 vs 75.6) and TerminalBench 2.1 (51.7 vs 60.7) to Qwen3.6-27B.</li>
+<li>Reasoning cannot be disabled, only dialed from low to xhigh, and xhigh roughly doubled token spend and wall-clock time in a measured test.</li>
+<li><code>tool_choice: &quot;required&quot;</code> is documented as unsupported and fails silently rather than erroring.</li>
+</ul>
+<h2 id="what-is-muse-glimmer-30b-and-what-did-meta-actually-ship">What Is Muse Glimmer 30B and What Did Meta Actually Ship?</h2>
+<p>Muse Glimmer is a 29.6B-parameter dense causal transformer plus a roughly 1.8B ViT-G/14 perception encoder, released on August 10, 2026 by Meta Superintelligence Labs under an unmodified Apache 2.0 license (<a href="https://huggingface.co/meta-models/Muse-Glimmer-30B">model card</a>). It accepts text and images and emits text only. Audio is unsupported in both directions.</p>
+<p>The model card&rsquo;s configuration is unusually specific, and it is worth reading before you plan hardware:</p>
+<ul>
+<li>52 layers, hidden size 6,656, head dimension 128</li>
+<li>Grouped-query attention at 32 query heads to 2 KV heads, a 16:1 ratio</li>
+<li>Sliding window of 2,048 tokens in a repeating [Local, Local, Local, Global] pattern</li>
+<li>SwiGLU feed-forward dimension 19,968, RoPE theta 500,000 on local layers only</li>
+<li>Vocabulary of 202,048 (200k BPE plus 2,048 special tokens)</li>
+<li>Context window of 131,072 tokens, extendable to 262,144 in tooling, with a knowledge cutoff of January 4, 2026</li>
+</ul>
+<p>It ships with an official ATEM tool-calling chat template using <code>&lt;atem:function_calls&gt;</code> and <code>&lt;atem:invoke&gt;</code> blocks, and a <code>reasoning_strength</code> variable you can set to low, medium, high, or xhigh.</p>
+<p>The lineage matters for setting expectations. Glimmer is distilled from the closed flagship Muse Spark in three phases: logit distillation, then agent-heavy mid-training with reasoning traces, then supervised fine-tuning plus on-policy distillation and reinforcement learning. Meta states plainly that the student is generally less capable than its teacher and that Glimmer does not meet Meta&rsquo;s own Frontier AI definition. This is a deliberately positioned 30B agent workhorse, not a frontier model in a smaller box.</p>
+<h2 id="is-muse-glimmer-30b-dense-or-moe">Is Muse Glimmer 30B Dense or MoE?</h2>
+<p>Dense. There is no expert routing in the configuration, and that is a design bet rather than an oversight.</p>
+<p>Meta and NVIDIA frame the choice as predictability: no routing decisions, no expert selection, and no variance in which token pathways fire per step. For an agent loop, the felt cost of a model is step latency, not a throughput benchmark. An MoE with 284B total and 13B active parameters can outrun a dense 30B on tokens per second, but its per-step timing swings with which experts get selected, and its memory math depends on which experts are resident.</p>
+<p>The honest counterargument is that Glimmer pays full freight. Every token runs through all ~30B parameters, so a dense model at this size is slower than the MoE rivals it competes with. One reviewer measured roughly 20 tok/s for Glimmer on an M3 Max against about 70 tok/s for MoE Qwen3.6-35B-A3B and 60 tok/s for Gemma4-26B-A4B on the same machine, and concluded the architecture &ldquo;will need an MoE if it wants to rival competitors&rdquo; (<a href="https://aymeric.fyi/blog/muse-glimmer-local-test">aymeric.fyi</a>).</p>
+<p>Both things are true. Dense buys steady per-step latency and trivial memory arithmetic. It costs raw speed.</p>
+<h2 id="inside-the-architecture-how-does-128k-context-fit-on-a-24-gb-card">Inside the Architecture: How Does 128K Context Fit on a 24 GB Card?</h2>
+<p>Through the KV cache, not through magic. The 16:1 grouped-query attention ratio and the 3-local-to-1-global attention pattern together shrink the per-token cache, and that is the unglamorous reason long agent sessions fit on desktop hardware.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Model</th>
+          <th>Approx. KV cache per token</th>
+          <th>Cache pool on one DGX Spark</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Muse Glimmer 30B</td>
+          <td>~52 KiB</td>
+          <td>4.8M tokens</td>
+      </tr>
+      <tr>
+          <td>Qwen3.6-27B</td>
+          <td>64 KiB</td>
+          <td>~2.2M tokens (0.45x)</td>
+      </tr>
+      <tr>
+          <td>Gemma4-31B</td>
+          <td>~840 KiB</td>
+          <td>~0.76M tokens (0.16x)</td>
+      </tr>
+  </tbody>
+</table>
+<p>At 131,072 tokens, Glimmer&rsquo;s cache floor is roughly 1.8 GB. On a single DGX Spark the resulting KV pool reached 4.8M tokens, about 2.2x the Qwen 3.6-27B pool and 6.3x the Gemma4-31B pool (<a href="https://artificialanalysis.ai/articles/muse-glimmer">Artificial Analysis</a>, <a href="https://dev.classmethod.jp/en/articles/dgx-spark-muse-glimmer-first-touch">classmethod</a>).</p>
+<p>The practical consequence: an always-on agent that accumulates context for hours needs cache headroom more than it needs peak decode speed. A model with an 840 KiB per-token cache cannot hold that session on a 32 GB card at all, no matter how fast its tokens arrive.</p>
+<h2 id="what-do-the-published-quantization-numbers-actually-buy-you">What Do the Published Quantization Numbers Actually Buy You?</h2>
+<p>Meta published degradation figures across 15 benchmarks, which turns &ldquo;run it at 4-bit&rdquo; from a leap of faith into a budget line you can compare.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Build</th>
+          <th>Memory needed</th>
+          <th>Measured average loss</th>
+          <th>Typical target</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>BF16</td>
+          <td>55-58 GB+</td>
+          <td>Baseline (0%)</td>
+          <td>64 GB VRAM workstation</td>
+      </tr>
+      <tr>
+          <td>K-Quant-Dynamic</td>
+          <td>~32 GB</td>
+          <td>0.2% over 15 benchmarks</td>
+          <td>32 GB card / 32 GB Mac</td>
+      </tr>
+      <tr>
+          <td>K-Quant-17GB</td>
+          <td>~24 GB</td>
+          <td>1.0% over 15 benchmarks</td>
+          <td>24 GB card</td>
+      </tr>
+      <tr>
+          <td>UD-Q2_K_XL (Unsloth)</td>
+          <td>12-14 GB</td>
+          <td>Not published by Unsloth</td>
+          <td>RTX 4080 class</td>
+      </tr>
+      <tr>
+          <td>UD-Q3_K_XL</td>
+          <td>14-15 GB</td>
+          <td>Not published by Unsloth</td>
+          <td>RTX 4090</td>
+      </tr>
+      <tr>
+          <td>UD-Q4_K_XL / NVFP4</td>
+          <td>17 GB+</td>
+          <td>Comparable tier</td>
+          <td>32 GB Mac, 24 GB card</td>
+      </tr>
+      <tr>
+          <td>UD-Q6_K_XL</td>
+          <td>20-22 GB</td>
+          <td>Higher fidelity</td>
+          <td>RTX 5090</td>
+      </tr>
+      <tr>
+          <td>UD-Q8_K_XL</td>
+          <td>~34 GB</td>
+          <td>Near-lossless</td>
+          <td>48 GB+</td>
+      </tr>
+  </tbody>
+</table>
+<p>The 17 GB build on a 24 GB card or a 32 GB Mac is the sweet spot for most local agent work, and the 1.0% average loss is small enough that you should not treat it as a compromise tier. Two add-ons compete for the same envelope, though: the optional vision projector adds about 1.4 GB, and the DFlash speculative decoder adds about 1.63 GB on top of base weights (<a href="https://awesomeagents.ai/reviews/review-muse-glimmer">Awesome Agents</a>).</p>
+<p>Meta&rsquo;s default sampling settings are temperature 1.0, top_p 0.95, and top_k 64 (<a href="https://unsloth.ai/docs/models/muse-glimmer">Unsloth docs</a>). Do not inherit another model&rsquo;s sampler config.</p>
+<h2 id="how-fast-is-muse-glimmer-30b-in-practice">How Fast Is Muse Glimmer 30B in Practice?</h2>
+<p>Speed is where this model&rsquo;s reputation lives or dies, and the spread across hardware is enormous.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Hardware</th>
+          <th>Configuration</th>
+          <th>Measured throughput</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>RTX 5090 (32 GB)</td>
+          <td>Lemonade, full 131K context, agent loops</td>
+          <td>~110 tok/s</td>
+      </tr>
+      <tr>
+          <td>RTX 5090</td>
+          <td>llama.cpp with DFlash</td>
+          <td>74.9 -&gt; 233.4 tok/s</td>
+      </tr>
+      <tr>
+          <td>DGX Spark</td>
+          <td>NVFP4, single request / 8-way parallel</td>
+          <td>11.67 / 88.61 tok/s</td>
+      </tr>
+      <tr>
+          <td>DGX Spark</td>
+          <td>NVFP4 with DFlash</td>
+          <td>21.57-23.74 tok/s</td>
+      </tr>
+      <tr>
+          <td>M5 Max</td>
+          <td>ExecuTorch with DFlash</td>
+          <td>26.6 -&gt; 50 tok/s</td>
+      </tr>
+      <tr>
+          <td>M4 Max</td>
+          <td>ExecuTorch with DFlash</td>
+          <td>23.7 -&gt; 38 tok/s</td>
+      </tr>
+      <tr>
+          <td>M3 Max (96 GB)</td>
+          <td>MLX with DFlash</td>
+          <td>~20 tok/s</td>
+      </tr>
+      <tr>
+          <td>RTX 2000 Ada (16 GB)</td>
+          <td>4-bit with CPU offload</td>
+          <td>~6.2 tok/s decode</td>
+      </tr>
+      <tr>
+          <td>MacBook Air M3 / M4</td>
+          <td>fanless, llama.cpp</td>
+          <td>~4.3 tok/s</td>
+      </tr>
+  </tbody>
+</table>
+<p>The best end is genuinely good. On a 32 GB RTX 5090, an independent tester ran the full 131,072-token context with 27.6 GB of 31.5 GB VRAM occupied and nothing spilled to shared memory, holding roughly 110 tok/s inside real agent loops (<a href="https://xda-developers.com/muse-glimmer-30b-runs-on-my-32gb-gpu-never-leaves-the-machine">XDA Developers</a>).</p>
+<p>DFlash is what moves the model from &ldquo;it runs&rdquo; to &ldquo;it responds.&rdquo; It proposes 16-token blocks for parallel verification with identical output to standard generation, and third-party measurements confirm real gains: 1.85x on vLLM (11.67 to 21.57 tok/s) and 2.13x on SGLang (11.16 to 23.74 tok/s) on a DGX Spark, broadly consistent with Meta&rsquo;s 3.1x claim on a 5090 and 1.5-1.8x on Apple silicon (<a href="https://dev.classmethod.jp/en/articles/dgx-spark-muse-glimmer-first-touch">classmethod</a>, <a href="https://rits.shanghai.nyu.edu/ai/meta-releases-muse-glimmer-a-30b-agent-model-for-a-single-gpu">RITS</a>). One RTX 3060 Ti test gained only about 1 tok/s, so do not assume the multiplier transfers to small cards.</p>
+<p>The worst end is just as concrete. On fanless MacBook Air M3 (24 GB) and M4 (32 GB) machines the model fits but generates around 4.3 tokens per second, which makes thermal headroom as important as unified-memory size (<a href="https://holaclaw.ai/blog/muse-glimmer-on-mac">HolaClaw</a>). On a 16 GB RTX 2000 Ada with CPU offload, decode sat near 6.2 tok/s versus 10-11 tok/s for a dense 27B Qwen on the same box.</p>
+<h2 id="the-thinking-tax-can-you-turn-reasoning-off">The Thinking Tax: Can You Turn Reasoning Off?</h2>
+<p>No. The reasoning strength setting offers only low, medium, high, and xhigh. There is no off switch, and the chat template embeds whatever string you pass directly, which produces non-obvious failures.</p>
+<p>A developer testing this found that passing <code>off</code> produced <em>more</em> thinking than passing <code>none</code>: 1,999 characters versus 1,243. The measured cost of the dial is substantial. Four identical questions cost 1,409 tokens and 123.9 seconds at low effort, versus 2,790 tokens and 245.8 seconds at xhigh. A single 50-character answer consumed 1,028 tokens and 90.55 seconds (<a href="https://dev.classmethod.jp/en/articles/dgx-spark-muse-glimmer-first-touch">classmethod</a>).</p>
+<p>This reframes the buying decision. Wall-clock time, not raw tok/s, determines which model feels faster in practice, and in that same test the slowest model won. If your agent loop fires many small tool calls, budget for reasoning tokens on every one of them and prefer low effort unless the task genuinely needs deliberation.</p>
+<h2 id="benchmarks-where-does-muse-glimmer-30b-win-and-where-does-qwen36-27b-still-beat-it">Benchmarks: Where Does Muse Glimmer 30B Win and Where Does Qwen3.6-27B Still Beat It?</h2>
+<p>Glimmer does not win everywhere, and the losses are as decision-relevant as the wins. Every row below is attributed to the harness that produced it, because Meta&rsquo;s model card, Artificial Analysis, LM Studio&rsquo;s BionicBench, and individual hands-on tests are different measurement regimes.</p>
+<p><strong>Meta&rsquo;s own reported results</strong></p>
+<table>
+  <thead>
+      <tr>
+          <th>Benchmark</th>
+          <th>Muse Glimmer 30B</th>
+          <th>Qwen3.6-27B</th>
+          <th>Gemma4-31B</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>MCP Atlas (Public)</td>
+          <td>75.5</td>
+          <td>62.5</td>
+          <td>54.2</td>
+      </tr>
+      <tr>
+          <td>SWE-Bench Verified</td>
+          <td>76.0</td>
+          <td>77.2</td>
+          <td>66.6</td>
+      </tr>
+      <tr>
+          <td>SWE-Bench Pro</td>
+          <td>51.2</td>
+          <td>Not reported</td>
+          <td>Not reported</td>
+      </tr>
+      <tr>
+          <td>OSWorld-Verified</td>
+          <td>65.9</td>
+          <td>75.6</td>
+          <td>Not reported</td>
+      </tr>
+      <tr>
+          <td>TerminalBench 2.1</td>
+          <td>51.7</td>
+          <td>60.7</td>
+          <td>43.4</td>
+      </tr>
+      <tr>
+          <td>DeepSearch QA</td>
+          <td>74.6</td>
+          <td>Not reported</td>
+          <td>Not reported</td>
+      </tr>
+      <tr>
+          <td>AIME 2026</td>
+          <td>94.7</td>
+          <td>Not reported</td>
+          <td>Not reported</td>
+      </tr>
+      <tr>
+          <td>GPQA Diamond</td>
+          <td>83.5</td>
+          <td>Not reported</td>
+          <td>Not reported</td>
+      </tr>
+      <tr>
+          <td>AA-LCR</td>
+          <td>80.0</td>
+          <td>Not reported</td>
+          <td>Not reported</td>
+      </tr>
+      <tr>
+          <td>IFBench</td>
+          <td>77.0</td>
+          <td>Not reported</td>
+          <td>Not reported</td>
+      </tr>
+  </tbody>
+</table>
+<p>The +13.0 MCP Atlas gap over Qwen3.6-27B is the headline for anyone building tool-calling agents, and it is the number that matches what hands-on testers report. The 9.7-point OSWorld deficit is equally real: if your agent drives a GUI, this is the wrong model.</p>
+<p><strong>Independent evaluations</strong></p>
+<table>
+  <thead>
+      <tr>
+          <th>Evaluation</th>
+          <th>Source</th>
+          <th>Result</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Intelligence Index (high reasoning)</td>
+          <td>Artificial Analysis</td>
+          <td>35, vs 38 for Qwen3.6-27B, 30 for Gemma 4 31B, 36 for 1T-parameter Kimi K2.5</td>
+      </tr>
+      <tr>
+          <td>Agentic desktop tasks (18 real tasks)</td>
+          <td>LM Studio BionicBench</td>
+          <td>83.3% completion vs 77.7% for both Qwen3.6-27B and Gemma 4 31B</td>
+      </tr>
+      <tr>
+          <td>GDPval-AA v2</td>
+          <td>Artificial Analysis</td>
+          <td>953 Elo, below the 1,000 human baseline and behind Qwen3.6-27B at 1,141</td>
+      </tr>
+      <tr>
+          <td>Tau3-Banking</td>
+          <td>Artificial Analysis</td>
+          <td>24%, best in class at this size</td>
+      </tr>
+      <tr>
+          <td>Vision (MMMU-Pro)</td>
+          <td>Artificial Analysis</td>
+          <td>74%</td>
+      </tr>
+      <tr>
+          <td>Overall verdict</td>
+          <td>Awesome Agents</td>
+          <td>7.8/10, &ldquo;Fast, Free, Not Flawless&rdquo;</td>
+      </tr>
+  </tbody>
+</table>
+<p>The BionicBench result is the most persuasive independent signal, because it uses 18 real desktop-agent tasks spanning coding, Word and Excel editing, PDF generation, and screenshot reading rather than a published academic suite (<a href="https://awesomeagents.ai/reviews/review-muse-glimmer">Awesome Agents</a>).</p>
+<h2 id="can-you-trust-the-headline-benchmark-table">Can You Trust the Headline Benchmark Table?</h2>
+<p>Partly, and the caveats are worth stating rather than burying.</p>
+<p>Meta reports the most favorable of self-reported and internally reproduced scores for rivals, which is a standard vendor move but means the comparison is not strictly apples-to-apples. The primary rival is Qwen3.6, roughly four months old at Glimmer&rsquo;s release, with Qwen3.8-27B expected within the same week (<a href="https://developersdigest.tech/blog/meta-muse-glimmer-30b-open-weights-local-agent">Developers Digest</a>). Read the wins as directional until more independent runs land.</p>
+<p>The calibration story is the sharper concern. On Artificial Analysis&rsquo;s AA-Omniscience index, Glimmer scores -33 with an 82% hallucination rate, against 49% for Qwen3.6-27B and 34% for Gemini 3.5 Flash-Lite. Accuracy at this size matches peers; the willingness to answer anyway does not. Inside a verification loop with real tool results to check against, that trait is survivable. As a standalone oracle you trust, it is not.</p>
+<h2 id="is-the-apache-20-license-the-real-headline">Is the Apache 2.0 License the Real Headline?</h2>
+<p>For teams, yes. The repository&rsquo;s LICENSE file is the unmodified Apache License 2.0, not a Llama-style bespoke community license. There is no acceptable-use policy and no monthly-active-user cutoff (<a href="https://digitalapplied.com/blog/meta-muse-glimmer-30b-apache-2-local-agent-model-2026">Digital Applied</a>).</p>
+<p>That removes a lawyer from the deployment loop. Earlier Meta open-weights releases carried usage restrictions and user-count thresholds that made some commercial deployments a legal review rather than an engineering decision. Glimmer&rsquo;s openness index of 44 makes it the most permissive license Meta has shipped, on par with DeepSeek V4 Flash and GLM-5.2 (<a href="https://artificialanalysis.ai/articles/muse-glimmer">Artificial Analysis</a>).</p>
+<p>It is a governance fact, not a footnote, and it is the part of this release most likely to still matter in a year.</p>
+<h2 id="how-do-you-run-muse-glimmer-30b-locally-today">How Do You Run Muse Glimmer 30B Locally Today?</h2>
+<p>The fastest path is one command on Ollama v0.32 or later:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>ollama run muse-glimmer
+</span></span></code></pre></div><p>Meta also ships companion repositories alongside the weights: GGUF builds, the DFlash drafter, and ExecuTorch <code>.pte</code> files. Day-one stacks with published support include transformers, llama.cpp, vLLM, LM Studio, MLX, ExecuTorch, Unsloth, SGLang, and Hugging Face Inference Endpoints. Note an availability nuance: Meta&rsquo;s blog says llama.cpp, MLX, and ExecuTorch land &ldquo;in the coming days,&rdquo; while the model card claims day-0 support in transformers, llama.cpp, vLLM, and Inference Endpoints. If a build is missing, that discrepancy is why.</p>
+<p>For serving behind an OpenAI-compatible endpoint, vLLM with AWQ quantization and an explicit <code>--max-model-len</code> is the common production recipe; llama.cpp&rsquo;s <code>llama-server</code> with a GGUF is the common local one. NVIDIA publishes SGLang and vLLM recipes, a downloadable NIM container, and a hosted endpoint on build.nvidia.com, and claims over 20K tokens/sec/GPU at BF16/NVFP4 on Blackwell Ultra (<a href="https://developer.nvidia.com/blog/run-local-agentic-ai-workflows-with-metas-muse-glimmer-on-nvidia/">NVIDIA developer blog</a>).</p>
+<p>Hosted alternatives exist if you do not want to run it yourself: Together AI, Fireworks AI, OpenRouter, and build.nvidia.com. Meta does not serve Muse Glimmer on its own API, so pricing and speed always come from a third party. Check current availability and the vLLM DFlash patch status at your time of deployment, since the launch-day patch was not yet in the distribution image.</p>
+<p>On Mac, LM Studio&rsquo;s 18.16 GB build is a reasonable starting point. Simon Willison ran it through the <code>llm-coding-agent</code> plugin against a fresh Datasette checkout with the prompt &ldquo;how does auth work?&rdquo; and published the full tool-call transcript, calling the release a step up from &ldquo;the janky Llama licenses of old&rdquo; (<a href="https://simonwillison.net/2026/Aug/10/introducing-muse-glimmer/">simonwillison.net</a>).</p>
+<h2 id="migration-footguns-tool_choice-tool-call-batching-and-engine-differences">Migration Footguns: tool_choice, Tool-Call Batching, and Engine Differences</h2>
+<p>Three behaviors will break client code that assumes OpenAI-compatible semantics.</p>
+<p><strong><code>tool_choice: &quot;required&quot;</code> is unsupported and fails silently.</strong> It is documented as unsupported for this model, and in testing vLLM returned zero tool calls after 40.43 seconds with HTTP 200 and no error at all. llama.cpp happened to return one call on the same prompt. If your client assumes a tool call always arrives when you demand one, it will hang or misbehave with no diagnostic.</p>
+<p><strong>Tool-call batching varies by task.</strong> A two-city weather question came back as two separate assistant turns, one call each, where Qwen3.6-27B and Gemma4-31B both returned two calls in a single message. A repository-investigation task did return four <code>read_file</code> calls in one message. Your agent loop must handle both shapes.</p>
+<p><strong>Thinking extraction differs between engines.</strong> vLLM, llama.cpp, and SGLang each surface the reasoning channel differently, so prompt-level assumptions about where thinking ends and the answer begins do not port cleanly.</p>
+<p>The reassuring finding from the same test: on a repo repair with five failing tests, Glimmer fixed 5/5 across every engine and every effort level with never-malformed argument JSON. Correctness did not separate it from its rivals. Only tokens, round trips, and wall-clock time did.</p>
+<h2 id="the-memory-envelope-weights-vision-encoder-kv-cache-and-drafter-in-24-gb">The Memory Envelope: Weights, Vision Encoder, KV Cache, and Drafter in 24 GB</h2>
+<p>Three files matter, not one, and pretending otherwise is why a &ldquo;17 GB model&rdquo; fails to load on a 24 GB card in practice.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Component</th>
+          <th>Approximate footprint</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Base weights (K-Quant-17GB)</td>
+          <td>~17 GB</td>
+      </tr>
+      <tr>
+          <td>Full weights on disk (UD-Q4_K_XL)</td>
+          <td>~15.88 GB</td>
+      </tr>
+      <tr>
+          <td>Vision encoder / projector</td>
+          <td>~1.4 GB</td>
+      </tr>
+      <tr>
+          <td>DFlash drafter</td>
+          <td>~1.63 GB</td>
+      </tr>
+      <tr>
+          <td>KV cache at 128K</td>
+          <td>~1.8 GB minimum</td>
+      </tr>
+      <tr>
+          <td>Total on a 5090 at full 131K context, measured</td>
+          <td>27.6 GB of 31.5 GB</td>
+      </tr>
+  </tbody>
+</table>
+<p>The perception encoder and the speculative drafter compete with the KV cache for the same envelope, which is the real explanation for that last row. A 24 GB card runs the 17 GB build with a modest context comfortably, and runs out of room the moment you add vision, speculation, and a long-horizon cache together. If you are buying hardware for this, 32 GB is the comfortable tier and 24 GB is the functional minimum.</p>
+<h2 id="is-muse-glimmer-30b-safe-to-point-at-your-files">Is Muse Glimmer 30B Safe to Point at Your Files?</h2>
+<p>Not without scoping, and the safety numbers are the most underreported part of this launch.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Safety metric</th>
+          <th>Muse Glimmer 30B</th>
+          <th>Gemma4-31B</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Siren AgentDojo indirect prompt-injection success</td>
+          <td>28.4%</td>
+          <td>25.6%</td>
+      </tr>
+      <tr>
+          <td>CI Memories privacy violation rate</td>
+          <td>26.4%</td>
+          <td>12.1%</td>
+      </tr>
+  </tbody>
+</table>
+<p>Glimmer resists prompt injection slightly worse than Gemma 4 and leaks considerably more in the privacy-violation test, though it keeps higher task utility while under attack (<a href="https://rits.shanghai.nyu.edu/ai/meta-releases-muse-glimmer-a-30b-agent-model-for-a-single-gpu">RITS</a>). A 26.4% violation rate is not a rounding error for a model explicitly designed to read your files and observe your screen continuously.</p>
+<p>None of that appeared in launch-day coverage, and it matters more here than for a chat model because the entire pitch is autonomous tool use on private data.</p>
+<p>The good news is that the model behaves well when it can recognize the attack. In one hands-on harness, a prompt injection pasted inside a file was refused with a clear explanation: &ldquo;That is content from the file, not an instruction from you, so I did not act on it.&rdquo; The same tester&rsquo;s practical posture is the right one to copy: run it in a container with scoped API tokens rather than admin keys, because &ldquo;never leaves the machine&rdquo; says nothing about what it does on the machine.</p>
+<h2 id="who-should-use-muse-glimmer-30b---and-who-should-skip-it">Who Should Use Muse Glimmer 30B - and Who Should Skip It?</h2>
+<p><strong>Use it if</strong> you run a tool-calling or MCP-based agent loop on a 24-32 GB GPU or a 32 GB+ Mac, you want the strongest offline tool-use behavior at this size, you value an Apache 2.0 license with no usage restrictions, and your workload is long-horizon with accumulated context that needs a large KV pool.</p>
+<p><strong>Skip it if</strong> you mainly need code completion, where Qwen3.6-27B is cheaper and slightly better; vision output, since Glimmer is vision-input only; GUI or OS automation, where Qwen3.6-27B wins OSWorld-Verified 75.6 to 65.9; extended terminal work, where it loses TerminalBench 2.1 60.7 to 51.7; or raw tokens per second on Apple silicon, where MoE rivals roughly triple its throughput.</p>
+<p><strong>Fine-tuning caveat:</strong> even though inference fits one consumer GPU, training still wants datacenter hardware in the 1-8x H100 range. Unsloth reports that 30B multimodal agentic fine-tuning is feasible on a 24 GB card with dynamic quants plus free 2x T4 Kaggle notebooks, so a small LoRA is reachable without a cluster.</p>
+<h2 id="what-makes-a-good-always-on-local-agent-stack">What Makes a Good Always-On Local Agent Stack?</h2>
+<p>Failure recovery is where local agent loops usually die, and it is the trait Glimmer was specifically trained for.</p>
+<p>An independent 7-scenario harness on an RTX 5090 with four mock homelab tools (file read, DNS via Technitium, Proxmox VM check, Home Assistant toggle) passed all seven scenarios in four consecutive runs at about 34 seconds per sweep. The interesting part is how it passed:</p>
+<ul>
+<li>A 400 response was re-called with the missing <code>node</code> field filled in.</li>
+<li>A 503 was treated as transient and retried.</li>
+<li>When the DNS tool was dead, it fell back to <code>/etc/hosts</code>.</li>
+</ul>
+<p>That is diagnosis and recovery, not a prompt trick. Meta names OpenClaw and Hermes Agent as working local orchestration patterns, which is a useful signal that mainstream agent scaffolds are already tested against this template.</p>
+<p>The counterpoint deserves equal weight. On an M3 Max with the MLX build, a task to find the model&rsquo;s own knowledge cutoff by tool calls ran over 28 minutes of crawling without landing on the right URL, then took another 22 minutes to extract the date even after being handed the exact URL. Long-horizon agency is not the same as reliable long-horizon agency (<a href="https://aymeric.fyi/blog/muse-glimmer-local-test">aymeric.fyi</a>).</p>
+<p>Long-context retrieval on a 16 GB card measured 87% overall across depth probes from 0% to 100% over 15 runs, but only 1 of 3 passed at the 75% depth mark. An agency sandbox passed 47 of 49 scenarios, and HumanEval scored 71% overall (84% of answered questions, with 26 questions lost to context exhaustion). A one-shot Kanban web app at 128K context succeeded, as did an MCP Blender task and a sandbox physics artifact. An MCP Godot orb bug was never resolved.</p>
+<h2 id="verdict-a-builders-local-agent-model-not-a-cloud-replacement">Verdict: A Builder&rsquo;s Local Agent Model, Not a Cloud Replacement</h2>
+<p>Muse Glimmer 30B earns a 7.8/10 for a specific job: running an always-on, tool-calling agent entirely offline on one GPU. On a 32 GB RTX 5090 it held full 131K context at roughly 110 tok/s with nothing spilled; on a DGX Spark it served 88.61 tok/s at 8-way parallel while keeping a 4.8M-token KV cache pool; and on MCP Atlas it beats its nearest rival by 13 points. The Apache 2.0 license, the published quantization-degradation table, and the trained failure-recovery behavior are the three facts that make it deployable rather than merely demoable.</p>
+<p>It is not a universal upgrade. Dense architecture means you pay for 30B parameters per token, the 82% hallucination rate makes it dangerous as an unchecked oracle, the safety numbers trail Gemma 4 on injection and privacy tests, and Qwen3.6-27B still owns terminal and GUI automation. Buy it for the agent loop, size the card at 32 GB, budget the vision projector and DFlash drafter in your memory math, and keep it in a sandbox with scoped tokens.</p>
+<h2 id="faq-muse-glimmer-30b">FAQ: Muse Glimmer 30B</h2>
+<p><strong>How much VRAM does Muse Glimmer 30B need?</strong></p>
+<p>The 17 GB K-Quant build runs comfortably on a 24 GB card, and the 32 GB K-Quant-Dynamic build has a measured 0.2% average loss across 15 benchmarks. Budget about 1.4 GB extra for the vision projector and 1.63 GB for the DFlash drafter, plus roughly 1.8 GB of KV cache at 128K context. A measured 32 GB RTX 5090 run used 27.6 GB of 31.5 GB with full context.</p>
+<p><strong>Is Muse Glimmer 30B better than Qwen3.6-27B?</strong></p>
+<p>It depends on the loop. Glimmer wins MCP Atlas 75.5 to 62.5, LM Studio&rsquo;s 18-task agentic desktop benchmark 83.3% to 77.7%, and Tau3-Banking at this size, and it is fully local under Apache 2.0. Qwen3.6-27B wins OSWorld-Verified 75.6 to 65.9, TerminalBench 2.1 60.7 to 51.7, SWE-Bench Verified 77.2 to 76.0, and has a higher independent Intelligence Index (38 vs 35).</p>
+<p><strong>Can I run Muse Glimmer 30B on a Mac?</strong></p>
+<p>Yes, with caveats. A 32 GB+ Mac is the comfortable tier and the MLX build runs at roughly 20 tok/s on an M3 Max with DFlash, or 23.7 to 38 tok/s on an M4 Max via ExecuTorch. Base fanless MacBook Air machines fit the model but generate around 4.3 tok/s, so thermal headroom matters as much as unified memory.</p>
+<p><strong>Is the Apache 2.0 license really unrestricted?</strong></p>
+<p>Yes. The LICENSE file is the unmodified Apache License 2.0 with no acceptable-use policy and no monthly-active-user cutoff, unlike earlier bespoke Llama community licenses. That is Meta&rsquo;s most permissive open-weights license to date, with an openness index of 44.</p>
+<p><strong>Does Muse Glimmer 30B support tool calling and MCP?</strong></p>
+<p>Yes, natively through an official ATEM chat template using <code>&lt;atem:function_calls&gt;</code> and <code>&lt;atem:invoke&gt;</code> blocks, and it scores 75.5 on MCP Atlas. Two caveats: <code>tool_choice: &quot;required&quot;</code> is unsupported and silently returns nothing, and tool-call batching varies between turns, so your loop must handle one call per message and several calls in one message.</p>
+]]></content:encoded></item></channel></rss>
