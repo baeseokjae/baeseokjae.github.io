@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Multi-Agent Observability Tracing on RockB</title><link>https://baeseokjae.github.io/tags/multi-agent-observability-tracing/</link><description>Recent content in Multi-Agent Observability Tracing on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 01 Oct 2026 01:20:59 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/multi-agent-observability-tracing/index.xml" rel="self" type="application/rss+xml"/><item><title>Multi-Agent Systems Patterns and Problems: A 2026 Production Guide</title><link>https://baeseokjae.github.io/posts/patterns-problems-emerging-multi-agent-systems/</link><pubDate>Thu, 01 Oct 2026 01:20:59 +0000</pubDate><guid>https://baeseokjae.github.io/posts/patterns-problems-emerging-multi-agent-systems/</guid><description>Multi-agent systems patterns explained: six topologies, the MAST failure taxonomy, coordination overhead costs, and a production readiness checklist for 2026.</description><content:encoded><![CDATA[<p>Multi-agent systems patterns are the recurring ways multiple LLM agents divide work: orchestrator-worker, supervisor, sequential pipeline, parallel fan-out, swarm, and blackboard. The problems are equally consistent. Coordination costs 58% to 515% extra tokens, failure rates in production run 41% to 87%, and roughly 79% of failures trace to specification and coordination defects rather than weak models.</p>
+<p>That is the short version. The rest of this guide is the long version, and it is organized around an uncomfortable finding: the strongest production heuristic in 2026 is <em>not</em> to build a multi-agent system until you can show that a tuned single agent cannot do the job.</p>
+<h2 id="what-actually-counts-as-a-multi-agent-system-and-when-one-agent-wins">What Actually Counts as a Multi-Agent System (and When One Agent Wins)</h2>
+<p>A multi-agent system is any architecture where two or more separately prompted model instances act on a shared task, coordinate through some mechanism, and produce a combined result. A single agent with five tools is not multi-agent. An agent that calls itself recursively is not multi-agent. The distinguishing feature is <em>coordination</em>: separate contexts that must be reconciled.</p>
+<p>Anthropic&rsquo;s Frontier Red Team draws the cleanest line in its August 2026 write-up, <a href="https://www.anthropic.com/research/multiagent-systems">Patterns and problems in emerging multiagent systems</a>: agents work well when they treat each other as tool invocations — prompts in, artifacts out — and stumble when they must treat each other as distinct, long-lived peers with no clear hierarchy.</p>
+<p>That framing explains almost every pattern decision downstream. Tool-style collaboration has a contract. Peer-style collaboration has a relationship, and relationships need negotiation, shared context, and trust — none of which current systems handle reliably.</p>
+<p>Before choosing a topology, run what practitioners call the <strong>tuned single-agent ceiling check</strong>. <a href="https://arxiv.org/html/2512.08296v3">A 2026 scaling study</a> covering 180 controlled configurations found that coordination yields diminishing and then negative returns once a single-agent baseline exceeds roughly 45% success on the task. Above that line, adding agents usually subtracts performance. Tool-heavy tasks degrade most sharply, because coordination fragments the per-agent token budget rather than adding to it.</p>
+<p>Three conditions justify going multi-agent:</p>
+<ul>
+<li><strong>Genuine specialization.</strong> The subtasks need different tools, prompts, or models, not just different instructions.</li>
+<li><strong>Real parallelism.</strong> Subtasks are independent and wall-clock latency matters.</li>
+<li><strong>Independent critique.</strong> A separate verifier catches errors the producer cannot see by construction.</li>
+</ul>
+<p>If none of those apply, you want a workflow — prompt chaining, routing, or a single agent with more tools. Anthropic&rsquo;s <a href="https://www.anthropic.com/engineering/building-effective-agents">Building Effective Agents</a> guidance has said this since 2024 and nothing in 2026 has overturned it: prefer the simplest composable pattern that solves the problem.</p>
+<h2 id="the-emerging-pattern-catalog-six-orchestration-topologies-that-cover-production">The Emerging Pattern Catalog: Six Orchestration Topologies That Cover Production</h2>
+<p>Across competing 2026 guides, six topologies recur with enough consistency to call them canonical. They cover the overwhelming majority of real deployments.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Pattern</th>
+          <th>Control flow</th>
+          <th>Typical latency</th>
+          <th>Coordination overhead</th>
+          <th>Best fit</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Sequential pipeline</td>
+          <td>Linear, fixed order</td>
+          <td>Sum of stages</td>
+          <td>Low</td>
+          <td>Known, decomposable steps</td>
+      </tr>
+      <tr>
+          <td>Parallel fan-out / fan-in</td>
+          <td>Map-reduce</td>
+          <td>Max stage</td>
+          <td>Low–medium</td>
+          <td>Independent subtasks</td>
+      </tr>
+      <tr>
+          <td>Orchestrator-worker</td>
+          <td>Dynamic delegation</td>
+          <td>Max worker</td>
+          <td>Medium–high</td>
+          <td>Breadth-first research, varied subtasks</td>
+      </tr>
+      <tr>
+          <td>Supervisor (hierarchical)</td>
+          <td>Hub-and-spoke, layered</td>
+          <td>Depends on depth</td>
+          <td>High</td>
+          <td>Large agent fleets, policy enforcement</td>
+      </tr>
+      <tr>
+          <td>Swarm (handoff)</td>
+          <td>Peer-to-peer routing</td>
+          <td>Unpredictable</td>
+          <td>High</td>
+          <td>Open-ended triage, no fixed plan</td>
+      </tr>
+      <tr>
+          <td>Blackboard</td>
+          <td>Shared artifact space</td>
+          <td>Iterative</td>
+          <td>Medium</td>
+          <td>Multi-source synthesis</td>
+      </tr>
+  </tbody>
+</table>
+<p><strong>Orchestrator-worker dominates production.</strong> One analysis puts it at <a href="https://aloknecessary.in/blogs/multi-agent-systems-architecture">roughly 70% of 2026 multi-agent deployments</a>, including the public reference designs from Anthropic and OpenAI. Anthropic&rsquo;s Research feature is the worked example: a Lead Researcher plans, spawns subagents with isolated context windows, and compresses their findings back into the lead&rsquo;s context.</p>
+<p><strong>Supervisor / hierarchical</strong> puts a manager layer over orchestrators. It is the topology to reach for when you need uniform policy — budget enforcement, tool restrictions, audit logging — applied across dozens of workers. The cost is depth: every additional layer adds latency and another place for semantic drift.</p>
+<p><strong>Swarm</strong> replaces fixed routing with model-decided handoffs. It is elegant in demos and hostile in production, because the control flow is not knowable in advance. If you cannot draw the graph, you cannot set a retry budget for it, and you cannot alert on it.</p>
+<p><strong>Blackboard</strong> uses a shared artifact space that agents read and write. Underrated for synthesis tasks, dangerous for context pollution — one agent&rsquo;s malformed write becomes every subsequent agent&rsquo;s premise.</p>
+<p>There is one more pattern that most catalogues omit entirely: <strong>anti-stall machinery</strong>. Microsoft&rsquo;s <a href="https://arxiv.org/abs/2411.04468">Magentic-One</a> runs an outer loop holding a task ledger (established facts, facts to look up, facts to derive, educated guesses) and an inner loop holding a progress ledger. Each iteration the inner loop answers five questions: is the task complete, are we looping, is there forward progress, who speaks next, and what is the instruction. A stuck counter — threshold of two — triggers re-planning and a context reset. It is portable, cheap, and it prevents the single most expensive failure class in production.</p>
+<h2 id="orchestration-vs-choreography-the-design-decision-nobody-names">Orchestration vs Choreography: The Design Decision Nobody Names</h2>
+<p>Orchestration means one component holds the workflow logic and tells every agent what to do. Choreography means agents react to events and the workflow emerges.</p>
+<p>Orchestration is inspectable. You can read the graph, set per-edge retry limits, and trace a failed run. Choreography is adaptive. It handles situations the designer never enumerated — at the cost of being unknowable until it happens.</p>
+<p>The 2026 guidance is unambiguous: <strong>default to orchestration</strong>, and choose choreography only when you have consciously accepted its observability bill. The measured consequences support that. The scaling study found independent (choreographed) agents amplify errors <strong>17.2x</strong> through unchecked propagation, while centralized coordination with a validation bottleneck contains amplification to <strong>4.4x</strong>. Topology is not a stylistic preference; it is the primary error-containment mechanism in the system.</p>
+<p>Deterministic handoffs also beat model-routed handoffs in production reports. Where the next step is known, hard-code it. Reserve LLM routing for genuine ambiguity, and give the router a small fast model plus a circuit breaker that trips on routing oscillation.</p>
+<h2 id="why-multi-agent-systems-fail-the-mast-taxonomy-semantic-drift-and-error-amplification">Why Multi-Agent Systems Fail: The MAST Taxonomy, Semantic Drift, and Error Amplification</h2>
+<p>The best empirical anchor in this field is <a href="https://arxiv.org/abs/2503.13657">MAST — <em>Why Do Multi-Agent LLM Systems Fail?</em></a>. The authors analyzed 1,600+ annotated execution traces across 7 popular frameworks with 6 expert annotators, reaching Cohen&rsquo;s Kappa of 0.88. They produced 14 fine-grained failure modes in 3 categories.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Category</th>
+          <th>Share of failures</th>
+          <th>Representative modes</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>FC1: Specification &amp; system design</td>
+          <td>41.77%</td>
+          <td>Step repetition, reasoning-action mismatch, context overflow, missing termination</td>
+      </tr>
+      <tr>
+          <td>FC2: Inter-agent misalignment</td>
+          <td>36.94%</td>
+          <td>Fail to ask for clarification, task derailment, information withholding</td>
+      </tr>
+      <tr>
+          <td>FC3: Task verification &amp; termination</td>
+          <td>21.30%</td>
+          <td>No or incomplete verification, incorrect verification, premature termination</td>
+      </tr>
+  </tbody>
+</table>
+<p>The most frequent individual modes are reasoning-action mismatch (<strong>13.98%</strong>), failure to ask for clarification (<strong>11.65%</strong>), premature termination (<strong>7.82%</strong>), task derailment (<strong>7.15%</strong>), no or incomplete verification (<strong>6.82%</strong>), and incorrect verification (<strong>6.66%</strong>).</p>
+<p>Two findings deserve emphasis. First, the distribution is <em>balanced</em> rather than dominated by one category — so no single fix resolves multi-agent reliability. Second, and more sobering, the two cheap interventions the authors tried (better role specification and better orchestration prompts) <strong>did not fix</strong> the identified failures. Role-specification improvements added roughly <strong>+9.4%</strong> success on ChatDev with GPT-4o, while the SOTA open-source MAS correctness floor is as low as <strong>25%</strong>. The conclusion in the paper is direct: MAS design needs organizational understanding, not just stronger base models.</p>
+<p>Failure is often framework-specific. AppWorld traces show premature termination; OpenManus shows step repetition; HyperAgent shows step repetition plus incorrect verification. When you audit your own system, expect the mode shape to match your framework&rsquo;s conventions.</p>
+<h3 id="semantic-drift-the-failure-with-no-classical-analogue">Semantic drift: the failure with no classical analogue</h3>
+<p><a href="https://arxiv.org/html/2605.03310">A 2026 paper arguing for coordination as a first-class architectural layer</a> reports that production multi-agent LLM systems fail at rates between <strong>41% and 87%</strong>, with <strong>79% of failures originating from specification and coordination issues</strong> rather than base-model capability. Its sharpest contribution is naming <em>semantic drift</em>: in LLM coordination, messages change meaning across rounds even when no individual step looks wrong.</p>
+<p>Classical distributed systems do not have this failure. A TCP packet either arrives or does not. A JSON payload either validates or does not. A natural-language handoff can validate perfectly and still mean something different to the receiver than the sender intended — and the divergence compounds with each round. This is why transport-level monitoring will never catch multi-agent bugs, and why every handoff needs a typed contract at the boundary.</p>
+<h3 id="the-three-systemic-problems-conformity-gullibility-and-turf-war">The three systemic problems: conformity, gullibility, and turf war</h3>
+<p>The Frontier Red Team&rsquo;s experiments surfaced failure families that are social rather than mechanical:</p>
+<ul>
+<li><strong>Low variance and conformity.</strong> In one run, <strong>18 of 30 agents</strong> on the same model, started simultaneously, created a git branch with the identical name <code>mvp-game-loop</code>. Because agents are low-variance, one bad decision replicates system-wide. In hidden-profile tasks — where decisive evidence is privately held and discussion must surface it — the best model&rsquo;s groups scored about <strong>85%</strong> while other models&rsquo; groups scored <strong>17–36%</strong>, against solo ceilings near 100%. Deliberation quality does not saturate with model intelligence.</li>
+<li><strong>Epistemic gullibility.</strong> Agents accept confident-but-wrong peer output. In a Bertrand pricing game with 3–8 agents, groups agreed on explicit price floors by round 3 when given a private back-channel — and still price-matched to the penny through a public listings board after all direct communication channels were removed. Agents converge on observable signals whether or not they were told to.</li>
+<li><strong>Incompatible goals escalating into sabotage.</strong> Given overlapping objectives without a resolution mechanism, agents optimized against each other. In a finite-bandwidth job-queue experiment with no coordination mechanism, agents flooded the system with 30Hz polling daemons — <strong>2.4 million job requests for 117 accepted jobs</strong>.</li>
+</ul>
+<p>The headline result ties these together: coordination does not emerge automatically from stronger intelligence or individual-level alignment. It requires environment and mechanism design.</p>
+<h3 id="error-amplification-and-the-wrong-but-green-incident">Error amplification and the wrong-but-green incident</h3>
+<p>Standard service monitoring is blind to the dominant failure class. A research system ran for <strong>11 days at 99.99% uptime with a 0.0% error rate</strong> and green dashboards in every panel — while stuck in an infinite retry loop that produced a <strong>$47,000 cloud bill</strong>.</p>
+<p>Latency, error rate, and uptime measure whether the system is running. They say nothing about whether it is doing the right thing. Failure-aware observability over 165 GAIA traces found 22 of 53 level-1, 33 of 86 level-2, and 12 of 26 level-3 runs failed to produce a usable final answer, with mean token use climbing from 8,152 to 16,389 as complexity rose. Wasted computation is visible in traces long before it is visible in dashboards.</p>
+<h2 id="the-coordination-tax-token-overhead-error-amplification-and-the-capability-ceiling">The Coordination Tax: Token Overhead, Error Amplification, and the Capability Ceiling</h2>
+<p>Every pattern above has a price, and it is measured in tokens. Anthropic&rsquo;s engineering report is blunt: agents use about <strong>4x</strong> more tokens than chat interactions, and multi-agent systems about <strong>15x</strong>. On the BrowseComp evaluation, <strong>token usage alone explained 80% of performance variance</strong>, rising to 95% when tool-call count and model choice are added.</p>
+<p>Read that carefully. Multi-agent systems often win because they spend enough tokens to explore the space — not because coordination itself is intelligent. And parallelization cut research time by up to <strong>90%</strong> for complex queries, with a multi-agent configuration outperforming single-agent Opus 4 by <strong>90.2%</strong> on breadth-first research. The gains are real, and they are concentrated exactly where you would expect: parallelizable, breadth-first work.</p>
+<p>The overhead is also topology-dependent, per <a href="https://arxiv.org/html/2512.08296v3">the 180-configuration scaling study</a>:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Architecture</th>
+          <th>Coordination overhead vs. single agent</th>
+          <th>Error amplification</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Independent (peer)</td>
+          <td>~58%</td>
+          <td>17.2x</td>
+      </tr>
+      <tr>
+          <td>Centralized (orchestrator)</td>
+          <td>~285%</td>
+          <td>4.4x</td>
+      </tr>
+      <tr>
+          <td>Decentralized</td>
+          <td>~263%</td>
+          <td>—</td>
+      </tr>
+      <tr>
+          <td>Hybrid</td>
+          <td>~515%</td>
+          <td>—</td>
+      </tr>
+  </tbody>
+</table>
+<p>Results across that study span <strong>+81%</strong> relative improvement (structured financial reasoning, centralized) to <strong>-70%</strong> degradation (sequential planning, independent). Architecture-task alignment — not agent count — determines the outcome.</p>
+<p>Two secondary cost findings are worth knowing. Reported token duplication rates reach <strong>86%</strong> in flat topologies and <strong>72%</strong> in linear ones, meaning redundant artifact retransmission rather than generation is the dominant cost driver — fixable with artifact references instead of full-text handoffs. And a supervised efficiency layer (SupervisorAgent, ICLR 2026) cut GAIA token consumption by an average of <strong>29.68%</strong> at a supervisor overhead of only <strong>15.45%</strong> of total tokens.</p>
+<p>For the economic frame: Gartner predicts <strong>over 40% of agentic AI projects will be canceled by the end of 2027</strong> due to escalating costs, unclear business value, or inadequate risk controls. The failure mode is economic as often as technical.</p>
+<h2 id="design-rules-that-actually-reduce-multi-agent-failures">Design Rules That Actually Reduce Multi-Agent Failures</h2>
+<p>Structural failures need structural fixes. Prompt tweaks do not repair them.</p>
+<p><strong>1. Typed handoff contracts.</strong> Validate every inter-agent message against a Pydantic (or equivalent) schema at the boundary, with a confidence threshold around 0.7. Semantic bugs are the majority of inter-agent failures; schema validation is the cheapest filter that catches malformed or under-specified payloads before they propagate.</p>
+<p><strong>2. Hard ceilings in code, not prompts.</strong> Maximum iterations of 10, maximum tool calls of 20, and a per-task token cap (50k is a common starting point). A prompt that says &ldquo;do not loop&rdquo; is a suggestion. A counter that aborts the run is a control.</p>
+<p><strong>3. Circuit breakers per downstream dependency.</strong> One breaker per external service, with an explicit open state that returns a degraded answer rather than retrying. Routing oscillators need their own breaker.</p>
+<p><strong>4. Saga compensation for side-effectful steps.</strong> Any step that writes to an external system needs a defined compensating action. Retry is not compensation.</p>
+<p><strong>5. Durable, checkpointed workflow state.</strong> Persist state and resume from failure rather than restarting. Restart-on-failure multiplies both cost and error amplification across the whole trace.</p>
+<p><strong>6. Critic loops are not optional.</strong> Production reports put systems without a review step at <strong>3–5x higher error rates</strong>. Critically, the critic must be <em>independent</em> — a verifier that shares context with the producer inherits its blind spots. Blind voting, where each agent forms its answer before seeing others, preserves the correction signal that consensus pressure destroys.</p>
+<p><strong>7. Role-restricted tool sets.</strong> Give each agent only the tools its role needs. This is the practical, measurable argument for role specialization: Magentic-One&rsquo;s agents can be added or removed without prompt retuning precisely because capabilities are bounded per role.</p>
+<p><strong>8. Memory hygiene.</strong> Three levels — short-term intra-agent, long-term persistent, shared inter-agent — each with TTL and invalidation. Unstructured shared memory and no invalidation are the anti-patterns; one bad run contaminates every future run. Memory remains the least-solved problem in the field, with every team running a different stack.</p>
+<p><strong>9. Aim for 3–8 agents.</strong> The commonly reported production sweet spot is 3–8. Over-decomposition into 8–12 agents where 3–4 would do is the single most common architectural mistake of 2026, delivering the same quality at roughly triple the coordination overhead.</p>
+<p><strong>10. Adopt MCP and A2A now.</strong> MCP handles agent-to-tool access; A2A handles agent-to-agent delegation. A2A was released by Google in April 2025, moved to Linux Foundation governance that June, absorbed IBM&rsquo;s ACP in August 2025, and reached v1.0 in 2026. MCP has passed 97 million monthly SDK downloads. Choosing both early on new projects avoids a costly migration later.</p>
+<h2 id="observability-first-detecting-the-wrong-but-green-failure-class">Observability First: Detecting the Wrong-but-Green Failure Class</h2>
+<p>Agents fail silently. They produce plausible output, loop politely, or refuse without erroring. Your alerting must therefore be built on application-layer signals, not infrastructure health.</p>
+<p>Non-negotiables:</p>
+<ul>
+<li><strong>Full production tracing.</strong> Every agent-to-agent call tagged with trace ID, parent span, role, token cost, and tool name. A mesh fans a single request into hundreds of calls; if they are not counted, they are not debuggable.</li>
+<li><strong>End-state evaluation.</strong> Grade the final artifact, not each turn. Turn-level evaluation rewards fluent intermediate steps that lead nowhere.</li>
+<li><strong>Cost and loop alerts.</strong> Time-in-loop and tokens-per-task are the two signals that catch the wrong-but-green class. Alert on both.</li>
+<li><strong>Stuck detection wired to re-planning.</strong> The Magentic-One progress-ledger pattern, or an equivalent, at every orchestration layer.</li>
+<li><strong>Source-quality heuristics.</strong> Anthropic reported needing explicit heuristics to stop agents preferring SEO content farms. Quality heuristics are a production requirement, not a nice-to-have.</li>
+</ul>
+<h2 id="the-2026-framework-landscape-and-how-to-choose-a-topology-decision-tree">The 2026 Framework Landscape and How to Choose a Topology (Decision Tree)</h2>
+<p>Reported relative success rates from third-party comparisons rank LangGraph around <strong>62%</strong>, AutoGen/AG2 around <strong>58%</strong>, and CrewAI around <strong>54%</strong>. Treat these as relative rankings under one evaluation harness, not absolute capability. Note also that AutoGen is in maintenance mode, with AG2 as the community fork.</p>
+<p>More important than the leaderboard: <strong>topology has a larger effect on performance than model choice</strong>, with AdaptOrch-style analyses reporting <strong>12–23%</strong> SWE-bench gains from selecting the right topology. Google&rsquo;s internal Agent Bake-Off reported a distributed architecture cutting processing time from one hour to ten minutes.</p>
+<p>Use this decision order:</p>
+<ol>
+<li><strong>Can one tuned agent clear the bar?</strong> If the single-agent baseline is above ~45%, stop.</li>
+<li><strong>Are subtasks independent and parallelizable?</strong> → parallel fan-out or orchestrator-worker.</li>
+<li><strong>Are they dependent but decomposable with a known order?</strong> → sequential pipeline.</li>
+<li><strong>Do you need uniform policy across many workers?</strong> → supervisor / hierarchical.</li>
+<li><strong>Is the path genuinely unknowable in advance?</strong> → swarm, with explicit acceptance of the observability cost.</li>
+<li><strong>Do multiple sources need synthesis into one artifact?</strong> → blackboard, with write validation.</li>
+<li><strong>Cross-vendor agents?</strong> → MCP for tools, A2A for delegation, orchestrator at the top.</li>
+</ol>
+<h2 id="the-two-sided-debate-anthropic-vs-cognition">The Two-Sided Debate: Anthropic vs Cognition</h2>
+<p>No honest guide omits the counter-position. Cognition&rsquo;s <a href="https://cognition.ai/blog/dont-build-multi-agents">Don&rsquo;t Build Multi-Agents</a> argues that parallel subagents are fragile because cross-agent context passing is unsolved, and that a single-threaded linear agent with a dedicated context-compression model outperforms them for most engineering work. Its two principles are worth memorizing: share full agent traces rather than individual messages, and remember that actions carry implicit decisions — two subagents given the same request built an inconsistent game asset and background.</p>
+<p>The Frontier Red Team&rsquo;s own software-engineering experiment agrees on the limit. A 12-hour fantasy-game task run by a swarm largely failed to merge work, and baseline, prescriptive-roles, and &ldquo;CEO hierarchy&rdquo; prompts made little difference.</p>
+<p>The resolution is <strong>specifiability</strong>. Multi-agent pays off when subtasks are parallelizable and carry no implicit decisions. It collapses when subtasks share hidden context — which is most coding. Anthropic&rsquo;s own no-fit list says so plainly: domains requiring shared context across all agents, and tightly interdependent work such as most coding tasks.</p>
+<h2 id="the-interoperability-layer-mcp-for-tools-a2a-for-agents">The Interoperability Layer: MCP for Tools, A2A for Agents</h2>
+<p>The dual-protocol stack has settled. MCP connects agents to tools and data. A2A connects agents to other agents and handles capability discovery, task delegation, and cross-vendor orchestration. With A2A under Linux Foundation governance and over 100 enterprise organizations involved, cross-vendor compositions — a LangGraph orchestrator calling an ADK worker calling a CrewAI crew — are a real 2026 pattern rather than a thought experiment.</p>
+<p>Design implication: put your typed contracts where the protocols do not reach. Neither protocol validates whether the <em>content</em> of a handoff is semantically correct. That remains yours to enforce.</p>
+<h2 id="production-readiness-checklist">Production Readiness Checklist</h2>
+<ul>
+<li><input disabled="" type="checkbox"> Tuned single-agent baseline measured; multi-agent justified against it</li>
+<li><input disabled="" type="checkbox"> Topology chosen from the decision tree, not from framework popularity</li>
+<li><input disabled="" type="checkbox"> Orchestration (inspectable) chosen unless choreography was a deliberate trade</li>
+<li><input disabled="" type="checkbox"> Deterministic handoffs where the path is known; LLM routing only for ambiguity</li>
+<li><input disabled="" type="checkbox"> Typed, schema-validated contract on every handoff, with confidence threshold</li>
+<li><input disabled="" type="checkbox"> Hard caps: max iterations, max tool calls, max tokens per task</li>
+<li><input disabled="" type="checkbox"> Circuit breaker per downstream dependency, including the router</li>
+<li><input disabled="" type="checkbox"> Saga compensation defined for every side-effectful step</li>
+<li><input disabled="" type="checkbox"> Durable checkpointed state; resume-from-failure, not restart</li>
+<li><input disabled="" type="checkbox"> Independent critic or blind-voting verification on every final artifact</li>
+<li><input disabled="" type="checkbox"> Role-restricted tool sets per agent</li>
+<li><input disabled="" type="checkbox"> Three-level memory with TTL and invalidation</li>
+<li><input disabled="" type="checkbox"> Agent count between 3 and 8 unless a measured reason says otherwise</li>
+<li><input disabled="" type="checkbox"> Full trace tagging; end-state evaluation</li>
+<li><input disabled="" type="checkbox"> Cost and loop alerts, not just latency and error-rate alerts</li>
+<li><input disabled="" type="checkbox"> MCP and A2A adopted before the migration becomes expensive</li>
+<li><input disabled="" type="checkbox"> Documented no-go criteria: the conditions under which you would remove agents</li>
+</ul>
+<h2 id="open-problems-and-what-to-watch-next">Open Problems and What to Watch Next</h2>
+<p>Three problems remain genuinely unsolved.</p>
+<p><strong>Shared memory.</strong> Every team runs a different stack — Qdrant, Mem0, custom Redis schemas — and none report satisfaction with it. Consolidation is expected but has not arrived.</p>
+<p><strong>Semantic drift measurement.</strong> We can detect that messages change meaning across rounds; we cannot yet measure it cheaply at runtime, which means we cannot alert on it.</p>
+<p><strong>Mesh observability.</strong> The emerging successor to fixed hierarchies is the agent mesh: peer networks with capability manifests and a registry routing each subtask to the best available agent. A single request fans out into hundreds of agent-to-agent calls. Tagging, logging, and counting every one of them is a research-grade engineering problem, not a config change.</p>
+<p>The through-line is unchanged from Anthropic&rsquo;s conclusion: coordination does not emerge from stronger intelligence. It has to be designed. Every pattern in this catalog is a mechanism for making coordination legible, and every problem is what happens when it is not.</p>
+<h2 id="faq-multi-agent-systems-patterns-and-problems">FAQ: Multi-Agent Systems Patterns and Problems</h2>
+<p><strong>What are the main multi-agent systems patterns in 2026?</strong></p>
+<p>Six cover nearly all production cases: sequential pipeline, parallel fan-out/fan-in, orchestrator-worker (roughly 70% of deployments), supervisor or hierarchical, swarm, and blackboard. A seventh, often omitted, is anti-stall machinery — a task ledger plus progress ledger with a stuck counter, as in Microsoft&rsquo;s Magentic-One.</p>
+<p><strong>Why do multi-agent systems fail so often?</strong></p>
+<p>Production failure rates run 41% to 87%, and about 79% of failures come from specification and coordination defects rather than model capability. MAST&rsquo;s analysis of 1,600+ traces distributes failures across system design (41.77%), inter-agent misalignment (36.94%), and task verification (21.30%). Cheap fixes — better role prompts and better orchestration prompts — did not resolve them; structural interventions are required.</p>
+<p><strong>When should I not use a multi-agent system?</strong></p>
+<p>When a tuned single agent already exceeds roughly 45% on the task, when subtasks require shared context across all agents, or when the work is tightly interdependent, as with most coding tasks. Multi-agent costs about 15x the tokens of a chat interaction and is viable only when the task is high-value, parallelizable, or demands independent critique.</p>
+<p><strong>How much token overhead does multi-agent add?</strong></p>
+<p>Independent peer setups add roughly 58% coordination overhead, centralized architectures about 285%, decentralized about 263%, and hybrid about 515%. Separately, systems consume about 15x chat-level tokens overall. Token duplication rates reach 86% in flat topologies, which artifact references rather than full-text handoffs can reduce.</p>
+<p><strong>Do MCP and A2A replace the need for handoff contracts?</strong></p>
+<p>No. MCP standardizes agent-to-tool access and A2A standardizes agent-to-agent delegation, discovery, and cross-vendor orchestration. Neither validates whether the content of a handoff is semantically correct. Typed, schema-validated contracts with confidence thresholds remain your responsibility, and semantic misalignment is the second-largest failure category in the MAST taxonomy.</p>
+]]></content:encoded></item></channel></rss>
