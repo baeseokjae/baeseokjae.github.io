@@ -1,0 +1,483 @@
+{
+  "topic": "SiloLink: MCP Bridge for Remote Claude Code Sessions",
+  "slug": "silolink-mcp-bridge-remote-claude-code",
+  "keyword": "SiloLink MCP bridge",
+  "type": "how-to",
+  "research_date": "2026-10-01",
+  "summary": "SiloLink (@dsiloed/silo-link) is a local Node/TypeScript daemon that bridges Claude Code sessions running on remote machines to Portablemind/DSiloed conversations. Claude Code launches it as an MCP server over mcp-remote at http://localhost:3579/mcp; SiloLink itself holds a WebSocket (ActionCable) + REST connection to the DSiloed backend and spawns/manages one Claude Code tmux session per conversation. You drive it from the web UI, Slack, Discord, Teams, or SMS.",
+  "verification": {
+    "npm_package": "@dsiloed/silo-link",
+    "latest_version": "1.19.23",
+    "latest_published": "2026-09-27T19:10:25.607Z",
+    "first_published": "2026-03-26T19:48:07.846Z",
+    "total_versions": 98,
+    "license": "MIT",
+    "engines": "node >=20",
+    "bin": "silolink",
+    "npm_downloads": {
+      "last_week": 221,
+      "last_month": 1225,
+      "total_lifetime": 16861,
+      "monthly_trend": {
+        "2026-03": 1039,
+        "2026-04": 1860,
+        "2026-05": 1810,
+        "2026-06": 3622,
+        "2026-07": 3757,
+        "2026-08": 3697,
+        "2026-09": 1076
+      },
+      "note": "2026-09 is partial (range endpoint 09-29); steady-state ~3.6-3.7k/month with a dip after the Sept release"
+    },
+    "github_mirror": {
+      "repo": "portablemind-ai/silolink",
+      "stars": 2,
+      "forks": 2,
+      "open_issues": 0,
+      "language": "TypeScript",
+      "created": "2026-08-18T22:56:49Z",
+      "pushed": "2026-08-18T23:01:04Z",
+      "license": "MIT",
+      "disclaimer": "Read-only public source mirror of the npm package. Canonical repo is GitLab (gitlab.com/model-api/silo_link)."
+    },
+    "local_health_endpoint": "curl http://localhost:3579/health -> {\"status\":\"ok\",\"sessions\":N,\"cable\":\"connected\"}",
+    "auth_model": "HS256 JWT, 24h validity, auto-refresh every 12h; stored in ~/.silolink/config.json (mode 0600) — password never written to disk",
+    "docs": {
+      "official_user_guide": "https://app.portablemind.ai/docs (section: Automation & Advanced > Coding Agents (SiloLink))",
+      "developer_api_guide": "https://www.dsiloed.com/apps/apiguide/index.html",
+      "interactive_demo": "https://www.dsiloed.com/apps/silolink-demo"
+    }
+  },
+  "competitors": [
+    {
+      "url": "https://code.claude.com/docs/en/remote-control",
+      "name": "Anthropic — Claude Code Remote Control (first-party)",
+      "key_points": [
+        "Connects claude.ai/code + iOS/Android apps to a Claude Code session running on your own machine; execution and filesystem stay local (unlike cloud sessions).",
+        "Setup is one command: `claude remote-control` in a project dir, accept the one-time `Enable Remote Control? (y/n)` prompt, then use the printed session URL or the spacebar QR code.",
+        "Flags that map directly to the bridge problem: `--spawn same-dir|worktree|session` (worktree = isolated git worktree per session, `session` = single-session mode), `--capacity <N>` (default 32 concurrent sessions), `--name`, `-c/--continue`, `--session-id`.",
+        "Hard requirements: a Pro/Max/Team/Enterprise subscription (API keys NOT supported). Team/Enterprise need an Owner to enable the Remote Control admin toggle first.",
+        "Blocked configurations: Amazon Bedrock, Google Cloud Agent Platform, Microsoft Foundry, and any `ANTHROPIC_BASE_URL` override (LLM gateway/proxy) — Remote Control is unavailable there.",
+        "Also unavailable if `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` or `DISABLE_GROWTHBOOK` is set; `DISABLE_TELEMETRY`/`DO_NOT_TRACK` are fine unless the org requires Trusted Devices.",
+        "Workspace trust caveat: run `claude` in the project dir first — the startup trust dialog never saves trust for the home directory.",
+        "Troubleshooting surface the article should cover: 'unexpected server response' -> run `claude update`; 'org requires Trusted Devices' -> `/login`; 'session expired for trusted-device check' -> sign-in older than 18 hours.",
+        "Adjacent first-party features worth differentiating against: cross-session messaging, Channels (Telegram/Discord/iMessage), and Dispatch from the desktop app."
+      ]
+    },
+    {
+      "url": "https://github.com/EthanSK/agent-bridge",
+      "name": "agent-bridge — push-based agent-to-agent over SSH",
+      "key_points": [
+        "Peer-to-peer over SSH, no cloud relay: config, keys, inboxes, and logs all stay on your machines; optional Tailscale for cross-network reach.",
+        "Push semantics, not polling: Claude Code receives `<channel source=\"agent-bridge\">` events; OpenClaw gets native channel turns; Codex 4.10.0+ is first-class both ways via a background codex-channel service.",
+        "Unified MCP server at mcp-server/ hosts both the 13 bridge_* tools and a long-lived inbox watcher lease (`~/.agent-bridge/locks/claude-code__default.watcher-lock.json`, 2s poll).",
+        "Production lesson worth quoting: Claude Code's plugin host gates idle-reaping on MCP tool-call frequency on stdio JSON-RPC, not channel registration — a channel-only plugin gets reaped after every notification.",
+        "Fleet-wide shared-context store at `~/.agent-bridge/shared-context/learnings.ndjson` (append-only NDJSON, replicated peer-to-peer, idempotent by lowercase-uuid id).",
+        "Also offers plain remote shell (`agent-bridge run <machine> \"cmd\"`) for diagnostics — but explicitly does NOT invoke an agent.",
+        "Maturity signal: 8 stars, 1 fork, created 2026-04-12, JavaScript."
+      ]
+    },
+    {
+      "url": "https://github.com/gvorwaller/claude-relay",
+      "name": "claude-relay — WebSocket + MCP relay between Claude Code instances",
+      "key_points": [
+        "Architecture: MCP server per machine -> WebSocket -> single relay server (port 9999) on one host machine; remote machines connect through an authenticated SSH local-forward.",
+        "Security stance worth contrasting with SiloLink: the relay intentionally listens only on loopback and refuses direct plaintext LAN WebSocket access — traffic between machines is always carried inside SSH.",
+        "Human-readable session identity (CC-1, CC-2, CODEX) via a registry at `~/claude-relay/sessions/registry.json`; `claude-sessions` prints one live-verified row per session (PROCESS + RELAY state).",
+        "Identity discipline is enforced: registry key, MCP CLIENT_ID, WebSocket clientId, and message from/to ID must all match exactly; the relay rejects duplicate live client IDs.",
+        "Client-specific MCP tool profiles: Claude Code gets the lean claude-core profile (relay_send/receive/peers/status/rename) and deliberately no relay_wait — Claude should end its turn and be woken by a Stop hook when mail arrives.",
+        "Maturity signal: 4 stars, 2 forks, created 2025-11-30, pushed 2026-09-30 (actively maintained)."
+      ]
+    },
+    {
+      "url": "https://github.com/RBJGlobal/claudelink",
+      "name": "ClaudeLink — local multi-terminal agent mesh with auto-nudge",
+      "key_points": [
+        "MCP server that turns multiple AI coding terminals into a team sharing a SQLite DB with three tables (agents, messages, bulletin); each terminal registers a role (reviewer/developer/tester/ops/architect).",
+        "Autonomy loop: a local Command Center at 127.0.0.1:7878 runs an auto-nudge scheduler that queries the DB for agents with unread mail and types \"check for updates\" directly into that terminal — it simulates a real keystroke rather than forging input.",
+        "Positioning is explicitly local-first: 'No cloud. No telemetry. No account.' Model-agnostic across Claude Code, Codex CLI, Gemini CLI, and Goose with hundreds of backing models.",
+        "Maturity signal: 6 stars, 0 forks, created 2026-03-13, TypeScript, MIT, npm package `claudelink`."
+      ]
+    },
+    {
+      "url": "https://github.com/geelen/mcp-remote",
+      "name": "mcp-remote — the stdio->remote proxy SiloLink itself depends on",
+      "key_points": [
+        "The de facto OAuth bridge for stdio-only MCP clients; ~5.2M monthly / ~776k weekly npm downloads. SiloLink's own install snippet uses `npx mcp-remote http://localhost:3579/mcp`.",
+        "Solves the exact client-side limitation the article must explain: Claude Code's older/stdio configs cannot speak to an HTTP MCP server directly, so a proxy is needed — newer Claude Code versions can use `--transport http` instead.",
+        "Known pain points that make the how-to valuable: OAuth callback on localhost refused, hangs mid-session token expiry, Claude Desktop hangs; the abluva fork merges an unmerged mid-session re-auth PR.",
+        "Protocol modes matter for SiloLink debugging: `auto` (probe server/discover), `legacy` (stateful Streamable HTTP initialize+session — needed for gateway URLs), and `2026-07-28` (stateless POST-only with _meta injection).",
+        "Maturity signal: 1,608 stars, 300 forks, created 2025-03-20, TypeScript."
+      ]
+    },
+    {
+      "url": "https://github.com/portablemind-ai/silolink",
+      "title": "portablemind-ai/silolink — official public source mirror of @dsiloed/silo-link (README)",
+      "key_points": [
+        "The primary artifact a how-to must reproduce end to end: install, `silolink config`, `silolink start --daemon`, `silolink launch -p \"...\"`, and the manual `.mcp.json`/`.claude.json` MCP entry — the vendor README is the only place this flow is documented.",
+        "Architecture: local daemon exposing an MCP server on localhost:3579 (Streamable HTTP on Express) plus a WebSocket to the DSiloed backend over ActionCable, so a session can be driven from a web UI, Slack, Discord, Teams or SMS.",
+        "Operational failure modes a tutorial must cover: pre-registration message buffering, echo prevention (tracked outbound IDs + prefix matching), 30-second API timeouts, 3-map session validation every 5 minutes, idle cleanup after 1 hour, reconnect backoff 1s->60s cap.",
+        "Permission gotcha that breaks headless runs: `--dangerously-skip-permissions` alone is not enough on Claude Code 2.x — the launcher also writes workspace trust into `~/.claude.json` and a top-level `skipDangerousModePermissionPrompt: true` into `~/.claude/settings.json`, or dangerous-pattern commands still prompt and hang the pane.",
+        "Workspace isolation ships as tools: per-session git worktrees under `~/.silolink/worktrees/<repo>/<branch>/` plus advisory file claims with cross-session conflict notifications."
+      ]
+    },
+    {
+      "url": "https://github.com/craigsc/cmux",
+      "title": "craigsc/cmux — 'tmux for Claude Code' (605 stars, MIT)",
+      "key_points": [
+        "The single-machine foil for SiloLink's cross-machine claim: `cmux new <branch>` creates a git worktree + branch, runs a setup hook and launches Claude in it so parallel agents never stomp each other.",
+        "Same problem statement as SiloLink ('Claude Code works best when it has full ownership of the working directory') solved locally with worktrees rather than a network bridge.",
+        "Command surface for a comparison table: new, start, cd, ls, merge, rm, init; worktrees live under `.worktrees/<branch>/` with sanitized branch names.",
+        "Pure bash on git plus the Claude CLI — zero service dependency, no account, no token: the low-friction option for readers who do not need remote control.",
+        "Gap to exploit: single machine only; no chat control surface, no cross-machine session continuity, no file-claim conflict notifications."
+      ]
+    },
+    {
+      "url": "https://pypi.org/project/claude-code-bridge/",
+      "title": "claude-code-bridge v1.3.0 — cross-machine MCP relay for Claude Code (PyPI, MIT)",
+      "key_points": [
+        "Comparable cross-machine bridge with the opposite topology: a self-hosted HTTP + SSE relay on :8765 with named channels, reached over LAN, Tailscale or another private overlay.",
+        "Thinner tool surface than SiloLink's 14 tools: bridge_send, bridge_receive (incremental `since_id` polling), bridge_channels, bridge_ping, bridge_clear, bridge_status — no workspace/worktree or file-claim management.",
+        "Install path differs and matters: it uses `claude mcp add --transport sse` and warns current Claude Code rejects the legacy `mcpServers` block at the schema level, so hand-editing settings is the wrong move.",
+        "Hardening the article should mirror: keep :8765 firewalled to the tailnet, use `--host 0.0.0.0` only when remote machines must reach it, and enable the built-in Bearer token instead of exposing the port bare.",
+        "It fills SiloLink's biggest gap: no vendor account or hosted backend required — the right pick for a fully self-hosted fleet."
+      ]
+    },
+    {
+      "url": "https://medium.com/@carlom/your-ai-coding-agents-are-working-alone-give-them-a-group-chat-ab4d5c85c475",
+      "title": "Your AI Coding Agents Are Working Alone. Give Them a Group Chat. (bridge-harness case study)",
+      "key_points": [
+        "Independent implementation of the same category on a different transport: a NATS message bus with a JetStream durable stream so a single-shot rewake hook cannot miss a message during its restart window.",
+        "Reactivation mechanism checklist: Pi is push-based (`triggerTurn: true` wakes the agent) while Claude Code is pull-based with a wake hook firing an async-rewake on arrival.",
+        "Names the design trap behind one-tmux-session-per-conversation: a single shared context degrades as it fills, so agents should exchange conclusions, not raw context.",
+        "Honest limitations to mirror: rooms are ephemeral (only DMs are durable), cross-session replay is scoped to a session identity, workflow design is still on the human.",
+        "Records a routing bug worth citing: namespacing everything by project/worktree silently severed base-repo-to-worktree messaging — identity routing had to be split from isolation."
+      ]
+    },
+    {
+      "url": "https://medium.com/@jaysidd_16468/i-stopped-babysitting-my-ai-coding-agents-here-is-how-1858a1a977cf",
+      "title": "I stopped babysitting my AI coding agents. Here is how. (ClaudeLink case study)",
+      "key_points": [
+        "Sharpest framing for the 'why this exists' section: the multi-agent bottleneck is psychological, not technical — 'a human operator does not scale… you do not have a team, you have a busier solo.'",
+        "Documents the security boundary SiloLink also hits: Claude Code's prompt-injection defense refuses to let external inbox content steer outbound tool calls, so the working design simulates a human keystroke and never forges the agent's agency.",
+        "Concrete terminal-automation bug any tmux-driven bridge inherits: iTerm2 routes multi-character writes through the bracketed-paste path and Codex's spec-correct TUI treats pasted carriage returns as content — fix is a two-write dispatch (text, then a standalone CR byte).",
+        "Architecture for contrast: SQLite with agents/messages/bulletin tables, a local Command Center on 127.0.0.1:7878 with an auto-nudge scheduler, role registration per terminal.",
+        "States plainly that multi-machine support is designed but not built — which sharpens SiloLink's cross-machine claim as a real differentiator."
+      ]
+    },
+    {
+      "url": "https://dev.to/ebibibi/ai-agents-yield-to-each-other-in-the-break-room-a-month-in-my-diy-discord-bridge-5gf1",
+      "title": "AI Agents Yield to Each Other in the 'Break Room' — A Month in My DIY Discord Bridge (CCDB)",
+      "key_points": [
+        "Proves the chat-app control surface is the compelling part of this category: one Discord thread equals one AI session, so a feature, a PR review and documentation run in parallel from a phone.",
+        "Per-thread git worktree isolation with a `/backend` switch between Claude and Codex — the multi-vendor angle SiloLink claims via its AgentLauncher abstraction.",
+        "Adds coordination SiloLink only partly matches: sessions claim resources, check each other's status, send messages and mutually yield with zero configuration and no token cost.",
+        "Self-hosting reality check: a personal open-source bridge that 'became a different tool' over a month of churn — evidence this space is early and fast-moving.",
+        "Gap to exploit: no hosted backend, no session-continuity primitive as explicit as `remote_load_context`, coordination is per-install rather than per-tenant."
+      ]
+    },
+    {
+      "url": "https://code.claude.com/docs/en/worktrees",
+      "title": "Claude Code official docs — Run parallel sessions with worktrees",
+      "key_points": [
+        "Authoritative isolation primitive every bridge builds on: `claude --worktree <name>` creates `.claude/worktrees/<name>/` on branch `worktree-<name>`, defaulting to a fresh remote base ref (override with `worktree.baseRef: \"head\"`).",
+        "Enforcement a bridge's safety claim depends on: while isolated, Claude Code blocks the tool calls its checks define and surfaces each refusal as a named tool error — the same rules cover every subagent the session spawns.",
+        "Subagent isolation is declarative via `isolation: worktree` in frontmatter, separating intra-session fan-out from cross-machine fan-out.",
+        "`.worktreeinclude` carries gitignored files such as `.env` into every new worktree — the setup detail readers most often get wrong when a fresh worktree fails to build.",
+        "Interactive runs need workspace trust (non-interactive `-p` skips it); backgrounded worktrees are swept but a non-backgrounded `--worktree` session or a hand-made `git worktree add` worktree is never swept."
+      ]
+    }
+  ],
+  "stats": [
+    {
+      "fact": "SiloLink is at version 1.19.23 — 98 published versions since the first release on 2026-03-26, with the latest published 2026-09-27.",
+      "source": "npm registry API — https://registry.npmjs.org/@dsiloed/silo-link"
+    },
+    {
+      "fact": "SiloLink npm downloads are ~3.6-3.7k/month in steady state (1,225 in the last 30 days on the point API, 16,861 lifetime since March 2026).",
+      "source": "npm downloads API — https://api.npmjs.org/downloads/range/2026-03-26:2026-09-29/@dsiloed/silo-link"
+    },
+    {
+      "fact": "The public GitHub mirror (portablemind-ai/silolink) has only 2 stars, 2 forks, and 0 open issues; it is explicitly a read-only mirror created 2026-08-18, with the canonical repo on GitLab.",
+      "source": "GitHub API — https://api.github.com/repos/portablemind-ai/silolink"
+    },
+    {
+      "fact": "SiloLink exposes 14 MCP tools, including the recommended non-blocking remote_poll and the blocking remote_wait_for_command.",
+      "source": "SiloLink README — https://raw.githubusercontent.com/portablemind-ai/silolink/main/README.md"
+    },
+    {
+      "fact": "SiloLink writes its JWT to ~/.silolink/config.json with mode 0600 and never writes the password to disk.",
+      "source": "SiloLink README (Configuration)"
+    },
+    {
+      "fact": "SiloLink's default MCP endpoint is a local Streamable HTTP server on port 3579 with a /health check returning {status, sessions, cable}.",
+      "source": "SiloLink README (Connecting Claude Code, Health Check)"
+    },
+    {
+      "fact": "Each SiloLink conversation gets its own Claude Code tmux session; sessions are cleaned after 1 hour idle and multiple sessions run simultaneously.",
+      "source": "SiloLink README (Multi-Session, Technical Details)"
+    },
+    {
+      "fact": "Anthropic's first-party Remote Control defaults to a capacity of 32 concurrent sessions and supports worktree spawn mode for per-session git worktree isolation.",
+      "source": "Claude Code docs — https://code.claude.com/docs/en/remote-control"
+    },
+    {
+      "fact": "Anthropic Remote Control requires a Pro/Max/Team/Enterprise subscription; API keys are not supported, and Bedrock/Vertex/Foundry or any custom ANTHROPIC_BASE_URL makes it unavailable.",
+      "source": "Claude Code docs — Requirements"
+    },
+    {
+      "fact": "Anthropic Remote Control requires the workspace trust dialog to have been accepted, and that dialog never saves trust for the home directory — start from a project directory.",
+      "source": "Claude Code docs — Requirements"
+    },
+    {
+      "fact": "MCP servers are split roughly 93% Streamable HTTP vs 7% deprecated SSE on the current transport standard.",
+      "source": "Bloomberry research, via Nordic APIs — https://nordicapis.com/10-interesting-mcp-statistics/"
+    },
+    {
+      "fact": "38.7% of MCP servers where the auth method could be determined have no authentication at all, and 53% rely on insecure long-lived static secrets.",
+      "source": "Bloomberry / Astrix, via Nordic APIs — https://nordicapis.com/10-interesting-mcp-statistics/"
+    },
+    {
+      "fact": "MCP servers have a median of about five tools each.",
+      "source": "Bloomberry research, via Nordic APIs"
+    },
+    {
+      "fact": "Public MCP server counts vary by registry by roughly 3.5x: Smithery 6,652 (curated), PulseMCP 20,120 (broad tracker), mcp.so ~23,000 (self-reported).",
+      "source": "AgentsCamp MCP Ecosystem Statistics 2026 — https://agentscamp.com/guides/mcp/mcp-ecosystem-statistics"
+    },
+    {
+      "fact": "The official npm @modelcontextprotocol/sdk went from 38.5M monthly downloads (Dec 2025) to ~156M (Jul 2026); PyPI mcp added ~271M monthly.",
+      "source": "AgentsCamp MCP Ecosystem Statistics 2026 (npm registry API / pypistats)"
+    },
+    {
+      "fact": "41% of surveyed software organizations were in limited or broad production use of MCP servers (Stacklok 2026 software survey) — the most defensible enterprise figure; a widely repeated '78%' claim was not traceable to a source.",
+      "source": "Stacklok State of Model Context Protocol in Software 2026, via Digital Applied"
+    },
+    {
+      "fact": "28% of Fortune 500 companies had implemented MCP servers as of early 2026, against 80% running AI agents in production generally.",
+      "source": "Synvestable — https://www.synvestable.com/model-context-protocol.html"
+    },
+    {
+      "fact": "Security concerns are the top blocker to MCP adoption at 64% of surveyed software organizations, ahead of cost (40%) and legacy integration (38%).",
+      "source": "Stacklok State of Model Context Protocol in Software 2026"
+    },
+    {
+      "fact": "Claude Code reconnects a dropped remote MCP server with exponential backoff up to five attempts (1s doubling), marking it failed or needing auth afterwards.",
+      "source": "Claude Code docs — Connect Claude Code to tools via MCP"
+    },
+    {
+      "fact": "Claude Code's newer transport flags allow `--transport http`/websocket to reach a remote server directly, which removes the mcp-remote proxy dependency for up-to-date clients.",
+      "source": "Claude Code docs — Installing MCP servers"
+    },
+    {
+      "fact": "SiloLink's client transport dependency mcp-remote recorded 5,220,462 downloads in the 30 days ending 2026-09-29 — the transport is orders of magnitude more used than the SiloLink daemon that rides on it.",
+      "source": "npm downloads API — https://api.npmjs.org/downloads/point/last-month/mcp-remote (retrieved 2026-10-01)"
+    },
+    {
+      "fact": "SiloLink exposes 14 MCP tools (src/mcp/tools/register-tools.ts), including attach_local_file with a 50 MB cap and symlinks resolved before the containment check, and remote_post which can post to ANY conversation by id.",
+      "source": "SiloLink README (MCP Tools) + Project Structure — https://raw.githubusercontent.com/portablemind-ai/silolink/main/README.md"
+    },
+    {
+      "fact": "The Codex launcher writes [mcp_servers.*] tables (url + http_headers Authorization Bearer) to a per-env $CODEX_HOME/config.toml with no npx mcp-remote bridge, and was validated against codex-cli 0.141.0.",
+      "source": "SiloLink README (Provider Selection / Codex notes)"
+    },
+    {
+      "fact": "cmux ('tmux for Claude Code') had 605 stars and 34 forks on 2026-10-01 (MIT, created 2026-02-13, last push 2026-06-16) — the leading single-machine worktree-per-agent alternative.",
+      "source": "GitHub REST API — https://api.github.com/repos/craigsc/cmux (retrieved 2026-10-01)"
+    },
+    {
+      "fact": "claude-code-bridge (PyPI, MIT) is at v1.3.0 with 20 published releases, self-described as a 'local-first, cross-machine MCP relay for independent coding agents', relaying over plain HTTP + SSE on port 8765.",
+      "source": "PyPI JSON API — https://pypi.org/pypi/claude-code-bridge/json (retrieved 2026-10-01)"
+    },
+    {
+      "fact": "bridge-harness keeps durable direct messages on a NATS JetStream stream with 30-minute retention, 100 messages per recipient and a 64 MB cap, added after the author found a single-shot rewake hook could miss a reply during its restart window roughly 1 in 5 times under heavy fan-out.",
+      "source": "bridge-harness case study — https://medium.com/@carlom/your-ai-coding-agents-are-working-alone-give-them-a-group-chat-ab4d5c85c475"
+    },
+    {
+      "fact": "CCDB (Claude & Codex Discord Bridge) reached v3.2.4 with four layers of inter-agent coordination — resource claiming, status checks, direct messaging and mutual yielding — with zero configuration and no token cost for coordination itself.",
+      "source": "dev.to — https://dev.to/ebibibi/ai-agents-yield-to-each-other-in-the-break-room-a-month-in-my-diy-discord-bridge-5gf1"
+    },
+    {
+      "fact": "Hacker News has no discussion thread for SiloLink as of 2026-10-01: the Algolia search API returns 0 relevant hits (only unrelated matches such as SoloLinks, Sidelink and 'silliness') — a negative adoption signal worth stating rather than implying community traction.",
+      "source": "HN Algolia API — https://hn.algolia.com/api/v1/search?query=SiloLink (retrieved 2026-10-01)"
+    },
+    {
+      "fact": "Remote Control's cross-session messaging (messages between your own sessions on different machines) requires Claude Code v2.1.224 or later, and forwarded dialogs such as permission prompts expire after five minutes by default unless dialogExpiry is set.",
+      "source": "Claude Code docs — https://code.claude.com/docs/en/remote-control (What connected devices see / Limitations)"
+    },
+    {
+      "fact": "Name-collision caveat for the article: 'silo-mcp' (github.com/ipcamit/silo-mcp, 0 stars, Go, created 2026-03-11) is an unrelated Docker-sandbox task-delegation server and must not be confused with SiloLink.",
+      "source": "GitHub REST API — https://api.github.com/repos/ipcamit/silo-mcp (retrieved 2026-10-01)"
+    }
+  ],
+  "angles": [
+    "Cloud relay vs local loopback: SiloLink's traffic always transits the DSiloed SaaS (ActionCable WebSocket + REST) and your Claude session is driven from a vendor UI. claude-relay and agent-bridge deliberately refuse that — agent-bridge is peer-to-peer over SSH with no cloud relay, claude-relay listens loopback-only. Make the trust boundary an explicit decision section with a comparison table rather than a footnote.",
+    "Polling vs pushing: SiloLink's own docs recommend the non-blocking `remote_poll()` in a 3-second loop. That is a deliberate design trade-off (can't lose messages on cancellation) but it costs latency and idle tokens. Contrast with agent-bridge's push channel events and claude-relay's content-free Stop hook that wakes the session when mail arrives.",
+    "The headless permission trap: SiloLink pre-clears the workspace trust dialog (`projects.<cwd>.hasTrustDialogAccepted`) and user-scope `skipDangerousModePermissionPrompt: true` because `--dangerously-skip-permissions` alone still re-prompts on the 'dangerous pattern' class in CC 2.x. This is the highest-value concrete gotcha for a how-to and is documented from the binary (`Sd()`), not the public schema.",
+    "First-party overlap: Anthropic shipped Remote Control on 2026-02-25 (544 points / 313 comments on HN). SiloLink is not competing on that axis — Remote Control needs a Pro/Max/Team/Enterprise subscription and dies behind Bedrock/Vertex/Foundry or any custom ANTHROPIC_BASE_URL, and it is one-human-one-session. SiloLink's axis is multi-session orchestration plus chat-channel reach (Slack/Discord/Teams/SMS) and usage/cost reporting. An honest positioning section wins more trust than pretending the overlap is zero.",
+    "Session continuity is the operational killer detail: tmux panes die, and context does not come back unless you call `remote_load_context()` and reuse `claude_resume_id`. Show the register -> load_context -> poll loop ordering as the canonical pattern, with the worktree/`identity_type: agent` staging-dir isolation as the multi-agent variant.",
+    "Git worktrees as an agent-safety primitive: SiloLink gives each session a worktree plus advisory file-claim soft-locks with cross-session conflict notifications; Anthropic's Remote Control has the same worktree idea via `--spawn worktree`. Advisory-not-blocking is worth calling out — two sessions can still clobber each other if the agent ignores the warning.",
+    "MCP security reality check the article can use for credibility: 38.7% of servers where auth was determinable have none, 53% use long-lived static secrets, and security is the top adoption blocker at 64%. This is exactly the argument for keeping the bridge on localhost and treating the ActionCable credential as a real secret (config at 0600, HS256 JWT, 24h validity with 12h refresh).",
+    "Provider abstraction beyond Claude: SiloLink already ships Gemini and Codex launchers, and Codex uses native streamable-HTTP MCP instead of the npx mcp-remote bridge. That makes 'how to bridge a non-Claude agent CLI' a natural follow-up section that most competitor articles skip.",
+    "There are three architectures, not one: outbound-only vendor control (Remote Control — no inbound port, first-party, plan-gated), a local MCP daemon with a listening port plus a control WebSocket (SiloLink on localhost:3579), and a self-hosted relay bus (claude-code-bridge over HTTP/SSE, bridge-harness over NATS). Choosing between them is the article's spine.",
+    "Cross-machine is the real dividing line. Single-host fleet managers (cmux worktrees, ClaudeLink's SQLite mesh) explicitly stop at one machine, and ClaudeLink admits multi-machine is 'designed but not yet built' — which is exactly the honest contrast that makes SiloLink's claim legible.",
+    "The isolation primitive is shared, so it is not a differentiator: git worktrees are the concurrency answer for cmux, CCDB, Claude Code itself (--worktree), and SiloLink's remote_workspace_* tools. What SiloLink adds is advisory file claims with cross-session conflict notifications — that is the part worth testing.",
+    "Anything that can reach the bridge inherits the agent's shell reach. The MCP endpoint is unauthenticated by default on localhost:3579, remote_post can target ANY conversation by id, and attach_local_file uploads up to 50 MB from the working tree — the trust boundary is the machine, and a prompt-injected model inside the loop is a live risk to state plainly.",
+    "Watch the token and identity model: SiloLink's user vs agent identity_type decides whether spawned sessions share one .mcp.json in projects_path or get isolated per-env staging dirs under ~/.silolink/staging/<env>/ — the difference between a single writer and a fleet leaking one env's JWT to a sibling.",
+    "Be honest about adoption: ~1.2k npm downloads a month, a 2-star source mirror, and zero Hacker News discussion, while the mcp-remote transport it depends on clears 5.2M downloads a month — separate 'this category matters' from 'this implementation is proven'.",
+    "Vendor lock-in is the trade: SiloLink needs a DSiloed/Portablemind account and hosted backend to be useful at all, while claude-code-bridge and bridge-harness are fully self-hosted — so say plainly which fleet each suits instead of framing the choice as purely technical.",
+    "Choose by the failure you can tolerate: a vendor outage (Remote Control depends on Anthropic servers), your own machine's exposed port (SiloLink), or your own relay's uptime (claude-code-bridge, bridge-harness).",
+    "Terminal automation has sharp edges worth documenting: tmux plus a CLI TUI makes bracketed-paste semantics, prompt-queue injection and ready-screen detection real integration hazards (Codex's strict TUI silently holding an unsubmitted prompt is the canonical example)."
+  ],
+  "keywords": [
+    "SiloLink MCP bridge",
+    "SiloLink Claude Code",
+    "@dsiloed/silo-link",
+    "silolink setup",
+    "Claude Code remote bridge",
+    "Claude Code remote session MCP",
+    "MCP bridge remote Claude Code sessions",
+    "claude code tmux remote session",
+    "remote_poll remote_register",
+    "remote_load_context session continuity",
+    "Claude Code remote control vs SiloLink",
+    "Portablemind SiloLink",
+    "DSiloed Claude Code bridge",
+    "claude code control from Slack Discord SMS",
+    "run Claude Code on remote server from phone",
+    "MCP server localhost 3579",
+    "claude code mcp-remote http localhost",
+    "claude code headless permissions skipDangerousModePermissionPrompt",
+    "claude code worktree per session",
+    "multi-session Claude Code orchestration",
+    "mcp bridge ssh tunnel vs cloud relay",
+    "claude code remote control bedrock unavailable",
+    "SiloLink Claude Code remote bridge",
+    "drive Claude Code sessions remotely",
+    "remote Claude Code MCP server",
+    "claude code tmux session manager",
+    "control Claude Code from Slack Discord",
+    "cross-machine claude code agent bridge",
+    "silolink setup tutorial",
+    "silolink mcp port 3579",
+    "git worktree isolation claude code agents",
+    "claude code file claim conflict notifications",
+    "mcp-remote localhost mcp server claude",
+    "claude code remote-control requirements",
+    "session continuity remote_load_context",
+    "claude code remote session security localhost port",
+    "dsiloed portablemind silolink",
+    "claude code agent fleet management 2026",
+    "self-hosted claude code bridge alternatives"
+  ],
+  "outline": [
+    "H2: What SiloLink actually is (and what it is not)",
+    "H2: How the bridge works: MCP on localhost, ActionCable to the cloud",
+    "H2: Prerequisites and install (Node 20+, tmux, npm i -g @dsiloed/silo-link)",
+    "H2: Configuring the daemon (silolink config, user vs agent identity_type, non-interactive flags)",
+    "H2: Connecting Claude Code to the SiloLink MCP server (mcp-remote on port 3579, plus the --transport http alternative)",
+    "H2: Launching your first remote session (CLI launch, web UI +, auto-launch on inbound message)",
+    "H2: The poll-loop contract: remote_register, remote_load_context, remote_poll",
+    "H2: Reaching Claude from Slack, Discord, Teams, and SMS",
+    "H2: Isolating parallel work with git worktrees and file claims",
+    "H2: Headless permissions: why --dangerously-skip-permissions is not enough",
+    "H2: Operating it: status, health check, session cleanup, and troubleshooting",
+    "H2: Security and trust boundary: what leaves your machine",
+    "H2: SiloLink vs Anthropic Remote Control vs agent-bridge vs claude-relay",
+    "H2: Beyond Claude: Gemini and Codex launchers, and MCP tool naming",
+    "H2: FAQ"
+  ],
+  "facts_for_claims": [
+    "SiloLink install command: `npm install -g @dsiloed/silo-link` (installs the `silolink` CLI).",
+    "Claude Code MCP snippet: {\"mcpServers\":{\"silolink\":{\"command\":\"npx\",\"args\":[\"mcp-remote\",\"http://localhost:3579/mcp\"]}}}",
+    "Daemon commands: `silolink start [--daemon]`, `silolink status`, `silolink sessions`, `silolink stop`, `silolink launch [-p \"prompt\"] [-a codex]`, `silolink config [--env <name>] [--non-interactive ...]`, `silolink setup-claude-md [path]`, `silolink report-usage --cli claude|gemini|codex`.",
+    "MCP tools table (14): remote_register, remote_load_context, remote_notify, remote_ask (blocking), remote_poll (recommended, non-blocking), remote_check_messages, remote_wait_for_command (blocking), remote_sessions, remote_unregister, remote_workspace_create/claim/check/merge/list.",
+    "remote_register input {session_name?, conversation_id?} -> output {session_id, conversation_id, conversation_url}.",
+    "remote_load_context input {conversation_id?, limit?} -> output {success, conversation_id, resume_id, message_count, history}.",
+    "remote_poll -> {success, message, sender_name} or {success, pending: true}.",
+    "remote_ask input {question, timeout?} -> {response, sender_name}.",
+    "Workspace example: remote_workspace_create({repo:\"/home/user/myapp\", branch:\"feature/auth\"}) -> {worktree_path, branch}; remote_workspace_claim({files:[...]}) -> {claimed, conflicts}; remote_workspace_check({}) -> {all_claims}; remote_workspace_merge({}) -> {success, merged_branch}.",
+    "Control channel REST endpoints: POST /api/v1/silolink/launch, POST /api/v1/silolink/stop, GET /api/v1/silolink/status.",
+    "Launch command JSON: {\"type\":\"launch\",\"conversation_id\":123,\"repo_path\":\"/home/user/myapp\",\"branch\":\"feature/auth\"}.",
+    "Config keys: claude_command, claude_working_directory, claude_auto_respawn, claude_idle_timeout_ms (30000 default), agent_provider (claude|gemini|codex, openai accepted as alias), codex_command, codex_args ([\"--dangerously-bypass-approvals-and-sandbox\"]), codex_resume_enabled (false default), codex_session_prompt.",
+    "identity_type agent staging dirs: ~/.silolink/staging/<env>/ ; worktrees at ~/.silolink/worktrees/<repo>/<branch>/.",
+    "Permissions pre-cleared on each launch: ~/.claude.json projects.<cwd>.hasTrustDialogAccepted, and ~/.claude/settings.json top-level skipDangerousModePermissionPrompt: true. Verify with: python3 -c 'import json; print(json.load(open(\"$HOME/.claude/settings.json\")).get(\"skipDangerousModePermissionPrompt\"))'",
+    "Still prompts regardless of settings: CC's hardcoded circuit breaker for catastrophic patterns (rm -rf /, rm -rf ~) — drive those from the web UI with the send_keys control command.",
+    "Allow only SiloLink tools without bypass: {\"permissions\":{\"allow\":[\"mcp__silolink__*\"]}} in .claude/settings.json.",
+    "Technical defaults: HS256 JWT 24h validity auto-refreshed every 12h; reconnect exponential backoff 1s -> 60s cap; echo prevention via tracked outbound message IDs + prefix matching; idle session cleanup after 1 hour; 30s abort on all DSiloed API calls; 3-map consistency validation every 5 minutes.",
+    "Codex specifics: writes [mcp_servers.*] tables with url + http_headers = {Authorization = \"Bearer <jwt>\"} to $CODEX_HOME/config.toml; no npx mcp-remote bridge; launched as `env CODEX_HOME=<home> codex ...`; MCP tools named silolink__remote_register; validated against codex-cli 0.141.0.",
+    "Local endpoint: http://localhost:3579 — MCP server (Streamable HTTP) plus /health.",
+    "Identity: Portablemind is the product (app.portablemind.ai); DSiloed is the backend service and the name that appears in the README and npm scope; built by Russell Holmes.",
+    "Remote Control is outbound-only (no inbound port) whereas SiloLink listens on localhost:3579 — different trust surfaces; state both.",
+    "mcp-remote is the client-side dependency of SiloLink's documented MCP snippet, and it pulls ~5.2M downloads/month — cite it as the transport's scale, not SiloLink's.",
+    "No independent third-party review or benchmark of SiloLink was found on 2026-10-01; every technical claim traces to the vendor README, npm registry/pypi metadata or the source tree.",
+    "HN Algolia returns 0 relevant hits for SiloLink as of 2026-10-01 — do not imply community traction.",
+    "'silo-mcp' (ipcamit) is an unrelated Docker-sandbox delegation server; disambiguate the name in the article."
+  ],
+  "sources_available": [
+    "https://raw.githubusercontent.com/portablemind-ai/silolink/main/README.md (23,840 bytes, complete — primary technical source)",
+    "https://api.github.com/repos/portablemind-ai/silolink",
+    "https://api.github.com/repos/portablemind-ai/silolink/git/trees/main?recursive=1",
+    "https://registry.npmjs.org/@dsiloed/silo-link",
+    "https://api.npmjs.org/downloads/point/last-month/@dsiloed/silo-link",
+    "https://api.npmjs.org/downloads/range/2026-03-26:2026-09-29/@dsiloed/silo-link",
+    "https://www.dsiloed.com/apps/silolink-demo",
+    "https://app.portablemind.ai/docs",
+    "https://www.dsiloed.com/apps/apiguide/index.html",
+    "https://code.claude.com/docs/en/remote-control",
+    "https://code.claude.com/docs/en/mcp",
+    "https://github.com/EthanSK/agent-bridge",
+    "https://github.com/gvorwaller/claude-relay",
+    "https://github.com/RBJGlobal/claudelink",
+    "https://github.com/geelen/mcp-remote",
+    "https://pypi.org/pypi/claude-code-bridge/json (claude-code-bridge v1.3.0 metadata — HTTP+SSE relay on :8765)",
+    "https://medium.com/@carlom/your-ai-coding-agents-are-working-alone-give-them-a-group-chat-ab4d5c85c475 (bridge-harness: NATS + JetStream durability numbers)",
+    "https://dev.to/ebibibi/ai-agents-yield-to-each-other-in-the-break-room-a-month-in-my-diy-discord-bridge-5gf1 (CCDB v3.2.4 Discord bridge)",
+    "https://medium.com/@jaysidd_16468/i-stopped-babysitting-my-ai-coding-agents-here-is-how-1858a1a977cf (ClaudeLink: prompt-injection defense, bracketed-paste bug)",
+    "https://code.claude.com/docs/en/worktrees (Claude Code worktree isolation semantics)",
+    "https://api.npmjs.org/downloads/point/last-month/mcp-remote (5,220,462 monthly downloads — scale anchor)",
+    "https://github.com/craigsc/cmux (single-machine worktree-per-agent alternative, 605 stars)",
+    "https://hn.algolia.com/api/v1/search?query=SiloLink (retrieved 2026-10-01 — 0 relevant hits; negative finding, not an error)"
+  ],
+  "sources_unavailable": [
+    {
+      "url": "https://www.reddit.com/search.json?q=silolink",
+      "reason": "reddit.com JSON API returned non-JSON (403/bot wall) on both r/all and r/mcp queries. One r/mcp post about SiloLink ('SiloLink — an MCP server that lets you drive Claude Code sessions on other machines from a chat thread (MIT)') was captured indirectly via Trendshift; not retried with a rendered browser."
+    },
+    {
+      "url": "https://www.npmjs.com/package/@dsiloed/silo-link",
+      "reason": "npmjs.com HTML page returned 403; the registry API (registry.npmjs.org) was used instead and is authoritative."
+    },
+    {
+      "url": "https://api.pulsemcp.com/v0beta/servers?query=silolink",
+      "reason": "API_SUNSET — v0beta deprecated and sunset as of September 2026."
+    },
+    {
+      "url": "https://registry.smithery.ai/servers?q=silolink",
+      "reason": "Query returned unrelated servers (no SiloLink listing) on the public unauthenticated search."
+    }
+  ],
+  "caveats": [
+    "The only public distribution channel is npm; there is no first-party docs site for SiloLink itself (the portablemind docs only list a 'Coding Agents (SiloLink)' nav section), so most technical claims trace to the package README and the shipped source tree.",
+    "Star/fork counts are not a maturity signal here: the GitHub repo is a read-only mirror created 2026-08-18 with 2 stars. Use npm version cadence (98 releases) and the source tree depth (src/core/bridge.ts is 78KB, base-tmux-launcher.ts 106KB, plus ~30 test files) as the real maturity evidence.",
+    "Vendor marketing numbers on the demo page (active sessions, messages routed) are client-side counters and should not be cited as usage statistics.",
+    "SiloLink's launcher is vendor-coupled to DSiloed/Portablemind — the daemon authenticates to that backend and registers into its Agent Dashboard. This is the single biggest editorial caveat for a 'how-to' aimed at readers who want a neutral bridge.",
+    "Name collision: 'silo-mcp' (github.com/ipcamit/silo-mcp) is an unrelated Docker-sandbox task-delegation server (0 stars, Go) — do not merge it with SiloLink in the article.",
+    "No independent third-party review, benchmark or security audit of SiloLink existed as of 2026-10-01; all reliability and security claims trace to the vendor README/package metadata and are the vendor's own design statements, not verified behavior.",
+    "Adoption is early: ~1.2k npm downloads/month, 2 stars on the source mirror, no Hacker News thread — the competitor landscape (cmux, claude-code-bridge, bridge-harness, CCDB) is at a comparable maturity, so avoid implying SiloLink is the incumbent."
+  ],
+  "merge_provenance": {
+    "merged_by_run_id": "5323ed53-4db4-4961-b2ba-0c1c37718c72",
+    "merged_at_utc": "2026-10-01T01:48:33Z",
+    "base": "sibling owner run 7e9ea1c8-ff41-4acb-8a3a-465674d4cedf (wrote the file first)",
+    "policy": "lossless union merge — no existing key deleted; competitors unioned by URL, stats/angles/outline by text similarity, keywords case-insensitive; sources split into competitor/primary/context",
+    "added": {
+      "competitors": 7,
+      "stats": 10,
+      "angles": 9,
+      "keywords": 17,
+      "outline": 0
+    },
+    "note": "merged by the duplicate unassigned spawn (no board writes made); all pre-existing content preserved verbatim"
+  }
+}
