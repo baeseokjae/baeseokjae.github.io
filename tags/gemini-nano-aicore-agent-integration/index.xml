@@ -1,0 +1,346 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Gemini Nano AICore Agent Integration on RockB</title><link>https://baeseokjae.github.io/tags/gemini-nano-aicore-agent-integration/</link><description>Recent content in Gemini Nano AICore Agent Integration on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 01 Oct 2026 02:50:51 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/gemini-nano-aicore-agent-integration/index.xml" rel="self" type="application/rss+xml"/><item><title>PhoneBuddy Agent Engine Review: Embedded Rust LLM for Mobile Apps</title><link>https://baeseokjae.github.io/posts/phonebuddy-embedded-rust-agent-engine/</link><pubDate>Thu, 01 Oct 2026 02:50:51 +0000</pubDate><guid>https://baeseokjae.github.io/posts/phonebuddy-embedded-rust-agent-engine/</guid><description>PhoneBuddy agent engine embeds a ReAct loop, virtual shell and jailed file tools in your app process — zero child processes. Independent Rust SDK review.</description><content:encoded><![CDATA[<p>The PhoneBuddy agent engine is an Apache-2.0 Rust agent harness embedded directly in an iOS or Android app: a ReAct tool loop, in-memory virtual shell, jailed file sandbox, boa_engine JavaScript sandbox, subagents and scheduled tasks all run in your app&rsquo;s own process behind a C ABI. Verified 2026-10-01 from a full source download: 70 Rust files, zero child-process code.</p>
+<p>That last sentence is the whole product thesis. Every desktop agent harness — grok-build, Codex, Claude Code — assumes it can fork a process, read a broad filesystem, and keep a session alive for hours. On a phone, each of those assumptions is a store-rejection risk. PhoneBuddy is built around the prohibition instead of around Linux, and the interesting question is not whether its feature list is long. It is whether the architecture holds up, and whether the small project around it is ready for production. This review keeps those two questions separate, because the answers differ sharply.</p>
+<h2 id="what-is-the-phonebuddy-agent-engine-exactly">What is the PhoneBuddy agent engine, exactly?</h2>
+<p>PhoneBuddySDK is a three-crate Rust workspace published by APUS AI Lab: <code>phone-buddy</code> (the agent engine), <code>phone-buddy-ffi</code> (the C ABI that exports <code>phone_buddy.h</code>), and <code>phone-buddy-cli</code> (a development CLI with <code>mock</code>, <code>self-test</code>, <code>chat</code> and <code>generate</code> subcommands). It requires Rust 1.94+, ships a static <code>.a</code> for iOS with a Swift wrapper and a <code>.so</code> for Android with Kotlin/JNI bindings, and is licensed Apache-2.0.</p>
+<p>It is important to be precise about what it is not. PhoneBuddy is not a model, not an inference runtime, and not a cloud service. It carries no weights and performs no inference of its own. It is the orchestration layer — planning, tool dispatch, sandboxing, subagent fan-out, scheduling — that sits between a language model you supply and the phone your app lives on. If you are looking for something that runs a quantized 4B model on-device, this is the wrong repository; if you want the loop that decides <em>which</em> tool to call and in what order, this is precisely the right one.</p>
+<p>The vendor is small and new. The GitHub organization was created on 2026-08-18, hosts four public repositories, and belongs to APUS AI Lab (apusai.com). The SDK itself has a short history: v0.1.1 and v0.1.2 released on 2026-08-18 and 2026-08-19, and v0.2.0 on 2026-08-25. Live metrics on 2026-10-01 read 36 stars, 13 forks, 1 open issue, 3 releases.</p>
+<h2 id="phonebuddy-is-two-different-projects--which-one-are-you-reading-about">PhoneBuddy is two different projects — which one are you reading about?</h2>
+<p>This matters more than it sounds, because searching for &ldquo;PhoneBuddy&rdquo; mixes two unrelated things, and most coverage does not say which one it means.</p>
+<table>
+  <thead>
+      <tr>
+          <th></th>
+          <th>PhoneBuddy SDK</th>
+          <th>PhoneBuddy (research line)</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Repository</td>
+          <td>APUS-AI-Lab/PhoneBuddySDK</td>
+          <td>PhoneBuddyAI/phonebuddy</td>
+      </tr>
+      <tr>
+          <td>What it is</td>
+          <td>Embeddable Rust agent harness for apps</td>
+          <td>Phone-use models and training pipeline</td>
+      </tr>
+      <tr>
+          <td>Artifacts</td>
+          <td>C ABI, Swift and Kotlin wrappers, CLI</td>
+          <td>PhoneBuddy-4B weights on Hugging Face</td>
+      </tr>
+      <tr>
+          <td>Evidence base</td>
+          <td>Source, docs, independent audit</td>
+          <td>arXiv 2606.23049 (22 Jun 2026)</td>
+      </tr>
+      <tr>
+          <td>Headline numbers</td>
+          <td>36 stars, 3 releases</td>
+          <td>83.2% AndroidWorld, 45.33% on a 150-task real-phone eval</td>
+      </tr>
+      <tr>
+          <td>Reported scale</td>
+          <td>70 <code>.rs</code> files at main</td>
+          <td>61 stars, 92 model downloads, 10 likes</td>
+      </tr>
+  </tbody>
+</table>
+<p>The <a href="https://arxiv.org/abs/2606.23049">research line</a> trains models to operate real phones, using a mock-app environment (PhoneWorld) plus real-app reinforcement learning. It is a legitimate and interesting project, but it answers a different question: &ldquo;can a model learn to use a phone?&rdquo; The SDK reviewed here answers &ldquo;how do I run an agent loop inside an app that the App Store will not reject?&rdquo; If a comparison article you read cites the 83.2% AndroidWorld figure as a property of the SDK, it has merged two projects that share nothing but a name.</p>
+<h2 id="why-does-mobile-break-desktop-agent-architecture">Why does mobile break desktop agent architecture?</h2>
+<p>Because the thing every desktop harness depends on — spawning a child process — is the thing mobile stores are built to prevent.</p>
+<p>Apple&rsquo;s <a href="https://developer.apple.com/app-store/review/guidelines/">Guideline 2.5.2</a>, verified verbatim on 2026-10-01, reads: &ldquo;Apps should be self-contained in their bundles, and may not read or write data outside the designated container area, nor may they download, install, or execute code which introduces or changes features or functionality of the app,&rdquo; with a narrow exception for educational code. In early 2026 that clause was enforced in a visible wave: Replit, Vibecode and similar build-on-phone tools were blocked from shipping updates under 2.5.2.</p>
+<p>Google Play&rsquo;s <a href="https://support.google.com/googleplay/android-developer/answer/9888379">Device and Network Abuse policy</a> is more surgical, and worth quoting in full because it is the friendlier of the two: &ldquo;an app may not download executable code (such as dex, JAR, .so files) from a source other than Google Play. This restriction does not apply to code that runs in a virtual machine or an interpreter where either provides indirect access to Android APIs (such as JavaScript in a webview or browser).&rdquo; The same page adds that interpreted code &ldquo;loaded at run time (for example, not packaged with the app) must not allow potential violations of Google Play policies.&rdquo;</p>
+<p>Read those two paragraphs together and the design space becomes obvious. A shell that forks <code>/bin/bash</code> is not merely risky on mobile — it is architecturally hostile to both policies. An interpreter that executes bounded scripts inside your own process is explicitly contemplated by Google and narrowly tolerated by Apple. PhoneBuddy chose the second shape for everything, including the shell.</p>
+<h2 id="does-the-phonebuddy-agent-engine-really-spawn-zero-child-processes">Does the PhoneBuddy agent engine really spawn zero child processes?</h2>
+<p>Verified: yes. This is the claim the project rests on, and it survives an independent source check rather than a README read.</p>
+<p>On 2026-10-01 the entire <a href="https://github.com/APUS-AI-Lab/PhoneBuddySDK"><code>main</code> branch</a> was downloaded as a tarball (commit c2fc7ea687fcc347412d6697093cdcedab7d8d30, dated 2026-09-13, sha256 prefix <code>d89a0f1899d3fafe</code>). The archive contains 70 <code>.rs</code> files across 163 tracked paths. Grepping the full source returned:</p>
+<ul>
+<li>0 occurrences of <code>std::process::Command</code></li>
+<li>0 occurrences of <code>tokio::process</code></li>
+<li>0 occurrences of <code>Command::new</code></li>
+<li>no <code>libc::fork</code>, <code>execv</code>, <code>execl</code>, or <code>posix_spawn</code></li>
+</ul>
+<p>That is a static result, not a runtime proof, and it should be stated that way. But it is the right static result: the forbidden primitives are simply absent from the codebase, not merely discouraged by convention.</p>
+<p>The <a href="https://github.com/APUS-AI-Lab/PhoneBuddySDK/blob/main/NOTICE">upstream provenance</a> explains how that is even possible. The repository&rsquo;s <a href="https://github.com/APUS-AI-Lab/PhoneBuddySDK/blob/main/NOTICE">NOTICE file</a> states that the engine is derived from xAI&rsquo;s <a href="https://github.com/xai-org/grok-build">grok-build</a> — a mature Apache-2.0 coding-agent harness with 27,171 stars and 5,111 forks as of 2026-10-01 — and lists the modifications: <code>std::process</code> and <code>tokio::process</code> were replaced with pure-Rust BusyBox applets plus Boa, the TLS stack was swapped from tokio-rs to rustls/ring, and a C FFI layer with Swift and Kotlin wrappers was added.</p>
+<p>That lineage cuts both ways. On one hand, the agent loop is not a weekend rewrite; it descends from a harness with 27k stars. On the other, desktop-shaped assumptions travel with the inheritance — context budget defaults, TUI-era tool naming, session semantics designed for a terminal — and a commercial embedder inherits a NOTICE attribution obligation it must satisfy in shipped binaries.</p>
+<h2 id="what-replaces-the-shell-the-filesystem-and-the-subprocess">What replaces the shell, the filesystem and the subprocess?</h2>
+<p>Four in-process substitutions carry the architecture. Each maps a desktop primitive onto something a store reviewer will accept.</p>
+<h3 id="how-does-the-virtual-shell-work-without-a-real-shell">How does the virtual shell work without a real shell?</h3>
+<p>Instead of spawning <code>/bin/sh</code>, the engine implements a BusyBox-style shell <em>in memory</em>. Command parsing, builtins like <code>ls</code>, <code>cat</code>, <code>grep</code> and <code>find</code>, and the pipe semantics between them are executed by Rust code operating on an in-memory view of a sandboxed directory. There is no binary to execute and no operating-system process to create, so the classic &ldquo;app downloads and runs a shell&rdquo; narrative has no foothold. The observable behaviour looks familiar to a model that was trained on terminal transcripts, which matters: the tool descriptions still read like a shell to the LLM, so prompt compatibility is preserved without the primitive being real.</p>
+<h3 id="how-is-the-file-sandbox-enforced">How is the file sandbox enforced?</h3>
+<p>File tools operate through a path-jailing layer that confines reads and writes to a designated directory inside the app container. Requests that try to traverse outside that root are rejected rather than normalized. Because the same layer sits under the virtual shell and the file tools, a model cannot escape the jail by switching interfaces. The audit reviewed below confirms path jailing as a static control.</p>
+<h3 id="what-protects-the-embedded-javascript-sandbox">What protects the embedded JavaScript sandbox?</h3>
+<p>Rather than pulling in a JS engine with network or filesystem reach, PhoneBuddy embeds <code>boa_engine</code> — a pure-Rust JavaScript interpreter — and bounds what scripts can do: no ambient filesystem access, no ambient network access, host functions must be explicitly exposed, and execution carries loop limits and timeouts. This is the piece that most needs the store-policy reading above, because an embedded interpreter is exactly what the Google Play carve-out contemplates and exactly what Apple&rsquo;s DPCLA 3.3.2 treats narrowly.</p>
+<h3 id="do-subagents-spawn-anything">Do subagents spawn anything?</h3>
+<p>No. Subagents are in-memory task contexts inside the same process, each with its own conversation state and tool permissions, coordinated by the parent loop rather than by an operating-system process boundary. Scheduled tasks follow the same pattern: cron-style timers inside the runtime, not system schedulers. Human-in-the-loop callbacks are host callbacks, not external job runners.</p>
+<h2 id="apple-guideline-252-and-dpcla-332-read-precisely">Apple Guideline 2.5.2 and DPCLA 3.3.2, read precisely</h2>
+<p>This is where the compliance argument actually stands or falls, and the honest version is more interesting than the marketing version.</p>
+<p>Guideline 2.5.2 is about <em>downloading or executing code that introduces or changes features</em>. It is not a blanket ban on forking, and it is not a ban on interpreters as such. What it forbids is an app becoming an environment where functionality arrives after review. A pure-Rust agent loop that ships with the binary adds no post-review functionality, so the strongest part of PhoneBuddy&rsquo;s position is that it never needs to argue about dynamic code <em>delivery</em> at all — there is nothing to deliver.</p>
+<p>The embedded JavaScript engine is the sharper edge. Apple&rsquo;s Developer Program License Agreement 3.3.2 permits interpreted code &ldquo;run by the built-in WebKit framework or JavaScriptCore,&rdquo; provided the scripts do not change the app&rsquo;s primary purpose. A non-WebKit interpreter such as <code>boa_engine</code> is not covered by that sentence on its face. It may still be acceptable — the guideline&rsquo;s operative test is whether the app&rsquo;s purpose changes — but it is a position you argue with a reviewer, not a safe harbour you invoke.</p>
+<p>One caveat on sourcing: the DPCLA wording above is quoted second-hand from AppCompliance&rsquo;s analysis of the 2026 enforcement wave. A direct fetch of the agreement PDF returned HTML rather than the document on 2026-10-01, so treat the DPCLA quotation as a well-sourced secondary citation and the Guideline 2.5.2 quotation — taken directly from Apple&rsquo;s guidelines page — as primary.</p>
+<h2 id="google-plays-policy-is-friendlier-than-most-developers-assume">Google Play&rsquo;s policy is friendlier than most developers assume</h2>
+<p>The Play side deserves more attention than it usually gets, because it hands an embedded agent harness an explicit carve-out.</p>
+<p>The policy text permits code that &ldquo;runs in a virtual machine or an interpreter where either provides indirect access to Android APIs (such as JavaScript in a webview or browser).&rdquo; That sentence covers the interpretive execution model PhoneBuddy uses, and it does so without requiring the interpreter to be a platform-provided component. The follow-on sentence is the catch: interpreted code loaded at runtime, rather than packaged with the app, &ldquo;must not allow potential violations of Google Play policies.&rdquo; In PhoneBuddy&rsquo;s case the engine and its scripts are packaged with the binary, which keeps the runtime-loading clause off the table — but the compliance burden still lands on the host app, because <em>your</em> tool surface is what a reviewer evaluates.</p>
+<p>The practical reading is a two-sided conclusion. Android is the more permissive deployment target for this architecture; iOS is the one that requires a written rationale. That asymmetry should shape an integration plan, not just a review.</p>
+<h2 id="the-claim-nobody-can-verify-passes-apple-and-google-sandbox-review">The claim nobody can verify: &ldquo;passes Apple and Google sandbox review&rdquo;</h2>
+<p>The <a href="https://raw.githubusercontent.com/APUS-AI-Lab/PhoneBuddySDK/main/README.md">README</a> asserts that the SDK &ldquo;Passes Apple App Store and Google Play app sandbox security reviews with zero permission escalations.&rdquo; As of 2026-10-01, that assertion could not be substantiated.</p>
+<ul>
+<li>There is no <code>.github</code> directory in the repository tree, so there is no public GitHub Actions workflow and no CI artifact of any kind.</li>
+<li>No review record, correspondence, or third-party attestation is published.</li>
+<li>The only independent technical audit found (covering an August commit) states plainly that no public App Store or Google Play review record was found and that the passed-review claim &ldquo;remains a project assertion.&rdquo;</li>
+</ul>
+<p>None of that makes the claim false. It makes it unverified, which is a different statement and the one a professional evaluator should carry. If your threat model includes store rejection of a shipping app, &ldquo;the README says it passed&rdquo; is not evidence; your own 2.5.2 and DPCLA 3.3.2 analysis is.</p>
+<h2 id="what-did-the-independent-audit-find--and-what-did-it-reject">What did the independent audit find — and what did it reject?</h2>
+<p>One third-party technical review exists, <a href="https://vibekk.com/archives/mobile-ai-agent-in-process-runtime-phonebuddy-audit">published at vibekk.com</a> and covering main at commit c661ba0 (reviewed 2026-08-23). It is worth summarizing honestly, including its limits, because it is the only external verification in the ecosystem.</p>
+<p>What it confirmed as static controls:</p>
+<ul>
+<li>No <code>std::process</code> or <code>tokio::process</code> usage</li>
+<li>Path jailing for file access</li>
+<li>Bounded JavaScript execution</li>
+<li>Timeouts and cancellation support</li>
+<li>Repeated-tool detection</li>
+<li>SSRF screening that blocks loopback and private address ranges</li>
+<li>Swift, Kotlin and C integration surfaces</li>
+</ul>
+<p>What it rejected or flagged as unsupported:</p>
+<ul>
+<li>The &ldquo;passes Apple App Store and Google Play&rdquo; claim, for the absence of any public record</li>
+<li>&ldquo;Guaranteed FFI panic containment&rdquo; — a meaningful objection, since the C ABI is precisely where mobile integration happens and where a Rust panic crossing the boundary would be an app crash rather than a caught error</li>
+</ul>
+<p>The audit also noted that the repository &ldquo;defines 174 Rust tests but has no public GitHub Actions workflow or Android instrumentation suite,&rdquo; and it could not run the tests because the auditing host had no Rust toolchain. One update since then is favourable: the in-tree test count has grown. Counting <code>#[test]</code> and <code>#[tokio::test]</code> attributes in the source on 2026-10-01 yields 381, well above the August figure of 174, and <code>crates/phone-buddy/tests</code> holds four integration test files (<code>e2e_mock.rs</code>, <code>responses_api_tests.rs</code>, <code>task_tests.rs</code>, <code>tool_args_salvage.rs</code>). The caveat is unchanged: with no CI, &ldquo;tests exist&rdquo; still does not mean &ldquo;tests are known to pass on a clean machine.&rdquo;</p>
+<h2 id="adoption-reality-check-36-stars-three-releases-one-unanswered-issue">Adoption reality check: 36 stars, three releases, one unanswered issue</h2>
+<p>The project&rsquo;s public footprint is small, and the right way to read it is &ldquo;early bet, not infrastructure.&rdquo;</p>
+<table>
+  <thead>
+      <tr>
+          <th>Metric</th>
+          <th>PhoneBuddySDK</th>
+          <th>grok-build (upstream)</th>
+          <th>llama.rn</th>
+          <th>LiteRT-LM</th>
+          <th>Cactus Needle</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Stars</td>
+          <td>36</td>
+          <td>27,171</td>
+          <td>1,047</td>
+          <td>6,549</td>
+          <td>12,899</td>
+      </tr>
+      <tr>
+          <td>License</td>
+          <td>Apache-2.0</td>
+          <td>Apache-2.0</td>
+          <td>MIT</td>
+          <td>Apache-2.0</td>
+          <td>Apache-2.0</td>
+      </tr>
+      <tr>
+          <td>Releases</td>
+          <td>3</td>
+          <td>—</td>
+          <td>active</td>
+          <td>—</td>
+          <td>—</td>
+      </tr>
+      <tr>
+          <td>Last push</td>
+          <td>2026-09-13</td>
+          <td>—</td>
+          <td>2026-10-01</td>
+          <td>—</td>
+          <td>2026-09-30</td>
+      </tr>
+      <tr>
+          <td>Role</td>
+          <td>Agent harness</td>
+          <td>Agent harness</td>
+          <td>Model runtime</td>
+          <td>Model runtime</td>
+          <td>Model runtime</td>
+      </tr>
+  </tbody>
+</table>
+<p>The temporal pattern is worth noting separately from the totals. Three releases landed in five days in August 2026 (v0.1.1 on the 18th, v0.1.2 on the 19th, v0.2.0 on the 25th). Then <code>main</code> went quiet: HEAD is c2fc7ea, dated 2026-09-13, with no commits in the roughly 2.5 weeks before 2026-10-01. The repository&rsquo;s <code>updated_at</code> moved on 2026-09-29, but that reflects metadata activity rather than new code.</p>
+<p>And the single open issue is the telling one. <a href="https://github.com/APUS-AI-Lab/PhoneBuddySDK/issues/1">Issue #1</a>, opened 2026-09-11, asks about a roadmap for Agent Skills and MCP support. It has zero comments and remains open. In a repository with one open issue, leaving it unanswered for three weeks is a signal about maintainer bandwidth — not hostility, just an absence of the throughput you would want before building a product on top of it.</p>
+<h2 id="how-does-the-phonebuddy-agent-engine-compare-to-napaxi-foundation-models-and-gemini-nano">How does the PhoneBuddy agent engine compare to Napaxi, Foundation Models and Gemini Nano?</h2>
+<p>The competitive frame has two distinct halves, and conflating them is the most common mistake in coverage of this space. One half is other <em>agent harnesses</em>; the other is <em>model runtimes</em>. PhoneBuddy competes in the first and depends on the second.</p>
+<table>
+  <thead>
+      <tr>
+          <th></th>
+          <th>PhoneBuddy SDK</th>
+          <th>Napaxi (Ant Group)</th>
+          <th>Apple Foundation Models</th>
+          <th>Gemini Nano / AICore</th>
+          <th>llama.rn</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Layer</td>
+          <td>Agent harness</td>
+          <td>Agent harness</td>
+          <td>Model + light tooling</td>
+          <td>Model</td>
+          <td>Model runtime</td>
+      </tr>
+      <tr>
+          <td>License</td>
+          <td>Apache-2.0</td>
+          <td>GPL-3.0</td>
+          <td>Platform framework</td>
+          <td>Platform framework</td>
+          <td>MIT</td>
+      </tr>
+      <tr>
+          <td>Platforms</td>
+          <td>iOS, Android, C ABI</td>
+          <td>Android-oriented</td>
+          <td>iOS/macOS (iOS 26)</td>
+          <td>Android flagships</td>
+          <td>iOS, Android, RN</td>
+      </tr>
+      <tr>
+          <td>On-device inference</td>
+          <td>No — host-supplied</td>
+          <td>No — remote LLM routing</td>
+          <td>Yes (~3B, Neural Engine)</td>
+          <td>Yes, allow-listed devices</td>
+          <td>Yes, any GGUF</td>
+      </tr>
+      <tr>
+          <td>MCP</td>
+          <td>Not shipped</td>
+          <td>MCP client</td>
+          <td>n/a</td>
+          <td>n/a</td>
+          <td>n/a</td>
+      </tr>
+      <tr>
+          <td>Commercial embedding</td>
+          <td>Permissive</td>
+          <td>Copyleft (blocker)</td>
+          <td>App-bound</td>
+          <td>App-bound</td>
+          <td>Permissive</td>
+      </tr>
+      <tr>
+          <td>Observed scale</td>
+          <td>36 stars</td>
+          <td>33 stars, 15 open issues</td>
+          <td>—</td>
+          <td>—</td>
+          <td>1,047 stars</td>
+      </tr>
+  </tbody>
+</table>
+<p><strong><a href="https://github.com/antgroup/Napaxi">Napaxi</a></strong> is the closest structural rival: a mobile-native agent SDK with a Rust kernel, an MCP client, a SKILL.md skill registry, 14+ built-in mobile tools, session/workspace/memory handling, background scheduling, cross-app signed actions, device-to-device A2A over LAN with AES-256-GCM, and channel integrations spanning QQ, WeChat, Feishu, Telegram and Bluetooth. On features it is clearly ahead of PhoneBuddy. Its decisive problem for commercial work is the license: GPL-3.0 with no self-serve commercial option is a genuine adoption blocker for a proprietary app. Its live metrics (33 stars, 7 forks, 15 open issues, created 2026-07-01, pushed 2026-09-30) also make it comparably young. On setup it is heavier, requiring Rust plus Git LFS plus NDK/Xcode.</p>
+<p><strong><a href="https://developer.apple.com/documentation/foundationmodels">Apple Foundation Models</a></strong> changes the premise. Since iOS 26 the framework exposes the roughly 3-billion-parameter Apple Intelligence model on the Neural Engine, with no download, no API key, and a 32K context. When the phone itself can host the orchestrator, a harness&rsquo;s value shifts upward to the tool, sandbox and planning layer — which is exactly the layer PhoneBuddy implements and exactly why it is complementary rather than redundant. The trade-off is that the framework&rsquo;s tool-calling surface is narrower than a full agent harness, and it is Apple-only.</p>
+<p><strong><a href="https://developer.android.com/ai/gemini-nano">Gemini Nano</a></strong> plays the same role on Android, delivered through <a href="https://developers.google.com/ml-kit/genai">ML Kit GenAI and AICore</a> on Pixel and recent Samsung, Xiaomi and Motorola flagships. AICore is sandboxed with no direct internet access, model downloads route through Private Compute Services, and requests are isolated. The familiar caveat applies: device coverage is uneven across OEMs, so a shipping app needs a fallback path.</p>
+<p><strong><a href="https://github.com/mybigday/llama.rn">llama.rn</a></strong> is the counterexample that clarifies the category boundary. At 1,047 stars, MIT-licensed, actively pushed on 2026-10-01, it loads any GGUF model and uses Metal on iOS. It is not a competitor to PhoneBuddy; it is the runtime a PhoneBuddy-based app would call. A useful sanity check on how much of the mobile on-device space is <em>not</em> the agent layer: llama.rn 1,047, LiteRT-LM 6,549, Cactus 6,081, Cactus Needle 12,899, mlc-llm 23,202, MNN 16,159, ncnn 23,905.</p>
+<h2 id="the-missing-model-layer-what-you-still-have-to-supply">The missing model layer: what you still have to supply</h2>
+<p>PhoneBuddy owns no weights and runs no inference. Its documentation is explicit about the division of labour, and the design has a sharp edge worth knowing before you integrate: the host application supplies the model, and the one-shot <code>generate_text</code> path is deliberately tool-free and returns <code>RouteNotConfigured</code> when no route exists — with no implicit fallback to a bundled model, because there is no bundled model.</p>
+<p>A realistic pairing matrix looks like this:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Platform</th>
+          <th>Model layer</th>
+          <th>Agent layer</th>
+          <th>Notes</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>iOS 26+</td>
+          <td>Apple Foundation Models</td>
+          <td>PhoneBuddy</td>
+          <td>No download, no API key, Neural Engine</td>
+      </tr>
+      <tr>
+          <td>Android flagships</td>
+          <td>Gemini Nano via AICore</td>
+          <td>PhoneBuddy</td>
+          <td>Uneven OEM coverage; needs fallback</td>
+      </tr>
+      <tr>
+          <td>Cross-platform, own weights</td>
+          <td>llama.rn or LiteRT-LM</td>
+          <td>PhoneBuddy</td>
+          <td>Any GGUF; Metal on iOS, NPU/GPU on Android</td>
+      </tr>
+      <tr>
+          <td>Cross-platform, cloud</td>
+          <td>Any hosted API</td>
+          <td>PhoneBuddy</td>
+          <td>Router handles providers, health, retry</td>
+      </tr>
+  </tbody>
+</table>
+<p>What the engine does contribute on the routing side is a provider layer with health tracking, failover, retry with backoff, and context budget management — the plumbing you would otherwise write yourself. What it does not give you is a local inference path, so &ldquo;PhoneBuddy runs an LLM on your phone&rdquo; is a sentence no one should write.</p>
+<h2 id="mcp-and-agent-skills-on-mobile-the-gap-phonebuddy-has-not-filled">MCP and Agent Skills on mobile: the gap PhoneBuddy has not filled</h2>
+<p>The mobile MCP problem is real and structural. MCP&rsquo;s stdio transport assumes a local process on the same machine, which is precisely what a phone app cannot provide. Streamable HTTP made remote MCP viable, and <a href="https://chatforest.com/guides/mcp-mobile-integration">three mobile patterns</a> have emerged: desktop-controls-mobile frameworks (mobile-next/mobile-mcp at roughly 4.1K stars, plus Appium MCP), app-as-MCP-client using Swift or Kotlin SDKs, and device-as-MCP-server.</p>
+<p>PhoneBuddy sits on that gap rather than over it. It exposes its own tool set and a host-routing LLM layer, and its only open issue — unanswered since 2026-09-11 — is a request for an Agent Skills and MCP roadmap. For an integrator in 2026, that means the MCP story is yours to build: either bridge the engine&rsquo;s tools to an MCP client you write, or treat remote MCP over Streamable HTTP as an external dependency the host app manages. Neither is fatal. Both are unbudgeted work the feature list does not mention.</p>
+<h2 id="integration-cost-and-the-ffi-risk-on-the-c-boundary">Integration cost and the FFI risk on the C boundary</h2>
+<p>The integration surface is a C ABI (<code>phone_buddy.h</code>) with Swift and Kotlin wrappers, which is the right choice for reach and the riskiest choice for stability. Two costs deserve explicit budgeting.</p>
+<p>First, panic containment. The audit specifically declined to accept &ldquo;guaranteed FFI panic containment&rdquo; as proven. That is not pedantry: a Rust panic that unwinds across an FFI boundary is undefined behaviour, and in a mobile app it surfaces as a hard crash of the host process rather than a recoverable error. If you embed this, you should verify containment yourself — wrap calls, exercise error paths, and test on real devices rather than the CLI.</p>
+<p>Second, threat surface. An in-process agent that can read and write a jailed directory and execute bounded JavaScript is attack surface <em>inside your app</em>, sharing your process, your memory and your entitlements. The static controls are real — path jailing, SSRF blocking on loopback and private ranges, script loop limits, timeouts, cancellation, repeated-tool detection — but they are controls to verify, not properties to assume. Tool arguments frequently arrive from model output, and model output can be shaped by untrusted content.</p>
+<p>Beyond that, budget for the ordinary costs: a Rust toolchain in your build pipeline, cross-compilation for two platforms, an NDK/Xcode setup, and an attribution obligation under the NOTICE that credits grok-build.</p>
+<h2 id="the-desktop-client-impersonation-feature-and-why-it-matters-commercially">The desktop-client impersonation feature, and why it matters commercially</h2>
+<p>One README feature is distinctly unusual for a mobile SDK: 1:1 network emulation of desktop AI coding clients, including xAI grok-build, OpenAI Codex and Anthropic Claude Code, with User-Agent and wire-schema mimicry.</p>
+<p>Read charitably, it is a compatibility convenience — the engine can speak the same protocol as a desktop client, which simplifies testing against existing tooling and lets a mobile app reuse request shapes that are already well-tested against those providers. Read commercially, it is a question mark. Impersonating another vendor&rsquo;s client identity in outbound traffic raises terms-of-service and provenance questions that a legal review should settle before a commercial launch, not after. This is not a reason to reject the SDK. It is a reason to read the feature with your counsel rather than with a product spec.</p>
+<h2 id="who-should-embed-the-phonebuddy-agent-engine-today">Who should embed the PhoneBuddy agent engine today?</h2>
+<p>The honest split is by risk appetite and by platform.</p>
+<p><strong>Reasonable fit today:</strong> a team shipping an Android-first app that needs a model-driven tool loop and cannot fork processes; a developer who already uses Apple Foundation Models or Gemini Nano and needs the agent layer above them; a project that values Apache-2.0 permissive licensing over GPL-3.0 alternatives like Napaxi; anyone willing to pin a specific commit and read the source, because the source is small enough (70 <code>.rs</code> files) to actually read.</p>
+<p><strong>Better to wait:</strong> teams requiring a support contract or vendor SLA; products on a path where an unverified store-review claim is unacceptable; anyone who needs MCP or Agent Skills support now rather than later; and teams without Rust build expertise who would rather pay for maturity than inherit a young codebase.</p>
+<h3 id="decision-checklist-before-you-add-it-to-your-app">Decision checklist before you add it to your app</h3>
+<ol>
+<li>Confirm your platform mix — Android is the permissive target; iOS requires a written 2.5.2 / DPCLA 3.3.2 rationale you can defend to a reviewer.</li>
+<li>Decide your model layer first (Foundation Models, Gemini Nano, llama.rn/LiteRT-LM, or cloud) and confirm the host-routing path works for it, including the no-fallback behaviour of one-shot generation.</li>
+<li>Verify panic containment across the C ABI on real devices, not in the CLI, before writing product code against it.</li>
+<li>Pin an exact commit. With 36 stars and no CI, upstream <code>main</code> is not a stable target and version tags lag the code you may be reading.</li>
+<li>Budget the MCP work explicitly if your roadmap assumes MCP, because it is not shipped.</li>
+<li>Add a NOTICE attribution step to your release process and run the impersonation feature past legal review.</li>
+</ol>
+<h2 id="verdict">Verdict</h2>
+<p>PhoneBuddy agent engine is the most architecturally interesting answer yet to a real and under-discussed constraint: App Review turns &ldquo;spawn a shell&rdquo; into an architectural prohibition, and this SDK is built around that prohibition rather than around Linux. The central claim survives independent verification — zero child processes, zero <code>std::process::Command</code>, zero <code>tokio::process</code> across 70 Rust files at main c2fc7ea — and the in-process substitutions (virtual shell, jailed files, bounded <code>boa_engine</code>, in-memory subagents) are coherent designs rather than marketing bullet points. The Apache-2.0 licence is a decisive advantage over Napaxi&rsquo;s GPL-3.0 for proprietary apps, and the grok-build lineage gives the agent loop real ancestry.</p>
+<p>The thinness is equally real. No CI. No published review record behind the store-compliance claim. One open issue asking for MCP support, unanswered. Three releases, then main quiet since 2026-09-13. Adoption in the dozens of stars. And two specific unproven claims — store review passage and FFI panic containment — sit exactly where a commercial embedder takes on risk.</p>
+<p>The disposition: a credible early bet with an unusually honest architectural premise, suitable for teams who read source and pin commits, and premature for anyone who needs a vendor&rsquo;s word to substitute for evidence.</p>
+<h2 id="faq">FAQ</h2>
+<h3 id="is-phonebuddy-sdk-free-to-use-commercially">Is PhoneBuddy SDK free to use commercially?</h3>
+<p>Yes. It is Apache-2.0, so it can be embedded in proprietary apps with attribution; the repository ships a NOTICE crediting grok-build. That permissive licence is the decisive advantage over Ant Group&rsquo;s Napaxi, which is GPL-3.0 and has no self-serve commercial option.</p>
+<h3 id="does-phonebuddy-run-an-llm-on-the-phone">Does PhoneBuddy run an LLM on the phone?</h3>
+<p>No. PhoneBuddy is the agent harness — planning, tools, sandbox, subagents — and ships no weights. Inference is host-supplied: you pair it with Apple Foundation Models on iOS, Gemini Nano or LiteRT-LM on Android, a GGUF runtime such as llama.rn, or a cloud provider. Its one-shot <code>generate_text</code> path deliberately has no implicit model fallback.</p>
+<h3 id="does-it-really-pass-app-store-and-google-play-review">Does it really pass App Store and Google Play review?</h3>
+<p>Unverified. The README asserts that it passes both sandbox reviews with zero permission escalations, but as of 2026-10-01 no public review record, CI artifact or third-party attestation could be found — and the repository has no <code>.github</code> directory at all. Treat it as a project claim and run your own 2.5.2 and DPCLA 3.3.2 analysis before relying on it.</p>
+<h3 id="does-the-phonebuddy-agent-engine-spawn-processes-or-use-forkexec">Does the PhoneBuddy agent engine spawn processes or use fork/exec?</h3>
+<p>Verified no. A full download of <code>main</code> at commit c2fc7ea contains 70 Rust files with zero <code>std::process::Command</code>, zero <code>tokio::process</code>, no <code>Command::new</code>, and no <code>libc::fork</code>, <code>execv</code>, <code>execl</code> or <code>posix_spawn</code>. File access is jailed, shell commands run as in-memory BusyBox-style applets, and JavaScript runs in a bounded <code>boa_engine</code> interpreter.</p>
+<h3 id="is-the-embedded-javascript-engine-allowed-by-the-app-stores">Is the embedded JavaScript engine allowed by the app stores?</h3>
+<p>Platform-dependent. Google Play&rsquo;s Device and Network Abuse policy explicitly carves out code that &ldquo;runs in a virtual machine or an interpreter where either provides indirect access to Android APIs (such as JavaScript in a webview or browser),&rdquo; which makes an embedded JS engine viable there. Apple is stricter: DPCLA 3.3.2 blesses interpreted code run by the built-in WebKit framework or JavaScriptCore, so a non-WebKit engine such as <code>boa_engine</code> is a position you argue with a reviewer, not a safe harbour.</p>
+<h2 id="sources-and-verification-notes">Sources and verification notes</h2>
+<p>All figures were refreshed on 2026-10-01 by downloading source and querying primary APIs directly, not inherited from earlier coverage.</p>
+<ul>
+<li>Live repository metrics, releases, commit history and issue state: GitHub REST API for <code>APUS-AI-Lab/PhoneBuddySDK</code> (via authenticated <code>gh</code> CLI; unauthenticated REST search returned 403 rate limits)</li>
+<li>Zero-child-process verification: full tarball of <code>main</code> at c2fc7ea (<code>sha256</code> prefix <code>d89a0f1899d3fafe</code>, 70 <code>.rs</code> files, 163 tracked paths), grepped for <code>std::process::Command</code>, <code>tokio::process</code>, <code>Command::new</code>, <code>fork</code>, <code>execv</code>, <code>execl</code>, <code>posix_spawn</code></li>
+<li>Provenance and modifications: <code>NOTICE</code> in the repository; upstream metrics for <code>xai-org/grok-build</code> from the GitHub REST API</li>
+<li>Apple Guideline 2.5.2: <code>https://developer.apple.com/app-store/review/guidelines/</code> (quoted verbatim)</li>
+<li>Google Play Device and Network Abuse: <code>https://support.google.com/googleplay/android-developer/answer/9888379</code> (quoted verbatim)</li>
+<li>DPCLA 3.3.2: quoted second-hand from <code>https://appcompliance.io/blog/apple-vibe-coding-crackdown-guideline-2-5-2/</code> (the direct agreement fetch returned HTML, not the document, on 2026-10-01)</li>
+<li>Independent audit: <code>https://vibekk.com/archives/mobile-ai-agent-in-process-runtime-phonebuddy-audit</code> (main at c661ba0, reviewed 2026-08-23)</li>
+<li>Host LLM routing and one-shot design: <code>https://github.com/APUS-AI-Lab/PhoneBuddySDK/blob/main/docs/llm-routing-and-one-shot-design.md</code></li>
+<li>Roadmap issue: <code>https://github.com/APUS-AI-Lab/PhoneBuddySDK/issues/1</code></li>
+<li>Mobile MCP patterns: <code>https://chatforest.com/guides/mcp-mobile-integration</code></li>
+<li>Napaxi: <code>https://github.com/antgroup/Napaxi</code></li>
+<li>Apple Foundation Models: <code>https://developer.apple.com/documentation/foundationmodels</code></li>
+<li>Gemini Nano and AICore: <code>https://developer.android.com/ai/gemini-nano</code> and <code>https://developers.google.com/ml-kit/genai</code></li>
+<li>llama.rn: <code>https://github.com/mybigday/llama.rn</code>; LiteRT-LM: <code>https://github.com/google-ai-edge/LiteRT-LM</code>; Cactus: <code>https://github.com/cactus-compute/cactus</code> and <code>https://github.com/cactus-compute/needle</code></li>
+<li>Same-named research project: <code>https://arxiv.org/abs/2606.23049</code>, <code>https://github.com/PhoneBuddyAI/phonebuddy</code>, <code>https://huggingface.co/PhoneBuddyAI/PhoneBuddy-4B</code></li>
+</ul>
+<p>Limitations: the SDK was not compiled or executed for this review; all architecture findings are static source reads plus the independent audit&rsquo;s static analysis. The 36-star, 3-release, one-open-issue snapshot is a point-in-time measurement dated 2026-10-01 and will drift.</p>
+]]></content:encoded></item></channel></rss>
