@@ -1,0 +1,248 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Information Flow Control on RockB</title><link>https://baeseokjae.github.io/tags/information-flow-control/</link><description>Recent content in Information Flow Control on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 01 Oct 2026 02:46:58 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/information-flow-control/index.xml" rel="self" type="application/rss+xml"/><item><title>OpenAPPA Agent Security: Deterministic Guardrails for Agentic Applications</title><link>https://baeseokjae.github.io/posts/openappa-deterministic-agent-security/</link><pubDate>Thu, 01 Oct 2026 02:46:58 +0000</pubDate><guid>https://baeseokjae.github.io/posts/openappa-deterministic-agent-security/</guid><description>OpenAPPA agent security labels what an agent has read and blocks disallowed flows before a tool runs, deterministically and outside the prompt.</description><content:encoded><![CDATA[<p>OpenAPPA agent security means enforcing information-flow policy outside the model&rsquo;s prompt: the engine labels everything an agent reads as audience x trust, checks every tool call against a declarative TOML contract before it runs, and returns a machine-readable remedy plan when a flow is disallowed. Its vendor benchmarks record zero successful attacks across 1,320 guarded evaluations.</p>
+<h2 id="what-is-openappa-and-what-is-it-not">What is OpenAPPA, and what is it not?</h2>
+<p><a href="https://openappa.com">OpenAPPA</a> is an MIT-licensed, Rust-based security engine published by Archestra AI in August 2026 and powered by APPA (Agentic Permissions Policy Algebra). It sits between an agent and its tools to answer one question before every action: is this data allowed to go to this destination? Reading a private record narrows the session&rsquo;s audience; reading an outsider&rsquo;s web page lowers its trust; a later call aiming at a destination the session no longer permits is refused before dispatch, not after.</p>
+<p>The design line the project builds everything on is that you cannot prompt-inject an algebra. Labels, contracts, and remedy plans live out of band, in a runtime the model cannot see or negotiate with. That matters because the attack class is not &ldquo;the model was persuaded&rdquo; but &ldquo;the model faithfully executed instructions planted in data it was told to read.&rdquo;</p>
+<p>It is equally important to say what OpenAPPA is not. It is not a prompt-injection detector, a PII scanner, or a command blacklist. It is not a sandbox: it does not restrict what the agent can touch, it restricts where data the agent has already read may go. It is not an OPA or Cedar replacement: OpenAPPA deliberately cannot express arbitrary business rules in policy, though it does carry restrictions forward between actions, which those engines do not. And it is not finished software. The repository labels itself a preview and an RFC, with config and wire surfaces that may break without shims.</p>
+<h2 id="why-do-probabilistic-agent-guardrails-fail-against-indirect-prompt-injection">Why do probabilistic agent guardrails fail against indirect prompt injection?</h2>
+<p>Because the failure is in the data path, not in the model&rsquo;s judgment. Three years of published incidents make the pattern concrete. EchoLeak (CVE-2025-32711) against Microsoft 365 Copilot was zero-click: the exfiltration channel was a Markdown image whose URL the chat client fetched automatically, on a domain already present on the content security policy allow-list. In the SalesBleed disclosure, a poisoned record submitted through a public Salesforce Agentforce Web-to-Lead form hijacked the agent, which encoded retrieved account data into a DNS subdomain; the data left during DNS resolution, before any HTTP request existed to block.</p>
+<p>Academic work quantifies how reliably this works. The Puppet confused-deputy study against MCP, published in ACM TOSEM, measured tool selection hijacking at up to 90.89% and end-to-end malicious payload execution at up to 86.46% across 14 models from 6 providers, with reasoning-enabled models significantly more vulnerable than non-reasoning counterparts. Both MCP-Scan and McpSafetyScanner failed to detect the attacks.</p>
+<p>The MCP ecosystem itself is unstable ground. An August 2026 census harvested 21,643 servers and 72,606 version records, finding that 15.2% of scanned servers carried at least one finding and 11.1% at least one high-severity finding, dominated by unauthenticated network exposure. Worse for anyone relying on a one-time review: 51.1% of multi-version servers changed what they advertise between versions, 40.6% did so silently with no identifier change, and 4.2% redirected their remote endpoint to a different host while keeping their registry identity. Silent drift was associated with roughly triple the odds of a high-severity finding (OR = 2.96), while popularity offered only weak protection (OR = 0.78 per unit of log stars).</p>
+<p>Against that backdrop, the industry&rsquo;s default posture is detection, and detection has a ceiling. OpenAPPA cites OpenAI&rsquo;s own prompt-injection check at 99.3%: at millions of calls, 0.7% is a lot of breaches. The second-model school has an architectural hole of its own. Claude Code&rsquo;s auto mode sends proposed commands to a classifier model, and Codex routes sandbox-boundary crossings to an auto_review agent, but to keep hostile input from tricking the judge, the harnesses strip tool outputs from its request. The classifier sees the command being run and never sees the values earlier tools returned, so it cannot observe provenance at all. When three consecutive denials land, both systems circuit-break back to manual prompts rather than explaining how to proceed.</p>
+<h2 id="how-does-openappa-track-data-flow-across-a-session">How does OpenAPPA track data flow across a session?</h2>
+<p>Each trajectory, meaning an agent&rsquo;s work on one conversation or task including its tool calls, carries a security label and the policy needed to evaluate its next action. The label is computed as <code>label = admittedLabels.reduce(narrow, startingLabel)</code>, and <code>narrow</code> only ever restricts. That monotonicity is what buys the provable guarantee, and it is also the honest difference from classic taint tracking that permanently strands execution. OpenAPPA keeps the monotone restriction but adds remedy plans so the agent can still finish the job, which is the subject of the next section.</p>
+<h3 id="what-are-security-labels-audience-trust-effects-and-attention">What are security labels: audience, trust, effects, and attention?</h3>
+<p>Four concepts, two of which most write-ups skip:</p>
+<ul>
+<li><strong>Audience</strong> is who is authorized to access the session&rsquo;s data. Reading data for a smaller audience restricts where the agent may send it later. Built-in audiences form the chain <code>self ⊆ internal ⊆ public</code>; named groups such as <code>@finance</code> or <code>@slack:channel/$channel_id</code> cover everything else. A contract can extract an audience from the call&rsquo;s own arguments: reading Slack channel <code>C0123</code> labels the data with that channel&rsquo;s members, and posting to it requires that they are already valid readers.</li>
+<li><strong>Trust</strong> follows who <em>wrote</em> the text, not who can read it. Text written only by the organization and its collaborators keeps the session&rsquo;s trust; a web page, an outsider&rsquo;s comment, or a meeting transcript with outside participants lowers it. Trust and audience are independent: a public repository issue written only by the team keeps trust, while an outsider&rsquo;s comment on a private repository is suspicious.</li>
+<li><strong>Effects</strong> accumulate. <code>effects = [&quot;egress&quot;]</code> records that something happened, and later contracts can require (<code>contains</code>) or forbid (<code>excludes</code>) that it happened, which is how action ordering gets enforced.</li>
+<li><strong>Attention</strong> is per-call and never accumulates. An approval clears the attention requirement for that action only. When an injected document claims a transfer was already pre-approved, the claim does not satisfy <code>requires.attention</code>, because policy demands the real approval in recorded history.</li>
+</ul>
+<h3 id="how-do-tool-contracts-use-delta-requires-and-effects">How do tool contracts use delta, requires, and effects?</h3>
+<p>Every <code>[[policy.tool]]</code> entry answers three questions, and it is the whole contract surface:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Field</th>
+          <th>What you write</th>
+          <th>What OpenAPPA does</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>delta</code></td>
+          <td>Restrictions the tool&rsquo;s result carries</td>
+          <td>Applies them when the agent receives the result</td>
+      </tr>
+      <tr>
+          <td><code>requires</code></td>
+          <td>Conditions the call must satisfy</td>
+          <td>Checks them before allowing the call</td>
+      </tr>
+      <tr>
+          <td><code>effects</code></td>
+          <td>Side effects of a successful call</td>
+          <td>Records them in the trajectory history</td>
+      </tr>
+  </tbody>
+</table>
+<p><code>delta</code> can only restrict: it can narrow the audience or lower trust, never widen or raise. <code>requires</code> supports audience, trust, effects, and attention conditions, with <code>contains</code> (the current audience must include all listed readers) and <code>within</code> (every current reader must belong to the listed audience) as the only two audience operators. A recipient argument is bound with a placeholder, so <code>requires = { audience = { contains = [&quot;$recipient&quot;] } }</code> makes the recipient a required top-level argument of the tool.</p>
+<p>Contracts match in declaration order and the first match wins, which lets a policy write <code>read_file(path:/docs/*)</code> with a public delta ahead of a general <code>read_file</code> rule marked internal. A missing match can fall through to a wildcard contract (<code>name = &quot;*&quot;</code>), but once a contract matches, a schema error refuses the call rather than falling through, and <code>appa/execute_remedy_plan</code> is reserved to the runtime and cannot be declared or shadowed by a policy.</p>
+<h2 id="how-do-remedy-plans-keep-a-guarded-agent-useful">How do remedy plans keep a guarded agent useful?</h2>
+<p>This is the part that decides whether deterministic enforcement survives contact with production. A bare forbidden makes an agent stall, retry, and fail; the ablation numbers show exactly how much. On Bench-Corp with GPT-5.6 Luna, task completion was 88.0% with full OpenAPPA, 56.5% with subagent isolation removed, and 35.0% with guided recovery removed. Enforcement strength did not change across those rows; utility did.</p>
+<p>When a call does not meet its contract, OpenAPPA blocks it and returns the remedy plans the policy allows. Four remedies cover most real cases:</p>
+<ul>
+<li><strong>Narrow</strong> the request so it targets an audience the session can still reach.</li>
+<li><strong>Sanitize</strong>: a registered sanitizer rewrites the payload before the tool receives it or before the result reaches the model. The sanitizer&rsquo;s <code>permits</code> declares the transition it is allowed to make, either an audience move such as <code>from = [&quot;internal&quot;], to = [&quot;public&quot;]</code> or a trust move such as <code>from = &quot;suspicious&quot;, to = &quot;trusted&quot;</code> — never both. Built-ins include <code>redact-email</code>, <code>redact-secrets</code>, and model-backed <code>llm</code> and <code>claude-code</code> variants.</li>
+<li><strong>Request authority</strong>: a person, an internal approval service, or a bounded model evaluator approves that one call. Approval does not loosen the label and does not cover the next call.</li>
+<li><strong>Fork a child trajectory</strong>: a subagent reads the sensitive data in a separate context and returns only what the policy permits, often through a sanitizer, so the parent trajectory is never poisoned by the read. <code>context_control = true</code> declares that the integration keeps child data separate and can withhold its answer until the check passes.</li>
+</ul>
+<p>The key property is that an offered plan can still be denied by the approval service or fail during cleaning. If no permitted remedy succeeds, the action stays blocked. The engine never trades the invariant for completion.</p>
+<h2 id="what-do-the-openappa-benchmarks-actually-show">What do the OpenAPPA benchmarks actually show?</h2>
+<p>Every number below is vendor-published by Archestra and should be read that way. Across 1,320 evaluations — 600 from Bench-Corp and 720 from AgentThreatBench — no scored attack succeeded against guarded OpenAPPA, with a combined 89% task completion. Claude Code auto mode and Microsoft FIDES let 10% and 31% of attacks through on the same headline table.</p>
+<p>Bench-Corp runs 20 multi-step enterprise workflows, 200 episodes per model, scoring what the agent actually changed or sent rather than using an LLM judge. Utility followed by attack success rate:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Model</th>
+          <th>Guarded OpenAPPA</th>
+          <th>FIDES middleware</th>
+          <th>FIDES native</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>GPT-5.6 Luna</td>
+          <td>88.0% / 0%</td>
+          <td>38.5% / 32.0%</td>
+          <td>37.0% / 32.5%</td>
+      </tr>
+      <tr>
+          <td>DeepSeek V4 Flash</td>
+          <td>89.5% / 0%</td>
+          <td>39.5% / 34.5%</td>
+          <td>41.5% / 33.0%</td>
+      </tr>
+      <tr>
+          <td>Gemini 3.7 Flash</td>
+          <td>90.0% / 0%</td>
+          <td>43.5% / 28.5%</td>
+          <td>44.5% / 28.0%</td>
+      </tr>
+  </tbody>
+</table>
+<p>The auto-mode head-to-head is the most useful table for a decision, and also the least statistically powerful: one actor model (Claude Sonnet 5), every task run once, so there is no variance estimate. IFC-tuned Auto restates each scenario&rsquo;s information-flow policy in plain language for a classifier; Stock Auto is the out-of-the-box baseline that knows nothing about deployment-specific rules.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Benchmark</th>
+          <th>Guarded OpenAPPA</th>
+          <th>IFC-tuned Auto</th>
+          <th>Stock Auto</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Bench-Corp (20 scenarios)</td>
+          <td>75.0% / 0 attacks</td>
+          <td>85.0% / 0</td>
+          <td>90.0% / 2</td>
+      </tr>
+      <tr>
+          <td>AgentThreatBench (24 tasks)</td>
+          <td>75.0% / 0 attacks</td>
+          <td>95.8% / 6</td>
+          <td>87.5% / 8</td>
+      </tr>
+  </tbody>
+</table>
+<p>Read plainly: OpenAPPA was the only configuration with zero scored attacks in both suites, and it paid for that with 10 to 21 points of task completion against the auto configurations. On Tau Bench&rsquo;s 97 banking support tasks (not an attack benchmark, four trials each), guarded OpenAPPA finished 151/388 simulations versus 153 for the same agent under a permissive policy and 156 for stock, with mean reward 1.29 points below stock. Its token overhead there was 4.22%, and across the attack suites the vendor reports guarded runs using 6.5x the tokens of a permissive policy on Bench-Corp and 2.3x on AgentThreatBench. Claude&rsquo;s SDK does not report what the auto-mode classifier spends, so total costs are not directly comparable.</p>
+<h2 id="how-does-openappa-compare-with-fides-openshell-opa-and-agent-auto-modes">How does OpenAPPA compare with FIDES, OpenShell, OPA, and agent auto-modes?</h2>
+<p>OpenAPPA is not alone in the deterministic camp, and it is not the only layer you need.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Approach</th>
+          <th>Enforcement point</th>
+          <th>Tracks provenance</th>
+          <th>Returns recovery options</th>
+          <th>Main weakness</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>OpenAPPA / APPA</td>
+          <td>Tool dispatch + MCP gateway</td>
+          <td>Yes, across the trajectory</td>
+          <td>Yes, structured remedy plans</td>
+          <td>Preview; 2.3-6.5x token cost; 75% completion in the head-to-head</td>
+      </tr>
+      <tr>
+          <td>Microsoft FIDES</td>
+          <td>Agent Framework middleware, pre-call</td>
+          <td>Yes, but linear</td>
+          <td>No</td>
+          <td>Completion collapses to 37-45% when a confidential read permanently taints the run, while 28-35% of attacks still get through</td>
+      </tr>
+      <tr>
+          <td>Nvidia OpenShell + Sentry</td>
+          <td>Kernel-isolated sandbox and DPU watchdog</td>
+          <td>No, isolation rather than flow</td>
+          <td>Quarantine in milliseconds</td>
+          <td>Restricts what the agent may touch, not where read data may go; Sentry is not open source</td>
+      </tr>
+      <tr>
+          <td>OPA / Cedar / Dogwood</td>
+          <td>Application-supplied context</td>
+          <td>No, your app must supply history</td>
+          <td>No, returns a decision only</td>
+          <td>You build the history, the combination rules, and the recovery workflow</td>
+      </tr>
+      <tr>
+          <td>Claude Code auto mode, Codex auto-review</td>
+          <td>Classifier or reviewer model</td>
+          <td>No, harnesses strip tool outputs</td>
+          <td>No, circuit breakers</td>
+          <td>Prompt-injectable judge; cannot see data provenance</td>
+      </tr>
+  </tbody>
+</table>
+<p>Two details worth carrying away. First, FIDES is the closest direct comparator and the most instructive failure: it ships as first-class middleware in <code>agent-framework-core</code>, is Python-only and explicitly experimental, and enforces before a sensitive tool runs. But linear information-flow control permanently taints a trajectory on a confidential read, which blocks the legitimate work that follows. Second, OpenAPPA does not reject model-backed components. An annotator, authority, or sanitizer can bind an external LLM, but it runs inside a declared mandate while the algebraic engine holds the global invariant. That is the composability difference: in an auto mode the classifier is the outer boundary and its hallucination is the breach; in OpenAPPA a model that errs cannot grant permissions beyond its contract.</p>
+<h2 id="how-do-you-install-and-run-openappa">How do you install and run OpenAPPA?</h2>
+<p>The fastest path is the Claude Code integration, which the project describes as a playground for the model rather than the product:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-sh" data-lang="sh"><span style="display:flex;"><span>curl -fsSL https://openappa.com/install.sh | sh <span style="color:#f92672">&amp;&amp;</span>
+</span></span><span style="display:flex;"><span>  ~/.local/bin/appa plugin install claude-code
+</span></span></code></pre></div><p>That deploys the runtime binary, registers lifecycle hooks in your user-level Claude Code settings, adds the runtime&rsquo;s own <code>appa</code> MCP server, installs the <code>/appa-guide</code> onboarding skill, and installs <code>clappa</code>, the protected session launcher. Then:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-sh" data-lang="sh"><span style="display:flex;"><span>clappa
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>/appa-guide
+</span></span></code></pre></div><p>The guide skill inspects your configured MCP servers and tools, matches batteries, asks focused questions where an identity or data boundary is ambiguous, and writes deterministic contracts after you approve them. Its failure mode during onboarding is fail-closed: unnamed tools route through a bounded fallback classifier until explicit contracts cover them. Protection belongs to the process, not the saved conversation, so a protected run must be resumed with <code>clappa --resume</code>, and a project configured with <code>disableAllHooks: true</code> disables enforcement entirely.</p>
+<p>Under the hood the integration intercepts Claude Code&rsquo;s lifecycle events (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, plus subagent events) and passes each call to the local runtime before execution. Unanswered hooks fail closed. For a separate runtime process, the service defaults to <code>http://127.0.0.1:8787</code> and exposes <code>POST /hook</code> and <code>/mcp</code> for decisions, <code>GET /health</code>, <code>/status</code>, <code>/binary-fingerprint</code>, <code>/policy-key</code>, and <code>POST /reload</code> for operations, with the append-only trajectory event log persisted to SQLite through <code>--db ./appa.db</code>. Management endpoints accept local requests only, and no agent may approve its own blocked call: the model can only request that the runtime execute an offered remedy plan.</p>
+<h2 id="what-does-a-first-appatoml-policy-look-like">What does a first appa.toml policy look like?</h2>
+<p>The smallest complete demonstration of confidentiality enforcement is the HR example from the validation docs. An agent reads files and sends email; after it reads an HR file, the policy must block email to an outside recipient while still allowing email to HR.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-toml" data-lang="toml"><span style="display:flex;"><span>[<span style="color:#a6e22e">externals</span>]
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">timeout_ms</span> = <span style="color:#ae81ff">2000</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">max_body_bytes</span> = <span style="color:#ae81ff">65536</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>[<span style="color:#a6e22e">policy</span>]
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">version</span> = <span style="color:#ae81ff">2</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>[[<span style="color:#a6e22e">policy</span>.<span style="color:#a6e22e">tool</span>]]
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">name</span> = <span style="color:#e6db74">&#34;mcp/files/read(path:/hr/*)&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">delta</span> = { <span style="color:#a6e22e">audience</span> = [<span style="color:#e6db74">&#34;hr@archestra.ai&#34;</span>] }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>[[<span style="color:#a6e22e">policy</span>.<span style="color:#a6e22e">tool</span>]]
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">name</span> = <span style="color:#e6db74">&#34;mcp/mail/send&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">requires</span> = { <span style="color:#a6e22e">audience</span> = { <span style="color:#a6e22e">contains</span> = [<span style="color:#e6db74">&#34;$to&#34;</span>] } }
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">delta</span> = {}
+</span></span></code></pre></div><p>The read&rsquo;s <code>delta</code> restricts the trajectory&rsquo;s audience to the HR reader; the send&rsquo;s <code>requires</code> checks that its recipient is already in that audience. A customer-support variant adds the recovery machinery: tickets tagged <code>support</code> carry <code>delta = { audience = [&quot;internal&quot;] }</code>, a sanitizer with <code>permits.audience = { from = [&quot;internal&quot;], to = [&quot;public&quot;] }</code> can clean them for wider sharing, and an authority with <code>permits.audience_missing = [&quot;public&quot;]</code> lets a human approve one specific external share.</p>
+<h2 id="how-do-you-test-policy-in-ci-with-appa-describe-check-and-appa-replay">How do you test policy in CI with appa describe &ndash;check and appa replay?</h2>
+<p>This is the most underrated part of the story, because most agent-security advice is unfalsifiable and this is not. <code>appa describe --check</code> verifies that the configuration loads and reports the tool inventory, batteries, and validation results. <code>appa replay</code> checks scripted tool calls against the decisions you expect without running any tools at all:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-text" data-lang="text"><span style="display:flex;"><span>mcp/files/read {
+</span></span><span style="display:flex;"><span>  path: &#34;/hr/salaries.csv&#34;
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>expect allow
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>mcp/mail/send {
+</span></span><span style="display:flex;"><span>  to: &#34;x@other.com&#34;
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>expect deny
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>mcp/mail/send {
+</span></span><span style="display:flex;"><span>  to: &#34;hr@archestra.ai&#34;
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>expect allow
+</span></span></code></pre></div><p>All three calls share one trajectory: after the read, only HR remains in the audience. Replay supplies an empty result for the read, so no CSV file and no email account are needed. Wire both commands into a required GitHub check and a policy change that lets the outside recipient through fails the pull request:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span>- <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Check policy decisions</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">shell</span>: <span style="color:#ae81ff">bash</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">run</span>: |<span style="color:#e6db74">
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    appa describe --config appa.toml --check
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">    appa replay --config appa.toml policy-tests/</span>
+</span></span></code></pre></div><p>The same discipline handles MCP supply-chain risk. A battery is a reusable, vetted policy configuration for a tool set such as Slack MCP or Claude Code&rsquo;s built-in tools, shipped with the annotators, sanitizers, and authorities it needs. Only the root <code>appa.toml</code> may use <code>include</code>, root rules run before battery rules, and the first match wins, so a root can override one issue or one channel while the battery files stay unchanged. The shipped GitHub battery is the best illustration: its annotator calls the GitHub API to check whether a repository is private before deciding the audience, which is exactly the per-server policy review that a registry census showing 51.1% of multi-version servers changing their advertised capabilities argues you should not skip.</p>
+<p>Deployment is deliberately layered too. You can embed the APPA runtime in your own agent through the Python binding or Rust runtime, connect an existing harness through lifecycle hooks that can block a call and withhold or replace its result, or apply policies centrally at the LLM proxy layer through Archestra&rsquo;s 1.4 release candidate across Claude Code, Cursor, Codex, Copilot CLI, n8n, and anything else that talks to a model through its proxy.</p>
+<h2 id="what-are-the-limitations-and-when-should-you-not-use-openappa">What are the limitations, and when should you not use OpenAPPA?</h2>
+<p>Be as precise about the limits as the vendor is:</p>
+<ul>
+<li><strong>It is a preview and an RFC.</strong> Five releases shipped in three days at the end of September 2026; the config and wire surfaces may break without shims. The repository sat at 808 stars and 17 open issues at the time of research, and it is one company&rsquo;s project, not a committee standard, even with a NeurIPS 2026 Workshop paper behind it.</li>
+<li><strong>Enforcement costs tokens and completion.</strong> 2.3x to 6.5x reported tokens against a permissive policy in the attack suites, and 75% task completion where auto configurations reached 85-96% in the single-run head-to-head.</li>
+<li><strong>Static contracts cannot see authorship.</strong> A static contract assumes that anyone who can write to a source did, so a public repository issue enters the trajectory as suspicious until an annotator decides per call from reported authors.</li>
+<li><strong>A member account an attacker controls sits outside the model.</strong> The trust model asks who wrote the text, not whether a legitimate identity was compromised.</li>
+<li><strong>Policy cannot express arbitrary business rules.</strong> That is OPA&rsquo;s strength and a deliberate non-goal here.</li>
+<li><strong>It is one layer.</strong> OpenAPPA does not sandbox execution, broker credentials, or scope identities.</li>
+</ul>
+<p>Do not adopt it if you need a mature, freeze-able API surface this quarter, if your agents are single-turn with no external data flow, or if you cannot staff the policy review that gives the contracts meaning. Do adopt it if you have agents reading private data and writing outward.</p>
+<h2 id="where-does-a-data-flow-engine-fit-in-a-defense-in-depth-stack">Where does a data-flow engine fit in a defense-in-depth stack?</h2>
+<p>Two vendors answered the same summer from two different layers, and they compose rather than compete. Nvidia&rsquo;s Open Agent Safety Platform, announced September 28, 2026 after disclosures in which agents from OpenAI, Anthropic, Meta, and Google broke out of test environments, puts each agent in a kernel-isolated sandbox with deny-by-default permissions and credentials brokered rather than handed over, then adds a policy prover that checks whether a fleet&rsquo;s combined permissions can compose into something the operator never intended, with Sentry correlating telemetry on separate hardware to quarantine a rogue agent in milliseconds. That layer restricts what an agent may touch. A flow policy restricts where data it has already read may go.</p>
+<p>Everything else still applies. Scope each agent&rsquo;s identity and tools, as covered in our <a href="/posts/secure-ai-agents-least-privilege-2026/">least-privilege architecture guide</a>. Map your exposure against the <a href="/posts/owasp-top-10-agentic-applications-2026/">OWASP Top 10 for Agentic Applications</a>, and read the hijacking-specific analysis in <a href="/posts/agent-goal-hijacking-owasp-agentic-risk-2026/">agent goal hijacking and OWASP agentic risk</a>. Treat MCP servers as an inventory problem, not a config file, per the <a href="/posts/mcp-security-guide-2026/">MCP security guide</a>. Keep your repository-level defenses in place too: <a href="/posts/clean-repo-prompt-injection-defense-guide-2026/">prompt-injection defenses for clean repos</a> and <a href="/posts/promptshield-repo-prompt-injection-scanner-2026/">repository scanners</a> catch different bugs than a flow engine does, and the <a href="/posts/agent-skills-supply-chain-security-guide-2026/">agent skills supply chain</a> is its own attack surface.</p>
+<p>Use Simon Willison&rsquo;s lethal trifecta and Meta&rsquo;s Rule of Two as the design heuristic: an agent that combines private data access, untrusted content, and external communication is dangerous, and holding at most two per session removes the risk entirely. When you cannot cut a leg because the workflow genuinely needs all three, a deterministic flow engine is the enforcement point that holds.</p>
+<h2 id="faq">FAQ</h2>
+<h3 id="what-is-openappa-in-one-sentence">What is OpenAPPA in one sentence?</h3>
+<p>OpenAPPA is an MIT-licensed, Rust-based deterministic security engine that sits between an agent and its tools, labels what the agent has read as audience x trust, and checks every tool call against declarative TOML contracts before dispatch, returning remedy plans instead of bare refusals.</p>
+<h3 id="is-openappa-the-same-as-opa-or-cedar">Is OpenAPPA the same as OPA or Cedar?</h3>
+<p>No. OPA, Cedar, and Dogwood are general-purpose policy engines that give you allow-or-deny decisions over context your application supplies, and they can express arbitrary business rules that OpenAPPA deliberately cannot. The difference is state: OpenAPPA tracks the agent&rsquo;s action history and carries data restrictions forward between calls, and it returns recovery options rather than only a verdict.</p>
+<h3 id="does-openappa-replace-prompt-injection-detection-tools">Does OpenAPPA replace prompt-injection detection tools?</h3>
+<p>It complements them. Detectors classify content and can be wrong, which is fine when their verdicts are advisory; OpenAPPA wraps them. A model-backed annotator, authority, or sanitizer runs inside a declared mandate, so a third-party scanner that errs cannot grant permissions beyond its contract, and the information-flow engine keeps the global invariant regardless of what the model concludes.</p>
+<h3 id="what-does-openappa-cost-in-tokens-and-task-completion">What does OpenAPPA cost in tokens and task completion?</h3>
+<p>Its vendor reports 4.22% token overhead on Tau Bench&rsquo;s banking tasks, but 6.5x the tokens of a permissive policy on Bench-Corp and 2.3x on AgentThreatBench in the attack suites, because isolated child trajectories and recovery run on top of the task. Task completion was 88-90% on Bench-Corp against FIDES&rsquo;s 37-45%, but 75% in the single-run head-to-head where auto-mode configurations reached 85-96%.</p>
+<h3 id="is-openappa-production-ready-in-2026">Is OpenAPPA production-ready in 2026?</h3>
+<p>Not in the sense of a frozen interface. The project labels itself a preview and an RFC, and config and wire surfaces may break without shims, with five releases in three days at the end of September 2026. What is production-shaped is the practice around it: declarative TOML, <code>appa replay</code> policy tests as a required merge check, and a local runtime that fails closed when it cannot answer.</p>
+]]></content:encoded></item></channel></rss>
