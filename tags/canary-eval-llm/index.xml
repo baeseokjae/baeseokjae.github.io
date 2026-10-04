@@ -1,0 +1,379 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Canary Eval LLM on RockB</title><link>https://baeseokjae.github.io/tags/canary-eval-llm/</link><description>Recent content in Canary Eval LLM on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 01 Oct 2026 03:02:30 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/canary-eval-llm/index.xml" rel="self" type="application/rss+xml"/><item><title>LLM Model Degradation: A Postmortem of Degraded Performance Across Multiple Models</title><link>https://baeseokjae.github.io/posts/degraded-performance-multiple-models-postmortem/</link><pubDate>Thu, 01 Oct 2026 03:02:30 +0000</pubDate><guid>https://baeseokjae.github.io/posts/degraded-performance-multiple-models-postmortem/</guid><description>LLM model degradation means HTTP 200 with worse answers. Vendor postmortems from Anthropic, OpenAI and Azure show how to detect it across multiple models.</description><content:encoded><![CDATA[<p>LLM model degradation is a slow, quiet loss of answer quality or speed that leaves every health check green: requests still return HTTP 200, error rates stay flat, and latency may not move at all. The 2025–2026 vendor postmortems show it is usually caused by infrastructure or configuration bugs — not by demand, time of day, or server load — and it is diagnosed by semantic monitoring, not uptime dashboards.</p>
+<h2 id="what-does-degraded-performance-actually-mean-for-an-llm">What Does &ldquo;Degraded Performance&rdquo; Actually Mean for an LLM?</h2>
+<p>When OpenAI&rsquo;s status page says &ldquo;Degraded performance,&rdquo; it is describing a service that answers requests but does so below its normal standard — partial errors, elevated latency, or outputs that are technically valid but wrong. That category now dominates the incident record. Aggregated status history from status.openai.com shows 112 OpenAI outages since January 27, 2026, and the overwhelming majority are degraded-performance events rather than full outages (<a href="https://pingoru.io/providers/openai/outage-history">Pingoru OpenAI outage history</a>).</p>
+<p>That reframing matters for anyone writing a postmortem, because the standard uptime number measures almost nothing about the experience your users had:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Instrument</th>
+          <th>What it measures</th>
+          <th>Why it misses degradation</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Uptime % (status page)</td>
+          <td>Did the endpoint respond at all</td>
+          <td>A wrong-but-valid answer counts as 100% up</td>
+      </tr>
+      <tr>
+          <td>Mean latency</td>
+          <td>Average response time</td>
+          <td>Hides tail latency — p99 can sit at 12s while the mean looks healthy (<a href="https://mlflow.org/articles/managing-ai-model-serving-latency-a-developers-guide">MLflow</a>)</td>
+      </tr>
+      <tr>
+          <td>Error rate (5xx)</td>
+          <td>Hard failures</td>
+          <td>Silent bugs return 200, so the numerator never moves</td>
+      </tr>
+      <tr>
+          <td>Token velocity (tokens/sec)</td>
+          <td>Generation throughput</td>
+          <td>Detects slowness, not semantic corruption</td>
+      </tr>
+      <tr>
+          <td>Canary eval score</td>
+          <td>Answer correctness on a fixed panel</td>
+          <td>The only instrument that sees quality, not plumbing</td>
+      </tr>
+  </tbody>
+</table>
+<p>The practical definition to carry into a postmortem is &ldquo;useful uptime&rdquo;: the fraction of requests that produced a correct, complete answer inside your latency bar. A model can post 99.98% API uptime and a terrible useful-uptime week at the same time, which is exactly what happened during OpenAI&rsquo;s May 2026 events.</p>
+<h2 id="the-postmortem-evidence-base-what-vendors-have-admitted-20252026">The Postmortem Evidence Base: What Vendors Have Admitted (2025–2026)</h2>
+<p>The most useful reliability syllabus available today is free: the vendors publish it themselves. Anthropic, OpenAI and Microsoft have all documented multi-model degradation in enough detail to extract reusable lessons.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Vendor / event</th>
+          <th>Window</th>
+          <th>Root cause</th>
+          <th>Detection latency</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Anthropic: three-bug cascade</td>
+          <td>Aug 5 – Sep 18, 2025</td>
+          <td>Routing error, TPU misconfiguration, XLA:TPU miscompilation</td>
+          <td>Weeks to diagnose</td>
+      </tr>
+      <tr>
+          <td>Anthropic: Opus 4.7 coding quality</td>
+          <td>Mar 4 – Apr 10, 2026</td>
+          <td>Reasoning effort silently lowered; prompt-cache bug</td>
+          <td>~5 weeks to revert/fix</td>
+      </tr>
+      <tr>
+          <td>OpenAI: GPT-5.5 in Codex</td>
+          <td>~May 13–16, 2026</td>
+          <td>Two bugs degrading capability</td>
+          <td>~48 hours to acknowledgement, fixed next day</td>
+      </tr>
+      <tr>
+          <td>OpenAI: GPT-5.5 performance degradation</td>
+          <td>May 15–17, 2026</td>
+          <td>Degraded performance across API surfaces</td>
+          <td>~32-hour window</td>
+      </tr>
+      <tr>
+          <td>OpenAI: API/ChatGPT/Codex</td>
+          <td>July 25, 2026</td>
+          <td>Simultaneous multi-component failure</td>
+          <td>1h 51m to restore, 17 consecutive abnormal days</td>
+      </tr>
+      <tr>
+          <td>Azure AI Foundry: gpt-5-mini tokens/sec</td>
+          <td>Apr 2026</td>
+          <td>Shared-capacity queueing, regional demand, concurrency</td>
+          <td>Customer-reported, no dashboard incident</td>
+      </tr>
+  </tbody>
+</table>
+<p>Notice the shape of these incidents: they are not single-model events. Azure&rsquo;s gpt-5-mini slowdown, OpenAI&rsquo;s simultaneous API/ChatGPT/Codex failure across 31 components, and Anthropic&rsquo;s overlapping bugs all degraded <em>multiple models and surfaces at once</em>, which is why triage-by-symptom (&ldquo;the model got dumber&rdquo;) is so unproductive.</p>
+<h2 id="case-study-1--anthropics-three-bug-cascade-augustseptember-2025">Case Study 1 — Anthropic&rsquo;s Three-Bug Cascade (August–September 2025)</h2>
+<p>Anthropic&rsquo;s official postmortem, <a href="https://www.anthropic.com/engineering/a-postmortem-of-three-recent-issues">&ldquo;A postmortem of three recent issues&rdquo;</a> (2025-09-17), remains the single best-documented case of silent multi-model degradation, because three independent bugs landed inside a three-week window and overlapped.</p>
+<p>Bug 1 — context-window routing error. Introduced August 5, 2025, it initially affected roughly 0.8% of Sonnet 4 requests: some traffic was routed to a server type that mishandled the context window. Sticky routing made follow-up turns likely to hit the same bad server, so a single bad first request poisoned the rest of the conversation. By the worst hour on August 31, 16% of Sonnet 4 requests were affected, and about 30% of Claude Code users in that period had at least one message routed incorrectly. Bedrock peaked at 0.18%; Vertex AI stayed under 0.0004% between August 27 and September 16. Routing logic was corrected September 4, but rollout to Bedrock lagged until September 18.</p>
+<p>Bug 2 — output corruption. A misconfiguration deployed to Claude API TPU servers on August 25 caused wrong tokens: Thai and Chinese characters appearing inside English answers, plus obvious syntax errors. Opus 4.1 and Opus 4 were hit August 25–28; Sonnet 4 was hit August 25 through September 2. Third-party platforms were unaffected.</p>
+<p>Bug 3 — approximate top-k XLA:TPU miscompilation. An August 25 code change to token selection triggered a latent compiler bug, confirmed to affect Haiku 3.5 and believed to touch a subset of Sonnet 4 and Opus 3.</p>
+<p>No server-side error fired for any of the three. That is the defining property of this failure class, and it is why the diagnosis took weeks. A load-balancing change on August 29 — after the bugs had landed — increased affected traffic, so some users saw failures while others saw normal performance. To the incident channel, that looked like ordinary feedback variation rather than a regression trend.</p>
+<p>Anthropic&rsquo;s postmortem also carries the vendor denial worth quoting verbatim, because it draws the line that all of your detection design depends on: &ldquo;We never reduce model quality due to demand, time of day, or server load. The problems our users reported were due to infrastructure bugs alone.&rdquo;</p>
+<h2 id="case-study-2--the-2026-degradation-wave-gpt-55-opus-47-112-openai-incidents">Case Study 2 — The 2026 Degradation Wave (GPT-5.5, Opus 4.7, 112 OpenAI Incidents)</h2>
+<p>The 2026 record shows the pattern accelerating. OpenAI&rsquo;s May 15–16 event, labelled &ldquo;GPT5.5 Performance Degradation,&rdquo; opened with an investigating status at 16:11 UTC on May 15 and was not resolved until May 17 — roughly a 32-hour degraded window on a single flagship model (<a href="https://pingoru.io/providers/openai/outage-history">status.openai.com via Pingoru</a>). Days later, on May 19–20, both GPT-5.4 and GPT-5.5 showed elevated errors with Chat Completions and Responses marked &ldquo;Degraded performance,&rdquo; detected and mitigated within about an hour and resolved to Operational by 00:37 UTC.</p>
+<p>The human side of that incident is instructive for detection latency. OpenAI Codex lead Thibault Sottiaux acknowledged on May 15, 2026 that two bugs had degraded GPT-5.5 capability in Codex across roughly 48 hours, then confirmed the fix the next day — acknowledgement to closure inside 24 hours. Compare that with Anthropic&rsquo;s overlapping bugs, which took weeks to even diagnose.</p>
+<p>Anthropic&rsquo;s own April 23, 2026 postmortem went further and admitted three product-layer changes that degraded Opus 4.7 coding quality: reasoning effort was silently lowered from high to medium on March 4 (reverted April 7), and a March 26 prompt-caching optimisation wiped prior thinking on every turn after an idle session instead of once (fixed April 10). This is degradation caused by the vendor&rsquo;s own product decisions, not by infrastructure failure — a category that no external monitoring can infer from the outside, and one that only shows up as &ldquo;the model feels worse at this task.&rdquo;</p>
+<p>The scale of the July 2026 wave puts the trend in perspective: on July 25, 2026, OpenAI&rsquo;s API, ChatGPT and Codex failed simultaneously across 31 service components and took 1 hour 51 minutes to fully restore. Third-party monitoring showed OpenAI had no fully normal day for 17 consecutive days — two major outages plus a run of degraded-performance and partial-outage days (<a href="https://www.36kr.com/en">36Kr English</a>, 2026-07).</p>
+<h2 id="the-silent-failure-class--http-200-broken-output">The Silent-Failure Class — HTTP 200, Broken Output</h2>
+<p>The FailureAtlas paper (arXiv 2607.17525, 2026-07-20) formalises what every operator has suspected: the most operationally severe failures in multi-provider LLM serving are silent. They return HTTP 200, pass every standard health check, and corrupt application state. Detecting them requires semantic-level observability, not latency, error-rate or pod-health monitoring.</p>
+<p>The paper&rsquo;s first-hand examples are worth internalising:</p>
+<ul>
+<li>A concurrency race in conversation-state management. Two coroutines read history, append a turn, and write back; the second write silently overwrites the first. Turns vanish from the context window and generation quality degrades — with every request still returning HTTP 200 and no metric registering an anomaly. It was found only because a semantic continuity benchmark showed persona-adherence dropping under high concurrency.</li>
+<li>A streaming index collision that corrupts tool-call payloads while the stream completes normally.</li>
+<li>A retry storm in which 100 parallel agents retried on a fixed interval, synchronised into a thundering herd that saturated the provider&rsquo;s rate limit on every retry window, turning a momentary 502 into permanent failure for 25% of requests.</li>
+</ul>
+<p>The paper also records a genuinely uncomfortable negative finding: the authors could not find a single evidence-grade, reproducible bug report of an infrastructure-level failure in model behaviour — which they describe as &ldquo;a legitimate finding, not a gap in our survey.&rdquo; Most &ldquo;the model got dumber&rdquo; claims are therefore unproven, and a postmortem that asserts a model regression must bring evidence.</p>
+<p>Industry telemetry reinforces how common the silent class is:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Statistic</th>
+          <th>Source</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>91% of production LLMs experience silent behavioural drift within 90 days of deployment</td>
+          <td>InsightFinder, via datarekha.com, &ldquo;Model monitoring in 2026&rdquo;</td>
+      </tr>
+      <tr>
+          <td>A support agent returned wrong answers on ~1 in 14 requests for nine days with every infrastructure dashboard green; ~$97/day in token burn plus downstream cost</td>
+          <td>Prefactor, &ldquo;Canary evaluation for production AI agents&rdquo;</td>
+      </tr>
+      <tr>
+          <td>22 incidents over eight weeks in a production LLM agent runtime (8 providers, ~40 scheduled jobs, 4,286 unit tests, 827 governance checks) all had a silent phase; the meta-pattern of an error signal never reaching a human in actionable form appeared at least 28 times</td>
+          <td>arXiv 2606.14589, &ldquo;When Errors Become Narratives&rdquo;, 2026-06-12</td>
+      </tr>
+      <tr>
+          <td>23% variance in GPT-4 response length across rolling 2,250-response samples; 31% instruction-following inconsistency for Mixtral</td>
+          <td>structured-prompt-drift study, via datarekha.com, 2025</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="a-reusable-postmortem-taxonomy-origin-layer--loudsilent">A Reusable Postmortem Taxonomy (Origin Layer × Loud/Silent)</h2>
+<p>Before writing the narrative, classify the incident. FailureAtlas proposes two axes — origin layer and detectability — and the grid tells you which instrument would have caught it.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Origin layer</th>
+          <th>Typical loud symptom</th>
+          <th>Typical silent symptom</th>
+          <th>Instrument that catches the silent case</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Network / Transport</td>
+          <td>Connection resets, 502/504 storms</td>
+          <td>Elevated p95 TTFT with 200s</td>
+          <td>TTFT percentile SLO + queue depth</td>
+      </tr>
+      <tr>
+          <td>Streaming / Protocol</td>
+          <td>Truncated streams, disconnects</td>
+          <td>Corrupted tool-call payloads, index collisions</td>
+          <td>Schema validation on streamed tool calls</td>
+      </tr>
+      <tr>
+          <td>State / Session</td>
+          <td>409 conflicts, lost sessions</td>
+          <td>Turns silently overwritten, context shrink</td>
+          <td>Semantic continuity + persona-adherence benchmarks</td>
+      </tr>
+      <tr>
+          <td>Model Behaviour</td>
+          <td>Wrong model id, obvious gibberish</td>
+          <td>Subtly worse answers, lower reasoning effort</td>
+          <td>Canary eval panel vs. rolling baseline</td>
+      </tr>
+      <tr>
+          <td>Governance / Cost</td>
+          <td>Budget breach alerts</td>
+          <td>Silent scope drift, retry-storm cost amplification</td>
+          <td>Cost velocity + scope allowlist at the gateway</td>
+      </tr>
+  </tbody>
+</table>
+<p>Two design consequences follow from the grid. First, every cell in the &ldquo;silent&rdquo; column needs at least one instrument, and most teams have none. Second, FailureAtlas notes that governance and control-plane mechanisms are designed and tested against the happy path, so they are most likely to malfunction exactly when the upstream provider is degraded worst — meaning your circuit breakers and failover logic are also incident candidates.</p>
+<h2 id="timeline-reconstruction--pin-the-harness-not-just-the-model">Timeline Reconstruction — Pin the Harness, Not Just the Model</h2>
+<p>The hardest part of a multi-model degradation postmortem is the timeline, and it fails for a mundane reason: the harness drifts. If your CLI version, system prompt, sampling parameters, or model ID change between the &ldquo;before&rdquo; and &ldquo;after&rdquo; windows, a changed harness looks exactly like a changed model, and the incident review turns into an argument instead of a fix.</p>
+<p>Pin these alongside the model version in every evaluation run:</p>
+<ul>
+<li>Model ID <em>and</em> the provider-side version string where available, plus region and service tier.</li>
+<li>System-prompt hash and tool-schema hash — Anthropic&rsquo;s March 2026 caching bug shows that prompt handling itself can change behaviour silently.</li>
+<li>Sampling parameters: temperature, top-p, max tokens, reasoning-effort setting.</li>
+<li>Client stack: SDK version, CLI version, retry policy, timeout values, concurrency limits.</li>
+<li>Traffic shape: concurrent agents, queue depth, sticky-routing behaviour.</li>
+</ul>
+<p>Store the pinned manifest with every canary result. When someone claims &ldquo;the model got worse on the 14th,&rdquo; the first artefact you produce is the diff of that manifest — and in practice a meaningful share of regression reports end there, as harness noise rather than model behaviour.</p>
+<h2 id="detection-layer-1--canary-evals-that-separate-regression-from-noise">Detection Layer 1 — Canary Evals That Separate Regression From Noise</h2>
+<p>Averages and a handful of bad prompts prove nothing. Real regression detection needs a frozen question panel, paired per-item statistics, a control arm, and pre-registered decision rules.</p>
+<p>The statistical trap is power. A canary that scores a model against itself screened 2,336 GPQA Diamond / MMLU-Pro / competition-math / AIME questions with 4 samples each; about 93% were answered correctly first try, and 97% of questions turned out to be always-right or always-wrong — leaving only 78 &ldquo;sometimes right&rdquo; questions with the statistical power to detect a real regression (<a href="https://dev.to">livenerf methodology via DEV Community</a>, 2026). Those 78 items are the entire instrument. A panel drawn from questions the model always gets right will report a flat score right through a genuine degradation.</p>
+<p>Operational alert tiers that teams actually run:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Canary signal</th>
+          <th>Threshold</th>
+          <th>Action</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Score drop vs. rolling 7-day baseline</td>
+          <td>2–3%</td>
+          <td>Investigate</td>
+      </tr>
+      <tr>
+          <td>Score drop</td>
+          <td>≥5%</td>
+          <td>Priority alert</td>
+      </tr>
+      <tr>
+          <td>Score drop across two consecutive runs</td>
+          <td>≥10%</td>
+          <td>Circuit breaker / rollback</td>
+      </tr>
+      <tr>
+          <td>Provider p95 TTFT</td>
+          <td>&gt;3s</td>
+          <td>Warning — degraded performance</td>
+      </tr>
+      <tr>
+          <td>Error rate</td>
+          <td>&gt;5%</td>
+          <td>Warning</td>
+      </tr>
+      <tr>
+          <td>Error rate</td>
+          <td>&gt;20%</td>
+          <td>Critical page</td>
+      </tr>
+      <tr>
+          <td>503/504 on 3+ consecutive checks</td>
+          <td>—</td>
+          <td>Switch to backup provider</td>
+      </tr>
+      <tr>
+          <td>Rate-limit utilisation</td>
+          <td>&gt;70%</td>
+          <td>Warning</td>
+      </tr>
+  </tbody>
+</table>
+<p>The 2%/5% thresholds are attributed to Lloyds Banking Group practice in Prefactor&rsquo;s canary-eval writeup (<a href="https://prefactor.com/">Prefactor</a>). The latency and error thresholds come from practitioner monitoring guides (<a href="https://apistatuscheck.com/blog/llm-api-monitoring-guide">APIStatusCheck</a>). Pair the eval panel with a control arm — a frozen older model version or a self-hosted model — so you can distinguish &ldquo;our provider degraded&rdquo; from &ldquo;our pipeline degraded.&rdquo;</p>
+<h2 id="detection-layer-2--latency-metrics-that-actually-move-ttft-p99-queue-depth">Detection Layer 2 — Latency Metrics That Actually Move (TTFT, p99, Queue Depth)</h2>
+<p>Tail latency is what users experience. &ldquo;If you are only watching mean response time, you are watching the wrong number&rdquo; is the correct framing from MLflow&rsquo;s serving-latency guide — average latency can look healthy while p99 sits at 12 seconds.</p>
+<p>Three metrics do the heavy lifting:</p>
+<ol>
+<li>Time to First Token (TTFT), as its own dashboard. A model that streams fast but takes three seconds to start feels broken even with excellent throughput. A sudden spike in p95 TTFT is often the first signal of upstream provider degradation, arriving before a full outage.</li>
+<li>Queue depth, as a leading indicator. By the time utilisation crosses a threshold, the queue has already grown and p99 has already spiked. That is precisely the mechanism Microsoft cited in the April 2026 Azure AI Foundry case, where gpt-5-mini tokens/second degraded until the same job took 90–120 seconds instead of a 60-second worst case, while a newer model completed it in under 20 seconds. Microsoft attributed this to shared-capacity queueing, regional demand and concurrency (<a href="https://learn.microsoft.com/en-us/answers/">Microsoft Q&amp;A, Azure AI Foundry</a>, 2026-04-24).</li>
+<li>Cold-start decomposition. Model-weight loading, LoRA adapter initialisation, KV-cache allocation and container startup each need separate instrumentation, otherwise a cold-start regression masquerades as model slowness.</li>
+</ol>
+<p>Two practical notes from the same body of work: the model is rarely the bottleneck — teams optimise inference time and then discover CPU preprocessing and tokenisation add more latency than the GPU step they just fixed — and tracing should use tail-based sampling, capturing 100% of requests above p99 and 100% of errors while sampling routine fast requests at 1–5%.</p>
+<h2 id="detection-layer-3--span-attached-quality-scores-and-drift-dashboards">Detection Layer 3 — Span-Attached Quality Scores and Drift Dashboards</h2>
+<p>Latency tells you a request was slow. It says nothing about whether the answer was right. The third detection layer attaches a quality score to the span that produced the output, so a dashboard can show semantic drift and latency side by side.</p>
+<p>The pattern that works in production: run a small scored rubric (or an LLM-as-judge with a frozen prompt) on a sampled subset of live responses, attach the score as an attribute on the existing trace span, and alert on the rolling baseline rather than on absolute values. This is what would have caught the Prefactor case — a support agent returning wrong answers on roughly 1 in 14 requests for nine days while every infrastructure dashboard stayed green, at a cost of about $97/day in token burn plus the downstream cost of incorrect actions. Root cause: the team was monitoring health checks, not behavioural drift.</p>
+<p>Pair the quality score with an explicit drift detector. The May 18, 2026 Azure Q&amp;A thread documenting sudden latency increases with no customer-side change and consistent token volume is the canonical ambiguous case: analysis attributed it to a silent backend change — model version update, infrastructure rebalancing, or increased shared-tenant load — with no official incident on the health dashboard (<a href="https://learn.microsoft.com/en-us/answers/">Microsoft Q&amp;A, &ldquo;Degraded Performance since May 18th 2026&rdquo;</a>). When the vendor&rsquo;s dashboard is silent and your metrics move, span-level quality data is the only evidence you will have.</p>
+<h2 id="triaging-provider-degradation--status-pages-circuit-breakers-retry-storms">Triaging Provider Degradation — Status Pages, Circuit Breakers, Retry Storms</h2>
+<p>Once you believe the provider is degraded, triage order matters, and OpenAI&rsquo;s own troubleshooting guidance is the right starting point (<a href="https://help.openai.com/en/articles/1000499-troubleshooting-api-errors-and-latency">OpenAI Help: troubleshooting API errors and latency</a>):</p>
+<ul>
+<li>Filter before investigating. Always filter to a single model, a single service tier, and the affected project. Selecting multiple models aggregates rather than switches, so issues on a low-traffic model get hidden by high-volume traffic, and high-volume models make localised issues look global.</li>
+<li>Use the HTTP Requests view, not the Uptime tab, and read error <em>rates</em> rather than raw counts. If client-side errors appear with no corresponding service-health data, the requests likely never reached the provider — the fault is upstream, in timeouts, proxies or networking.</li>
+<li>Use percentiles, not averages, and prefer priority/scale tiers that carry defined SLAs, since the standard tier has no guaranteed latency. Track token velocity (tokens/sec, independent of prompt size) and request time.</li>
+</ul>
+<p>Then bound the blast radius — and understand that naive retries are part of the blast radius. FailureAtlas&rsquo;s retry storm is the cautionary example: 100 parallel agents retrying on a fixed interval synchronised into a thundering herd that saturated the rate limit on every retry window, converting a momentary 502 into permanent failure for a quarter of requests. Mitigations that actually help:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Control</th>
+          <th>Why it works</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Jittered exponential backoff with a retry budget</td>
+          <td>Breaks synchronisation; caps total amplification</td>
+      </tr>
+      <tr>
+          <td>Circuit breaker at the gateway (not in agent code)</td>
+          <td>Stops the herd even when the agent keeps asking</td>
+      </tr>
+      <tr>
+          <td>Provider-level failover with a control-arm eval</td>
+          <td>Fails over on measured quality, not on a hunch</td>
+      </tr>
+      <tr>
+          <td>Per-provider rate-limit headroom ≥30%</td>
+          <td>Rate-limit utilisation above 70% is a warning sign</td>
+      </tr>
+      <tr>
+          <td>Sticky-routing awareness</td>
+          <td>Anthropic&rsquo;s bug shows bad routing follows a conversation</td>
+      </tr>
+  </tbody>
+</table>
+<p>One more triage note specific to multi-model incidents: check whether the degradation is model-specific or gateway-wide before escalating. Azure&rsquo;s shared-capacity queueing, regional demand and concurrency can slow one model while another completes the same job in a fraction of the time — the fix there is routing, not a vendor escalation.</p>
+<h2 id="how-do-you-write-the-postmortem-blameless-template-and-action-items">How Do You Write the Postmortem? Blameless Template and Action Items</h2>
+<p>The postmortem is a document with a job to do: change the system so the next silent degradation is caught in hours instead of weeks. A structure that survives review:</p>
+<ol>
+<li>Summary — one paragraph, plain language: what degraded, for which models, for how long, and what users experienced.</li>
+<li>Impact quantified in useful uptime — requests affected, percentage, tail latency, error rate, and the cost of incorrect downstream actions.</li>
+<li>Timeline with timestamps in UTC — introduction, first user-visible symptom, first internal signal, diagnosis, mitigation, full resolution. Include the <em>detection latency</em> as its own line; it is the metric the action items must move.</li>
+<li>Origin-layer classification — use the taxonomy table above, and state whether the failure was loud or silent.</li>
+<li>Harness manifest — model ID, prompt hash, sampling params, client versions, concurrency, so the &ldquo;was it the model or us?&rdquo; question is answered by artefacts.</li>
+<li>Contributing factors — overlapping bugs, load-balancing changes that amplified exposure, contradictory user reports that looked like ordinary variation.</li>
+<li>What went well and what didn&rsquo;t — including honest gaps: which silent-cell instrument was missing.</li>
+<li>Action items with owners and dates, each tied to a detection layer: canary panel items added, TTFT percentile SLO defined, span-attached quality score shipped, retry jitter deployed, circuit breaker moved out of agent code.</li>
+<li>Open questions — including anything the vendor has not explained. Anthropic&rsquo;s postmortem is a model here for what it discloses; the harder lesson is noticing what a vendor postmortem leaves out, such as exact affected-request percentages for third-party platforms.</li>
+</ol>
+<p>Keep it blameless in the specific sense that matters: blame lands on missing instrumentation, not on the engineer who noticed the answers looked worse.</p>
+<h2 id="slos-and-a-pre-flight-checklist-for-model-degradation">SLOs and a Pre-Flight Checklist for Model Degradation</h2>
+<p>Pre-registered SLOs are what turn a postmortem from a story into a control loop. Before the next incident, define and instrument:</p>
+<table>
+  <thead>
+      <tr>
+          <th>SLO</th>
+          <th>Suggested target</th>
+          <th>Detection layer</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Useful uptime (correct answer within latency bar)</td>
+          <td>≥99% per model per day</td>
+          <td>Canary eval</td>
+      </tr>
+      <tr>
+          <td>p95 TTFT per model</td>
+          <td>&lt;3s warning, &lt;5s page</td>
+          <td>Latency</td>
+      </tr>
+      <tr>
+          <td>p99 end-to-end latency</td>
+          <td>&lt;12s (the number users actually feel)</td>
+          <td>Latency</td>
+      </tr>
+      <tr>
+          <td>Quality score vs. 7-day rolling baseline</td>
+          <td>&lt;2% drift</td>
+          <td>Span-attached scoring</td>
+      </tr>
+      <tr>
+          <td>Retry-budget consumption</td>
+          <td>&lt;20% of daily budget</td>
+          <td>Governance</td>
+      </tr>
+      <tr>
+          <td>Rate-limit utilisation</td>
+          <td>&lt;70%</td>
+          <td>Governance</td>
+      </tr>
+      <tr>
+          <td>Detection latency</td>
+          <td>&lt;4h from first symptom to acknowledgement</td>
+          <td>Process</td>
+      </tr>
+  </tbody>
+</table>
+<p>The last row is the one most teams omit and the one that separates OpenAI&rsquo;s 24-hour Codex closure from Anthropic&rsquo;s multi-week diagnosis. Detection latency is a process SLO, and it is the only one that improves the others.</p>
+<h2 id="faq">FAQ</h2>
+<h3 id="what-does-degraded-performance-mean-on-an-llm-providers-status-page">What does &ldquo;degraded performance&rdquo; mean on an LLM provider&rsquo;s status page?</h3>
+<p>It means requests are completing but below normal standard — partial errors, elevated latency, or unusable output. It is deliberately distinct from a full outage, and it covers most of the incident record: status.openai.com shows 112 outages since January 27, 2026, dominated by degraded-performance events rather than clean outages. Your uptime percentage will not move during one of these windows.</p>
+<h3 id="does-an-llm-provider-throttle-model-quality-during-peak-demand">Does an LLM provider throttle model quality during peak demand?</h3>
+<p>No — and the vendors have stated it explicitly. Anthropic&rsquo;s postmortem says: &ldquo;We never reduce model quality due to demand, time of day, or server load. The problems our users reported were due to infrastructure bugs alone.&rdquo; Azure&rsquo;s gpt-5-mini slowdown was attributed to shared-capacity queueing, regional demand and concurrency rather than intentional throttling. The practical implication is that degradation is usually a bug to be diagnosed, not a load pattern to schedule around.</p>
+<h3 id="how-do-i-tell-whether-the-model-degraded-or-my-own-harness-changed">How do I tell whether the model degraded or my own harness changed?</h3>
+<p>Pin a manifest with every eval run: model ID and provider version string, system-prompt hash, tool-schema hash, sampling parameters, SDK/CLI versions, retry policy and concurrency. Then diff the manifest across the two windows before diffing model outputs. A changed harness looks exactly like a changed model, so the manifest diff is the first artefact you should produce.</p>
+<h3 id="how-many-test-questions-do-i-need-to-detect-a-real-quality-regression">How many test questions do I need to detect a real quality regression?</h3>
+<p>More than intuition suggests, and the questions must be discriminating. One published canary screened 2,336 questions with 4 samples each; 97% turned out to be always-right or always-wrong, leaving only 78 &ldquo;sometimes right&rdquo; items with the statistical power to detect a regression. Build the panel from items with observed variance, use paired per-item statistics, run a control arm, and pre-register the decision thresholds (commonly 2–3% to investigate, 5% to alert, 10% across two runs to roll back).</p>
+<h3 id="what-is-the-fastest-way-to-limit-damage-while-multiple-models-are-degraded">What is the fastest way to limit damage while multiple models are degraded?</h3>
+<p>Stop amplification, then route around it. Use jittered exponential backoff with a hard retry budget, keep circuit breakers at the gateway rather than inside agent code, cap concurrency, and fail over on measured quality rather than on latency alone. The documented failure mode to avoid is the retry storm: 100 agents retrying on a fixed interval synchronised into a thundering herd that saturated the provider&rsquo;s rate limit and turned a momentary 502 into permanent failure for 25% of requests.</p>
+]]></content:encoded></item></channel></rss>
