@@ -1,0 +1,420 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Claude Code Hooks Observability on RockB</title><link>https://baeseokjae.github.io/tags/claude-code-hooks-observability/</link><description>Recent content in Claude Code Hooks Observability on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 01 Oct 2026 02:38:09 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/claude-code-hooks-observability/index.xml" rel="self" type="application/rss+xml"/><item><title>Agent Trajectory Monitor: Terminal Dashboards for AI Coding Agents (2026 Review)</title><link>https://baeseokjae.github.io/posts/agent-trajectory-terminal-monitor/</link><pubDate>Thu, 01 Oct 2026 02:38:09 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-trajectory-terminal-monitor/</guid><description>An agent trajectory monitor compresses many running AI coding agents into one terminal attention queue: how the 2026 tools work, what they miss.</description><content:encoded><![CDATA[<p>An agent trajectory monitor reads the sequence of actions an AI coding agent has already taken — tool calls, file edits, shell commands, retries, context usage — and compresses many concurrent sessions into one attention queue showing which agent is working, which is stuck, and which is drifting off goal.</p>
+<p>That is the short answer. The rest of this review separates the three layers people keep conflating (emulator, runtime, monitor), checks the claims behind the leading 2026 tools against verifiable data, and states plainly where deterministic trajectory monitoring fails.</p>
+<h2 id="what-is-an-agent-trajectory-monitor--and-why-does-it-belong-in-the-terminal">What Is an Agent Trajectory Monitor — and Why Does It Belong in the Terminal?</h2>
+<p>Trajectory monitoring is the shift from observing a single span to observing whether spans <em>occur and relate as they should</em>. Commercial APM vendors frame it that way: not &ldquo;was this call slow?&rdquo; but &ldquo;given everything this run has already attempted, what is it trying to accomplish now?&rdquo; Monte Carlo&rsquo;s documentation describes Agent Trajectory Monitors as alerting on agent span occurrence and relationship patterns, positioned explicitly as the evolution of span-level monitoring.</p>
+<p>The terminal is where that belongs for a simple reason: that is where the agents are. The 2026 CLI coding-agent ecosystem is large enough to index — the <a href="https://github.com/bradAGI/awesome-cli-coding-agents">awesome-cli-coding-agents</a> directory (1,304 GitHub stars, last updated 2026-09-28) lists more than 130 terminal-native coding agents and their harnesses. A monitor that assumes a browser control plane will always be one integration behind that churn. A monitor that reads local transcripts and hook events works with whichever agent you installed this week.</p>
+<p>The workload justifies the attention routing. A production-scale characterization of agentic coding (arXiv:2608.00101, &ldquo;Agentic Coding in the Wild,&rdquo; 2026-07-30) sampled GitHub Copilot traces covering 3.2M users, 13M sessions, 761M LLM calls and 95T tokens. Its finding is that a session is a sparse set of user-initiated turns, and each turn unfolds into an autonomous agentic loop almost always coupled with tool execution. One human turn can mean dozens of tool calls you never see.</p>
+<p>And the pain is documented, not hypothetical. A developer running three to six CLI agents (Claude Code, Codex, Aider) across git worktrees on a 300k-line monorepo described the exact failure on Hacker News (story 47268777, &ldquo;Is anyone else drowning in terminal tabs running AI coding agents?&rdquo;): throughput is great, managing it is not, and agents sit waiting for a file-write permission in a tab you forgot existed.</p>
+<h2 id="the-permission-prompt-problem-why-every-monitor-starts-with-which-agent-is-stuck">The Permission-Prompt Problem: Why Every Monitor Starts With &ldquo;Which Agent Is Stuck?&rdquo;</h2>
+<p>Every tool in this category began by answering one question, and most still sell primarily on it. Warp&rsquo;s analysis of AI-coding terminals names the expensive failure directly: an agent sitting blocked on a permission prompt for forty minutes across six agents in three repositories. That is not a compute problem or a model-quality problem. It is an attention-allocation problem, and it costs the full wall-clock time of the block.</p>
+<p>Survey data explains why the fix cannot be &ldquo;just let them run.&rdquo; Stack Overflow&rsquo;s &ldquo;Agents on a leash&rdquo; pulse survey (2026-05-27, 1,100 developers and professionals) found agent usage at work nearly doubled year over year, from 31% to 59% — while 60% of respondents block agents from making unapproved system changes, 68% prefer predictable single-agent setups over multi-agent configurations, and 63% rarely or never let agents run entirely on autopilot.</p>
+<p>The practical consequence: the monitor&rsquo;s job is attention routing, not automation. It does not need to decide for you. It needs to answer four questions fast enough that you never lose forty minutes again.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Question the monitor must answer</th>
+          <th>Where the answer comes from</th>
+          <th>Failure if unanswered</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Which agents are currently running?</td>
+          <td>Process scan, hook events, or session registry</td>
+          <td>Orphaned sessions running unattended</td>
+      </tr>
+      <tr>
+          <td>Which one needs input right now?</td>
+          <td>Permission-prompt detection in the transcript stream</td>
+          <td>40-minute blocks (Warp&rsquo;s named failure)</td>
+      </tr>
+      <tr>
+          <td>Which checkout or worktree does each own?</td>
+          <td>Git worktree mapping per session</td>
+          <td>Two agents editing the same tree</td>
+      </tr>
+      <tr>
+          <td>Can I respond without finding the original tab?</td>
+          <td>Inline reply path or a JSON control channel</td>
+          <td>You hunt through 20 tabs to unblock work</td>
+      </tr>
+  </tbody>
+</table>
+<p>The fourth row is the one most tools quietly skip, and it is the reason a dashboard that only <em>reports</em> feels half-finished. A monitor that can be queried by another agent — c9watch exposes a JSON CLI for exactly this, so agents can coordinate with each other — turns status into a control surface.</p>
+<h2 id="should-you-pick-by-layer-rather-than-brand">Should You Pick by Layer Rather Than Brand?</h2>
+<p>Yes. Treating the category as one product shape produces a misleading checklist. Three layers do three different jobs, and the &ldquo;best tool&rdquo; answer changes for each.</p>
+<p>Warp&rsquo;s own framing supports this: &ldquo;best agent terminal&rdquo; has no single answer because three separate questions belong to three layers — does the terminal render an agent TUI correctly (multi-line input, notifications, Unicode, scrollback while the alt screen is owned), does the session outlive you, and can you see which agent is stuck? Herdr is positioned as a runtime that keeps many agents alive and reports which one is blocked; Ghostty, iTerm2, Kitty, WezTerm and Alacritty are rendering surfaces only. MOLTamp&rsquo;s comparison of six terminals for AI-coding workloads makes the same split explicit, favoring observability into agent activity over raw throughput.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Layer</th>
+          <th>Job</th>
+          <th>Examples</th>
+          <th>What breaks if you skip it</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Emulator</td>
+          <td>Renders the agent TUI: alt-screen scrollback, multi-line paste, Unicode, notifications</td>
+          <td>Ghostty, iTerm2, Kitty, WezTerm, Alacritty, Warp, Wave</td>
+          <td>Garbled output, lost scrollback, missed prompts</td>
+      </tr>
+      <tr>
+          <td>Runtime / multiplexer</td>
+          <td>Keeps sessions alive beyond your SSH connection; reports which one is blocked</td>
+          <td>tmux, workmux, dmux, Herdr</td>
+          <td>Sessions die with the terminal; no cross-session view</td>
+      </tr>
+      <tr>
+          <td>Trajectory monitor</td>
+          <td>Compresses N sessions into one attention queue and a verdict</td>
+          <td>AgentPulse, c9watch, Agent Deck, PI Dashboard, Sidekick Agent Hub</td>
+          <td>You can see agents but not whether the run is still on goal</td>
+      </tr>
+  </tbody>
+</table>
+<p>A tool can own worktree lifecycle or merely discover existing tmux panes, and neither model is inherently better — worktree automation and dashboard coverage are separate decisions. Reviewing dmux, workmux, webmux, AgentDock, Agent of Empires and ClawTab across tmux relationship, worktrees, agent state, phone path, and recovery is only meaningful once you have decided which layer you are buying.</p>
+<h2 id="which-signals-actually-predict-failure--and-which-are-noise">Which Signals Actually Predict Failure — and Which Are Noise?</h2>
+<p>Read the trajectory, not the transcript. This is the central methodological rule in the category, and it has a concrete technical basis: models may omit, summarize poorly, or explain behavior they never performed. A monitor built on an agent&rsquo;s own generated rationale is monitoring a story. A monitor built on observable evidence — tool names, normalized arguments, file edit sizes, retry counts, context-window occupancy, exit codes, privileged path access — is monitoring behavior.</p>
+<p>AgentKit&rsquo;s analysis makes the distinction crisp. Per-action controls (validate arguments, enforce permissions, require approval) answer &ldquo;is one operation allowed right now?&rdquo; Trajectory monitoring answers &ldquo;given everything already attempted, what is this run trying to accomplish now?&rdquo; That framing traces back to a concrete incident: on 2026-07-20 OpenAI described failures from a long-running internal model that existing deployment evaluations missed, where separate actions each looked acceptable while their combined purpose bypassed a control. Access was paused and monitoring was added that evaluates the evolving trajectory. Google DeepMind&rsquo;s analysis of one million agent tasks found that most flagged events came from misinterpretation or overeagerness rather than hostile intent — which is precisely why static permission lists miss them.</p>
+<p>What per-tool dashboards cannot surface is well documented. Stack Pulsar&rsquo;s observability review lists the canonical failure modes that are invisible on a per-call view: the same wrong tool name passed three times before a hallucinated stack trace, a 4,200-token edit on a file that needed three lines, and a failing shell command silently retried seven times.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Signal</th>
+          <th>Where it lives</th>
+          <th>What it predicts</th>
+          <th>False-positive risk</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Repeat tool call with unchanged arguments</td>
+          <td>Tool-call span sequence</td>
+          <td>Loop / stuck state</td>
+          <td>Legitimate retry after a timeout</td>
+      </tr>
+      <tr>
+          <td>Edit size vs file size</td>
+          <td>Write/Edit tool args</td>
+          <td>Overreach, destructive rewrite</td>
+          <td>Intentional full-file regeneration</td>
+      </tr>
+      <tr>
+          <td>Same shell command exited non-zero N times</td>
+          <td>exit_code plus command hash</td>
+          <td>Silent retry loop</td>
+          <td>Flaky test or network tooling</td>
+      </tr>
+      <tr>
+          <td>Context-window occupancy trend</td>
+          <td>Token counters per turn</td>
+          <td>Impending compaction, lost state</td>
+          <td>Long but productive sessions</td>
+      </tr>
+      <tr>
+          <td>Subagent call depth</td>
+          <td>SubagentStart/Stop spans</td>
+          <td>Runaway fan-out</td>
+          <td>Legitimate parallel research</td>
+      </tr>
+      <tr>
+          <td>Privileged path or pipe-to-shell</td>
+          <td>Normalized tool args</td>
+          <td>Drift outside authorized scope</td>
+          <td>Deliberate, reviewed escalation</td>
+      </tr>
+  </tbody>
+</table>
+<p>AgentKit&rsquo;s monitor design reduces this to six moments worth watching: goal accepted, plan changed, tool selected, result observed, boundary reached, completion claimed — each with one high-signal warning and one default response. That is a workable template even if you build your own, and the instruction to turn the request into invariants <em>before</em> the first consequential tool call is the part most home-grown monitors get wrong.</p>
+<h2 id="deterministic-rules-or-an-llm-judge--which-should-watch-the-agents">Deterministic Rules or an LLM Judge — Which Should Watch the Agents?</h2>
+<p>The real 2026 split is whether a second model is allowed to judge the first. Two of the most interesting projects in the research say no, for the same reason: reproducibility.</p>
+<p>AgentPulse (MIT, by Conal Hickey) reads Claude Code, Cursor and Codex transcripts and assigns one of six states — converging, exploring, stuck, done, drifting, idle — with no model call, no telemetry and no network. Its default analysis window is 20 minutes; the live TUI refreshes every 30 seconds, drops sessions after one hour idle, and shows up to 10 sessions. <code>npx @conalh/agentpulse@latest live</code> opens a terminal dashboard rather than a hosted control plane. It ships exit-code gates: <code>--strict</code> exits 1 when a session is drifting or stuck, and <code>--fail-on-error</code> is a separate gate for unreadable transcripts, enabled by default in the bundled GitHub Action.</p>
+<p>LivePlan (arXiv:2608.06701, &ldquo;Online Monitoring and Corrective Steering of Programming Agents,&rdquo; 2026-08-07) reaches the same conclusion from research rather than tooling: it decouples judging from advising. A deterministic rule-based monitor inspects trajectory signals without invoking an LLM, and only on detection consults an advisor model for a high-level next-step correction — deliberately avoiding misleading global re-planning. Agent Trajectory Sentinel goes further toward cheap determinism: a one-class behavioural monitor trained on healthy runs only, at roughly 219 microseconds per step with 3.95 MB of state, reading telemetry rather than model internals, refitting in 1.7 s against 68 s for a GRU across 2,823 committed traces.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Approach</th>
+          <th>Cost per step</th>
+          <th>Reproducible</th>
+          <th>Blind spots</th>
+          <th>Best fit</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Deterministic local rules (AgentPulse, Sentinel)</td>
+          <td>~200 µs</td>
+          <td>Yes — same input, same verdict</td>
+          <td>Fixed vocabulary; misses novel behaviour</td>
+          <td>CI gates, high-frequency polling, privacy-sensitive work</td>
+      </tr>
+      <tr>
+          <td>Rule monitor + advisor LLM on detection (LivePlan)</td>
+          <td>Free until triggered</td>
+          <td>Detection yes, advice no</td>
+          <td>Advice quality varies</td>
+          <td>Interactive steering without constant model cost</td>
+      </tr>
+      <tr>
+          <td>Continuous LLM judge</td>
+          <td>Per-step model call</td>
+          <td>No</td>
+          <td>Judge itself can be wrong or drift</td>
+          <td>Research, offline batch scoring</td>
+      </tr>
+      <tr>
+          <td>Commercial trajectory alerting (Monte Carlo)</td>
+          <td>Platform-metered</td>
+          <td>Rules as code, so yes</td>
+          <td>Requires span instrumentation and vendor schema</td>
+          <td>Teams already on a managed observability stack</td>
+      </tr>
+  </tbody>
+</table>
+<p>The honest version of the deterministic argument includes its own limits, and AgentPulse states them. Its &ldquo;drifting&rdquo; label is deliberately narrow: privileged paths (.ssh, .aws, .kube, /etc/shadow), a curl or wget piped into sh/bash/zsh, or a Write/Edit outside the repo root. It explicitly does <strong>not</strong> cover process substitution, download-then-execute chains, package install hooks, or symlink escapes. That is the right disclosure discipline — a deterministic label is not a quality score, and unseen behavior should be visible as unaddressed rather than silently passed. NIST&rsquo;s distinction between &ldquo;not addressed&rdquo; and &ldquo;silently passed&rdquo; is the standard worth copying.</p>
+<h2 id="what-changed-with-native-otel-hooks--and-why-do-cross-agent-dashboards-still-break">What Changed With Native OTel Hooks — and Why Do Cross-Agent Dashboards Still Break?</h2>
+<p>The plumbing changed in 2026. You no longer have to scrape JSONL if the agent emits OpenTelemetry spans.</p>
+<p>Claude Code 1.0 (GA 2026-06-26) ships native hook spans on every PreToolUse, PostToolUse, SubagentStart and SubagentStop, with gen_ai.* attributes, by default truncating tool output to 8 KB and opting in via OTEL_EXPORTER_OTLP_ENDPOINT. Gemini CLI (GA 2026-06-15) supports &ndash;telemetry-otlp-endpoint using OpenInference attributes, which need renaming before they share a timeline. Codex CLI exposes &ndash;otel-endpoint. OpenCode v0.4.0 has &ndash;analytics-config emitting opencode.cost.session_total. GitHub Copilot Chat exposes org-token-only spans lacking tool sub-attributes. AWS Kiro is in preview with prompt-template IDs.</p>
+<p>The catch is attribute drift. Gemini CLI and Codex CLI emit OpenInference attribute names rather than gen_ai.*, so a collector attribute-rename processor is required before they can sit on one timeline with Claude Code or OpenCode. Only Codex CLI emits coding_agent.tool_call.duration_ms directly — everywhere else you compute duration from span start and end timestamps.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Agent / CLI</th>
+          <th>Status (2026)</th>
+          <th>Enablement</th>
+          <th>Attribute schema</th>
+          <th>Tool-level detail</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Claude Code</td>
+          <td>1.0 GA, 2026-06-26</td>
+          <td>OTEL_EXPORTER_OTLP_ENDPOINT (opt-in, spans on by default)</td>
+          <td>gen_ai.*</td>
+          <td>Yes, 8 KB truncated tool output</td>
+      </tr>
+      <tr>
+          <td>Gemini CLI</td>
+          <td>GA, 2026-06-15</td>
+          <td>&ndash;telemetry-otlp-endpoint</td>
+          <td>OpenInference</td>
+          <td>Yes, requires rename</td>
+      </tr>
+      <tr>
+          <td>Codex CLI</td>
+          <td>Stable</td>
+          <td>&ndash;otel-endpoint</td>
+          <td>OpenInference</td>
+          <td>Yes, plus native duration_ms</td>
+      </tr>
+      <tr>
+          <td>OpenCode</td>
+          <td>v0.4.0</td>
+          <td>&ndash;analytics-config</td>
+          <td>opencode.cost.*</td>
+          <td>Cost totals per session</td>
+      </tr>
+      <tr>
+          <td>GitHub Copilot Chat</td>
+          <td>Org-token spans only</td>
+          <td>Org config</td>
+          <td>Vendor</td>
+          <td>No tool sub-attributes</td>
+      </tr>
+      <tr>
+          <td>AWS Kiro</td>
+          <td>Preview</td>
+          <td>Provider config</td>
+          <td>Vendor</td>
+          <td>Prompt-template IDs</td>
+      </tr>
+  </tbody>
+</table>
+<p>The design lesson is that normalization belongs in the collector, not the tool. Instrumenting on an open standard first keeps your exit path open; a monitor that hard-codes one vendor&rsquo;s attribute names inherits that vendor&rsquo;s roadmap.</p>
+<h2 id="how-do-the-2026-agent-trajectory-monitors-actually-compare">How Do the 2026 Agent Trajectory Monitors Actually Compare?</h2>
+<p>Here is the landscape with repository data verified directly against the GitHub API on 2026-10-01.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Tool</th>
+          <th>Shape</th>
+          <th>Language / License</th>
+          <th>Stars (2026-10-01)</th>
+          <th>Discovery model</th>
+          <th>Notable constraint</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>AgentPulse</td>
+          <td>Terminal TUI + CI gate</td>
+          <td>Node CLI, MIT</td>
+          <td>npx-distributed</td>
+          <td>Reads Claude Code / Cursor / Codex transcripts</td>
+          <td>Narrow drift vocabulary; no live session control</td>
+      </tr>
+      <tr>
+          <td>Agent Deck (dot-agent-deck)</td>
+          <td>Rich terminal dashboard</td>
+          <td>Rust, MIT</td>
+          <td>108</td>
+          <td>Hook install (<code>dot-agent-deck hooks install</code>)</td>
+          <td>Requires hook installation first</td>
+      </tr>
+      <tr>
+          <td>c9watch</td>
+          <td>macOS desktop dashboard + JSON CLI</td>
+          <td>Rust, MIT</td>
+          <td>128</td>
+          <td>Scans running processes at the OS level</td>
+          <td>macOS-only</td>
+      </tr>
+      <tr>
+          <td>PI Dashboard</td>
+          <td>Web dashboard + mobile control</td>
+          <td>TypeScript, MIT</td>
+          <td>308</td>
+          <td>Works with the pi coding agent</td>
+          <td>Vendor-locked to pi</td>
+      </tr>
+      <tr>
+          <td>Sidekick Agent Hub</td>
+          <td>TUI dashboard in VS Code + CLI</td>
+          <td>TypeScript, MIT</td>
+          <td>85</td>
+          <td>Reads Claude Code / OpenCode / Codex</td>
+          <td>Bundles productivity features; not monitor-only</td>
+      </tr>
+      <tr>
+          <td>Agent Trajectory Sentinel</td>
+          <td>Library / behavioural monitor</td>
+          <td>Python, Apache-2.0</td>
+          <td>5</td>
+          <td>Trained on healthy runs from telemetry</td>
+          <td>Early-stage; you build the surface</td>
+      </tr>
+      <tr>
+          <td>Monte Carlo Agent Trajectory Monitors</td>
+          <td>Commercial platform</td>
+          <td>Proprietary</td>
+          <td>n/a</td>
+          <td>Span occurrence and relationship patterns, Monitors as Code</td>
+          <td>Requires instrumentation and vendor schema</td>
+      </tr>
+  </tbody>
+</table>
+<p>Two axes matter more than the star counts. The first is discovery versus lock-in: c9watch discovers sessions by scanning running processes, so you can start an agent from any terminal or IDE with no plugins, no workflow change and no vendor lock-in, while PI Dashboard and similar tools assume you launch from them. The second is bundle scope: Sidekick Agent Hub bundles inline completions, code transforms and multi-account switching alongside monitoring — a deliberate product choice that the pure-monitor tools avoid. Neither is wrong; they just fit different teams.</p>
+<p>The commercial framing is also worth reading carefully. Monte Carlo positions trajectory monitoring inside a broader agent-observability suite alongside trace/conversation structure, conversation clusters, agent evaluation, and metric and validation monitors. That is a platform sale, and it makes sense for organizations that already run a managed observability stack — but Gartner&rsquo;s rough adoption figure for LLM observability, cited secondarily at about 15% of enterprise GenAI deployments, up from ~5% a year earlier and projected to reach 50% by 2028, suggests most teams are still at the beginning of that curve. Treat that figure as indicative rather than primary.</p>
+<h2 id="what-do-per-tool-dashboards-structurally-miss">What Do Per-Tool Dashboards Structurally Miss?</h2>
+<p>Three things, and each has a measurable cost.</p>
+<p><strong>Waste that only appears across turns.</strong> KV cache hit rate in the Copilot trace study averages roughly 90% within a turn but falls to about 55% across turn boundaries, and is drastically invalidated by model switches or context compaction (arXiv:2608.00101). A per-call view sees 761 million healthy calls. A trajectory view sees where the expensive boundary crossings happen — and the same study&rsquo;s lightweight idle-time predictor captures 86–90% of total idle time, against minutes-long user idles at turn boundaries versus quick agentic turnaround.</p>
+<p><strong>Self-reported productivity that is wrong.</strong> METR&rsquo;s randomized controlled trial (arXiv:2507.09089) found 16 experienced open-source developers were 19% slower with early-2025 AI coding tools while believing they had been sped up by about 20%. That gap is the strongest available argument for instrumenting the trajectory rather than trusting the vibe. It also applies reflexively to monitoring tools: if developers cannot accurately perceive their own speed change, they certainly cannot perceive whether their monitor is helping.</p>
+<p><strong>Progress that looks like success.</strong> The six-moment card exists because &ldquo;completion claimed&rdquo; is a distinct event from &ldquo;goal achieved.&rdquo; A run can burn an hour producing plausible-looking diffs that are pointed at the wrong file.</p>
+<table>
+  <thead>
+      <tr>
+          <th>What you cannot see per-tool</th>
+          <th>What the trajectory shows</th>
+          <th>Evidence</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Cache invalidation at turn boundaries</td>
+          <td>Where a 90%-to-55% hit-rate cliff costs money</td>
+          <td>arXiv:2608.00101</td>
+      </tr>
+      <tr>
+          <td>Perceived vs actual speed change</td>
+          <td>A 19% slowdown hidden by a 20% perceived speedup</td>
+          <td>METR, arXiv:2507.09089</td>
+      </tr>
+      <tr>
+          <td>Wrong-goal drift</td>
+          <td>Boundary crossing outside the authorized scope</td>
+          <td>OpenAI 2026-07-20 incident; DeepMind 1M-task analysis</td>
+      </tr>
+      <tr>
+          <td>Silent retry loops</td>
+          <td>Seven identical failing commands</td>
+          <td>Stack Pulsar failure-mode list</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="does-local-first-mean-private-not-automatically">Does Local-First Mean Private? Not Automatically</h2>
+<p>Local-first is a real and valuable property: AgentPulse performs no model call, no telemetry and no network, which means session content never leaves the machine during analysis. But &ldquo;no network&rdquo; describes the runtime, not the workflow.</p>
+<p>The leak channel is CI. Derived labels, verdicts, narratives and topic keywords produced by a local analyzer can reach step summaries or pull-request comments the moment the tool runs in a pipeline — and that is exactly the intended use for <code>--strict</code> and the bundled GitHub Action. AgentPulse&rsquo;s documentation recommends <code>redact: all</code> when sensitive material is involved. Path redaction reduces exposure; it does not eliminate it, because a verdict string (&ldquo;drifting: edited file outside repo root&rdquo;) can itself disclose structure.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Deployment</th>
+          <th>Data at rest</th>
+          <th>What leaves the machine</th>
+          <th>Mitigation</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Interactive local TUI</td>
+          <td>Transcripts + derived labels on disk</td>
+          <td>Nothing</td>
+          <td>Disk encryption, session retention limits</td>
+      </tr>
+      <tr>
+          <td>Local monitor in CI, gating only</td>
+          <td>Derived labels in job logs</td>
+          <td>Exit codes and (often) log lines</td>
+          <td><code>redact: all</code>; gate on exit code only</td>
+      </tr>
+      <tr>
+          <td>Local monitor in CI, posting PR comments</td>
+          <td>Derived labels in PRs</td>
+          <td>Narratives, keywords, verdicts</td>
+          <td>Disable PR commenting; keep exit codes</td>
+      </tr>
+      <tr>
+          <td>Managed platform</td>
+          <td>Everything the SDK ships</td>
+          <td>Full traces and spans</td>
+          <td>Vendor review, data residency selection</td>
+      </tr>
+  </tbody>
+</table>
+<p>The rule to carry away: decide what leaves the machine before you turn on the gate, not after someone reads a PR comment.</p>
+<h2 id="verdict-which-agent-trajectory-monitor-for-which-workflow">Verdict: Which Agent Trajectory Monitor for Which Workflow?</h2>
+<p>There is no single winner because the layers differ. Match the tool to your missing layer.</p>
+<ul>
+<li><strong>You lose agents behind terminal tabs.</strong> Start with a runtime layer (tmux, workmux, Herdr) plus a discovery-based dashboard. c9watch&rsquo;s process-scan model asks nothing of your workflow, which matters more than any feature list if you use several IDEs.</li>
+<li><strong>You forget which agent is blocked.</strong> Any of the TUI dashboards solves this — Agent Deck, c9watch, Sidekick, PI Dashboard (if you use pi). The differentiator is whether the tool can also respond, not just report.</li>
+<li><strong>You need a CI gate on agent behaviour.</strong> AgentPulse is the most directly shaped for this: <code>--strict</code> exits 1 on drifting or stuck sessions, <code>--fail-on-error</code> catches unreadable transcripts, and the GitHub Action wires it up. Read its documented blind spots before relying on it as a security control.</li>
+<li><strong>You need per-session verdicts on thousands of runs.</strong> Build a library layer — the Sentinel pattern of a one-class monitor trained on healthy runs only, at ~219 µs per step, is cheap enough to run on every step rather than sampling.</li>
+<li><strong>You are already instrumented with OTel.</strong> Normalize gen_ai.* versus OpenInference in the collector, then add trajectory alerting on top (commercial Monitors as Code, or your own rules).</li>
+<li><strong>You have one agent and one repo.</strong> You do not need a monitor. A terminal with a token counter and correct alt-screen handling covers the workload — the category only pays for itself at fan-out.</li>
+</ul>
+<p>The forward-looking judgment: the wedge is the permission prompt, but the durable value is the trajectory. Every tool here started by answering &ldquo;which agent is stuck?&rdquo; The tools that survive will answer the harder question — given everything this run has attempted, is it still pointed at the goal I authorized?</p>
+<h2 id="how-do-you-instrument-a-minimal-agent-trajectory-monitor-tonight">How Do You Instrument a Minimal Agent Trajectory Monitor Tonight?</h2>
+<p>You can build the useful 20% in an evening, and building it teaches you what the tools actually do.</p>
+<ol>
+<li><strong>Capture the stream.</strong> Turn on native hooks where they exist — Claude Code&rsquo;s gen_ai.* hook spans via OTEL_EXPORTER_OTLP_ENDPOINT, or a transcript tail for agents without them. If you want no telemetry at all, read the session JSONL directly.</li>
+<li><strong>Normalize to one schema.</strong> Parse each event into: timestamp, session id, tool name, normalized arguments hash, target path, exit code, token count. Normalize Gemini CLI and Codex OpenInference attribute names to gen_ai.* at this step, in the collector, not later.</li>
+<li><strong>Compute the six signals.</strong> Repeat-call detection (same tool, same argument hash, within N steps), edit size versus file size, consecutive non-zero exit codes for the same command hash, context occupancy trend, subagent depth, and privileged-path or pipe-to-shell matches.</li>
+<li><strong>Define states, not scores.</strong> Map signals to a small vocabulary — working, asking, idle, stuck, drifting — as AgentPulse does. A label you can act on beats a 0–100 number you cannot.</li>
+<li><strong>Make it exit non-zero.</strong> Wire <code>--strict</code>-style semantics into CI so the monitor is a gate, not a report. Set <code>redact: all</code> and gate on exit codes only if PR comments would leak more than you want.</li>
+<li><strong>Add one advisor call, not a judge.</strong> Follow LivePlan: rules decide <em>that</em> something is wrong; a single model call may suggest a next step. Never let the model decide <em>whether</em> to alert, or you lose reproducibility at the exact point you need it.</li>
+</ol>
+<p>Start with the permission-prompt question, because it pays back the same day. Then add drift detection, and be explicit about what your rules do not cover — the value of a deterministic monitor is that its blind spots are knowable.</p>
+<h2 id="faq">FAQ</h2>
+<h3 id="what-is-an-agent-trajectory-monitor">What is an agent trajectory monitor?</h3>
+<p>An agent trajectory monitor observes the sequence and relationships between an agent&rsquo;s spans — tool calls, file edits, shell commands, subagent calls — rather than the latency of any single call. It answers whether the run is still converging on the authorized goal. Monte Carlo frames it commercially as alerting on span occurrence and relationship patterns; AgentPulse implements it locally by labeling a session converging, exploring, stuck, done, drifting or idle without any model call.</p>
+<h3 id="do-i-need-otel-instrumentation-to-monitor-coding-agents">Do I need OTel instrumentation to monitor coding agents?</h3>
+<p>No, but it is now the cleanest path. Claude Code 1.0 (GA 2026-06-26) emits native hook spans with gen_ai.* attributes on PreToolUse, PostToolUse, SubagentStart and SubagentStop, opt-in via OTEL_EXPORTER_OTLP_ENDPOINT, with tool output truncated to 8 KB. Agents without hooks can be monitored by reading local JSONL transcripts — that is how AgentPulse works. The catch is attribute drift: Gemini CLI and Codex CLI emit OpenInference names, so you need a collector rename processor before they share one timeline.</p>
+<h3 id="is-deterministic-agent-drift-detection-accurate-enough-to-gate-ci">Is deterministic agent drift detection accurate enough to gate CI?</h3>
+<p>It is reliable within its vocabulary and explicitly incomplete outside it. AgentPulse&rsquo;s drifting state covers privileged paths (.ssh, .aws, .kube, /etc/shadow), a curl or wget piped into sh/bash/zsh, and a Write or Edit outside the repo root — and documents that it does not cover process substitution, download-then-execute chains, package install hooks, or symlink escapes. Use it as a high-signal gate for known-bad patterns, not as a security boundary, and keep the unaddressed cases visible rather than assumed-passed.</p>
+<h3 id="how-is-a-trajectory-monitor-different-from-an-agent-observability-dashboard">How is a trajectory monitor different from an agent observability dashboard?</h3>
+<p>A dashboard tells you what happened across calls; a trajectory monitor issues a per-session judgment. Per-action controls answer &ldquo;is this one operation allowed now,&rdquo; while trajectory monitoring answers &ldquo;given everything already attempted, what is this run trying to accomplish now.&rdquo; That distinction matters because per-call views structurally cannot show a wrong tool name used three times before a hallucinated stack trace, a 4,200-token edit on a three-line file, or a failing command silently retried seven times.</p>
+<h3 id="which-agent-trajectory-monitor-should-i-use-in-2026">Which agent trajectory monitor should I use in 2026?</h3>
+<p>Pick by layer and by discovery model. For zero-friction multi-IDE coverage, c9watch (Rust, MIT, 128 stars) scans running processes and exposes a JSON CLI. For a terminal-first dashboard, Agent Deck (108 stars) needs a hook install first. For a CI gate with exit codes, AgentPulse is purpose-built. For a CI gate plus behavioral model, Agent Trajectory Sentinel runs at roughly 219 microseconds per step. If you run a single agent in a single repo, skip the category and use a terminal with a token counter — the monitor only pays for itself once you fan out.</p>
+]]></content:encoded></item></channel></rss>
