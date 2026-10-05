@@ -1,0 +1,290 @@
+{
+  "topic": "Apex Inference Chip: Running a Real LLM on an FPGA",
+  "slug": "apex-inference-chip-fpga-llm",
+  "keyword": "fpga llm inference",
+  "type": "review",
+  "research_date": "2026-10-01",
+  "summary": "APEX (github.com/SigmanticAI/apex-inference-chip) is a fully open, verification-first FPGA inference tile: one transformer decoder layer in real RTL (attention, KV-cache compression, softmax, RMSNorm, RoPE, SwiGLU, residual), every block bit-exact against an executable NumPy golden model, brought up on real FPGA silicon. Apache-2.0, 580 stars / 13 forks, created 2026-08-17, last push 2026-08-18. The headline measured number is deliberately modest: 0.56 tok/s end-to-end for Qwen2.5-0.5B on AWS F2 (VU47P) at the fastest registered image (A0, 62.5 MHz; steady 1.78 s/token, confirmed on two builds) and 0.25 tok/s on the reference A2 15.625 MHz image — a 140x measured climb from the 0.004 tok/s host-driven baseline. The architectural bet is not speed: it is putting the KV-cache codec inside the datapath (per-channel INT4 keys / per-token INT4 values + fp16 outlier lane, precision tiers driven by a token-importance unit), with compression ratios asserted including tags, padding, outlier lanes and the scale bank (KVQ4 D=128 = 4.5625 b/v stored = 3.51x; codec ceiling 4.125 b/v = 3.88x). Accuracy through the verified codec is measured on the full 10,042-document HellaSwag validation set on Qwen2.5-7B: KVQ8 shows no detectable effect (0.7814 -> 0.7809, paired z = -0.57, 9,965/10,042 documents identical), KVQ4 a small but definitively real ~1.2-point cost (z = -5.87) that is exactly why the outlier tier exists. Verification depth is the differentiator: 152,883 L3 e2e checks, 193-check F2 on-card battery, mutation-tested testbenches, machine-generated counts and an anti-fabrication rule. The honest scope: this is ONE tile, no DRAM controller / PCIe / NoC; the 7B end state (6.5-25.9 tok/s projected on LPDDR5X, ~3 W, 32k-64k context held flat by KV compression, 5-10x less energy per token than a desktop GPU at the same single-stream job) is a projection from a calibrated analytic model with three load-bearing unbuilt lanes: native-W4 weights, the hardware layer walker, wide LPDDR. The project explicitly does NOT claim method novelty (KIVI/KVQuant lineage; Titanus GLSVLSI'25, Kelle MICRO'25 prior art) and never claims a speed win over GPUs.",
+  "competitors": [
+    {
+      "url": "https://github.com/SigmanticAI/apex-inference-chip",
+      "key_points": [
+        "PRIMARY SOURCE (the artifact under review). 'A fully open, verification-first LLM-inference tile.' One transformer decoder layer in real RTL: attention, KV-cache compression, softmax, RMSNorm, RoPE, SwiGLU, residual. Apache-2.0. 580 stars / 13 forks; created 2026-08-17, last push 2026-08-18; homepage sigmanticai.com.",
+        "Tagline frames the thesis: 'GPUs are built to compute. This tile is built to remember.' The KV codec lives in the datapath so reading speed is designed to stay flat as context grows.",
+        "Deliberate scope honesty: 'this is one tile - no DRAM controller, no PCIe, no NoC (out of scope by charter)'; demonstrated end-to-end on Qwen2.5-0.5B on FPGA; the 7B spec (docs/spec/APEX7B_SPEC.md) is a paper architecture; Qwen2.5-7B tokens ran only through the software-verified golden pipeline, not silicon.",
+        "Measured vs projected is a formal rule: 'a number is either measured on hardware/simulation, or it is a projection from the calibrated analytic model - and it says which. No blended claims.' All projected end-state performance lives in perf/ and is labeled ALL PROJECTED.",
+        "Built with Sigmantic AI (YC-backed); Polaris Engine verification agents. Verdict-relevant caveat: the repo is a vendor artifact (the company sells the verification tooling), though every claim links to a test and log line."
+      ]
+    },
+    {
+      "url": "https://github.com/SigmanticAI/apex-inference-chip/blob/main/docs/results/prompt_on_chip/FIRST_WALKED_TOKENS.md",
+      "key_points": [
+        "The concrete on-silicon result the review should lead with: prompt 'The capital of France is' -> generated ' Paris. It', greedy decode, token-identical to the host-golden reference at every token, on card i-0f5efed9674c4d6e3 (terminated+verified), harness token_loop.py run --engine hw-walked --tokens 3 --ddr-attested.",
+        "72/72 walked chains, 0 refused, every walked value bit-exact (144/144 QKV INT32 accumulators + 896/896 r1 f16 per chain); DDR image full-verified on load: 240 tensors, 5,595,456 words, 0 fails.",
+        "Measured end-to-end: 3 tokens / 43.38 s = 0.069 tok/s with per-token wall 19.15 / 12.09 / 12.15 s (first token carries warmup); walked MAC share 8.53% (44,040,192 / 516,196,352). Honest sentence: 'the first tokens ever produced with walked chains on APEX silicon, 17x faster end-to-end than the previous measured baseline, with 8.53% of the arithmetic on the walked path and every walked value bit-exact.'",
+        "The wall is transport, not the tile: 24 executor invocations/token at ~0.5 s each, while the walk window itself is ~36 ms at A2. Measured transport ladder (same card class/image): per-layer invocations 12.1 s/token -> one batched invocation 11.3 s -> + parallel program emission (12-wide pool) 5.8 s/token = ~0.17 tok/s, 2.1x the earlier number and 43x the July baseline, with all gates holding at every rung.",
+        "Remaining per-token profile: golden python composition ~2.5-3 s (shrinks only by walking more steps), pooled emission ~1 s, execution+grading ~1.5-2 s. Next levers in order: walk attention (E-7 mask) into the chain, A0 (4x clock), W4 (2x fetch)."
+      ]
+    },
+    {
+      "url": "https://github.com/SigmanticAI/apex-inference-chip/blob/main/STATUS.md",
+      "key_points": [
+        "GENERATED FILE (scripts/gen_status.py parses real suite logs; anti-fabrication rule) - the only source of published counts. HEAD e134f29, generated 2026-07-26.",
+        "Verification mass: top/l3 152,883 checks across all 28 cases (incl. CQ-8/CQ-4+/TIP-auto mixed tiers, D=64+128, T<=128) + tile mutation gate; top/l2 18,863 checks; top/smoke 6,751 + 209,741 cycles with 2,176 + 4,240 checks, 0 errors; golden LIVE gate 'ALL 120 CASES WITHIN DERIVED BUDGET (hard + statistical)'.",
+        "Exhaustive-domain proofs worth quoting: asu/silu 65,536/65,536 input patterns bit-exact; residual 20,012/20,012 fp16 vectors; kvq/fparith 8,748,634 checks / 0 fails; rope 12,288/12,288 channel-pair vectors; kvq/replay 382,200 checks on real Qwen2.5-7B K/V rows with 0 fails.",
+        "LOC: 72,275 total working tree - verif 27,760 SV/SVH + 21,043 py, golden 5,884 py, seq (walker) 2,440, kvq 2,530, mxe 1,884, top 4,945. Only two suites not PASS: audit_seq and audit_csr (NO-RUN).",
+        "Known-limitations register lives in TRACEABILITY.md (24 entries); a 'D-022 tier-quality' register documents that CQ-4 is out-of-quality-budget on outlier-bearing data (7.1% of value scale vs a 5% contract) which is exactly why TIP tier-select exists."
+      ]
+    },
+    {
+      "url": "https://arxiv.org/abs/2502.10659 (Pushing up to the Limit of Memory Bandwidth and Capacity Utilization for Efficient LLM Decoding on Embedded FPGA)",
+      "key_points": [
+        "The embedded-FPGA bar APEX is measured against: LLaMA2-7B on a Zynq KV260 (4 GB 64-bit 2400 Mbps DDR4, <20 GB/s) at ~5 tok/s, using 93.3% of memory capacity and reaching 85% of the theoretical memory-bandwidth limit.",
+        "Bare-metal, no OS, to reserve capacity for weights + KV cache; operator-fusion pipeline and a data arrangement format to maximize transaction efficiency.",
+        "Claimed as the first attempt to deploy a 7B-level LLM on a standalone embedded FPGA. This is the 'bandwidth wall' reference point: decode is purely bandwidth-bound, 4-bit 7B weights already = 3.5 GB."
+      ]
+    },
+    {
+      "url": "https://arxiv.org/abs/2507.03308 (Hummingbird: A Smaller and Faster Large Language Model Accelerator on Embedded FPGA)",
+      "key_points": [
+        "LLaMA3-8B at 4.8 tok/s on KV260 and 8.6 tok/s on ZCU104 with 93-94% model bandwidth utilization, beating the 4.9 tok/s / 84% LLaMA2-7B prior baseline.",
+        "67% LUT, 39% DSP and 42% power savings over existing research; overcomes the typical 4 GB embedded-FPGA memory constraint via offloading strategies.",
+        "The productization follow-on (Hummingbird+, FPGA 2026) is explicitly 'from research prototype to edge product' - the trajectory most academic FPGA-LLM work does not make."
+      ]
+    },
+    {
+      "url": "https://arxiv.org/abs/2502.16473 (TerEffic: Highly Efficient Ternary LLM Inference on FPGA)",
+      "key_points": [
+        "Fully on-chip ternary design: 370M-parameter model at 16,300 tok/s single-batch, 455 tok/s/W, 192x Jetson Orin Nano throughput and 19x power-efficiency improvement; HBM-assisted variant does 727 tok/s for larger models.",
+        "Shows why on-chip weight residency + ternary quantization is the speed extreme; contrasts with APEX's choice to stream weights from DDR and keep a real 0.5B model.",
+        "Companion datapoint: TeLLMe (FPGA 2026, UCI-CORSA) - end-to-end ternary prefill+decode with table-lookup matmul on edge FPGAs."
+      ]
+    },
+    {
+      "url": "https://mikeayles.com/blog/on-chip-llm-kv260",
+      "key_points": [
+        "Taalas-style on-chip weights on a $250 Xilinx Kria KV260: a 3.16M-parameter INT4 transformer entirely in on-chip URAM/BRAM, zero DRAM in the token loop, 59,965 tok/s on the fabric, bit-exact (earlier Show HN demo quoted 21,000 tok/s).",
+        "Scale comparison that disciplines any FPGA-LLM claim: 'I had ~3 MB of memory to work with' (18 Mb URAM + ~5 Mb BRAM); the same board's Arm cores manage 11 tok/s; an RTX 3050 Ti manages 719 tok/s. 3.16M params is a TinyStories-class model, not an assistant.",
+        "Live WebSocket demo through a Cloudflare tunnel to a single FPGA in Wales; HN discussion (79 points / 33 comments) is the most active community thread on FPGA LLM inference, and its criticisms are the review's best counterarguments: per-user latency degrades from 17 ms p50 solo to multi-second at 500-1000 connections (aggregate throughput is flat), GPUs win on training/economics, and 'hardware people love to say FPGA design is hard, but it really isn't' cuts both ways."
+      ]
+    },
+    {
+      "url": "https://nicholi.ai/2026/06/09/multiply-free-a-ternary-llm-engine-on-a-130-fpga.html",
+      "key_points": [
+        "ternfpga: multiply-free ternary LLM engine on a $130 Xilinx Arty A7-35T, benchmarked head-to-head against an RTX 3060 in the same machine; ~1.6 J/token estimated (derived, three of four ingredients silicon-measured) vs 3.67 J/token for the GPU and 4.62 for a six-year-old desktop CPU - a ~2.3x energy win.",
+        "The framing the review should steal: batch-1 decode is a memory problem, not a math problem, so a board cheaper than the GPU's electricity can compete on energy while losing badly on speed (the GPU was actually slower than the CPU: 23.5 vs 28.4 tok/s).",
+        "Labeling discipline worth citing approvingly: every number tagged silicon-measured, derived, or projected - the same taxonomy APEX uses (measured/projected), and a good foil for hype-style FPGA posts."
+      ]
+    },
+    {
+      "url": "https://github.com/adamgallas/llama-fpga",
+      "key_points": [
+        "The established open-source FPGA-LLM project: LLaMA2-7B in AWQ 4-bit across four subprojects - KV260 (PS 4 GB), ZCU104 (PL-only and PS/PL hybrid), Alveo U250 (all four DDR4 channels). DATE'25 / ICCAD'25; 209 stars / 32 forks.",
+        "The open-source comparison point for APEX: llama-fpga ships a working 7B system with Vivado/Vitis projects and demo videos but no comparable bit-exact verification story; APEX ships verified RTL and a tile but no 7B on silicon. Neither is a drop-in product.",
+        "Useful for the 'what can you actually run yourself' section: KV260 needs an >=8 GB SD card, ZCU104 needs a 4 GB DDR4 SODIMM."
+      ]
+    },
+    {
+      "url": "https://arxiv.org/abs/2608.28048 (AI Hardware Accelerators for Large Language Models: Architectures and the Memory Wall)",
+      "key_points": [
+        "2026 survey that supplies the review's framing: 'the decisive constraint on LLM acceleration is not arithmetic but memory' - the autoregressive decode phase is bandwidth-bound, the KV cache can rival the model weights in size, and data movement dominates energy.",
+        "Roofline/transformer-structure analysis across GPUs, ASICs (TPU, Trainium, Groq, Cerebras), FPGAs, processing-in-memory, neuromorphic and photonic; no single architecture is optimal across workloads.",
+        "Verdict sentence to echo: GPUs remain the flexible default and the training workhorse; domain-specific ASICs win at scale; PIM is the most promising near-term answer to the memory wall as a heterogeneous complement."
+      ]
+    },
+    {
+      "url": "https://arxiv.org/abs/2405.00738 (HLSTransform: Energy-Efficient Llama 2 Inference on FPGAs Via High Level Synthesis)",
+      "key_points": [
+        "The most-cited energy datapoint in this niche: up to 12.75x less energy per token than an Intel Xeon E5-2686 v4 and 8.25x less than an RTX 3090 on a VU9P FPGA, while being 2.46x faster than the CPU and 0.53x the speed of the RTX 3090.",
+        "HLS (not RTL) prototyping - the pragmatic road APEX explicitly does not take, which is why APEX's verification depth is unusually high but its bring-up velocity is lower.",
+        "94 HN points on the arXiv listing: the topic has real audience appetite, which supports the search-volume assumption behind this post."
+      ]
+    },
+    {
+      "url": "https://www.achronix.com/blog/accelerating-llm-inferencing-fpgas",
+      "key_points": [
+        "Vendor-side counterpoint for the 'is FPGA competitive at 70B?' question: Achronix Speedster7t (with Myrtle.ai) benchmarked Llama2-70B, batch 1, (1,128) sequence vs leading GPUs - but results are 'available upon request', i.e. unverifiable marketing.",
+        "Myrtle.ai's Vollo SDK ('low latency streaming inference of ML models on FPGA platforms') is the commercial product line that actually sells FPGA inference today.",
+        "Useful as the 'claims you cannot check' example in an honesty-focused review, contrasted with APEX's committed bitstream/logs and the nicholi-style measured/derived/projected tagging."
+      ]
+    },
+    {
+      "url": "https://arxiv.org/abs/2511.06174 (LUT-LLM: Efficient LLM Inference with Memory-based Computations on FPGAs, FCCM 2026)",
+      "key_points": [
+        "The 2025-26 research direction that competes with the GEMM-centric approach: shift inference from arithmetic-based to memory-based computation (table lookups) using the FPGA's abundant distributed on-chip memory; first FPGA accelerator to deploy a 1B+ model with memory-based computation via activation-weight vector co-quantization.",
+        "Bandwidth-aware parallel centroid search, efficient 2D table lookups, spatial-temporal hybrid design - the direct answer to the objection that FPGAs have too few multipliers to beat GPUs at matmul.",
+        "Companion work in the same lane: SkipOPU (ACM TRETS 2026) for dynamically allocated computation across tokens/layers, and CascadeLUT (arXiv 2608.00720) for bandwidth-constrained streaming inference."
+      ]
+    }
+  ],
+  "stats": [
+    {
+      "fact": "APEX measured end-to-end throughput on real FPGA silicon: 0.56 tok/s on the fastest registered image (A0, 62.5 MHz, steady 1.78 s/token, confirmed on two builds) and 0.25 tok/s on the reference image (A2, 15.625 MHz), for Qwen2.5-0.5B through one transformer decoder layer in RTL.",
+      "source": "https://github.com/SigmanticAI/apex-inference-chip README section 6"
+    },
+    {
+      "fact": "The measured climb is 140x: from a 0.004 tok/s host-driven baseline (July 30 prompt demo) to 0.56 tok/s; the intermediate graded-hybrid rung measured 0.069 tok/s (3 tokens / 43.38 s) and 5.8 s/token (~0.17 tok/s) after parallel program emission.",
+      "source": "README section 6; docs/results/prompt_on_chip/FIRST_WALKED_TOKENS.md"
+    },
+    {
+      "fact": "On-card verification battery: 193 checks, 0 fails; 72/72 walked chains bit-exact with 144/144 QKV INT32 accumulators + 896/896 residual f16 per chain; DDR weight image full-verified as 240 tensors / 5,595,456 words / 0 fails.",
+      "source": "docs/results/prompt_on_chip/FIRST_WALKED_TOKENS.md"
+    },
+    {
+      "fact": "Simulation verification mass: top/l3 152,883 checks over 28 end-to-end cases (D=64+128, T<=128, CQ-8/CQ-4+/TIP-auto tiers) with a 3/3 tile mutation gate; top/l2 18,863 checks; golden gate 'ALL 120 CASES WITHIN DERIVED BUDGET'.",
+      "source": "https://github.com/SigmanticAI/apex-inference-chip/blob/main/STATUS.md"
+    },
+    {
+      "fact": "Exhaustive-domain proofs: SiLU 65,536/65,536 input patterns bit-exact; fp16 residual-add 20,012/20,012; KVQ integer fp-arith 8,748,634 checks / 0 fails; RoPE 12,288/12,288 channel-pair vectors; real Qwen2.5-7B K/V RTL replay 382,200 checks / 0 fails.",
+      "source": "STATUS.md (machine-generated from suite logs, generated 2026-07-26)"
+    },
+    {
+      "fact": "KVQ4 at D=128 stores 4.5625 bits/value = 3.51x compression as a real SRAM record (tags, padding, outlier lane and scale bank all counted); the codec ceiling is 4.125 b/v = 3.88x. 'The number that survives is the number the SRAM actually sees.'",
+      "source": "STATUS.md section 2 (golden/tests/test_effective_bits.py, pinned gate)"
+    },
+    {
+      "fact": "Accuracy through the verified codec on the full 10,042-document HellaSwag validation set, Qwen2.5-7B (4-bit MLX weights): base 0.7814; KVQ8 0.7809 (paired delta -0.0005 +/- 0.0009, z = -0.57, 9,965/10,042 documents identical); KVQ4 0.7698 (delta -0.0117 +/- 0.0020, z = -5.87). KVQ8 shows no detectable effect; KVQ4 has a small, definitively real ~1.2-point cost.",
+      "source": "docs/results/s5_eval7b/RESULTS.md"
+    },
+    {
+      "fact": "Smaller-model full-set results (FP16 weights): Qwen2-0.5B 0.4905 FP16 -> 0.4817 KVQ8 / 0.4720 KVQ4 / 0.4774 KVQ4+; Qwen2-1.5B 0.6544 -> 0.6400 / 0.6461 / 0.6462. Deltas span -0.008 to -0.019, i.e. 'near-lossless: worst-case ~1.9 points, typical ~1 point'; tier-vs-tier orderings remain noise even at n=10,042.",
+      "source": "docs/results/s4_head2head/RESULTS.md"
+    },
+    {
+      "fact": "Open-flow place-and-route on Lattice ECP5-85F (speed-6, sv2v -> yosys synth_ecp5 -abc9 -> nextpnr-ecp5, --freq 40 --seed 2): shipping-config KVQ engine closes at 34.11 MHz, 3.7x over the 9.19 MHz honest re-baseline; utilization 19,368 logic LUTs (23%), 4,484 carry LUTs (5%), 38 DP16KD (18%). Bitstream committed in-repo.",
+      "source": "docs/results/s10_fmax/RESULT.md"
+    },
+    {
+      "fact": "Routing-seed finding worth a sidebar: seed 1 placement of the identical design degenerated for 35 h and 11 h before being killed; seed 2 routes the same netlist in ~4.5 minutes. 'A stuck route is a seed problem before it is a frequency problem.'",
+      "source": "docs/results/s10_fmax/RESULT.md"
+    },
+    {
+      "fact": "AWS F2 bring-up: the full attention tile + OCL bridge built clean in Vivado 2025.2, synthesis+place&route in 15 m 39 s with zero errors, post-route timing MET at 250 MHz on VU47P (worst slack +0.711 ns); BAR0 probe of the verified CSRs ALL PASS on an f2.6xlarge. Total cost of the whole arc (dev box + 4 build iterations + AFI + smoke session): about $12.",
+      "source": "docs/results/f2_firstlight/RESULT.md"
+    },
+    {
+      "fact": "Repository scale and traction: 72,275 LOC in the working tree (27,760 SV/SVH testbench + 21,043 py verification, 5,884 py golden models, 2,440 seq walker, 2,530 kvq, 4,945 top); Apache-2.0; 580 stars / 13 forks; created 2026-08-17, last push 2026-08-18.",
+      "source": "STATUS.md section 3 + GitHub API (repos/SigmanticAI/apex-inference-chip)"
+    },
+    {
+      "fact": "PROJECTED (never measured) end state: 7B-class decode at 6.5 / 13.0 / 25.9 tok/s on LPDDR5X x32 / x64 / x128 (70% efficiency) with W4 weights + KVQ4 records; INT8 weights on x64 projects only 6.7 tok/s, which is why the unbuilt W4 path is called load-bearing. A x32 channel projects 6.5 tok/s, below the 10 tok/s floor.",
+      "source": "docs/results/perf_model/PERF_MODEL.md section 3a (file is labeled ALL PROJECTED)"
+    },
+    {
+      "fact": "PROJECTED energy/context pitch: 7B at reading speed on ~3 W with 32k-64k context held flat by KV compression, 5-10x less energy per token than a desktop GPU at the same single-stream job - and explicitly never a speed win over GPUs. KV cache is 28,672 values/token (GQA) = 56 KiB/token FP16 vs 16.0 KiB/token as KVQ4 stored records.",
+      "source": "README section 7 + PERF_MODEL.md assumptions"
+    },
+    {
+      "fact": "KV compression is already a published family - KIVI and KVQuant per-channel-INT4-K / per-token-INT4-V with outlier handling; hardware-native KV compression has prior art (Titanus GLSVLSI'25, Kelle MICRO'25). APEX states 'We do not claim method novelty'; its contribution claim is the integrated, verified hardware.",
+      "source": "README section 10 (Method, prior art, provenance)"
+    },
+    {
+      "fact": "Embedded-FPGA baseline: LLaMA2-7B on a Zynq KV260 (4 GB 64-bit 2400 Mbps DDR4, <20 GB/s) decodes at ~5 tok/s using 93.3% of memory capacity and 85% of the theoretical memory-bandwidth limit, in a bare-metal environment with operator fusion.",
+      "source": "https://arxiv.org/abs/2502.10659"
+    },
+    {
+      "fact": "Hummingbird runs LLaMA3-8B at 4.8 tok/s (KV260) and 8.6 tok/s (ZCU104) with 93-94% model bandwidth utilization, and cuts 67% LUT / 39% DSP / 42% power vs prior research; its FPGA-2026 follow-on Hummingbird+ is explicitly a research-prototype-to-edge-product step.",
+      "source": "https://arxiv.org/abs/2507.03308"
+    },
+    {
+      "fact": "The speed extreme on FPGAs is on-chip residency, not streaming: TerEffic's fully on-chip ternary design does 16,300 tok/s on a 370M-parameter model at 455 tok/s/W (192x Jetson Orin Nano throughput, 19x power efficiency); an HBM-assisted variant reaches 727 tok/s for larger models.",
+      "source": "https://arxiv.org/abs/2502.16473"
+    },
+    {
+      "fact": "The energy argument, measured in the same machine: a $130 Arty A7-35T ternary engine (ternfpga) is estimated at 1.6 J/token vs 3.67 J/token for an RTX 3060 and 4.62 J/token for a six-year-old desktop CPU; the GPU was also slower than the CPU (23.5 vs 28.4 tok/s) at batch-1 decode.",
+      "source": "https://nicholi.ai/2026/06/09/multiply-free-a-ternary-llm-engine-on-a-130-fpga.html"
+    },
+    {
+      "fact": "HLSTransform (HLS Llama-2 on a VU9P) cuts energy per token by up to 12.75x vs a Xeon E5-2686 v4 and 8.25x vs an RTX 3090, is 2.46x faster than the CPU and 0.53x the RTX 3090's speed.",
+      "source": "https://arxiv.org/abs/2405.00738"
+    },
+    {
+      "fact": "2026 survey framing: 'the decisive constraint on LLM acceleration is not arithmetic but memory' - autoregressive decode is bandwidth-bound, the KV cache can rival the model weights in size, and data movement dominates energy; no single architecture is optimal across workloads.",
+      "source": "https://arxiv.org/abs/2608.28048"
+    },
+    {
+      "fact": "On-chip-residency extreme on commodity hardware: a 3.16M-parameter INT4 transformer (TinyStories class, ~1.5 MB at INT4) runs entirely in the KV260's URAM/BRAM at 59,965 tok/s bit-exact with zero DRAM in the token loop (21,000 tok/s in the earlier demo); the same board's Arm cores do 11 tok/s and an RTX 3050 Ti does 719 tok/s.",
+      "source": "https://mikeayles.com/blog/on-chip-llm-kv260 (+ HN item 49242475, 79 points / 33 comments)"
+    },
+    {
+      "fact": "Hardware cost envelope: Xilinx Kria KV260 starter kit ~$249 with 4 GB 64-bit DDR4 (the shared PS/PL controller being 'the bandwidth wall'); AWS f2.6xlarge at $1.98/hour on-demand ($0.697/hour spot) with 24 vCPUs / 256 GiB; the comparable f2.48xlarge at $15.84/hour.",
+      "source": "amd.com/kv260 + instances.vantage.sh/aws/ec2/f2.6xlarge + aws-pricing.com"
+    },
+    {
+      "fact": "The community's strongest counterarguments (from the most active HN thread on FPGA LLM inference): FPGAs are not power-efficient if fully saturated by LLM inference; GPUs scale for both training and inference with a far lower technical floor; and aggregate throughput stays flat while per-user latency degrades (17 ms p50 solo -> ~6.3 s at 1,000 connections).",
+      "source": "https://news.ycombinator.com/item?id=49242475 (HN Algolia item 49242475)"
+    },
+    {
+      "fact": "Sustained demand signal for the keyword set: 94 HN points on the HLSTransform paper, 79 on the $250-FPGA demo, plus recurring Ask HN threads 'Who is using FPGA for ML inference?' and 'Why isn't FPGA adoption exploding now that LLMs can write HDL?' - i.e. the readership wants the practical 'should I actually do this' answer that a review supplies.",
+      "source": "HN Algolia search (tags=story) for 'FPGA LLM', 'FPGA inference', 'LLM inference'"
+    }
+  ],
+  "angles": [
+    "Lead with the honest number, not the hype: 0.56 tok/s for a real 0.5B model through verified RTL on real silicon, a 140x measured climb from 0.004 tok/s. That inversion (slow number first) is the differentiator against every 'FPGA beats GPU' post and is what earns reader trust.",
+    "The architectural bet is memory, not math: put the KV-cache codec inside the datapath so reading speed stays flat as context grows. Anchor with the survey line 'the decisive constraint on LLM acceleration is not arithmetic but memory', then show APEX's compressed-in-SRAM record accounting (4.5625 b/v = 3.51x).",
+    "Honest accounting as a feature: compression ratios asserted including tags/padding/outlier lanes/scale bank; counts machine-generated into STATUS.md; mutation-tested testbenches and an anti-fabrication rule; measured-vs-projected labeled everywhere. Contrast with vendor benchmarks whose 'results are available upon request'.",
+    "What accuracy actually costs: full 10,042-document HellaSwag at n=10k - KVQ8 is free (z = -0.57, 9,965/10,042 identical) and KVQ4 costs ~1.2 points (z = -5.87). This is the kind of quantified, reproducible degradation most KV-quantization writeups avoid.",
+    "FPGA vs GPU, resolved for the reader: never a speed win; a possible 5-10x energy-per-token win at the same single-stream job; the real FPGA value is on-chip residency (59,965 tok/s on a 3.16M model) and energy (1.6 vs 3.67 J/token) at small batch, not throughput at frontier scale.",
+    "The scale ladder that disciplines every FPGA-LLM claim: 0.5-3.16M params on-chip at tens of thousands of tok/s vs 7-8B streamed at 4.8-5 tok/s (KV260/ZCU104) vs APEX's one verified tile at 0.56 tok/s. Put the models, boards and numbers in one table and the tradeoff becomes obvious.",
+    "The unbuilt lanes are the story's second half: hardware layer walker, native-W4 weight path, wide LPDDR. Two of the three load-bearing dependencies of the projected 7B performance do not exist yet, which is exactly how to read the projection honestly.",
+    "Reproducibility as a practical hook: clone and run the golden gate + Verilator suites locally (Verilator 5.x, Python 3.11 + NumPy), or spend ~$2 and 30 minutes on f2.6xlarge ($1.98/hour) to fly the committed AGFI and run the 193-check battery plus the interactive prompt CLI. Very few hardware projects let a reader do this.",
+    "The methodology is the product: APEX is built by a YC-backed verification-agent company (Sigmantic AI / Polaris Engine), so the tile doubles as a proof of the tooling. Say that plainly - the review's credibility comes from naming the vendor interest, not hiding it.",
+    "Where this is genuinely novel and where it is not: the codec is KIVI/KVQuant lineage and hardware KV compression has prior art (Titanus GLSVLSI'25, Kelle MICRO'25); the contribution claim is an open, bit-exact-verified RTL implementation with a committed bitstream and padding-inclusive accounting. Reviewers who miss that will over-claim."
+  ],
+  "keywords": [
+    "fpga llm inference",
+    "apex inference chip",
+    "run llm on fpga",
+    "fpga vs gpu llm inference",
+    "fpga llm inference review",
+    "kv cache compression fpga",
+    "in-datapath kv compression",
+    "int4 kv cache quantization accuracy",
+    "qwen2.5 on fpga",
+    "aws f2 fpga llm",
+    "kv260 llm inference",
+    "7b llm on embedded fpga",
+    "open source fpga llm accelerator",
+    "bit-exact rtl verification llm",
+    "fpga llm energy per token",
+    "ternary llm fpga engine",
+    "on-chip weights llm fpga tok/s",
+    "memory bandwidth wall llm inference",
+    "hellaswag kv quantization",
+    "apex tinynpu",
+    "sigmantic apex inference chip",
+    "fpga llm inference tokens per second comparison",
+    "llama-fpga vs apex",
+    "hls vs rtl llm accelerator",
+    "llm inference accelerator power efficiency fpga",
+    "ecp5 kvq engine fmax",
+    "f2.6xlarge cost llm fpga"
+  ],
+  "outline": [
+    "H2: What APEX actually is (one verified tile, not a chip)",
+    "H2: The numbers that matter: 0.56 tok/s measured, a 140x climb, and why the slow number leads",
+    "H2: A decode step through the tile - how the RTL is organized (MXE, KVQ, ASU, RoPE, TIP, SEQ, SEAM, XBR)",
+    "H2: The architectural bet: the KV cache lives compressed, inside the datapath",
+    "H2: What the compression actually costs - full-set HellaSwag (KVQ8 free, KVQ4 -1.2 points)",
+    "H2: Verification-first: bit-exact golden models, mutation gates and the anti-fabrication rule",
+    "H2: On real hardware: the ECP5 bitstream, the AWS F2 bring-up, and the 193-check battery",
+    "H2: Where the wall really is - transport, not silicon (12.1 s -> 5.8 s per token)",
+    "H2: APEX in context: KV260 at 5 tok/s, Hummingbird at 4.8, TerEffic at 16,300, on-chip at 59,965",
+    "H2: Measured vs projected: the three unbuilt lanes behind the 7B performance promise",
+    "H2: FPGA vs GPU for LLM inference: when the FPGA wins (energy, residency) and when it does not (speed, scale)",
+    "H2: Cost and reproducibility: a $249 KV260, a $1.98/hour F2 card, and a $12 build arc",
+    "H2: Verdict: who should care about APEX - and what to watch next"
+  ],
+  "sources_unavailable": [
+    "No independent third-party review or press coverage of APEX was found - the GitHub repo and its committed evidence directories are effectively the only source, so every APEX number in this brief traces to the project itself (README, STATUS.md, docs/results/*).",
+    "Achronix Speedster7t Llama2-70B benchmark numbers: blog states 'results available upon request' - not verifiable.",
+    "CD-LLM (ACM, 70B+ batched decoding on multi-FPGA) and SkipOPU (ACM TRETS) full texts are paywalled; only abstract-level facts were used.",
+    "TRINE (arXiv 2603.22867, token-aware runtime-adaptive FPGA inference engine for multimodal AI) was returned only as a PDF link; full text not extracted this run."
+  ],
+  "notes": [
+    "Task type in the issue description is 'review' (topics.json: search_volume_est 250, kd_est 5, cluster 'LLM comparison', paperclip_issue BLO-3654). Keyword 'fpga llm inference' has a low-difficulty profile; the SERP is dominated by arXiv papers and GitHub repos rather than review articles, so a hands-on, number-dense review with a clear verdict should be competitive.",
+    "Recommended lead image/table idea: the scale ladder (params, board, tok/s, power) - 3.16M on-chip 59,965 tok/s / 370M ternary 16,300 tok/s / 7-8B streamed 4.8-5 tok/s / APEX 0.5B verified tile 0.56 tok/s. It is honest and immediately positions APEX correctly.",
+    "Every APEX figure used must keep its measured/projected label - the project's own rule, and the fastest way for the post to lose credibility is to quote the 25.9 tok/s projection as if it were silicon.",
+    "Verified against the live repo on 2026-10-01: stars 580, forks 13, pushed_at 2026-08-18, Apache-2.0, open_issues 0. Re-check these before publishing if the post sits for a while."
+  ]
+}
