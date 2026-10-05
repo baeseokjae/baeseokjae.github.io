@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Persistent VMs for AI Agents on RockB</title><link>https://baeseokjae.github.io/tags/persistent-vms-for-ai-agents/</link><description>Recent content in Persistent VMs for AI Agents on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 01 Oct 2026 05:11:21 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/persistent-vms-for-ai-agents/index.xml" rel="self" type="application/rss+xml"/><item><title>machine0 Review 2026: Persistent CPU and GPU VMs From the CLI</title><link>https://baeseokjae.github.io/posts/machine0-persistent-cpu-gpu-vms-cli/</link><pubDate>Thu, 01 Oct 2026 05:11:21 +0000</pubDate><guid>https://baeseokjae.github.io/posts/machine0-persistent-cpu-gpu-vms-cli/</guid><description>machine0 CLI VMs are persistent KVM machines for agents: full CPU/GPU VMs from 1 vCPU at $0.013/hr to 8x H200, driven by CLI or MCP. Review inside.</description><content:encoded><![CDATA[<p>machine0 CLI VMs are full KVM/QEMU virtual machines that stay on until you stop, suspend or destroy them — driven either from a command line where every command accepts <code>--json</code>, or from a remote MCP server. CPU machines start at 1 vCPU / 1 GB for $0.013/hr (~$9/month) and scale to 60 vCPU / 240 GB at $3.714/hr; GPU machines go from one RTX 4000 Ada at $0.836/hr up to 8x H200 with 1,128 GB of combined VRAM.</p>
+<p>That is the short answer, and it is also the entire pitch. machine0 (Y Combinator S26, founded by Barnaby Malet) is not competing on cold starts, and it is not trying to be the cheapest compute on the market. It is betting that a specific class of agent workload — coding agents that run six to eight hours, auto-research and RL loops that run for days, 24/7 fleets like OpenClaw — no longer fits the ephemeral sandbox model that E2B, Modal and Daytona optimized for. This review covers what the product actually does on 2026-10-01, what it costs line by line, where the billing traps are, and who should not buy it.</p>
+<h2 id="what-exactly-is-machine0--a-sandbox-or-a-computer">What exactly is machine0 — a sandbox or a computer?</h2>
+<p>It is a computer. Every machine0 VM is a genuine KVM/QEMU virtual machine, not a container and not a gVisor sandbox, which means you get kernel-level access and the real GPU driver exposed inside the guest <a href="https://news.ycombinator.com/item?id=49348136">per the founder on the launch thread</a>. That single architectural choice cascades into everything else: you can load kernel modules, run Docker inside, attach a real NVIDIA driver, and keep a working tree alive for as long as you keep paying.</p>
+<p>Fly.io&rsquo;s own taxonomy is the cleanest way to place it. In <a href="https://fly.io/learn/agent-sandbox-providers/">fly.io&rsquo;s agent sandbox guide</a>, agents buy one of three product shapes: a stateless code runner, a persistent computer, or a control plane that manages fleets of either. machine0 is squarely the second category, and the guide names the failure mode it avoids — &ldquo;pick by feature list and you find out in week three that your coding agent&rsquo;s working tree evaporated at the ten-minute mark.&rdquo;</p>
+<p>The founder&rsquo;s framing of the problem is worth quoting because it explains the product&rsquo;s shape. Agent workloads moved from ephemeral to always-on, and the four named pain points are resources (a few agents saturate RAM and CPU), security (<code>--yolo</code> on your laptop is one prompt injection away from exfiltrated credentials), availability (close the laptop and the agent dies mid-task), and isolation.</p>
+<h3 id="is-it-ephemeral-like-e2b-or-persistent-like-a-vps">Is it ephemeral like E2B, or persistent like a VPS?</h3>
+<p>Persistent by default, and this is the sharpest difference in the category. An <a href="https://dev.to/saptadev27/cloud-computers-for-ai-agents-in-2026-a-practical-comparison-5dbd">independent seven-product comparison published on dev.to</a> found that machine0 and Fly.io Sprites persist indefinitely, while OpenComputer v2 caps at a hard eight hours and E2B, Vercel Sandbox and Modal cap a continuous session at 24 hours on paid plans.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Product</th>
+          <th>Isolation</th>
+          <th>Max continuous lifetime</th>
+          <th>Billing model</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>machine0</td>
+          <td>Full KVM/QEMU VM</td>
+          <td>Indefinite (until you destroy it)</td>
+          <td>Per-minute, always-on until suspended</td>
+      </tr>
+      <tr>
+          <td>Fly.io Sprites</td>
+          <td>Firecracker microVM</td>
+          <td>Indefinite</td>
+          <td>Per-second active with scale-to-zero</td>
+      </tr>
+      <tr>
+          <td>E2B</td>
+          <td>Firecracker microVM</td>
+          <td>24 hours (paid)</td>
+          <td>Per-second full duration</td>
+      </tr>
+      <tr>
+          <td>Daytona</td>
+          <td>Container (VM/GPU classes)</td>
+          <td>24 hours (paid)</td>
+          <td>Per-second full duration</td>
+      </tr>
+      <tr>
+          <td>Vercel Sandbox</td>
+          <td>Firecracker microVM</td>
+          <td>24 hours (paid)</td>
+          <td>Per-second active CPU</td>
+      </tr>
+      <tr>
+          <td>Modal</td>
+          <td>gVisor</td>
+          <td>24 hours (paid)</td>
+          <td>Per-second active with scale-to-zero</td>
+      </tr>
+      <tr>
+          <td>OpenComputer v2</td>
+          <td>Full KVM VM</td>
+          <td>8 hours</td>
+          <td>Per-second full duration</td>
+      </tr>
+  </tbody>
+</table>
+<p>That table is the whole buying decision compressed into four columns. Note the last column and the fourth row together: the usage-billed platforms charge nothing while your agent waits on a model, and machine0 charges for every second the VM is on.</p>
+<h2 id="how-does-an-agent-drive-its-own-fleet-from-the-cli-or-mcp">How does an agent drive its own fleet from the CLI or MCP?</h2>
+<p>Two interfaces, and both are aimed at an agent rather than a human clicking through a console. The CLI is deliberately small — <code>new</code>, <code>ls</code>, <code>rm</code> — and every command accepts <code>--json</code>, so a model parses structured output instead of scraping a table. The same surface is exposed as a remote MCP server, which means Claude Code, Codex or any MCP-capable harness can create and manage VMs as tool calls.</p>
+<p>The founder&rsquo;s explicit positioning is: &ldquo;One command spins up a persistent VM. Your agent drives it via CLI or MCP, building its own fleet from 1 vCPU up to 60 vCPU / 240 GB and 8xH100s.&rdquo;</p>
+<p>The grammar matters more than it sounds. The strongest criticism on the launch thread was that the API is not a moat — one commenter argued it &ldquo;could be vibecoded as a pile of scripts,&rdquo; and pointed out that AWS, GCP, Hetzner and DigitalOcean already have agent-orchestrable APIs. The founder&rsquo;s answer is not that the API is defensible but that it is cheaper in context and turns: a three-verb grammar saves tokens and avoids the orphaned artifacts that real cloud APIs leave behind — security groups, volumes, elastic IPs you forget to delete and pay for.</p>
+<p>That is a fair answer, and it is the right way to evaluate machine0: not as unique infrastructure, but as a smaller interface over infrastructure that already exists. It runs on DigitalOcean today; <a href="https://news.ycombinator.com/item?id=49348136">bring-your-own-cloud is on the roadmap, not shipped</a>.</p>
+<h3 id="what-can-the-agent-do-without-ssh">What can the agent do without SSH?</h3>
+<p>Everything the fleet needs at the API level: create, list, inspect, suspend, snapshot, clone and destroy. Every VM gets a static public IP and HTTPS at <code>&lt;vm&gt;.mac0.io</code>, so a service your agent starts becomes reachable without you configuring DNS or a reverse proxy. The machines ship pre-loaded — the <code>ubuntu-24-04-loaded</code> image includes Docker, Node.js, Python, Go, Rust, Bun, Claude Code, Codex, OpenCode, tmux, zoxide, fzf, ripgrep and bat, per the <a href="https://docs.machine0.io/introduction/faq">machine0 FAQ</a>.</p>
+<h2 id="what-does-machine0-cost-full-cpu-gpu-and-storage-pricing">What does machine0 cost? Full CPU, GPU and storage pricing</h2>
+<p>Pricing is per-minute and identical in all five regions, which is unusual and genuinely useful — no region arbitrage games. <a href="https://docs.machine0.io/introduction/pricing">The authoritative pricing page</a> gives a floor and a ceiling that are 285x apart, so the marketing line &ldquo;from $0.013/hr&rdquo; deserves the criticism it got on launch (&ldquo;It ranges from cold to orange!&rdquo;). Here is the real spread.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Tier</th>
+          <th>Spec</th>
+          <th>Price/hr</th>
+          <th>Approx. monthly</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>small</td>
+          <td>1 vCPU / 1 GB / 25 GB</td>
+          <td>$0.013</td>
+          <td>~$9</td>
+      </tr>
+      <tr>
+          <td>(mid CPU tiers)</td>
+          <td>scales between</td>
+          <td>—</td>
+          <td>—</td>
+      </tr>
+      <tr>
+          <td>6xl</td>
+          <td>60 vCPU / 240 GB / 900 GB</td>
+          <td>$3.714</td>
+          <td>~$2,711</td>
+      </tr>
+  </tbody>
+</table>
+<p>Two CPU variants cut across those tiers. The <code>-nvme</code> variant puts newer-generation CPUs and NVMe disks behind the same vCPU/RAM/disk numbers for higher disk IOPS, and the <code>-premium</code> variant gives dedicated — not shared — vCPUs, which is their fastest single-thread tier. If you are running a compiler or a single-threaded agent loop, <code>-premium</code> is the tier that changes wall-clock time.</p>
+<p>GPU pricing is where machine0 differentiates hardest, because most of the sandbox category has no GPU at all:</p>
+<table>
+  <thead>
+      <tr>
+          <th>GPU tier</th>
+          <th>VRAM</th>
+          <th>Price/hr</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>gpu-4000ada-1 (1x RTX 4000 Ada)</td>
+          <td>20 GB</td>
+          <td>$0.836</td>
+      </tr>
+      <tr>
+          <td>gpu-l40s-1 / gpu-6000ada-1</td>
+          <td>48 GB</td>
+          <td>$1.727</td>
+      </tr>
+      <tr>
+          <td>gpu-mi300x-1</td>
+          <td>192 GB</td>
+          <td>$2.849</td>
+      </tr>
+      <tr>
+          <td>gpu-h100-1</td>
+          <td>80 GB</td>
+          <td>$4.851</td>
+      </tr>
+      <tr>
+          <td>gpu-h200-1</td>
+          <td>141 GB</td>
+          <td>$4.917</td>
+      </tr>
+      <tr>
+          <td>8x MI300X</td>
+          <td>1,536 GB</td>
+          <td>$22.792</td>
+      </tr>
+      <tr>
+          <td>8x H100</td>
+          <td>640 GB</td>
+          <td>$38.808</td>
+      </tr>
+      <tr>
+          <td>8x H200</td>
+          <td>1,128 GB</td>
+          <td>$39.336</td>
+      </tr>
+  </tbody>
+</table>
+<p>Note the version problem: machine0.io&rsquo;s marketing snippet still advertises the older H100 rate of $3.729/hr, while the docs pricing page and an independent write-up both show $4.851/hr. Treat the docs as current and the marketing banner as stale.</p>
+<h3 id="what-are-the-billing-traps">What are the billing traps?</h3>
+<p>Three, and all three are documented and easy to hit.</p>
+<p>First, stopped VMs bill at full rate. The <a href="https://docs.machine0.io/introduction/faq">FAQ</a> is explicit: cloud resources remain reserved while a VM is merely stopped, so only suspend or destroy stops the meter. If you stop a 6xl machine and walk away for a week, you still owe roughly $624.</p>
+<p>Second, suspend is where savings actually live. A suspended VM pays only image storage at $0.078/GB/month, and persistent disks cost about $0.1667/GB/month. Suspending a 900 GB image costs on the order of $70/month instead of $2,711 — a 97.5% reduction, which is the single most valuable habit for anyone running a fleet.</p>
+<p>Third, auto-topup is on by default once a card is saved. There is a $5 minimum top-up and unused credits are refundable, but an always-on fleet plus auto-topup is a compounding-spend pattern worth watching for the first month.</p>
+<h3 id="is-machine0-cheaper-than-e2b-or-daytona">Is machine0 cheaper than E2B or Daytona?</h3>
+<p>At the same shape, for a busy agent, yes — by roughly 3x. The dev.to comparison measured a 2 vCPU / 4 GB machine running flat out for one hour: machine0 $0.052, versus E2B and Daytona at $0.166, Modal at $0.238 and OpenComputer at $0.378.</p>
+<p>But the same review states the counter-case plainly: &ldquo;machine0 bills while stopped, though, and the usage-billed ones cost far less when the agent is mostly waiting on a model.&rdquo; That is the crossover. If your agent spends most of its wall-clock time waiting for a model response — the typical tool-calling agent — a scale-to-zero platform wins on cost. If your agent is genuinely burning CPU or GPU continuously, machine0 wins.</p>
+<p>An honest rule of thumb: estimate your duty cycle. Above roughly 50% busy, machine0&rsquo;s per-minute always-on model beats per-second active billing at comparable shapes. Below 20% busy, it does not.</p>
+<h2 id="suspend-snapshot-and-resume--what-actually-persists">Suspend, snapshot and resume — what actually persists?</h2>
+<p>This is the most misunderstood part of the product, and the founder corrected it directly on the launch thread: there is <strong>no CRIU</strong>. &ldquo;Snapshots are at the disk layer, not RAM&hellip; so processes restart, they don&rsquo;t resume mid-execution. Practically: anything that survives a reboot survives a suspend.&rdquo;</p>
+<p>Read that carefully, because &ldquo;suspend&rdquo; is doing load-bearing work it does not deserve. A suspended machine0 VM is a disk snapshot. When you run <code>machine0 start</code>, the guest cold-boots from that disk. Files, installed packages, git working trees, Docker images, databases on disk, crontab entries — all survive. Running processes, in-memory state, open network connections, an in-flight model call — none survive.</p>
+<p>That places machine0 in a specific column of the persistence taxonomy. In <a href="https://blog.logrocket.com/comparing-ai-agent-sandbox-platforms-e2b-modal-daytona-and-more/">LogRocket&rsquo;s five-dimension comparison of agent sandbox platforms</a>, persistence is not one thing: E2B pauses with memory intact, Daytona only on VM sandboxes, and the rest save the filesystem — matching machine0&rsquo;s documented disk-level suspend. A <a href="https://rywalker.com/research/ai-agent-sandbox-sandboxes">23-platform landscape survey</a> frames the same caveat for the whole market: &ldquo;does persistence mean a running process resumes? Not necessarily. Some products preserve only files, while others retain memory in specific pause modes.&rdquo;</p>
+<p>So the correct mental model for machine0 suspend is: <strong>a saved computer, not a paused process</strong>. Structure agent work accordingly — write checkpoints to disk, make steps resumable, and do not expect a suspend to hold a 30-minute in-flight training run.</p>
+<h3 id="what-are-snapshots-and-clones-for">What are snapshots and clones for?</h3>
+<p>Golden images. You can snapshot a configured VM and clone it, which turns a long provisioning sequence — install drivers, pull models, configure the agent harness — into a repeatable starting point. For fleet operators this is the feature that makes scaling sane: bake once, clone many, and keep the expensive setup off the critical path.</p>
+<h2 id="what-are-profiles-and-why-are-they-the-most-agent-native-feature">What are profiles, and why are they the most agent-native feature?</h2>
+<p>Profiles bundle MCP connections, credentials, prompts and environment variables and inject them at VM creation, so each agent gets exactly the capabilities you choose and nothing else. When you SSH in, the VM&rsquo;s Claude Code or Codex picks them up automatically. Per the <a href="https://www.ycombinator.com/launches/SBD-machine0-cloud-computers-for-agents">YC launch page</a>, this is the mechanism that makes a fleet of agents manageable rather than a pile of hand-configured boxes.</p>
+<p>It is also where the genuinely unsolved problem sits. Credential rotation is the open edge: the founder says OAuth refresh is handled inside the profile and re-injection is possible, but a commenter (bobbylarson) pressed the real objection — a process that read a credential at boot keeps the stale value in memory, so revocation mid-session is &ldquo;not solved cleanly without short TTLs.&rdquo;</p>
+<p>Note the security scoping carefully, because it is easy to over-credit a VM boundary. As the landscape survey puts it, a VM boundary, an egress policy and scoped credentials solve three different problems and must be verified separately: a full KVM VM isolates guest execution from the host, but it does not stop exfiltration through network destinations you allowed or credentials you granted. machine0&rsquo;s own defaults are sensible — <a href="https://docs.machine0.io/platform/security">SSH-only with password auth disabled, root login disabled, ufw enabled with ports 22/80/443 open, and private keys that never leave your machine</a> — but they are defaults, not a complete security posture.</p>
+<h3 id="which-is-more-agent-native-cli-json-output-or-the-mcp-server">Which is more agent-native: CLI JSON output or the MCP server?</h3>
+<p>The MCP server, for one specific reason: it removes an orchestration hop. If your harness already speaks MCP, adding the machine0 server means the agent can provision its own compute as a tool call — spawn a GPU box for a fine-tune, run it, destroy it — without you writing glue. The <code>--json</code> CLI is the fallback for harnesses without MCP and for your own scripting.</p>
+<h2 id="machine0-vs-e2b-modal-daytona-and-flyio-sprites">machine0 vs E2B, Modal, Daytona and Fly.io Sprites</h2>
+<p>Different products, different optimization targets. None wins every dimension.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Dimension</th>
+          <th>machine0</th>
+          <th>E2B / Daytona</th>
+          <th>Modal</th>
+          <th>Fly.io Sprites</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Cold start</td>
+          <td>Cold boot from disk — not competitive</td>
+          <td>~717 ms / ~742 ms</td>
+          <td>~2,437 ms</td>
+          <td>Fast microVM</td>
+      </tr>
+      <tr>
+          <td>Isolation</td>
+          <td>Full KVM VM</td>
+          <td>Firecracker microVM / containers</td>
+          <td>gVisor</td>
+          <td>Firecracker microVM</td>
+      </tr>
+      <tr>
+          <td>Persistence</td>
+          <td>Indefinite, disk-level</td>
+          <td>24h session cap, memory-intact pause (E2B)</td>
+          <td>24h cap, filesystem only</td>
+          <td>Indefinite, scale-to-zero</td>
+      </tr>
+      <tr>
+          <td>GPU</td>
+          <td>Up to 8x H200 (1,128 GB)</td>
+          <td>None listed</td>
+          <td>Limited / CPU-focused</td>
+          <td>No GPU parity</td>
+      </tr>
+      <tr>
+          <td>Pricing model</td>
+          <td>Per-minute always-on until suspended</td>
+          <td>Per-second full duration</td>
+          <td>Per-second active</td>
+          <td>Per-second active</td>
+      </tr>
+      <tr>
+          <td>Best for</td>
+          <td>Always-on agents, GPU work</td>
+          <td>Fast tool-call sandboxes</td>
+          <td>Bursty scale-to-zero</td>
+          <td>Persistent sandboxes</td>
+      </tr>
+  </tbody>
+</table>
+<p>The <a href="https://blog.logrocket.com/comparing-ai-agent-sandbox-platforms-e2b-modal-daytona-and-more/">LogRocket comparison</a> measured cold starts of 742 ms for Daytona, 717 ms for E2B, 1,852 ms for Vercel and 2,437 ms for Modal. machine0 does not appear in that contest at all — it is not a millisecond tool-call runner. If your workload is &ldquo;spawn, run this function, tear down,&rdquo; every platform on that list beats machine0. If your workload is &ldquo;keep a computer alive for two days while a research loop iterates,&rdquo; machine0 is the shape that matches.</p>
+<p>On GPUs the field thins dramatically. E2B and Blaxel list no GPU at all, which removes them from training, fine-tuning and RL use cases. That leaves machine0 with almost no direct competition inside the agent-sandbox category for GPU-backed, persistent, CLI-driven agents — a narrower claim than &ldquo;best product,&rdquo; but a true one.</p>
+<h2 id="nixos-and-ubuntu-reproducible-or-pre-installed">NixOS and Ubuntu: reproducible or pre-installed?</h2>
+<p>Two image philosophies, both available. The <code>ubuntu-24-04-loaded</code> image is the pragmatic default: Docker, Node.js, Python, Go, Rust, Bun, Claude Code, Codex, OpenCode, tmux, zoxide, fzf, ripgrep and bat are already there, so an agent is productive minutes after <code>new</code> returns.</p>
+<p>NixOS is the counter-argument to suspend-and-pray state preservation. Declarative flakes, deterministic builds and one-command rollbacks make the environment itself a version-controlled artifact — instead of trusting that a disk snapshot carries the right state forever, you can rebuild an identical machine from a definition. For fleets where reproducibility is a compliance requirement rather than a convenience, this matters.</p>
+<p>One caveat worth flagging: the NixOS image shipped on an end-of-life release at launch (25.11), which the founder acknowledged and said he would republish. At a company moving at launch speed, check image freshness before baking a golden image you intend to keep.</p>
+<h2 id="security-model-regions-and-uptime">Security model, regions and uptime</h2>
+<p>Five regions — us-east (New York), us-west (San Francisco), uk (London), eu (Amsterdam) and asia (Singapore) — at identical per-minute pricing. One practical restriction: GPU sizes are offered in us-east, uk, eu and asia, but not us-west. If your workload is GPU-bound and your data residency requirement points at San Francisco, that is a hard blocker, not a preference.</p>
+<p>machine0 quotes a 99.99% VM-level uptime SLA. Note the qualifier: VM-level, which is a different claim from end-to-end service availability, and worth reading in the actual agreement before you architect around it.</p>
+<h2 id="who-should-use-machine0--and-who-should-not">Who should use machine0 — and who should not?</h2>
+<p>Use it if:</p>
+<ul>
+<li>Your agent runs for hours or days and dies when your laptop closes.</li>
+<li>You need GPU compute attached to a persistent agent (fine-tuning, RL, local inference) — the sandbox category largely cannot serve you.</li>
+<li>You are running a fleet and want profiles to inject MCP servers and credentials per agent instead of hand-configuring boxes.</li>
+<li>You want <code>--json</code> on every command so an orchestrator can parse state without scraping.</li>
+<li>You want full kernel access — Docker-in-Docker, kernel modules, real drivers — rather than a locked-down guest.</li>
+</ul>
+<p>Do not use it if:</p>
+<ul>
+<li>Your workload is bursty tool calls that mostly wait on model responses; a scale-to-zero platform will cost dramatically less.</li>
+<li>Cold start matters more than persistence — 700 ms beats a disk boot.</li>
+<li>You need the absolute cheapest compute; the founder says directly that &ldquo;we&rsquo;re not the cheapest compute on the market, but cheaper than most sandbox providers/neoclouds.&rdquo;</li>
+<li>You need mid-execution process resumption; suspend is disk-level, and that is not going to change without CRIU.</li>
+<li>You need bring-your-own-cloud today. It is roadmap, not shipped.</li>
+</ul>
+<h2 id="criticisms-open-questions-and-the-moat-question">Criticisms, open questions and the moat question</h2>
+<p>The launch thread&rsquo;s strongest arguments were structural, not technical, and they have not been answered:</p>
+<ul>
+<li><strong>The interface is not a moat.</strong> The verbs <code>new</code>, <code>ls</code>, <code>rm</code> can be wrapped around any cloud API. The defense is developer experience and context economy, which is real but not exclusive.</li>
+<li><strong>Vendor lock-in.</strong> A proprietary CLI over one cloud provider&rsquo;s infrastructure is a commitment. BYOC on the roadmap partially addresses it; shipping it would address it properly.</li>
+<li><strong>Credential revocation mid-session is unsolved.</strong> Short TTLs are the suggested fix and there is no evidence they are implemented yet.</li>
+<li><strong>Pricing transparency.</strong> Leading with &ldquo;from $0.013/hr&rdquo; for a lineup whose top tier is $3.714/hr drew justified pushback. The docs page is honest; the banner is not.</li>
+<li><strong>Launch-speed polish.</strong> An EOL NixOS base image and experimental/beta labels on profiles and disks are normal for a YC S26 company, and also a reason to date any review you read.</li>
+</ul>
+<p>None of these are disqualifying. All of them are the difference between buying a product and buying a promise.</p>
+<h2 id="verdict-is-a-cli-driven-persistent-vm-worth-it-for-your-agent-workload">Verdict: is a CLI-driven persistent VM worth it for your agent workload?</h2>
+<p>Yes, for the workload it was built for — and it is unusually clear about which workload that is. machine0 CLI VMs are the right buy when your agent is genuinely busy for hours at a time, when you need a real GPU attached to a persistent box, or when you are running a fleet that needs credentials and MCP servers injected per machine. At 2 vCPU / 4 GB, running flat out, it costs $0.052/hr against $0.166 for E2B and Daytona — a 3x advantage that reverses the moment your agent goes idle.</p>
+<p>The discipline that makes it cheap is suspend, not stop. Stopped VMs bill at full rate; suspended VMs bill at $0.078/GB/month for image storage. An operator who internalizes that one rule cuts a fleet&rsquo;s bill by an order of magnitude.</p>
+<p>The parts that are still rough — mid-session credential revocation, BYOC, image freshness — are the parts of a company that is three months old. Judge machine0 as what it is: a well-shaped product for always-on agents with a small interface, honest docs, and an honest limitation list. If your agent runs for six hours straight, it is probably the right computer. If it runs for six seconds at a time, it is the wrong one.</p>
+<h2 id="faq">FAQ</h2>
+<p><strong>Does machine0 suspend preserve running processes?</strong>
+No. Suspend is a disk-layer snapshot, not a CRIU memory checkpoint. Your files, installed packages and working trees survive; running processes restart on <code>machine0 start</code> rather than resuming mid-execution. The founder&rsquo;s rule of thumb is exact: anything that survives a reboot survives a suspend.</p>
+<p><strong>How much does a machine0 VM cost per month?</strong>
+It ranges from about $9/month for the smallest tier (1 vCPU / 1 GB / 25 GB at $0.013/hr) to roughly $2,711/month for a 6xl machine (60 vCPU / 240 GB / 900 GB at $3.714/hr). Billing is per-minute, identical in all five regions, with a $5 minimum top-up and refundable unused credits.</p>
+<p><strong>Is machine0 cheaper than E2B or Daytona?</strong>
+For a busy agent at the same shape, yes — about 3x. A 2 vCPU / 4 GB machine running flat out for one hour costs $0.052 on machine0 versus $0.166 on E2B and Daytona. For bursty workloads that mostly wait on model responses, scale-to-zero platforms are cheaper because machine0 bills the whole time the VM is on.</p>
+<p><strong>Do stopped machine0 VMs still cost money?</strong>
+Yes, at full rate. Cloud resources remain reserved while a VM is stopped. Only suspend (image storage at $0.078/GB/month) or destroy stops the compute meter. This is the most expensive mistake a new user can make.</p>
+<p><strong>Does machine0 offer GPUs, and how large?</strong>
+Yes, up to 8x H200 at $39.336/hr with 1,128 GB of combined VRAM. GPU tiers include RTX 4000 Ada (20 GB, $0.836/hr), L40S and RTX 6000 Ada (48 GB, $1.727/hr), MI300X (192 GB, $2.849/hr), H100 (80 GB, $4.851/hr) and H200 (141 GB, $4.917/hr). GPUs are available in us-east, uk, eu and asia — not us-west.</p>
+]]></content:encoded></item></channel></rss>
