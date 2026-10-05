@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Systolic Array Transformer Accelerator on RockB</title><link>https://baeseokjae.github.io/tags/systolic-array-transformer-accelerator/</link><description>Recent content in Systolic Array Transformer Accelerator on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 01 Oct 2026 05:22:22 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/systolic-array-transformer-accelerator/index.xml" rel="self" type="application/rss+xml"/><item><title>Apex Inference Chip Review: 0.56 tok/s and the Truth About FPGA LLM Inference</title><link>https://baeseokjae.github.io/posts/apex-inference-chip-fpga-llm/</link><pubDate>Thu, 01 Oct 2026 05:22:22 +0000</pubDate><guid>https://baeseokjae.github.io/posts/apex-inference-chip-fpga-llm/</guid><description>The APEX (tinyNPU) chip runs a real LLM on an FPGA at 0.56 tok/s — measured, not projected. A review of what silicon proved and what is still a model.</description><content:encoded><![CDATA[<p>The Apex Inference Chip (SigmanticAI&rsquo;s APEX, or tinyNPU) does run a real LLM on an FPGA, and it does so at <strong>0.56 tokens per second</strong> on its fastest measured image — roughly 1.78 seconds per token, confirmed on two separate builds. That number is deliberately slow, honestly published, and the entire point of the project is the verification trail behind it.</p>
+<p>That paragraph is the honest summary, and this review exists because almost every other sentence about this repository can be made misleading with one small edit. Strip the words &ldquo;measured on silicon&rdquo; and APEX looks like a hardware failure. Strip &ldquo;one decoder layer&rdquo; and it looks like a chip. Strip &ldquo;projected from an analytic model&rdquo; and its 7B performance claims look like results. The repository itself refuses to let you do any of those things, which is why it is worth your time even if you never build a bitstream.</p>
+<p>A quick note on scope before we start: this is a review of a research artifact, not a product. The repo was created on 2026-08-17, last pushed on 2026-08-18, and sits at 580 stars and 13 forks as of 2026-10-01. It is Apache-2.0, roughly 72,000 lines of SystemVerilog, Python and documentation. It is a tile, not a chip — no DRAM controller, no PCIe, no network-on-chip, by explicit charter.</p>
+<h2 id="what-is-the-apex-inference-chip-three-different-things-share-the-name">What Is the &ldquo;Apex Inference Chip&rdquo;? Three Different Things Share the Name</h2>
+<p>Anyone searching for &ldquo;apex inference chip&rdquo; will land on the wrong project, and it is worth resolving that in the first minute because two of the three are commercial and one is open source.</p>
+<ul>
+<li><strong>SigmanticAI/apex-inference-chip (APEX, tinyNPU).</strong> The subject of this review. An Apache-2.0 RTL inference tile whose tagline — running a real LLM on an FPGA — is the article title above.</li>
+<li><strong>Apex Compute (apexcompute.com).</strong> A separate commercial startup shipping a &ldquo;Unified Engine&rdquo; FPGA prototype. Different company, different artifact, different numbers. Its Kintex UltraScale+ design closes timing at 366 MHz with 78,348 CLB LUTs, 197 DSP slices and 1.05 MB of on-chip SRAM, and claims Gemma 3 1B decode at 15.63 tokens/second against 7.59 on an NVIDIA Jetson Orin Nano. Those are its own prototype claims and are not comparable to APEX&rsquo;s tile-level measurements.</li>
+<li><strong>SigmanticAI (sigmanticai.com).</strong> The YC-backed vendor that supplied the Polaris Engine verification tooling used to build APEX. It is the tool vendor, not the artifact — a distinction that matters when we get to conflicts of interest.</li>
+</ul>
+<p>If you arrived here looking for Apex Compute, the numbers you want are in the second bullet. Everything below is about the open tile.</p>
+<h2 id="the-60-second-version-what-sigmanticai-shipped-and-what-it-measured">The 60-Second Version: What SigmanticAI Shipped and What It Measured</h2>
+<p>APEX implements <strong>one transformer decoder layer</strong> — all seven matrix jobs of it — on a single INT8 systolic GEMM engine, time-multiplexed. The seven jobs are the QKV projections, the two attention products, the output projection, and the FFN gate/up and down projections. There is no second engine, no separate attention unit, and no FP16 datapath for K or V anywhere in the design.</p>
+<p>Two facts define the artifact:</p>
+<ol>
+<li><strong>A model actually ran end-to-end on silicon.</strong> On 2026-08-11, on an AWS F2 VU47P instance (AFI <code>agfi-0500f4afe435b5e71</code>), the prompt &ldquo;The capital of France is&rdquo; produced &quot; Paris. It&quot; under greedy decode, token-identical to the host-golden reference. All 72 walked chains completed, zero refused, and every walked value was bit-exact: 144/144 QKV INT32 accumulators and 896/896 first-round FP16 values per chain.</li>
+<li><strong>The published speed is 0.56 tokens/second.</strong> That is the fastest registered image, designated A0, running at 62.5 MHz with a steady 1.78 s/token. The reference image, A2 at 15.625 MHz, does 0.25 tok/s.</li>
+</ol>
+<p>Both statements are about Qwen2.5-0.5B. The 7B model has never run on silicon here — more on that below, because it is the single most important caveat in this review.</p>
+<h2 id="inside-the-tile-one-decoder-layer-one-gemm-engine-seven-jobs">Inside the Tile: One Decoder Layer, One GEMM Engine, Seven Jobs</h2>
+<p>The design decision that makes APEX interesting is also the one that makes it slow: everything is funneled through one matrix engine, the MXE. A single INT8 systolic array performs every projection in the decoder layer by time-slicing. That is a hardware-efficiency trade, not a throughput play — you buy area and utilization predictability, and you pay in latency.</p>
+<p>The KV-cache codec, called KVQ, lives inside the datapath rather than beside it. It uses per-channel INT4 keys, per-token INT4 values, and a single FP16 &ldquo;outlier lane&rdquo; to catch the values that INT4 would destroy, with three precision tiers — KVQ8, KVQ4 and KVQ4+ — and a TIP importance unit that promotes or demotes tokens between tiers as generation proceeds. The repo&rsquo;s claim is architectural: there is no FP16 copy of K or V anywhere in the design, so the cache is never expanded back to full precision between RoPE and the store.</p>
+<p>That matters because of where the bottleneck actually sits. The 2026 SoK paper &ldquo;The KV Cache Is the New Memory Wall&rdquo; (arXiv 2609.30854) makes the case quantitatively: Llama-3-70B in BF16 has a 140 GB weight footprint, which already exceeds one accelerator&rsquo;s 80 GB of HBM, and a <em>single</em> 128k-token sequence adds 42 GB of KV cache on top. At long context, the binding resource stops being the weights and becomes the cache.</p>
+<h2 id="the-architectural-bet-the-kv-cache-is-compressed-inside-the-datapath">The Architectural Bet: The KV Cache Is Compressed Inside the Datapath</h2>
+<p>There is a second, subtler reason the placement matters. arXiv 2603.17280, &ldquo;The 1/W Law,&rdquo; measures how tokens per watt behave as context grows: it halves every time the context window doubles on identical hardware. An H100 holds 256 concurrent sequences at 4K context for 17.6 tokens per watt, but only 16 sequences at 64K for 1.5 tokens per watt. The 40x spread that operators attribute to software inefficiency is, in that framing, mostly a context-window effect.</p>
+<p>If that is true, then compressing the KV cache is not a memory optimization — it is a <em>power</em> optimization. APEX&rsquo;s TIP unit exists precisely because the SoK finding is that accuracy degrades below 4-bit precision and turns discontinuous for eviction on position-sensitive tasks. Moving tokens between precision tiers is an attempt to buy that back.</p>
+<p>The repo is candid that the codec method itself is not novel. Per-channel INT4 keys with per-token INT4 values and an FP16 outlier is the KIVI and KVQuant recipe, and hardware-native KV compression predates APEX in Titanus (GLSVLSI'25) and Kelle (MICRO'25). What APEX claims is the integrated, verified hardware implementation — the codec and the GEMM engine and the bit-exact test trail in one open repository. That is a real but narrower claim than &ldquo;invented KV compression in hardware,&rdquo; and the repository says so in as many words.</p>
+<h2 id="the-methodological-bet-bit-exact-or-it-does-not-ship">The Methodological Bet: Bit-Exact or It Does Not Ship</h2>
+<p>This is the actual product. The verification surface is roughly <strong>twice</strong> the RTL surface: 27,760 lines of SystemVerilog and SVH testbenches plus 21,043 lines of Python, measured against about 22,000 lines of RTL and 5,884 lines of golden Python. The golden NumPy model is the arbiter, not the spec.</p>
+<p>The discipline shows up in three places:</p>
+<ul>
+<li><strong>Exhaustive sweeps instead of spot checks.</strong> The SiLU activation is verified over 65,536 input patterns, bit-exact against golden. The W4B feeder runs a 4,063,104-point operand sweep. Several suites carry between four and nine asserted mutant kills, and a surviving mutant fails the build — the testbenches are themselves mutation-tested.</li>
+<li><strong>Compositional verification, L1 to L3.</strong> Block-level tests roll up into pipeline tests and then into full-layer composition. The L3 full-layer attention replay passed 28 cases across 152,883 checks, spanning mixed CQ-8, CQ-4+ and TIP-auto precision tiers at head dimensions 64 and 128 with sequence lengths up to 128.</li>
+<li><strong>Zero tolerated mismatches.</strong> The tile smoke test reports <code>cycles=67507 checks=2176 errors=0</code> at D=64 and <code>cycles=209741 checks=4240 errors=0</code> at D=128. A machine-generated STATUS.md, produced by <code>scripts/gen_status.py</code> under an anti-fabrication rule, carries the raw evidence.</li>
+</ul>
+<p>One caveat deserves its own line, because it is the most common misreading of this project: bit-exactness is relative to a fixed-point golden model the team wrote. Bit-exact against golden is not the same as numerically correct against the float behavior of the original model. The codec&rsquo;s own accuracy is measured separately on HellaSwag across 10,042 documents with paired statistics and its own honest caveats.</p>
+<h2 id="the-synthesis-toolchain-was-lying-how-silicon-caught-it">The Synthesis Toolchain Was Lying: How Silicon Caught It</h2>
+<p>This is the best story in the repository, and the one that most cleanly justifies the whole approach.</p>
+<p>During bring-up of the walked-attention path, the FPGA produced <strong>wrong values</strong> while the Verilator simulation twin produced correct ones on the same stimulus. The natural first instinct — assume the RTL is wrong, or the testbench is wrong — was eliminated by the differential itself. Two implementations of the same source disagreed; one of them was running on silicon. The team traced the divergence and isolated a <strong>synthesis toolchain defect</strong>, not an RTL bug and not a testbench bug.</p>
+<p>The resulting rule is now the repo&rsquo;s operating principle: hardware truth comes from silicon-versus-simulation differential evidence, not from synthesis reports. Most open RTL never touches silicon at all, and the projects that do tend to trust the synthesis log as ground truth. APEX committed to the opposite — and the toolchain it caught is not named in the material I could verify, so treat &ldquo;which vendor&rdquo; as unreported rather than inferred.</p>
+<p>That the toolchain in question is the vendor&rsquo;s own Polaris Engine tooling is a genuine conflict-of-interest surface for a project whose headline value is verification. The mitigations are structural: machine-generated status files, committed logs, mutation gates that fail the build, and a public traceability register. Whether that is enough is a judgment call, but the conflict is disclosed rather than hidden.</p>
+<h2 id="how-fast-is-it-really-056-toks-and-the-140x-ladder">How Fast Is It, Really? 0.56 tok/s and the 140x Ladder</h2>
+<p>The headline number is 0.56 tokens per second, and the repo&rsquo;s own optimization document shows a <strong>140x climb</strong> from a host-driven baseline of 0.004 tok/s to that figure. The ladder is worth understanding because it tells you where the time actually goes.</p>
+<p>On the walked path, the arithmetic performed inside the tile accounted for <strong>8.53%</strong> of per-token MACs — 44,040,192 of 516,196,352. The remaining wall was dominated by per-chain host transport: 24 executor invocations per token at roughly 0.5 seconds each. The tile&rsquo;s own walk window is about <strong>36 ms</strong> on the A2 reference image.</p>
+<p>In other words, the tile is not the bottleneck. The host orchestration around it is. That is the correct attribution, and it is the attribution the repo makes; a review that quotes 0.56 tok/s without it is describing a transport problem as a hardware problem.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Image</th>
+          <th>Clock</th>
+          <th>Steady decode</th>
+          <th>Model</th>
+          <th>Status</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>A0 (fastest registered)</td>
+          <td>62.5 MHz</td>
+          <td>0.56 tok/s (1.78 s/token)</td>
+          <td>Qwen2.5-0.5B</td>
+          <td>Measured on silicon, confirmed on two builds</td>
+      </tr>
+      <tr>
+          <td>A2 (reference)</td>
+          <td>15.625 MHz</td>
+          <td>0.25 tok/s</td>
+          <td>Qwen2.5-0.5B</td>
+          <td>Measured; tile walk window ~36 ms</td>
+      </tr>
+      <tr>
+          <td>7B end-state</td>
+          <td>—</td>
+          <td>&ldquo;reading speed&rdquo; at ~3 W</td>
+          <td>Qwen2.5-7B</td>
+          <td><strong>Projected</strong> from an analytic model, never run on silicon</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="measured-vs-projected-read-this-before-quoting-any-number">Measured vs Projected: Read This Before Quoting Any Number</h2>
+<p>The repository&rsquo;s own rule is that a number is either measured on hardware or simulation, or it is a projection from a calibrated analytic model — and it says which. Applying that filter to the claims gives you this split:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Claim</th>
+          <th>Measured or projected</th>
+          <th>Notes</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>0.56 tok/s on Qwen2.5-0.5B</td>
+          <td>Measured</td>
+          <td>A0 image, 62.5 MHz, two builds, all gates passing</td>
+      </tr>
+      <tr>
+          <td>Bit-exact walked tokens, 72/72 chains</td>
+          <td>Measured</td>
+          <td>AFI <code>agfi-0500f4afe435b5e71</code>, 2026-08-11</td>
+      </tr>
+      <tr>
+          <td>AWS F2 timing closure at 250 MHz shell clock</td>
+          <td>Measured</td>
+          <td>Vivado zero-error P&amp;R on VU47P; BAR0 CSR probe all pass</td>
+      </tr>
+      <tr>
+          <td>Lattice ECP5-85F build via yosys/nextpnr</td>
+          <td>Measured</td>
+          <td>Second independent hardware existence proof</td>
+      </tr>
+      <tr>
+          <td>L3 replay: 28 cases, 152,883 checks</td>
+          <td>Measured</td>
+          <td>Mixed KVQ tiers, D=64/128, T≤128</td>
+      </tr>
+      <tr>
+          <td>7B at reading speed on ~3 W, 32k–64k context</td>
+          <td><strong>Projected</strong></td>
+          <td>Three unbuilt dependencies: native W4 weight path, hardware layer walker, wide LPDDR</td>
+      </tr>
+      <tr>
+          <td>5–10x less energy per token than a desktop GPU</td>
+          <td><strong>Projected</strong></td>
+          <td>Derived from the same analytic model</td>
+      </tr>
+      <tr>
+          <td>Faster than a GPU</td>
+          <td><strong>Explicitly not claimed</strong></td>
+          <td>README states it is &ldquo;never a speed win over GPUs&rdquo;</td>
+      </tr>
+  </tbody>
+</table>
+<p>Three load-bearing pieces of the 7B projection do not exist yet. The native-W4 weight path is not committed end-to-end. The hardware layer walker that would remove the host from the token loop is not built. The wide LPDDR interface that would feed weights at the required rate is not built. And Qwen2.5-7B has run only through the software-verified golden pipeline — never through silicon. Any article that presents the 7B figures as results is repeating a projection as a measurement.</p>
+<h2 id="the-fpga-reality-check-056-toks-vs-59965-toks">The FPGA Reality Check: 0.56 tok/s vs 59,965 tok/s</h2>
+<p>Here is where a naive reader concludes that FPGAs are slow. They are not; they are differently shaped, and the two families are easy to contrast.</p>
+<p>TerEffic (arXiv 2502.16473) keeps weights fully on-chip and reaches <strong>16,300 tokens/second</strong> on a 370M ternary model — 192x the throughput of a Jetson Orin Nano, at 455 tokens/second/watt. With HBM assistance it does 727 tok/s on a 2.7B model, three times an A100. Separately, a Taalas-style build on a $250 Xilinx Kria KV260 keeps a 3.16M-parameter INT4 transformer entirely in on-chip memory and measures <strong>59,965 tok/s</strong> on the fabric, bit-exact, with zero DRAM in the token loop. The same board&rsquo;s Arm cores manage 11 tok/s and an RTX 3050 Ti laptop manages 719 tok/s.</p>
+<p>The structural insight behind those numbers is that decode is memory-bandwidth-bound: you read every weight once per token, so arithmetic is cheap and <em>reading</em> is the cost. Once weights live on-chip, the memory wall disappears and throughput explodes. The crossover is honest and published — around 6.3M parameters on that KV260 design, past which you spill to DDR and you are back at the wall. Long context spills the KV cache the same way.</p>
+<p>APEX chose the opposite path. It keeps DRAM weight streaming and host transport in the loop by design, because its subject is a single verified decoder layer reachable from a host, not a deployed inference service. Comparing 0.56 tok/s to 59,965 tok/s is not comparing two attempts at the same goal; it is comparing a tile bring-up to a product.</p>
+<h2 id="energy-per-token-the-axis-where-fpgas-actually-win">Energy per Token: The Axis Where FPGAs Actually Win</h2>
+<p>When throughput is conceded, energy is the remaining argument, and it holds up better than the speed claims in this space. A ternary-engine writeup (nicholi.ai, June 2026) measures an RTX 3060 at <strong>3.67 joules per token</strong>, a six-year-old desktop CPU at 4.62 J/token, and a $130 Arty A7-35T FPGA at roughly <strong>1.6 J/token</strong> — about 2.3x better than the GPU. System power is ~0.489 W versus 86.4 W measured for the 3060.</p>
+<p>Two things about that comparison are worth internalizing. First, the FPGA there is explicitly <em>slower</em> than the GPU, and the author refuses the &ldquo;40x faster&rdquo; headline for exactly that reason. Second, the wattage is a Vivado estimate, not a current-probe reading, so the J/token figures are measured cycle counts multiplied by an estimated wattage. The author says so. That honesty is the correct template, and it is the standard to apply to every watt claim in this space — including Apex Compute&rsquo;s 4.5 W versus 7 W comparison and APEX&rsquo;s own ~3 W projection.</p>
+<h2 id="where-apex-sits-in-the-2026-fpga-llm-inference-landscape">Where APEX Sits in the 2026 FPGA LLM Inference Landscape</h2>
+<table>
+  <thead>
+      <tr>
+          <th>Project</th>
+          <th>What it is</th>
+          <th>Headline measurement</th>
+          <th>Keeps on-chip?</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>SigmanticAI APEX (tinyNPU)</td>
+          <td>One verified decoder layer, INT8 systolic GEMM, in-datapath INT4 KV</td>
+          <td>0.56 tok/s (Qwen2.5-0.5B, measured)</td>
+          <td>No — DRAM streaming + host</td>
+      </tr>
+      <tr>
+          <td>TerEffic (arXiv 2502.16473)</td>
+          <td>Fully on-chip ternary weights</td>
+          <td>16,300 tok/s (370M model)</td>
+          <td>Yes</td>
+      </tr>
+      <tr>
+          <td>LUT-LLM (arXiv 2511.06174)</td>
+          <td>Table-lookup instead of arithmetic, vector-quantized</td>
+          <td>First 1B+ model on FPGA without arithmetic compute</td>
+          <td>Yes (memory-based compute)</td>
+      </tr>
+      <tr>
+          <td>KV260 Taalas-style build</td>
+          <td>3.16M-param INT4 transformer fully resident</td>
+          <td>59,965 tok/s on a $250 board</td>
+          <td>Yes</td>
+      </tr>
+      <tr>
+          <td>ternfpga / Arty A7-35T</td>
+          <td>Multiply-free ternary engine, energy-first</td>
+          <td>~1.6 J/token, 1,423 MB/s sustained</td>
+          <td>Partly — 0.7B capped near 8 tok/s</td>
+      </tr>
+      <tr>
+          <td>Apex Compute (name collision)</td>
+          <td>Commercial Unified Engine prototype</td>
+          <td>15.63 tok/s (Gemma 3 1B), vendor-claimed</td>
+          <td>Unclear — prototype claims only</td>
+      </tr>
+      <tr>
+          <td>Design Conductor 2.0 (arXiv 2605.05170)</td>
+          <td>Agent-built TurboQuant KV accelerator (VerTQ)</td>
+          <td>240-cycle pipeline, 125 MHz, 5.7 mm² TSMC 16FF</td>
+          <td>Design, not a running LLM</td>
+      </tr>
+  </tbody>
+</table>
+<p>That last row is the one that reframes the whole question. If an autonomous multi-agent harness can architect, implement, verify, timing-optimize and FPGA-map a KV-compression accelerator in roughly 80 hours, then &ldquo;we built an accelerator&rdquo; is no longer a differentiated claim in 2026. What remains scarce is an open, reproducible, bit-exact evidence trail — which is exactly what APEX is selling. Its differentiated claim is not the architecture. It is the receipt.</p>
+<p>For market context, the FPGA market itself is growing but modest: Mordor Intelligence puts 2026 at USD 11.02 billion at a 9.35% CAGR to 2031, The Business Research Company has 2026 at USD 10.83 billion, and MarketsandMarkets runs USD 11.73 billion (2025) to USD 19.34 billion by 2030 at 10.5%. The AI-FPGA sub-segment is smaller and faster — USD 2.00 billion in 2025, USD 2.10 billion in 2026, heading to USD 8.50 billion by 2034 at 17.4%. Edge AI overall runs from USD 24.9 billion (2025) to USD 30.0 billion (2026) and USD 118.7 billion by 2033 at 21.7%. One gap worth stating plainly: no source I could verify gives a 2026 figure for FPGA share of LLM inference specifically. That number is not separately reported, and anyone quoting one is extrapolating.</p>
+<h2 id="honest-limitations-as-published-by-the-project-itself">Honest Limitations, as Published by the Project Itself</h2>
+<p>Most projects bury this section. APEX publishes it. The known quality limits are:</p>
+<ul>
+<li><strong>CQ-8 worst end-to-end error</strong> of 3.5e-01 against the value scale.</li>
+<li><strong>CQ-4 is documented as out of quality budget</strong> on outlier-bearing data — end-to-end absolute error of 1.421e-01, which is 7.1% of the value scale. This is the stated reason the TIP tier-select unit exists.</li>
+<li><strong>24 documented limitations</strong> in TRACEABILITY.md, indexed L-T1 through L-S3.</li>
+</ul>
+<p>Add the caveats the repository does not get to choose: the codec method is prior art (KIVI, KVQuant), hardware-native KV compression predates it (Titanus, Kelle), the whole artifact is built with the vendor&rsquo;s own verification tooling, and the headline throughput number was still being corrected in the final three commits before last push — reference image first, then fastest, then confirmed on two builds.</p>
+<h2 id="reproduce-it-yourself-in-three-commands">Reproduce It Yourself in Three Commands</h2>
+<p>You do not have to take any of this on faith, and that is the strongest thing about the project. Three checks, in ascending cost:</p>
+<ol>
+<li><strong><code>make -C golden test</code></strong> — validates the NumPy golden model locally, for free. If the golden model is wrong, everything downstream is wrong, so this is the right first check.</li>
+<li><strong>The F2 walked demo</strong> — the verified reference image (<code>agfi-030a812cd224b409d</code>) rebuilds the whole design in about <strong>$2 and 30 minutes</strong> on an <code>f2.6xlarge</code>, and a 193-check battery ran with zero failures before that README section was committed.</li>
+<li><strong>The KV codec accuracy matrix</strong> — the HellaSwag-based comparison across KVQ8, KVQ4 and KVQ4+ tiers.</li>
+</ol>
+<p>One disclosure: I did not build the bitstream myself for this review. The &ldquo;$2 and 30 minutes&rdquo; figure and the F2 measurements are the team&rsquo;s, quoted from the repository, not independently reproduced here. Neither was the ECP5 build. If you need those verified, command two above is where to spend the money.</p>
+<h2 id="verdict-who-should-read-this-repo-and-who-should-not">Verdict: Who Should Read This Repo, and Who Should Not</h2>
+<p><strong>Read it if</strong> you build RTL and want a working model of what verification-first development looks like at full scale — the mutation gates, the L1-to-L3 compositional rollup, the machine-generated status file, the silicon-versus-simulation differential that caught a toolchain bug. Read it if you work on KV-cache compression and want to see the codec moved into the datapath rather than bolted beside it. Read it if you are evaluating any FPGA inference vendor and need a calibrated sense of what &ldquo;measured&rdquo; should mean.</p>
+<p><strong>Skip it if</strong> you want a fast LLM on an FPGA. This is 0.56 tokens per second on a 0.5B model with the host in the loop, and the 7B numbers do not exist on silicon yet. If throughput is your goal, the fully on-chip family — TerEffic, the KV260 build — is the one to study, and if you need a product today, a GPU is still the answer.</p>
+<p>The fair one-line verdict: APEX is not an inference accelerator you deploy, it is a verification artifact you learn from. Its 0.56 tok/s is published precisely because the project would rather be slow and provable than fast and unverifiable — and in a field where an agent harness can now generate accelerators faster than anyone can verify them, that inversion of priorities is the interesting part.</p>
+<h2 id="faq">FAQ</h2>
+<h3 id="what-is-the-apex-inference-chip-and-is-it-a-real-chip">What is the Apex Inference Chip, and is it a real chip?</h3>
+<p>It is not a chip. APEX (also called tinyNPU) is an open-source Apache-2.0 RTL design from SigmanticAI implementing a single transformer decoder layer as a reusable tile. By explicit charter it has no DRAM controller, no PCIe block and no network-on-chip, so it cannot be dropped into a system as a standalone accelerator. It has been built and run on two real targets — a Lattice ECP5-85F using the open yosys/nextpnr flow, and an AWS F2 VU47P instance using Vivado — which makes it more than a simulation-only design, but less than a product.</p>
+<h3 id="how-fast-is-fpga-llm-inference-on-apex">How fast is FPGA LLM inference on APEX?</h3>
+<p>0.56 tokens per second on the fastest measured image (A0 at 62.5 MHz, a steady 1.78 seconds per token on Qwen2.5-0.5B) and 0.25 tok/s on the reference image at 15.625 MHz. The full optimization ladder climbed 140x from a 0.004 tok/s host-driven baseline. Only 8.53% of per-token arithmetic happens inside the tile; the rest of the wall is host transport, at 24 executor invocations per token of roughly half a second each. The tile&rsquo;s own walk window is about 36 ms.</p>
+<h3 id="has-the-7b-model-actually-run-on-the-apex-fpga">Has the 7B model actually run on the APEX FPGA?</h3>
+<p>No. Qwen2.5-0.5B is the FPGA-measured model. Qwen2.5-7B has run only through the software-verified golden pipeline and has never executed on silicon. The much-quoted 7B figures — reading-speed generation at roughly 3 W with 32k–64k context held flat by KV compression, and 5–10x lower energy per token than a desktop GPU — are projected from a calibrated analytic model and depend on three unbuilt pieces: the native-W4 weight path, the hardware layer walker, and a wide LPDDR interface.</p>
+<h3 id="what-makes-apex-different-from-other-fpga-llm-projects">What makes APEX different from other FPGA LLM projects?</h3>
+<p>Verification discipline, not throughput. The verification surface is roughly twice the RTL surface — 27,760 lines of SystemVerilog testbenches plus 21,043 lines of Python against about 22,000 lines of RTL. Testbenches are mutation-tested so a surviving mutant fails the build; SiLU is checked over 65,536 patterns bit-exact; the W4B feeder runs a 4,063,104-point operand sweep; and a full-layer replay passed 28 cases across 152,883 checks. The KV codec method itself is prior art from KIVI and KVQuant, and hardware KV compression predates it in Titanus and Kelle — the claim is the integrated, verified implementation.</p>
+<h3 id="can-i-reproduce-the-apex-inference-chip-results-myself">Can I reproduce the Apex Inference Chip results myself?</h3>
+<p>Yes, at three levels of cost. <code>make -C golden test</code> validates the NumPy golden model locally for free. The pre-built AWS F2 reference image (<code>agfi-030a812cd224b409d</code>) rebuilds the full design in about $2 and 30 minutes on an f2.6xlarge, with the repository reporting a 193-check battery at zero failures. The KV codec accuracy matrix on HellaSwag is the third check. Note that this review did not independently rebuild the bitstream — the cost and timing figures are the project&rsquo;s own, taken from the committed README and status files rather than reproduced here.</p>
+]]></content:encoded></item></channel></rss>
