@@ -1,0 +1,283 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Mcp Tool Call Token Overhead on RockB</title><link>https://baeseokjae.github.io/tags/mcp-tool-call-token-overhead/</link><description>Recent content in Mcp Tool Call Token Overhead on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 01 Oct 2026 06:39:48 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/mcp-tool-call-token-overhead/index.xml" rel="self" type="application/rss+xml"/><item><title>Agent CodeMode Review: How Coding Agent MCP Scripts Call Your Connected Servers</title><link>https://baeseokjae.github.io/posts/agent-codemode-mcp-scripts/</link><pubDate>Thu, 01 Oct 2026 06:39:48 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-codemode-mcp-scripts/</guid><description>Agent CodeMode review: a coding agent&amp;#39;s MCP scripts call servers it already authenticated — 40 tool calls collapse into one script.</description><content:encoded><![CDATA[<p>agent-codemode (janwilmake/agent-codemode) is a MIT-licensed Node 18+ CLI and TypeScript library that lets a script your coding agent writes call the MCP servers that agent has already authenticated. It reads the OAuth tokens and stdio configs Claude Code already created, speaks Streamable HTTP or stdio JSON-RPC directly, and returns an exact answer instead of routing every intermediate result through the model.</p>
+<h2 id="what-is-agent-codemode-and-which-number-does-it-lead-with">What Is agent-codemode and Which Number Does It Lead With?</h2>
+<p>The project is small, and it is deliberately pitched as small. Its own README says: &ldquo;Be clear about what is and isn&rsquo;t new here.&rdquo; What it does is give a coding agent a way to skip the tool-call loop. Instead of the model calling 40 MCP tools in sequence, feeding each result back into context, the agent writes one script that calls those tools as ordinary functions and prints one result.</p>
+<p>The headline measurement comes from a live 39-ticket Linear workspace, where the author fetched every In Progress ticket with its full body and counted occurrences of &ldquo;mcp&rdquo; across all of them. The two paths, as reported in the README:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Path</th>
+          <th>Data into context</th>
+          <th>Round trips</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Sequential MCP tool calls</td>
+          <td>262,159 characters (~65,500 tokens)</td>
+          <td>40</td>
+      </tr>
+      <tr>
+          <td>One script</td>
+          <td>903 characters (~226 tokens)</td>
+          <td>1</td>
+      </tr>
+  </tbody>
+</table>
+<p>That is roughly 290x less data entering the context window, or a 99.66% reduction for that task. The author is honest about the arithmetic: the token figures assume a 4-characters-per-token heuristic, and he states explicitly that the ratio, not the absolute token count, is the durable part of the claim.</p>
+<p>That honesty matters, because the same number is routinely quoted without it. The 99.66% figure is a single-task context measurement, not an end-to-end saving. The closest independent production measurement in this space — Agent Swarm&rsquo;s live workflow-triage run from July 2026 — reports about 99.2% fewer tokens for the data-gathering step but only roughly half the total cost for the whole scheduled task, because the agent still has to reason over the summary and decide what to escalate. Any review that repeats 99.66% without that caveat is over-selling a real result.</p>
+<h2 id="why-do-coding-agents-need-mcp-scripts-at-all">Why Do Coding Agents Need MCP Scripts at All?</h2>
+<p>Anthropic&rsquo;s engineering write-up on code execution with MCP names the two taxes that compound every time a model talks to a tool:</p>
+<ol>
+<li><strong>Tool definitions loaded upfront.</strong> Every connected server&rsquo;s schema spends context before the model has read the user&rsquo;s request.</li>
+<li><strong>Intermediate results passed through the model.</strong> When call B needs call A&rsquo;s output, call A&rsquo;s full output must enter context just to be copied into the next request.</li>
+</ol>
+<p>A two-hour sales transcript flowing through two tools is roughly 50,000 extra tokens, and a large enough document breaks the context window entirely rather than merely costing money. Cloudflare&rsquo;s Kenton Varda and Sunil Pai put the same point more bluntly in September 2025 when they named the pattern: LLMs are better at writing code to call MCP than at calling MCP directly. Their reasoning is plausible and worth repeating — models have seen enormous amounts of real TypeScript and comparatively few contrived tool-call transcripts, and chained calls are exactly where the direct path hurts, because every intermediate value has to be materialized into the conversation.</p>
+<p>The scaling problem is structural, not incidental. Bifrost and Maxim&rsquo;s controlled benchmark across 508 tools on 16 MCP servers measured 75.1 million input tokens for classic MCP against 5.4 million for code mode on the same query set — a 92.8% reduction, with both configurations passing 65 of 65 test queries. Their framing is the cleanest available: MCP token cost scales with catalog size, not with work done. A six-turn workflow across a hundred tools pays the full definition cost six times before producing a three-line answer.</p>
+<h2 id="how-does-agent-codemode-read-the-credential-your-agent-already-minted">How Does agent-codemode Read the Credential Your Agent Already Minted?</h2>
+<p>This is the actual product, and it is the only row in the project&rsquo;s own comparison table that differs from every neighbour.</p>
+<p>On macOS, Claude Code stores its MCP OAuth tokens in a single Keychain item with the service name <code>Claude Code-credentials</code>. Its <code>mcpOAuth</code> map is keyed by <code>&lt;serverName&gt;|&lt;urlHash&gt;</code> and carries <code>serverUrl</code>, <code>accessToken</code>, <code>refreshToken</code>, <code>clientId</code>, <code>issuer</code> and <code>expiresAt</code>. On Linux and Windows, the same OAuth material lives in <code>~/.claude/.credentials.json</code>. Separately, <code>~/.claude.json</code> (both top-level and per-project <code>mcpServers</code>) plus <code>.mcp.json</code> hold the stdio and API-key server definitions, and agent-codemode expands <code>${VAR}</code> references the way Claude Code does.</p>
+<p>Because those are files and Keychain entries rather than an API, setup is zero. Every competing tool makes you re-authenticate: Cloudflare takes bindings you configure, MCPorter keeps its own vault at <code>~/.mcporter/credentials.json</code> and requires <code>mcporter auth</code> per server, and VoidMCP wants tokens registered through a CLI. agent-codemode reads the token your agent already minted and needs no auth step at all.</p>
+<p>That difference decides behaviour more than it looks like it should. An agent mid-task reaches for whatever works right now, not for a tool that needs you to complete an OAuth flow first. Inheritance is what makes the script the path of least resistance — which is precisely why the security section below is not a footnote.</p>
+<h2 id="how-do-you-install-and-run-it">How Do You Install and Run It?</h2>
+<p>The package is <code>agent-codemode@0.1.1</code>, published under MIT, requiring Node 18 or newer, with <strong>no dependencies at all</strong>. The tarball is 146,160 bytes unpacked across 52 files, and the published binaries are <code>agent-codemode</code> and its shorter alias <code>codemode</code>, both pointing at <code>dist/cli.js</code>.</p>
+<p>Four subcommands cover the surface:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Command</th>
+          <th>What it does</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>codemode servers</code></td>
+          <td>Lists the MCP servers discovered from your agent&rsquo;s config and credentials</td>
+      </tr>
+      <tr>
+          <td><code>codemode tools &lt;server&gt;</code></td>
+          <td>Lists that server&rsquo;s tools</td>
+      </tr>
+      <tr>
+          <td><code>codemode call &lt;server&gt; &lt;tool&gt;</code></td>
+          <td>Invokes one tool directly</td>
+      </tr>
+      <tr>
+          <td><code>codemode types --all</code></td>
+          <td>Reads each server&rsquo;s live <code>tools/list</code> and emits a typed <code>.ts</code> module per server plus an index barrel</td>
+      </tr>
+  </tbody>
+</table>
+<p>Exit codes are conventional and worth scripting against: <code>0</code> on success, <code>1</code> for credential, transport or usage errors, and <code>2</code> when the tool itself reported <code>isError</code>. That third code is the kind of detail that separates a tool designed for scripts from a CLI that merely happens to be scriptable.</p>
+<h2 id="what-does-the-typed-api-look-like">What Does the Typed API Look Like?</h2>
+<p><code>types --all</code> is the part that changes how the agent writes code. It queries each server&rsquo;s live tool list and generates a declaration-merged module set, so generated modules merge into an <code>McpServers</code> interface. The practical consequence is that a side-effect import is the entire setup, wrong tool names are compile errors, and argument types are checked at the call site with no cast anywhere:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-ts" data-lang="ts"><span style="display:flex;"><span><span style="color:#66d9ef">import</span> <span style="color:#e6db74">&#34;agent-codemode/types&#34;</span>; <span style="color:#75715e">// declaration-merges McpServers
+</span></span></span><span style="display:flex;"><span><span style="color:#75715e"></span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">mcp</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;agent-codemode&#34;</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">issues</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">mcp</span>.<span style="color:#a6e22e">linear</span>.<span style="color:#a6e22e">listIssues</span>({ <span style="color:#a6e22e">team</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;ENG&#34;</span>, <span style="color:#a6e22e">state</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;In Progress&#34;</span> });
+</span></span></code></pre></div><p>The TypeScript API mirrors the CLI: an <code>mcp</code> proxy object, <code>callTool</code>, <code>listTools</code>, <code>resultText</code>, and <code>McpClient.fromClaudeCode</code>. On the wire there is nothing exotic — for remote servers it performs the standard Streamable HTTP MCP handshake (<code>initialize</code>, capture <code>Mcp-Session-Id</code>, <code>notifications/initialized</code>, then <code>tools/call</code>), and for stdio servers it spawns the configured subprocess and speaks newline-framed JSON-RPC. The registry data supports that transport choice as the mainstream one: of 30,375 unique servers catalogued as of September 2026, 54.8% are remote-only and 17,584 remote endpoints use streamable-http against just 1,073 on the deprecated SSE transport.</p>
+<h2 id="what-does-a-multi-server-script-actually-look-like">What Does a Multi-Server Script Actually Look Like?</h2>
+<p>The worked shape is one script, several servers, no <code>.env</code> file. The agent writes something close to this and runs it as a subprocess:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-ts" data-lang="ts"><span style="display:flex;"><span><span style="color:#66d9ef">import</span> { <span style="color:#a6e22e">mcp</span>, <span style="color:#a6e22e">resultText</span> } <span style="color:#66d9ef">from</span> <span style="color:#e6db74">&#34;agent-codemode&#34;</span>;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">tickets</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">mcp</span>.<span style="color:#a6e22e">linear</span>.<span style="color:#a6e22e">listIssues</span>({ <span style="color:#a6e22e">state</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;In Progress&#34;</span> });
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">bodies</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">Promise</span>.<span style="color:#a6e22e">all</span>(<span style="color:#a6e22e">tickets</span>.<span style="color:#a6e22e">map</span>(<span style="color:#a6e22e">t</span> <span style="color:#f92672">=&gt;</span> <span style="color:#a6e22e">mcp</span>.<span style="color:#a6e22e">linear</span>.<span style="color:#a6e22e">getIssue</span>({ <span style="color:#a6e22e">id</span>: <span style="color:#66d9ef">t.id</span> })));
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">hits</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">bodies</span>.<span style="color:#a6e22e">flatMap</span>(<span style="color:#a6e22e">b</span> <span style="color:#f92672">=&gt;</span> <span style="color:#a6e22e">resultText</span>(<span style="color:#a6e22e">b</span>).<span style="color:#a6e22e">match</span>(<span style="color:#e6db74">/mcp/gi</span>) <span style="color:#f92672">??</span> []);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">`</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">tickets</span>.<span style="color:#a6e22e">length</span><span style="color:#e6db74">}</span><span style="color:#e6db74"> tickets, </span><span style="color:#e6db74">${</span><span style="color:#a6e22e">hits</span>.<span style="color:#a6e22e">length</span><span style="color:#e6db74">}</span><span style="color:#e6db74"> mentions of &#34;mcp&#34;`</span>);
+</span></span></code></pre></div><p>Forty round trips collapse into one process, one context insertion, and an exact count. Note the shape of what the model sees: a single line of output. Note also what it does not see: any ticket body at all.</p>
+<h2 id="why-are-claudeai-connectors-not-supported">Why Are claude.ai Connectors Not Supported?</h2>
+<p>They are refused on purpose, for two stated reasons. First, the token for a claude.ai connector such as Gmail or Calendar exists only in claude.ai&rsquo;s backend — there is nothing local to read. Second, the connector endpoint rejects any request whose <code>clientInfo.name</code> contains the string &ldquo;claude&rdquo;, so the only way to make it work would be impersonating Claude Code. The project declines to do that, and a review should credit the refusal rather than list it as a missing feature.</p>
+<p>The verified support matrix is narrower and more honest than most tools&rsquo; claims: remote HTTP MCP over OAuth works, self-hosted remote MCP works, plugin-scoped MCP servers such as <code>plugin:slack:slack</code> work, API-key HTTP and SSE servers configured with headers work, and stdio servers configured with env vars work. Linux and Windows OAuth are explicitly labelled best-effort and unverified, with the README asking for help confirming a full run.</p>
+<p>There is also a live failure mode worth knowing before you build on it. Claude Code rotates refresh tokens single-use (the README cites anthropics/claude-code issue #59460), so a stale token held or cached by a script can be rejected outright. The documented recovery is to start Claude Code or run <code>claude mcp login &lt;server&gt;</code>. That is the credential-inheritance strategy&rsquo;s structural weakness: your reliability depends on a store another vendor controls.</p>
+<h2 id="is-it-safe-the-one-keychain-item-problem">Is It Safe? The One-Keychain-Item Problem</h2>
+<p>This is the most useful section in the whole repo, and it is the strongest original contribution a review of it can make.</p>
+<p>The project&rsquo;s <code>SECURITY.md</code> documents its own contract: it reads credentials but never writes, refreshes, rotates or deletes them; it never transmits a token anywhere except to the server that issued it; it never caches one (it re-reads the store on every call, because Claude Code rotates on its own schedule); it never prints secret material; and it raises loudly on expiry instead of silently degrading into an empty result.</p>
+<p>Then it discloses the part that matters. On macOS, every MCP OAuth token a Claude Code session holds sits in one Keychain item that is readable <strong>without any prompt</strong> by any process running as you that Claude Code could have spawned — every hook, every local MCP subprocess, every <code>npx</code> package one of those pulls in, and every shell command an agent decides to run. As the author puts it, that is a property of the credential store, not of this package, and removing the package does not change it.</p>
+<p>The consequence deserves stating plainly: if a production MCP server is one <code>npx</code> away from an untrusted postinstall script, that is worth knowing deliberately rather than discovering later. The doc&rsquo;s practical rules follow from it — treat your agent&rsquo;s MCP server list as a blast radius, and prefer read-scoped tokens wherever a server offers scopes.</p>
+<p>The supply-side context makes the blast radius bigger than it sounds. The official MCP registry held 30,375 unique servers as of 2026-09-10, roughly triple its May 2026 size, and it records <strong>no auth method, no security review and no uptime check</strong>. About 62% of listed servers have only a single version and roughly 36% have not been updated in three months or more. Publishing is also top-heavy: the top 10 publishers hold 17.7% of all servers and 16,356 publishers have exactly one.</p>
+<p>agent-codemode&rsquo;s own risk surface is genuinely small, and that is the fair reading. There is no network listener, no daemon, no background process and no persistent state: it runs, reads a credential, makes one JSON-RPC call, and exits. The one new capability is convenience. The doc names what convenience costs — a script holding your Linear token can close tickets at 3 a.m. with nobody reading the diff — which is why the example keeps destructive actions behind an explicit flag such as <code>--post</code>. Copy that pattern before you copy anything else.</p>
+<h2 id="what-is-genuinely-new-here-and-what-is-not">What Is Genuinely New Here, and What Is Not?</h2>
+<p>Almost nothing is new, and the project says so. Code mode was named by Kenton Varda and Sunil Pai at Cloudflare in September 2025. Cloudflare already collapsed an API of more than 2,500 endpoints — which would cost over 2 million tokens if each were a tool — into two tools, <code>search()</code> and <code>execute()</code>, in roughly 1,000 tokens of context, and <code>@cloudflare/codemode</code> recorded 625,217 npm downloads in the week of 2026-09-23..29. Anthropic ships Programmatic Tool Calling inside the Claude Developer Platform, reporting 37% fewer tokens on its research tasks plus a small accuracy gain, and its acknowledgements credit Cloudflare, LLMVM and &ldquo;Code Execution as MCP&rdquo;. MCPorter (openclaw/mcporter) reached runtime, typed clients and per-server CLI generation first, with 5,039 stars and 538,183 weekly downloads.</p>
+<p>The distribution gap frames the whole story in one line:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Package</th>
+          <th>npm downloads, week of 2026-09-23..29</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>@cloudflare/codemode</td>
+          <td>625,217</td>
+      </tr>
+      <tr>
+          <td>mcporter</td>
+          <td>538,183</td>
+      </tr>
+      <tr>
+          <td>mcp-use</td>
+          <td>37,016</td>
+      </tr>
+      <tr>
+          <td>@utcp/code-mode</td>
+          <td>1,051</td>
+      </tr>
+      <tr>
+          <td>@tmustier/code-mode-mcp</td>
+          <td>10</td>
+      </tr>
+      <tr>
+          <td>agent-codemode</td>
+          <td>10</td>
+      </tr>
+  </tbody>
+</table>
+<p>What remains after subtracting all of that is a 33-file, zero-dependency Node CLI whose only novel move is reading a file — or a Keychain item — that somebody else already wrote. That is a real feature, and it is also the maintenance risk, because the file it reads is controlled by another vendor.</p>
+<h2 id="is-agent-codemode-one-project-or-three">Is &ldquo;agent codemode&rdquo; One Project or Three?</h2>
+<p>Search for the phrase and you will land on three unrelated things. Disambiguating them is not pedantry; it prevents installing the wrong package.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Project</th>
+          <th>Language</th>
+          <th>What it is</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>janwilmake/agent-codemode</td>
+          <td>TypeScript</td>
+          <td>The subject of this review: a CLI plus typed library that inherits your coding agent&rsquo;s MCP credentials</td>
+      </tr>
+      <tr>
+          <td>datalayer/agent-codemode</td>
+          <td>Python (BSD-3-Clause)</td>
+          <td>Different design entirely: generates typed Python bindings from MCP servers, runs agent code in a sandbox (eval, monty, docker, jupyter, colab, kaggle, modal variants), and can re-export the generated tools as an MCP server. 4 stars, 2 forks, last push 2026-09-26</td>
+      </tr>
+      <tr>
+          <td>@cloudflare/codemode</td>
+          <td>TypeScript</td>
+          <td>Cloudflare&rsquo;s runtime for the same pattern, part of the cloudflare/agents monorepo (5,699 stars, last push 2026-09-30)</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="how-does-agent-codemode-compare-with-its-neighbours">How Does agent-codemode Compare With Its Neighbours?</h2>
+<table>
+  <thead>
+      <tr>
+          <th></th>
+          <th>agent-codemode</th>
+          <th>MCPorter</th>
+          <th>@cloudflare/codemode</th>
+          <th>@utcp/code-mode</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Credentials</td>
+          <td>Inherited from your agent (no auth step)</td>
+          <td>Own vault at <code>~/.mcporter/credentials.json</code>, <code>mcporter auth</code> per server</td>
+          <td>Bindings you configure</td>
+          <td>Config file + MCP server wiring</td>
+      </tr>
+      <tr>
+          <td>Sandbox</td>
+          <td>None — it is your shell</td>
+          <td>None</td>
+          <td>Yes (sandbox executor, approve/reject/rollback)</td>
+          <td>Isolated VM sandbox with timeouts</td>
+      </tr>
+      <tr>
+          <td>Typed clients</td>
+          <td><code>types --all</code> emits per-server modules with declaration merging</td>
+          <td><code>emit-ts</code> (<code>.d.ts</code> or client mode)</td>
+          <td>Typed OpenAPI-derived surface, <code>search()</code>/<code>execute()</code></td>
+          <td>TypeScript against configured providers</td>
+      </tr>
+      <tr>
+          <td>Extra surface</td>
+          <td>4 CLI verbs, 1 library</td>
+          <td><code>generate-cli</code>, <code>serve</code> bridge, transport pooling, auto-OAuth, stable <code>--json</code> envelopes</td>
+          <td>Connectors, audit records, saved snippets, AI SDK / TanStack AI / Vite entry points</td>
+          <td>Multi-protocol (MCP, HTTP, File, CLI) orchestration</td>
+      </tr>
+      <tr>
+          <td>Maturity</td>
+          <td>30 stars, 0 forks, ~10 weekly downloads, no commits since 2026-08-19</td>
+          <td>5,039 stars, 347 forks, pushed 2026-10-01, ~538k weekly downloads</td>
+          <td>~625k weekly downloads, actively maintained</td>
+          <td>1,578 stars, 108 forks, ~1,051 weekly downloads</td>
+      </tr>
+  </tbody>
+</table>
+<p>MCPorter does everything agent-codemode does and considerably more. The single difference agent-codemode claims is the credential row, and the README says so rather than pretending otherwise. One naming trap for readers following older links: the repo now lives at <code>openclaw/mcporter</code> (site <code>mcporter.sh</code>), and <code>steipete/mcporter</code> links redirect there.</p>
+<h2 id="what-does-the-evidence-say-about-over-claiming">What Does the Evidence Say About Over-Claiming?</h2>
+<p>The most rigorous public benchmark in this space is <code>@tmustier/code-mode-mcp</code>, run against a deterministic 10-tool MCP server with claude-opus-4-8:xhigh, 8 task shapes across 4 conditions and 5 runs each — 160 scored runs, every one returning the exact expected answer. Its findings cut against a global mode switch:</p>
+<ul>
+<li><strong>There is no universal call-count threshold.</strong> Six independent small lookups favoured direct tool calls; an 8-step dependent cursor chain and a 19-call list-and-fan-out stage favoured code mode. The recommendation is per-stage routing.</li>
+<li><strong>The wins are real where data volume is real.</strong> One task fetched four datasets concurrently: direct MCP returned about 148,000 characters of raw records to the model where code mode returned about 100. Another took 8 model/tool cycles direct against one exec cell. A third aggregated 18 result blocks inside a single cell.</li>
+<li><strong>Hybrid cost is not zero.</strong> Guided-hybrid median initial context was 4,328 tokens versus 3,261 for direct-only and 2,484 for code-mode-only. The discovery and guidance surface has to be paid for.</li>
+<li><strong>Unguided hybrids made avoidable mistakes</strong> — guessing nested tool names, misparsing <code>result.content[0].text</code>, making redundant verification calls — and needed route changes. That is the direct counter-argument to &ldquo;just ship a skill and behaviour changes by default.&rdquo;</li>
+</ul>
+<p>Worth noting for citation hygiene: that benchmark repo is now deprecated in spirit (its description points readers to <code>nicobailon/pi-mcp-adapter</code>&rsquo;s <code>mcpScript</code>), with 1 star and a last push of 2026-07-16. Cite it as evidence, not as a tool recommendation.</p>
+<h2 id="when-should-you-write-a-script-instead-of-calling-a-tool">When Should You Write a Script Instead of Calling a Tool?</h2>
+<p>Use task shape, not a call count. The heuristic below is drawn from the benchmark above and from Agent Swarm&rsquo;s published operational rule, which is the clearest version available: script it when a job means 10+ similar tool calls, a bulk fan-out, or heavy intermediate data you would otherwise discard; stay with direct tool calls for a handful of calls or when intermediate values must be in context.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Write a script when</th>
+          <th>Call the tool directly when</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>10 or more similar calls to the same server</td>
+          <td>A handful of calls, done</td>
+      </tr>
+      <tr>
+          <td>Bulk fan-out or parallel fetch across many records</td>
+          <td>The model must read each result to decide the next step</td>
+      </tr>
+      <tr>
+          <td>Heavy intermediate data you would otherwise discard</td>
+          <td>Intermediate values legitimately belong in context</td>
+      </tr>
+      <tr>
+          <td>A long deterministic chain where each step is mechanical</td>
+          <td>Approvals, ambiguous semantics, error recovery</td>
+      </tr>
+      <tr>
+          <td>The same job will run again tomorrow</td>
+          <td>Rich native results the model should see verbatim</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="what-is-the-second-win-nobody-prices">What Is the Second Win Nobody Prices?</h2>
+<p>The script is a file. It runs tomorrow from cron or as a CI gate with no model and no tokens involved at all — which is the answer to the reasonable objection that code mode on top of MCP on top of code is a useless extra layer. Agent Swarm&rsquo;s numbers back the compounding effect: roughly 150 reusable scripts, about 25,000 executions in 30 days, and around 70% of their schedules using at least one. The counterweight is the author&rsquo;s own warning about a script that holds a live token and acts unattended.</p>
+<h2 id="should-you-depend-on-it-the-maintenance-reality">Should You Depend On It? The Maintenance Reality</h2>
+<p>Treat this as a verdict input, not a closing footnote. The repository was created 2026-08-18, last pushed 2026-08-19, and has been untouched since. It has 30 stars, 0 forks, 33 tracked files, 681 KB, no GitHub releases ever, and one open issue that is a promotional invite rather than a bug report. npm shows only versions 0.1.0 and 0.1.1, last modified 2026-08-18, and roughly 10 downloads in the week of 2026-09-23..29. The Show HN launch reached 4 points and 0 comments, so there is no community validation to imply. Linux and Windows support is explicitly unverified by the author. And a tool whose entire value proposition is reading a credential store that Anthropic controls will rot the moment that store changes — which the single-use refresh rotation issue already demonstrates.</p>
+<h2 id="how-do-you-copy-the-idea-in-an-afternoon">How Do You Copy the Idea in an Afternoon?</h2>
+<p>The core is small enough to reimplement, and that is a more durable takeaway than a verdict on a 30-star package. The whole trick, harness-agnostically:</p>
+<ol>
+<li>Locate the agent&rsquo;s credential store — the Keychain item <code>Claude Code-credentials</code> on macOS, <code>~/.claude/.credentials.json</code> elsewhere for OAuth, plus <code>~/.claude.json</code> and <code>.mcp.json</code> for stdio and API-key servers.</li>
+<li>Pick the entry for the server you want, keyed by name and URL hash.</li>
+<li>For a remote server, speak Streamable HTTP MCP: <code>initialize</code>, capture <code>Mcp-Session-Id</code>, send <code>notifications/initialized</code>, then <code>tools/call</code>.</li>
+<li>For a local server, spawn the configured subprocess and speak newline-framed JSON-RPC.</li>
+<li>Print the result and exit non-zero on tool errors.</li>
+</ol>
+<p>There is one behavioural piece that is not code at all, and it is the mechanism the author identifies behind the token ratio: an agent that knows the option exists writes one script, and an agent that does not keeps making twenty tool calls. That is why the project ships <code>.claude/skills/agent-codemode/SKILL.md</code>. The skill, not the library, is what changes the default.</p>
+<h2 id="verdict-borrow-the-pattern-and-the-securitymd">Verdict: Borrow the Pattern and the SECURITY.md</h2>
+<p>agent-codemode is a 30-star, single-maintainer, zero-dependency CLI whose one genuinely differentiated move is inheriting credentials the agent already holds. The token ratio it measures is real; the generalization is narrower than the number suggests, and the independent 160-run benchmark shows why — task shape, not call count, decides whether code mode wins, and unguided hybrids pay for their own guidance. If you already run MCPorter, you are not missing a capability. If you are designing a harness and want your agent to reach for scripts by default, read this repository&rsquo;s <code>SECURITY.md</code> first: the blast-radius disclosure about the single Keychain item is the most valuable artifact here, and it applies to your setup whether or not you install the package. Borrow the pattern, inherit the security reasoning, and hold the dependency at arm&rsquo;s length until it has commits newer than August 2026.</p>
+<h2 id="faq">FAQ</h2>
+<p><strong>What is agent-codemode in one sentence?</strong>
+It is a Node 18+ CLI and TypeScript library that lets a script your coding agent writes call the MCP servers that agent already authenticated, by reading the credentials Claude Code already stored instead of asking you to log in again.</p>
+<p><strong>Is the 99.66% token saving claim reliable?</strong>
+It is a real measurement on one Linear task (262,159 characters over 40 tool calls versus 903 characters in one script), but it is a context-window measurement rather than an end-to-end saving. Independent production data shows about 99.2% fewer tokens for the data-gathering step and roughly half the total cost for the whole job, because the agent still reasons over the result.</p>
+<p><strong>Does agent-codemode create a new security hole?</strong>
+No, and its own <code>SECURITY.md</code> says so. On macOS every MCP OAuth token lives in one Keychain item readable without a prompt by anything a Claude Code session can spawn. The package makes that existing exposure legible rather than creating it — removing the package does not change the exposure.</p>
+<p><strong>How is it different from MCPorter or Cloudflare Code Mode?</strong>
+The only real difference is credentials: agent-codemode uses the token your agent already has, while MCPorter keeps its own vault and requires <code>mcporter auth</code> per server, and Cloudflare uses bindings you configure. On every other axis — typed clients, maturity, distribution, sandboxing — MCPorter and <code>@cloudflare/codemode</code> are ahead by orders of magnitude.</p>
+<p><strong>When should I write an MCP script instead of calling tools directly?</strong>
+When a job needs 10 or more similar calls, a bulk fan-out, a long deterministic chain, or heavy intermediate data you would otherwise discard — and when the job will run again tomorrow without a model. Keep direct tool calls for a handful of calls, semantic decisions, approvals, and cases where intermediate values genuinely belong in the model&rsquo;s context.</p>
+]]></content:encoded></item></channel></rss>
