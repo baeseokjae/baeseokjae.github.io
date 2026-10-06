@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Pi Coding Agent Settings.json Location on RockB</title><link>https://baeseokjae.github.io/tags/pi-coding-agent-settings.json-location/</link><description>Recent content in Pi Coding Agent Settings.json Location on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 01 Oct 2026 07:12:31 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/pi-coding-agent-settings.json-location/index.xml" rel="self" type="application/rss+xml"/><item><title>Pi Coding Agent Configuration on Linux: Fix the Out-of-Place .pi Folder</title><link>https://baeseokjae.github.io/posts/pi-coding-agent-config-linux/</link><pubDate>Thu, 01 Oct 2026 07:12:31 +0000</pubDate><guid>https://baeseokjae.github.io/posts/pi-coding-agent-config-linux/</guid><description>Pi ignores XDG on Linux and writes to ~/.pi/agent. Move it with PI_CODING_AGENT_DIR — not PI_CONFIG_DIR — plus migration and dotfiles recipes.</description><content:encoded><![CDATA[<p>Pi does not follow the XDG Base Directory specification on Linux. Its user configuration lives in <code>~/.pi/agent</code>, and the only supported way to relocate it is the <code>PI_CODING_AGENT_DIR</code> environment variable. Set it to the <em>agent</em> directory — <code>~/.config/pi/agent</code>, never <code>~/.config/pi</code> — or authentication and model settings silently read as empty.</p>
+<p>This guide covers what is actually inside that folder, why the widely cited <code>PI_CONFIG_DIR</code> variable does nothing, the three layouts that fit real workflows, and the verification commands that prove the move worked.</p>
+<h2 id="why-does-pi-put-its-configuration-in-home-on-linux">Why Does Pi Put Its Configuration in $HOME on Linux?</h2>
+<p>Pi&rsquo;s coding agent resolves its user-level directory with a small function in <code>packages/coding-agent/src/config.ts</code>. If the environment variable is absent it falls back to <code>join(homedir(), CONFIG_DIR_NAME, &quot;agent&quot;)</code>, where <code>CONFIG_DIR_NAME</code> defaults to <code>.pi</code>. On Linux that resolves to <code>~/.pi/agent</code> — a dotfolder in the home root, not <code>~/.config</code>.</p>
+<p>That behavior has been contested repeatedly, and the issue history is the clearest evidence of how settled the maintainers consider it:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Issue</th>
+          <th>Ask</th>
+          <th>Outcome</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><a href="https://github.com/earendil-works/pi/issues/534">#534</a></td>
+          <td>Resolve prefix as <code>PI_CONFIG_DIR</code> → <code>XDG_CONFIG_HOME</code> → OS default</td>
+          <td>Opened and closed the same day; 30 +1 reactions, 16 comments</td>
+      </tr>
+      <tr>
+          <td><a href="https://github.com/earendil-works/pi/issues/2870">#2870</a></td>
+          <td>Full XDG compliance across config, state, and cache</td>
+          <td>Closed; 80 total reactions (62 +1, 12 heart, 6 rocket)</td>
+      </tr>
+      <tr>
+          <td><a href="https://github.com/earendil-works/pi/issues/2390">#2390</a></td>
+          <td><code>PI_CONFIG_DIR</code> is ignored by the coding agent</td>
+          <td>Closed; maintainer confirmed the variable is for a different subsystem</td>
+      </tr>
+      <tr>
+          <td><a href="https://github.com/earendil-works/pi/issues/5301">#5301</a></td>
+          <td>Opt-in XDG layout behind a <code>Paths</code>/<code>Roots</code> abstraction</td>
+          <td>Closed — &ldquo;sorry, this isn&rsquo;t going to change for the time being&rdquo;</td>
+      </tr>
+  </tbody>
+</table>
+<p>As of 2026-10-01, a search for open XDG-related issues in the repository returns zero results. Every proposal has been closed, and the maintainer&rsquo;s position is consistent across threads: existing users make automatic migration messy, so <code>PI_CODING_AGENT_DIR</code> remains the escape hatch.</p>
+<p>The scale of the audience is what makes this a practical problem rather than a philosophical one. The <code>@earendil-works/pi-coding-agent</code> package recorded 11,878,758 downloads between 2026-08-31 and 2026-09-29, and the legacy <code>@mariozechner/pi-coding-agent</code> scope added 3,309,867 in the same window. The repository itself sits at 110,843 stars, 14,096 forks, and 234 open issues. A dev.to review of pi in 2026 named &ldquo;<code>~/.pi/agent</code> ignores XDG on Linux&rdquo; as the single largest community complaint of the year, citing a 56-point Hacker News thread.</p>
+<h2 id="what-actually-lives-inside-the-pi-folder">What Actually Lives Inside the .pi Folder?</h2>
+<p>Before moving anything, know what you are moving. Pi&rsquo;s official configuration documentation splits user-level assets into two groups: files you should back up and files you can regenerate.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Path under <code>~/.pi/agent</code></th>
+          <th>Contents</th>
+          <th>Regenerable?</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><code>settings.json</code></td>
+          <td>user settings</td>
+          <td>No — hand-written</td>
+      </tr>
+      <tr>
+          <td><code>keybindings.json</code></td>
+          <td>keybinding overrides</td>
+          <td>No</td>
+      </tr>
+      <tr>
+          <td><code>mcp.json</code></td>
+          <td>MCP server definitions</td>
+          <td>No</td>
+      </tr>
+      <tr>
+          <td><code>models.json</code></td>
+          <td>model/provider configuration</td>
+          <td>No</td>
+      </tr>
+      <tr>
+          <td><code>auth.json</code></td>
+          <td>stored credentials</td>
+          <td>No — secret</td>
+      </tr>
+      <tr>
+          <td><code>extensions/</code>, <code>skills/</code>, <code>prompts/</code>, <code>themes/</code></td>
+          <td>user assets</td>
+          <td>No</td>
+      </tr>
+      <tr>
+          <td><code>bin/</code></td>
+          <td>auto-downloaded <code>fd</code> and <code>ripgrep</code></td>
+          <td>Yes</td>
+      </tr>
+      <tr>
+          <td><code>pi-debug.log</code> (and other logs)</td>
+          <td>diagnostics</td>
+          <td>Yes</td>
+      </tr>
+  </tbody>
+</table>
+<p>Two consequences follow from that table.</p>
+<p>First, <code>auth.json</code> is the reason this is a configuration topic with a security edge. Any migration step that copies the directory into a git repository, a container image, or a shared backup can leak credentials. The official security documentation also warns against mounting a host agent directory into a container you do not fully trust, because the credential file travels with it.</p>
+<p>Second, the <code>bin/</code> directory explains a behavior that surprises people after a successful move: the first run after relocating the agent directory re-downloads <code>fd</code> and <code>ripgrep</code> into <code>&lt;new agent dir&gt;/bin</code>. Nothing breaks, but the old copy stays behind as dead weight if you moved rather than deleted.</p>
+<p>Project-level configuration is separate. Pi reads <code>&lt;current working directory&gt;/.pi/</code> and only loads it after you approve project trust. The one documented exception is the session directory, which is resolved before trust is evaluated.</p>
+<h2 id="the-variable-that-does-not-exist-pi_config_dir">The Variable That Does Not Exist: PI_CONFIG_DIR</h2>
+<p>Search results and older write-ups routinely tell you to <code>export PI_CONFIG_DIR=...</code>. That advice is wrong for the coding agent, and it is the most common way readers end up convinced that pi ignores environment variables entirely.</p>
+<p>Issue #2390 documented exactly this: after setting <code>PI_CONFIG_DIR</code>, <code>~/.pi/agent</code> was still created. The maintainer&rsquo;s conclusion was unambiguous — <code>PI_CONFIG_DIR is for pods, not for the coding agent</code>. The variable belonged to a removed <code>pods</code> manager and was never wired into the coding agent&rsquo;s path resolution.</p>
+<p>You can confirm this against the primary source. The official environment variable reference at <code>pi.dev/docs/latest/environment-variables</code> lists <code>PI_CODING_AGENT_DIR</code>, <code>PI_CODING_AGENT_SESSION_DIR</code>, <code>PI_PACKAGE_DIR</code> (for Nix/Guix), <code>PI_OFFLINE</code>, <code>PI_SKIP_VERSION_CHECK</code>, and telemetry controls. <code>PI_CONFIG_DIR</code> does not appear on that page at all.</p>
+<p>If you set <code>PI_CONFIG_DIR</code> and saw no effect, nothing is broken — you configured a variable that the coding agent does not read.</p>
+<h2 id="pi_coding_agent_dir-points-at-an-agent-directory-not-a-home">PI_CODING_AGENT_DIR Points at an Agent Directory, Not a Home</h2>
+<p>The name is the specification. <code>PI_CODING_AGENT_DIR</code> is not <code>PI_HOME</code>. Its default value is <code>~/.pi/agent</code> — the leaf directory that contains <code>settings.json</code> — not <code>~/.pi</code>.</p>
+<p>The failure mode when you miss that distinction is quiet and expensive. Setting <code>PI_CODING_AGENT_DIR=~/.piz</code> makes pi look for <code>~/.piz/auth.json</code> and <code>~/.piz/models.json</code>. Those files do not exist, so pi starts with no authentication and no configured models and reports nothing obviously wrong. Setting <code>PI_CODING_AGENT_DIR=~/.piz/agent</code> behaves correctly. One path segment is the difference between a working setup and a confusing one, and the asymmetry exists because pi never appends <code>agent</code> to a value you supply — it only appends it to the default.</p>
+<p>The design intent is visible in the naming. The <code>~/.pi</code> container is meant to hold several sibling agent directories — <code>~/.pi/agent</code>, <code>~/.pi/work</code>, <code>~/.pi/personal</code> — that you switch between by changing one variable. That is why the variable names a directory rather than a home.</p>
+<p>This is not a new edge case, either. Pi&rsquo;s changelog records fixes for tilde expansion in this variable, for hardcoded paths in error messages, and for example expansion — all three in the release notes — which means the tilde form is supported, but absolute paths remain the safer choice in scripts, systemd units, and container entrypoints where no shell performs expansion.</p>
+<h2 id="designing-the-target-layout-config-state-and-cache">Designing the Target Layout: Config, State, and Cache</h2>
+<p>The most-reacted issue on this topic asked pi to respect all four XDG variables: <code>XDG_CONFIG_HOME</code>, <code>XDG_DATA_HOME</code>, <code>XDG_STATE_HOME</code>, and <code>XDG_CACHE_HOME</code>. Pi exposes two of those levers. Here is the layout that gets you closest with the variables that actually exist:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Concern</th>
+          <th>XDG location</th>
+          <th>Pi control</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Settings, auth, models, MCP, extensions</td>
+          <td><code>$XDG_CONFIG_HOME/pi/agent</code> (<code>~/.config/pi/agent</code>)</td>
+          <td><code>PI_CODING_AGENT_DIR</code></td>
+      </tr>
+      <tr>
+          <td>Session transcripts</td>
+          <td><code>$XDG_DATA_HOME/pi-sessions</code> (<code>~/.local/share/pi-sessions</code>)</td>
+          <td><code>PI_CODING_AGENT_SESSION_DIR</code></td>
+      </tr>
+      <tr>
+          <td>Downloaded binaries (<code>fd</code>, <code>ripgrep</code>)</td>
+          <td>stays in the agent directory</td>
+          <td>none — symlink if needed</td>
+      </tr>
+      <tr>
+          <td>Logs</td>
+          <td>stays in the agent directory</td>
+          <td>none — symlink if needed</td>
+      </tr>
+      <tr>
+          <td>Project overrides</td>
+          <td><code>&lt;project&gt;/.pi/</code></td>
+          <td>trust-gated, no variable</td>
+      </tr>
+  </tbody>
+</table>
+<p>This split is the practical answer to the objection that a single variable cannot separate configuration from state. It can, when you use both variables:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-sh" data-lang="sh"><span style="display:flex;"><span>export PI_CODING_AGENT_DIR<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>XDG_CONFIG_HOME<span style="color:#66d9ef">:-</span>$HOME/.config<span style="color:#e6db74">}</span><span style="color:#e6db74">/pi/agent&#34;</span>
+</span></span><span style="display:flex;"><span>export PI_CODING_AGENT_SESSION_DIR<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>XDG_DATA_HOME<span style="color:#66d9ef">:-</span>$HOME/.local/share<span style="color:#e6db74">}</span><span style="color:#e6db74">/pi-sessions&#34;</span>
+</span></span></code></pre></div><p>That pair appeared in the discussion of issue #2870 and is the layout to copy if you want a dotfiles-friendly configuration directory and a regenerable, large, never-backed-up session store. Sessions are the heavy, disposable half — separating them means your <code>~/.config</code> stays small enough to commit and diff, while transcripts live where backup tools can skip them.</p>
+<p>For comparison, <code>opencode</code> is the reference implementation cited in that thread: it respects <code>~/.config</code>, <code>~/.local/share</code>, <code>~/.local/state</code>, and <code>~/.cache</code>, and even ships a <code>.gitignore</code> inside <code>~/.config/opencode</code>. Pi is two-thirds of the way there by design and will not go further, which is the honest framing to plan against.</p>
+<p>Note what you cannot fix: because <code>bin/</code> and logs sit inside the agent directory, no environment variable makes pi write literally nothing to <code>$HOME</code>. If your goal is &ldquo;zero dotfolders in <code>$HOME</code>&rdquo;, a single symlink is the remaining step.</p>
+<h2 id="recipe-1-a-clean-xdg-install">Recipe 1: A Clean XDG Install</h2>
+<p>For a fresh machine, point pi at XDG paths before the first run so the fallback never fires. Add both exports to <code>~/.bashrc</code> or <code>~/.zshrc</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-sh" data-lang="sh"><span style="display:flex;"><span><span style="color:#75715e"># ~/.bashrc or ~/.zshrc</span>
+</span></span><span style="display:flex;"><span>export PI_CODING_AGENT_DIR<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>XDG_CONFIG_HOME<span style="color:#66d9ef">:-</span>$HOME/.config<span style="color:#e6db74">}</span><span style="color:#e6db74">/pi/agent&#34;</span>
+</span></span><span style="display:flex;"><span>export PI_CODING_AGENT_SESSION_DIR<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>XDG_DATA_HOME<span style="color:#66d9ef">:-</span>$HOME/.local/share<span style="color:#e6db74">}</span><span style="color:#e6db74">/pi-sessions&#34;</span>
+</span></span></code></pre></div><p>Then create the directories explicitly and start pi:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-sh" data-lang="sh"><span style="display:flex;"><span>mkdir -p <span style="color:#e6db74">&#34;</span>$PI_CODING_AGENT_DIR<span style="color:#e6db74">&#34;</span> <span style="color:#e6db74">&#34;</span>$PI_CODING_AGENT_SESSION_DIR<span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>exec <span style="color:#e6db74">&#34;</span>$SHELL<span style="color:#e6db74">&#34;</span> -l          <span style="color:#75715e"># reload the profile</span>
+</span></span><span style="display:flex;"><span>pi --version              <span style="color:#75715e"># first run writes settings.json here, not to ~/.pi</span>
+</span></span></code></pre></div><p>Verification is a two-line check that <code>~/.pi</code> was never created and the expected files landed in the configured location:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-sh" data-lang="sh"><span style="display:flex;"><span>ls -la <span style="color:#e6db74">&#34;</span>$PI_CODING_AGENT_DIR<span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>test -e <span style="color:#e6db74">&#34;</span>$HOME<span style="color:#e6db74">/.pi&#34;</span> <span style="color:#f92672">&amp;&amp;</span> echo <span style="color:#e6db74">&#34;unexpected: ~/.pi exists&#34;</span> <span style="color:#f92672">||</span> echo <span style="color:#e6db74">&#34;clean: no ~/.pi&#34;</span>
+</span></span></code></pre></div><p>The reason to create the directories yourself is that a read-only <code>$HOME</code> or a restricted container home will otherwise fail at the first write with an error that points at pi rather than at the filesystem.</p>
+<h2 id="recipe-2-migrating-an-existing-pi-without-losing-sessions-or-auth">Recipe 2: Migrating an Existing ~/.pi Without Losing Sessions or Auth</h2>
+<p>Existing users carry two assets worth preserving: <code>auth.json</code> and the session history. The safest migration moves the whole tree and leaves a compatibility symlink so anything that still hardcodes <code>~/.pi</code> keeps working.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-sh" data-lang="sh"><span style="display:flex;"><span>set -eu
+</span></span><span style="display:flex;"><span>TARGET<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>XDG_CONFIG_HOME<span style="color:#66d9ef">:-</span>$HOME/.config<span style="color:#e6db74">}</span><span style="color:#e6db74">/pi&#34;</span>
+</span></span><span style="display:flex;"><span>mkdir -p <span style="color:#e6db74">&#34;</span>$TARGET<span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># 1. Preserve a copy before touching anything.</span>
+</span></span><span style="display:flex;"><span>cp -a <span style="color:#e6db74">&#34;</span>$HOME<span style="color:#e6db74">/.pi&#34;</span> <span style="color:#e6db74">&#34;</span>$HOME<span style="color:#e6db74">/.pi.bak.</span><span style="color:#66d9ef">$(</span>date -u +%Y%m%dT%H%M%SZ<span style="color:#66d9ef">)</span><span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># 2. Move the real tree (including the agent/ leaf) into the XDG location.</span>
+</span></span><span style="display:flex;"><span>mv <span style="color:#e6db74">&#34;</span>$HOME<span style="color:#e6db74">/.pi/agent&#34;</span> <span style="color:#e6db74">&#34;</span>$TARGET<span style="color:#e6db74">/agent&#34;</span>
+</span></span><span style="display:flex;"><span>mv <span style="color:#e6db74">&#34;</span>$HOME<span style="color:#e6db74">/.pi&#34;</span>/* <span style="color:#e6db74">&#34;</span>$TARGET<span style="color:#e6db74">&#34;</span>/ 2&gt;/dev/null <span style="color:#f92672">||</span> true
+</span></span><span style="display:flex;"><span>rmdir <span style="color:#e6db74">&#34;</span>$HOME<span style="color:#e6db74">/.pi&#34;</span> 2&gt;/dev/null <span style="color:#f92672">||</span> true
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># 3. Backward-compatibility symlink: ~/.pi resolves to the same real files.</span>
+</span></span><span style="display:flex;"><span>ln -s <span style="color:#e6db74">&#34;</span>$TARGET<span style="color:#e6db74">&#34;</span> <span style="color:#e6db74">&#34;</span>$HOME<span style="color:#e6db74">/.pi&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># 4. Point pi at the leaf, not the parent.</span>
+</span></span><span style="display:flex;"><span>export PI_CODING_AGENT_DIR<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;</span>$TARGET<span style="color:#e6db74">/agent&#34;</span>
+</span></span></code></pre></div><p>Then confirm pi still authenticates — this is the step that catches a missing <code>/agent</code>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-sh" data-lang="sh"><span style="display:flex;"><span>ls -l <span style="color:#e6db74">&#34;</span>$PI_CODING_AGENT_DIR<span style="color:#e6db74">/auth.json&#34;</span> <span style="color:#e6db74">&#34;</span>$PI_CODING_AGENT_DIR<span style="color:#e6db74">/models.json&#34;</span>
+</span></span><span style="display:flex;"><span>pi --version
+</span></span></code></pre></div><p>If <code>auth.json</code> is missing or empty at that path, you pointed the variable at <code>$TARGET</code> instead of <code>$TARGET/agent</code>. Move the value one level deeper; nothing else needs to change.</p>
+<p>Two honest caveats about the symlink approach. It works, and the community consensus in issue #534 confirmed that <code>ln -s ~/.config/pi ~/.pi</code> is a valid workaround. But it leaves a <code>~/.pi</code> entry in your home directory — now a symlink rather than a directory — so the &ldquo;home pollution&rdquo; complaint is reduced, not eliminated. If your <code>~/.config</code> is already managed by a dotfiles repository, the symlink is usually the best trade: tools that hardcode <code>~/.pi</code> and tools that read <code>$XDG_CONFIG_HOME</code> converge on the same real files.</p>
+<h2 id="recipe-3-ci-containers-and-read-only-homes">Recipe 3: CI, Containers, and Read-Only Homes</h2>
+<p>In ephemeral environments, put everything under the workspace and make it explicit. Nothing should depend on <code>$HOME</code>, because the home directory in a build container is frequently read-only or wiped between steps:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-sh" data-lang="sh"><span style="display:flex;"><span>export PI_CODING_AGENT_DIR<span style="color:#f92672">=</span>/workspace/.pi/agent
+</span></span><span style="display:flex;"><span>export PI_CODING_AGENT_SESSION_DIR<span style="color:#f92672">=</span>/workspace/.pi/sessions
+</span></span><span style="display:flex;"><span>export PI_OFFLINE<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>              <span style="color:#75715e"># skip network checks in hermetic builds</span>
+</span></span><span style="display:flex;"><span>export PI_SKIP_VERSION_CHECK<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span>   <span style="color:#75715e"># avoids a startup HTTP call</span>
+</span></span><span style="display:flex;"><span>mkdir -p <span style="color:#e6db74">&#34;</span>$PI_CODING_AGENT_DIR<span style="color:#e6db74">&#34;</span> <span style="color:#e6db74">&#34;</span>$PI_CODING_AGENT_SESSION_DIR<span style="color:#e6db74">&#34;</span>
+</span></span></code></pre></div><p>This covers the read-only-home case that a single variable cannot: configuration and sessions diverge, so a <code>$HOME</code> you cannot write to stops mattering. If you need the binaries under one cache root as well, symlink <code>bin</code> out of the agent directory rather than trying to relocate it by variable.</p>
+<p>The security note matters more in this recipe than in any other. Pi&rsquo;s own documentation warns that mounting a host agent directory into a container exposes the credentials in <code>auth.json</code> to anything running inside it. Treat a container mount of <code>~/.pi/agent</code> as equivalent to mounting your credential store, and prefer a dedicated agent directory with its own scoped auth for CI workloads.</p>
+<h2 id="managing-the-configuration-in-git-without-leaking-auth">Managing the Configuration in Git Without Leaking Auth</h2>
+<p>The main practical payoff of a <code>~/.config/pi/agent</code> layout is that the directory is small, text-heavy, and worth tracking. The one file that must never be committed is <code>auth.json</code>.</p>
+<p>A workable ignore file for the agent directory:</p>
+<pre tabindex="0"><code class="language-gitignore" data-lang="gitignore"># ~/.config/pi/agent/.gitignore
+auth.json
+bin/
+*.log
+sessions/
+</code></pre><p>Track <code>settings.json</code>, <code>keybindings.json</code>, <code>mcp.json</code>, <code>models.json</code>, <code>prompts/</code>, <code>themes/</code>, <code>skills/</code>, and <code>extensions/</code>. Those are the files where version history actually saves you time — a keybinding experiment or an MCP server list is exactly the kind of change you want to diff and revert.</p>
+<p>Verify the ignore rule before your first push, not after:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-sh" data-lang="sh"><span style="display:flex;"><span>cd <span style="color:#e6db74">&#34;</span>$PI_CODING_AGENT_DIR<span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>git check-ignore -v auth.json          <span style="color:#75715e"># must print a matching rule</span>
+</span></span><span style="display:flex;"><span>git status --short                     <span style="color:#75715e"># auth.json must not appear</span>
+</span></span></code></pre></div><p>If you keep session history in the same repository by choice rather than by accident, expect that directory to dominate repository size within weeks. That is the concrete argument for keeping <code>PI_CODING_AGENT_SESSION_DIR</code> pointed at <code>~/.local/share</code> and out of the tracked tree.</p>
+<h2 id="how-do-i-verify-the-configuration-path-actually-changed">How Do I Verify the Configuration Path Actually Changed?</h2>
+<p>Three checks, in increasing order of confidence.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-sh" data-lang="sh"><span style="display:flex;"><span><span style="color:#75715e"># 1. The variable is visible to the process that will launch pi.</span>
+</span></span><span style="display:flex;"><span>printenv PI_CODING_AGENT_DIR PI_CODING_AGENT_SESSION_DIR
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># 2. Only that directory is being written.</span>
+</span></span><span style="display:flex;"><span>ls -la <span style="color:#e6db74">&#34;</span>$PI_CODING_AGENT_DIR<span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># 3. Nothing new appeared in the home root.</span>
+</span></span><span style="display:flex;"><span>find <span style="color:#e6db74">&#34;</span>$HOME<span style="color:#e6db74">&#34;</span> -maxdepth <span style="color:#ae81ff">1</span> -name <span style="color:#e6db74">&#39;.pi*&#39;</span> -newermt <span style="color:#e6db74">&#39;-10 minutes&#39;</span>
+</span></span></code></pre></div><p>Check 1 fails most often for a mundane reason: the export lives in your interactive shell profile, but the process reading it is a cron job, a systemd unit, an SSH command, or a launchd agent with a different environment. Absolute paths in the unit file, plus the same two variables in the unit&rsquo;s <code>Environment=</code> block, are the reliable fix. Never rely on <code>~</code> inside a systemd unit — no shell is present to expand it.</p>
+<p>Check 2 catches the missing-<code>/agent</code> mistake. Check 3 catches the case where pi wrote to the default location anyway because one of the two variables was not actually exported in the launching context.</p>
+<p>If you change settings while pi is running, the in-session <code>/settings</code> command and a <code>/reload</code> apply the change without restarting the process. And whichever directory pi is pointed at, restart it before moving that directory — a running pi keeps writing to the old, now renamed path until it exits.</p>
+<h2 id="eight-mistakes-that-silently-break-the-configuration-path">Eight Mistakes That Silently Break the Configuration Path</h2>
+<ol>
+<li>Setting <code>PI_CONFIG_DIR</code>. It is not read by the coding agent; the export has no effect.</li>
+<li>Pointing <code>PI_CODING_AGENT_DIR</code> at the parent directory. Omitting <code>/agent</code> yields an empty auth and model configuration with no error.</li>
+<li>Exporting the variables only in the interactive shell. Cron, systemd, and CI inherit nothing.</li>
+<li>Using <code>~</code> in a systemd unit or an exec-style call. Use absolute paths.</li>
+<li>Expecting the auto-downloaded <code>fd</code> and <code>ripgrep</code> binaries in <code>bin/</code> to stay where they were. They land under the new agent directory on the next run.</li>
+<li>Moving the directory while pi is running. The process keeps writing to the renamed path.</li>
+<li>Committing <code>auth.json</code> after pointing the directory into a dotfiles repository. Check with <code>git check-ignore</code> before the first push.</li>
+<li>Assuming the move also relocates sessions. Set <code>PI_CODING_AGENT_SESSION_DIR</code> separately.</li>
+</ol>
+<p>Rolling back is genuinely easy, which is worth saying plainly: unset both variables, move the directory back to <code>~/.pi</code>, and pi uses the default again. There is no database or registry entry to repair, because the paths are resolved from the environment on every launch.</p>
+<h2 id="does-the-xdg-debate-change-what-you-should-do">Does the XDG Debate Change What You Should Do?</h2>
+<p>Both sides of this argument are reasonable, and the disagreement is about defaults rather than capability.</p>
+<p>The case for changing pi&rsquo;s default: <code>~/.pi/agent</code> violates a specification almost every Linux CLI tool follows, it pollutes <code>$HOME</code> for users who keep that directory curated, and it breaks the assumption behind backup and dotfile tooling that reads <code>$XDG_CONFIG_HOME</code>. The 80 reactions on issue #2870 and the 56-point Hacker News thread show that this is not a fringe preference. The gap against peers is concrete: <code>opencode</code> respects all four XDG paths.</p>
+<p>The case for leaving it: a default change requires migrating every existing user, and the maintainer consistently called that messy enough to reject. The proposals on the table were not unreasonable — the suggestion in #534 was a backward-compatible resolution order (check <code>PI_CONFIG_DIR</code>, then use <code>$HOME/.pi</code> if it exists, then fall back to XDG), which would have required no migration at all — and #5301 proposed an opt-in layout behind a <code>Paths</code>/<code>Roots</code> abstraction. Both were closed: &ldquo;this isn&rsquo;t going to change for the time being.&rdquo; The counter-arguments in the community threads are also not empty: the escape hatch moves the directory in seconds, XDG can scatter an application&rsquo;s data across four locations, and a tool frequently run inside a VM or container has a weaker relationship with its home directory.</p>
+<p>The practical reading is that one environment variable closes most of the gap, and knowing that <code>PI_CODING_AGENT_DIR</code> — not <code>PI_CONFIG_DIR</code> — is the mechanism, and that it names the leaf and not the home, is what prevents the silent failures. Everything else is a defaults argument you can work around in an evening.</p>
+<h2 id="frequently-asked-questions">Frequently Asked Questions</h2>
+<p><strong>Is <code>PI_CONFIG_DIR</code> the correct variable for moving pi&rsquo;s configuration folder?</strong></p>
+<p>No. <code>PI_CONFIG_DIR</code> belonged to a removed <code>pods</code> subsystem and is not read by the coding agent; the maintainer confirmed this in issue #2390 and the official environment variable reference does not list it. Use <code>PI_CODING_AGENT_DIR</code>.</p>
+<p><strong>Where does pi store its configuration on Linux by default?</strong></p>
+<p>User-level configuration lives in <code>~/.pi/agent</code>, containing <code>settings.json</code>, <code>keybindings.json</code>, <code>mcp.json</code>, <code>models.json</code>, <code>auth.json</code>, plus <code>extensions/</code>, <code>skills/</code>, <code>prompts/</code>, and <code>themes/</code>. Project-level configuration lives in <code>&lt;project&gt;/.pi/</code> and loads only after you approve project trust.</p>
+<p><strong>Why does pi still create <code>.pi</code> after I set an environment variable?</strong></p>
+<p>Because the variable you set was not the one pi reads. If you exported <code>PI_CONFIG_DIR</code>, nothing happens. If you exported <code>PI_CODING_AGENT_DIR</code> and the folder still appears at <code>~/.pi/agent</code>, the variable was not present in the environment of the process that launched pi — usually a cron job, systemd unit, or CI step rather than your interactive shell.</p>
+<p><strong>Can I make pi fully XDG-compliant?</strong></p>
+<p>You can relocate configuration and sessions with <code>PI_CODING_AGENT_DIR</code> and <code>PI_CODING_AGENT_SESSION_DIR</code>. You cannot relocate the auto-downloaded binaries and logs, which share the agent directory, so <code>$HOME</code> always keeps at least a symlink unless you point the agent directory elsewhere entirely. Full compliance was requested in issue #2870 and declined.</p>
+<p><strong>Will moving the agent directory break my authentication?</strong></p>
+<p>Only if you point the variable at the wrong level. <code>PI_CODING_AGENT_DIR=~/.config/pi</code> makes pi read <code>~/.config/pi/auth.json</code>, which does not exist. <code>PI_CODING_AGENT_DIR=~/.config/pi/agent</code> reads the file you actually moved. Verify with <code>ls -l &quot;$PI_CODING_AGENT_DIR/auth.json&quot;</code> before starting pi.</p>
+]]></content:encoded></item></channel></rss>
