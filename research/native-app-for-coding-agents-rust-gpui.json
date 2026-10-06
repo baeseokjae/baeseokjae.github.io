@@ -1,0 +1,405 @@
+{
+ "topic": "Building a Native App for Coding Agents in Rust and GPUI",
+ "slug": "native-app-for-coding-agents-rust-gpui",
+ "keyword": "rust coding agent gui",
+ "type": "how-to",
+ "research_date": "2026-10-01",
+ "research_method": "crates.io JSON API (live download/version data), authenticated GitHub API via gh CLI (repo + release metadata), Hacker News Algolia API (item + comment text), raw.githubusercontent.com (deck LEARNINGS.md, READMEs), direct HTML fetch via urllib (sheerluck how-to, Paneflow dev.to post-mortem, waku.sh, gpui.rs). No browser rendering used.",
+ "summary": "There is now a real pattern for building a coding-agent desktop app in Rust: GPUI (Zed's GPU-accelerated Rust UI framework) plus gpui-component (Longbridge's 75+ component kit) gives you the window, theme, virtual lists, and a code editor widget, while your own Rust crate owns the agent loop, PTY, and streaming. This article is the how-to that is currently missing: existing GPUI tutorials stop at a static Linear-lookalike UI, and the good agent-specific writeup (Paneflow's post-mortem) is an architecture essay, not a build guide. Key verified constraints: crates.io `gpui` is Zed's OFFICIAL crate but is frozen on the Oct-2025 0.2.2 snapshot (0.2.0 Oct 9 -> 0.2.2 Oct 22, nothing since), while gpui-component is developed against Zed git and its published releases pin registry gpui -- so mixing a gpui-component release with a different gpui (gpui-unofficial or a mismatched git rev) compiles both crates but produces E0277 trait-mismatch errors at YOUR call sites. The practical recipe is the matched git pair (gpui + gpui_platform + gpui-component from git, pinned by a committed Cargo.lock), a recent Rust stable, and a push-based UI (EventEmitter/cx.subscribe/cx.emit) rather than polling. The three failure modes that actually cost time: polling timers that defeat cx.notify() (Paneflow measured 6-8 useless repaints/sec from a 500ms port poll and a 2s CWD poll), session persistence retrofitted too late (Paneflow lost four restored workspaces on its first rebuild), and GPUI's requirement that element IDs stay stable across renders or on_click never fires. Packaging is real work: dock icon/label are bundle-only (`cargo run` shows the binary name), icons go blank without `.with_assets(gpui_component_assets::Assets)`, and first build compiles GPUI+wgpu from source (5-15 min).",
+ "verification_notes": [
+  "All numbers below were read live on 2026-10-01: crates.io API for downloads/versions, GitHub API (authenticated as baeseokjae) for stars/forks/releases.",
+  "gpui version/data caveat: crates.io reports gpui 0.2.2 as max stable, last updated 2025-10-22 -> the published crate is ~11 months stale vs Zed main. Zed main has split gpui into gpui + gpui_platform + gpui_web + gpui_macros; none of the split crates are on crates.io (per deck LEARNINGS.md, cross-checked against crates.io).",
+  "Do NOT repeat the widely-blogged claim that 'Zed is ~30MB'. The actual Zed v1.22.0 release assets on 2026-09-30 are Zed-aarch64.dmg 112MB, zed-linux-x86_64.tar.gz 119MB, Zed-aarch64.exe 68MB (GitHub releases API). GPUI gives you a smaller footprint than Electron because there is no Chromium/Node runtime, but a real app with fonts/icons is not a 10MB artifact.",
+  "Memory/speed deltas versus Electron (47-71% less idle RAM, 8.2MB vs 121.7MB installers) come from single-author benchmark blog posts (johal.in, rustify.rs); they are directionally consistent but NOT independently reproducible measurements. gpui-component's '60-80% less memory than Electron' and '120 FPS' claims come from the vendor/Longbridge blog -- treat as vendor claims.",
+  "zeron (2,515 stars, MIT, 'native control plane for Claude Code, Codex...') is listed as an adjacent app but its README describes a CLI/daemon + sync engine; GPUI use was NOT verified, so do not assert it as a GPUI app.",
+  "Paneflow repo resolves to arthjean/paneflow (83 stars, GPL-3.0) via the GitHub API; the dev.to post links to ArthurDEV44/paneflow. Same project, two org paths -- cite arthjean/paneflow as canonical and note the redirect."
+ ],
+ "entities": [
+  {
+   "name": "GPUI",
+   "what": "Zed's GPU-accelerated hybrid immediate/retained-mode Rust UI framework",
+   "url": "https://www.gpui.rs/",
+   "note": "pre-1.0, breaking changes expected; contributions land in zed-industries/zed"
+  },
+  {
+   "name": "Zed",
+   "what": "Reference application; 91,149 stars / 10,863 forks (2026-10-01), Rust, v1.22.0 released 2026-09-30",
+   "url": "https://github.com/zed-industries/zed"
+  },
+  {
+   "name": "gpui-component / gpui-kit",
+   "what": "Longbridge's styled component system on GPUI: 75+ components, virtual lists, data tables, code editor, dock layout",
+   "url": "https://github.com/longbridge/gpui-kit",
+   "note": "15,377 stars, 952 forks; gpui-component 0.7.0 released 2026-09-28; powers the shipped Longbridge Pro desktop app"
+  },
+  {
+   "name": "Paneflow",
+   "what": "Native GPUI terminal workspace for running Claude Code / Codex / OpenCode side by side; the best public architecture post-mortem",
+   "url": "https://github.com/arthjean/paneflow",
+   "note": "83 stars, GPL-3.0, first commit 2026-04-01; pins Rust 1.96.1"
+  },
+  {
+   "name": "Kael",
+   "what": "General-purpose GPUI fork (ex adabraka-gpui) adding radial/conic gradients, webviews, Lottie, blur, form controls",
+   "url": "https://github.com/Augani/kael",
+   "note": "38 stars, Apache-2.0; not affiliated with Zed"
+  },
+  {
+   "name": "deck",
+   "what": "~700-line GPUI + gpui-component app starter with a decision-log LEARNINGS.md and gotcha digest",
+   "url": "https://github.com/hellno/deck",
+   "note": "3 stars, 0BSD; the docs are more valuable than the code"
+  },
+  {
+   "name": "code-assistant (stippi)",
+   "what": "LLM coding assistant with a GPUI GUI, TUI, and MCP/ACP modes",
+   "url": "https://github.com/stippi/code-assistant",
+   "note": "182 stars, MIT, created 2024-11-03; a real GPUI agent-GUI reference"
+  },
+  {
+   "name": "muxel",
+   "what": "GPUI-native multi-agent terminal multiplexer: tiled panes, worktrees, live agent status, scheduled runs, SSH remote",
+   "url": "https://github.com/ProjectHax/muxel",
+   "note": "24 stars, GPL-3.0, created 2026-06-24"
+  },
+  {
+   "name": "Waku",
+   "what": "Commercial-style native coding-agent app; one timeline across agents, checkpoint/rewind via hidden git ref, Sparkle updates",
+   "url": "https://waku.sh",
+   "note": "Show HN 2026-08-16, 39 points"
+  },
+  {
+   "name": "gpui-component HN thread",
+   "what": "515-point / 218-comment discussion of the component kit -- useful community signal",
+   "url": "https://news.ycombinator.com/item?id=45719004",
+   "note": "Oct 27 2025"
+  },
+  {
+   "name": "GPUIX",
+   "what": "React/TypeScript bindings that paint into GPUI instead of the DOM (napi + wasm)",
+   "url": "https://gpuix.dev",
+   "note": "2,495-star repo remorses/gpuix; alternative if your team is TS-first"
+  }
+ ],
+ "competitors": [
+  {
+   "url": "https://blog.sheerluck.dev/posts/your-first-gpui-app-building-a-desktop-ui-in-rust/",
+   "title": "Your First GPUI App - Building a Desktop UI in Rust (Aug 30, 2026)",
+   "key_points": [
+    "Best true beginner on-ramp: builds a Linear-inspired issue tracker UI step by step (sidebar, search box, nav items, tabs, issue cards).",
+    "Uses `gpui-kit = \"0.6\"` as a single dependency that brings GPUI + platform entry point + gpui-component + bundled assets -- the simplest possible Cargo.toml.",
+    "Covers the Render trait, element styling, size/colour, nested elements, two-column layouts -- i.e. layout only.",
+    "Prerequisites stated plainly: Rust + basic HTML/CSS (flex/margin/padding) knowledge.",
+    "GAP WE BEAT IT ON: no agent loop, no streaming, no subprocess/PTY, no async, no persistence, no packaging, and it warns only vaguely that GPUI has breaking changes. It never mentions the dependency-channel trap or gpui_component::init."
+   ]
+  },
+  {
+   "url": "https://dev.to/arthurj-dev/building-a-native-terminal-for-ai-coding-agents-in-rust-gpui-2bg4",
+   "title": "Building a native terminal for AI coding agents in Rust + GPUI (Paneflow post-mortem, May 2026)",
+   "key_points": [
+    "Thesis: for a terminal/agent surface, the UI framework must own glyph rasterization end-to-end (shaping, atlasing, GPU draw); there is no 'bring your own text path' in GPUI.",
+    "Why not Electron (memory, contradicts the native philosophy) and, at length, why not Tauri: the webview API surface is too narrow for low-level key chords, IME, and inter-pane focus without a JS round-trip.",
+    "Lesson 1: he pushed a Tauri implementation far before pivoting -- 'when a framework asks you to work around its own abstraction for two basic features, you're building against the framework, not with it. Pivot.'",
+    "Lesson 3 (the money quote for agent UIs): polling timers DEFEAT cx.notify() -- a 500ms port scan + 2s CWD poll produced 6-8 unnecessary repaints/sec when nothing was happening; migrating to EventEmitter / cx.subscribe / cx.emit took idle repaints to zero. 'GPUI's diff repaint is cheap, but it isn't free.'",
+    "Lesson 4: session persistence is table-stakes -- he shipped without save/restore, opened four workspaces, rebuilt the binary, and lost all four. save ~/.cache/paneflow/session.json on CloseWindow.",
+    "Lesson 2: a persistent visual artifact (gaps between block characters U+2580-259F) survived six plausible GPU-math fixes; the real cause was 11 missing codepoints in his coverage table. 'When GPU quad math looks correct on every probe but the visual artifact persists, the problem is probably which codepoints you're emitting, not how.'",
+    "Architecture detail worth stealing: he does NOT use alacritty's EventLoop::spawn -- two hand-rolled detached threads (pty_reader_loop with a 4096-byte buffer + OSC 7/133/XTVersion scanners; pty_message_loop for input+resize), DEC 2026 synchronized-output coalescing via sync_bytes_count(), and a GPUI-side loop that drains wakeups for up to 4ms (max 100 events) then does ONE cx.update() + ONE cx.notify().",
+    "Agent control plane: JSON-RPC 2.0 over $XDG_RUNTIME_DIR/paneflow/paneflow.sock (named pipe on Windows) with a 5-second dispatch timeout, and an ai.* namespace (session_start, prompt_submit, tool_use, notification, stop, session_end) so a CLI agent can announce its own lifecycle to the UI.",
+    "GAP WE BEAT IT ON: it is a post-mortem for one specific app (a terminal multiplexer), not a reproducible build guide -- no Cargo.toml, no first-window skeleton, no upgrade path, no packaging steps."
+   ]
+  },
+  {
+   "url": "https://www.gpui.rs/",
+   "title": "GPUI official site + README (Zed)",
+   "key_points": [
+    "Canonical hello-world: `Application::new().run(|cx: &mut App| { ... cx.open_window(WindowOptions{ window_bounds: Some(WindowBounds::Windowed(bounds)), ..Default::default() }, |_, cx| cx.new(|_| HelloWorld { text: \"World\".into() })) })`.",
+    "Three registers: entity state (Entity<T> + Context<T>), high-level declarative views (impl Render returning a div() tree with a Tailwind-shaped builder API), and low-level imperative Elements for custom layout/virtualized lists.",
+    "Actions are user-defined structs mapping keystrokes to typed operations; there is an async executor integrated with the platform event loop.",
+    "Explicit pre-1.0 warning: 'There will often be breaking changes between versions.' macOS needs Xcode + Metal; docs point at Zed's crates and Zed's ui crate for real examples.",
+    "GAP WE BEAT IT ON: reference docs, no tutorial arc, and nothing about components, packaging, or agent workloads."
+   ]
+  },
+  {
+   "url": "https://github.com/hellno/deck/blob/main/docs/LEARNINGS.md",
+   "title": "deck: LEARNINGS.md -- building a native desktop app on GPUI",
+   "key_points": [
+    "Settles the dependency confusion with a three-channel table: crates.io pair (gpui 0.2.x + gpui-component 0.5.x, Metal + Blade/Vulkan on Linux, frozen Oct-2025 snapshot), git pair (gpui + gpui_platform + gpui-component main, Metal + wgpu on Linux since zed PR #46758 merged 2026-02-13), and gpui-unofficial (a tag-for-tag mirror, NOT a wgpu fork, incompatible with gpui-component).",
+    "Names the exact trap: a published gpui-component is built against one specific gpui; mixing in a different gpui makes both crates compile while YOUR view satisfies one crate's Render trait and open_window/Root::new want the other's -> E0277 at your call sites, which is baffling because the dependencies themselves compile fine.",
+    "Real cost of the git channel: needs a recent Rust stable (Zed pins 1.95.0; gpui HEAD uses just-stabilized std APIs like cold_path), and the Oct-2025 -> mid-2026 bump took exactly four one-line edits: Application::new() -> gpui_platform::application(), a new Menu.disabled field, and a cx arg on window.focus(). Reproducibility comes from a committed Cargo.lock.",
+    "Bundling is one declarative block: [package.metadata.bundle] read by cargo-bundle -> a double-clickable Deck.app; signing/notarization (paid Apple Developer ID, codesign + xcrun notarytool) deliberately left opt-in. Sharp edge: cargo-bundle 0.11 trips 'No matching IconType' on a lone 1024px PNG.",
+    "A 12-item gotcha digest that reads like the missing manual -- gpui_component::init(cx) before opening a window or cx.theme() panics; Root::new must be the literal top layer; .with_assets(gpui_component_assets::Assets) or icons are blank; dock icon/label are bundle-only; KeyBinding::new panics on bad strings; no Modal (use Dialog); Input is a stateful InputState entity; List selection is owned by ListState (never set .selected() in render_item); .searchable(true) lives on ListState, not the element.",
+    "Performance rules for snappy UI: never block the UI thread on I/O (apply state, cx.notify() now, persist in the background); notify the SMALLEST entity that owns the change; render large collections with uniform_list/list, never a flex column of N children; filter in memory.",
+    "First build compiles GPUI + wgpu from source: 5-15 minutes, once."
+   ]
+  },
+  {
+   "url": "https://github.com/longbridge/gpui-kit",
+   "title": "gpui-component / GPUI Kit README (Longbridge)",
+   "key_points": [
+    "75+ documented components and primitives; three layers (gpui-component styled, gpui-base unstyled behavior/infrastructure, gpui-shell JS extensions for a Rust host).",
+    "Production proof rather than a demo: it has powered the shipped Longbridge Pro commercial desktop app from day one.",
+    "Specifically relevant to agent UIs: virtual lists that render only the visible range (including variable-height items), data tables with hundreds of thousands of rows, a code editor that stays stable at 200K lines with Tree-sitter highlighting and LSP diagnostics/completion/hover, native Markdown/HTML rendering, serializable dock layout (resizable panels, draggable tabs, nested splits).",
+    "Includes UI integration testing (headless windows, synthetic pointer/keyboard input, assertions on state/focus/layout/accessibility) and wasm32-unknown-unknown support.",
+    "Vendor claims to attribute rather than assert: '120 FPS' and '60-80% less memory than equivalent Electron apps'. 15,377 stars; gpui-component 0.7.0 released 2026-09-28."
+   ]
+  }
+ ],
+ "stats": [
+  {
+   "fact": "Zed (the reference GPUI app): 91,149 stars, 10,863 forks, Rust, repo pushed 2026-10-01",
+   "source": "GitHub API repos/zed-industries/zed, 2026-10-01"
+  },
+  {
+   "fact": "Zed v1.22.0 release assets (2026-09-30): Zed-aarch64.dmg 112MB, Zed-aarch64.exe 68MB, zed-linux-x86_64.tar.gz 119MB -- refutes the blogged 'Zed is ~30MB' claim",
+   "source": "GitHub API releases/latest, 2026-10-01"
+  },
+  {
+   "fact": "crates.io gpui: 316,531 all-time downloads, 177,435 in the last 90 days, max stable 0.2.2, last updated 2025-10-22 (frozen ~11 months behind Zed main)",
+   "source": "crates.io API /api/v1/crates/gpui, 2026-10-01"
+  },
+  {
+   "fact": "crates.io gpui-component: 159,788 all-time downloads, 94,980 in the last 90 days, max stable 0.7.0, updated 2026-09-28, repository longbridge/gpui-kit",
+   "source": "crates.io API /api/v1/crates/gpui-component, 2026-10-01"
+  },
+  {
+   "fact": "gpui-component / gpui-kit repo: 15,377 stars, 952 forks, Rust, pushed 2026-10-01; latest release v0.7.0 on 2026-09-28",
+   "source": "GitHub API repos/longbridge/gpui-kit + releases/latest, 2026-10-01"
+  },
+  {
+   "fact": "Ecosystem scale context (90-day crates.io downloads): ratatui 19.75M > tauri 12.82M > egui 5.69M > iced 604K > gpui 177K. GPUI is the smallest of these by an order of magnitude -- the component kit matters.",
+   "source": "crates.io API for each crate, 2026-10-01"
+  },
+  {
+   "fact": "alacritty_terminal 0.26.0 (updated 2026-04-06): 1,761,005 all-time / 1,013,303 in 90 days -- the terminal-grid crate Paneflow embeds inside a GPUI view",
+   "source": "crates.io API /api/v1/crates/alacritty_terminal, 2026-10-01"
+  },
+  {
+   "fact": "Paneflow measured 6-8 unnecessary repaints per second from a 500ms port-scan poll plus a 2s CWD poll; migrating to EventEmitter/cx.subscribe/cx.emit took idle repaints to zero",
+   "source": "Paneflow post-mortem (dev.to/arthurj-dev), 'Four things I got wrong', lesson 3"
+  },
+  {
+   "fact": "Paneflow drains terminal wakeups for up to 4ms or 100 events, then issues exactly one cx.update() + one cx.notify() per batch; reader hot path uses a 4096-byte buffer and honours DEC 2026 synchronized output via sync_bytes_count()",
+   "source": "Paneflow post-mortem, PTY/GPUI boundary section"
+  },
+  {
+   "fact": "Paneflow's JSON-RPC dispatch to the GPUI main thread uses an mpsc one-shot response channel with a 5-second timeout (the socket thread cannot touch Entity<T>)",
+   "source": "Paneflow post-mortem, dispatch_to_gpui code block"
+  },
+  {
+   "fact": "Realistic first build cost: GPUI + wgpu compiled from source takes 5-15 minutes depending on machine, once; rebuilds are then fast",
+   "source": "deck README/LEARNINGS + deck repo description"
+  },
+  {
+   "fact": "Toolchain pins in the wild: Zed pins Rust 1.95.0, Paneflow pins 1.96.1, muxel pins a recent stable -- all via rust-toolchain.toml because gpui HEAD uses just-stabilized std APIs",
+   "source": "deck LEARNINGS.md; paneflow/muxel READMEs"
+  },
+  {
+   "fact": "Community signal: the gpui-component launch thread drew 515 points and 218 comments on HN; a GPUI coding-agent app (waku.sh) hit the front page at 39 points on 2026-08-16, where a commenter summarised the mood as 'GPUI is going to be react for Rust ecosystem'",
+   "source": "HN Algolia API items 45719004 and 49315709"
+  },
+  {
+   "fact": "Adjacent GPUI apps show the pattern is general, not terminal-only: zedis (Redis GUI) 2,120 stars, disktree (disk treemap) 2,050 stars, Loungy (launcher) 1,733 stars",
+   "source": "GitHub search API (gpui in name/description/topics), 2026-10-01"
+  },
+  {
+   "fact": "Electron-vs-native deltas reported by third-party benchmark posts: Tauri 2.0 8.2MB vs Electron 30 121.7MB installer; 47-71% lower idle memory",
+   "source": "johal.in / rustify.rs blog benchmarks (single-author, attribute as reported not measured)"
+  }
+ ],
+ "angles": [
+  "The real reason to go native is owning the input path, not saving RAM: Electron is rejected first, but the sharper lesson is Paneflow abandoning a working Tauri prototype because a webview cannot give you key chords, clean IME, and inter-pane focus without a JS round-trip.",
+  "The dependency channel trap nobody documents: crates.io gpui is official but frozen at the Oct-2025 0.2.2 snapshot, gpui-component releases pin that snapshot while its main tracks Zed git, and mixing them compiles fine but breaks your own call sites with E0277. Show the three-channel table and the committed-Cargo.lock recipe.",
+  "Agent UIs are event streams, not documents: the anti-pattern is a polling timer calling cx.notify() (Paneflow lost 6-8 repaints/sec to one), the fix is EventEmitter/cx.subscribe/cx.emit plus a coalescing batcher (4ms / 100 events) and DEC 2026 synchronized-output awareness.",
+  "Treat the window as a supervisor surface, not a chat box: what the shipping apps actually build is pane/tab state, git worktrees, live agent status (thinking/waiting/stalled/done), notifications, scheduled runs, and session restore that survives a reboot.",
+  "Session persistence is the cheapest credibility you can buy: Paneflow shipped without it, rebuilt once, and lost four workspaces -- the first real user experience was data loss.",
+  "The pre-1.0 honesty section: budgets for the git channel include a bleeding-edge Rust stable, a 5-15 minute first build, and a ~4-line code churn per ~8-month bump (Application::new() -> gpui_platform::application(), Menu.disabled, window.focus(cx)).",
+  "A local JSON-RPC control plane turns your GUI from a viewer into a participant: ai.* lifecycle events from the CLI agent into the sidebar, and socket/pipe transport with a timeout-bounded dispatch onto the UI thread.",
+  "Packaging is where weekend projects die: dock icon and app name only appear via cargo bundle, icons are blank without .with_assets(...), and signing/notarization is a paid Apple Developer ID -- so make the bundle block declarative and treat notarization as opt-in.",
+  "Steal the component kit instead of the DOM: virtual lists, a 200K-line-stable code editor widget with Tree-sitter + LSP, and a serializable dock layout are already solved problems in gpui-component.",
+  "The 'what actually breaks' debugging angle: block-character gaps caused by 11 missing codepoints (six GPU-math fixes failed first), and on_click never firing because element IDs were regenerated from a render-time counter."
+ ],
+ "keywords": [
+  "rust coding agent gui",
+  "gpui",
+  "gpui-component",
+  "build desktop app rust",
+  "native app coding agents",
+  "zed ui framework",
+  "rust gui framework",
+  "gpui tutorial"
+ ],
+ "long_tail_keywords": [
+  "build a native app for coding agents in rust and gpui",
+  "gpui vs tauri for agent apps",
+  "gpui-component example project",
+  "gpui entity cx.notify streaming tokens",
+  "alacritty_terminal gpui terminal pane",
+  "gpui custom title bar gpui-component",
+  "cargo bundle macos gpui app icon",
+  "gpui virtual list chat history",
+  "rust gui for claude code codex opencode",
+  "gpui application new run open_window example",
+  "gpui keybinding actions macro tutorial",
+  "gpui pre-1.0 breaking changes upgrade cargo.lock",
+  "coding agent dashboard rust gpui",
+  "gpui_component init theme panic fix",
+  "electron alternative rust coding agent ui"
+ ],
+ "outline": [
+  "H2: Why build a native GUI for coding agents (and when not to)",
+  "H2: Prerequisites: Rust stable, GPU stack, and platform build deps",
+  "H2: Choosing your GPUI dependency path (crates.io pair, git pair, or a fork)",
+  "H2: The minimal app: Application, Window, Render, and Root",
+  "H2: State without a browser: Entity, Context, cx.notify(), cx.spawn()",
+  "H2: Streaming agent output into the UI without wrecking your frame budget",
+  "H2: Embedding a real terminal: PTY + alacritty_terminal inside a GPUI view",
+  "H2: A local control plane: JSON-RPC so agents can announce themselves",
+  "H2: Look and feel: components, theming, title bar, and the Zed-style shell",
+  "H2: Packaging and shipping: bundle config, icons, signing, updates",
+  "H2: Surviving pre-1.0 churn: what breaks on a bump and how to pin it",
+  "H2: Pitfalls checklist: the bugs that cost real time",
+  "H2: FAQ"
+ ],
+ "faq": [
+  {
+   "q": "Is crates.io `gpui` the real Zed framework or a fork?",
+   "a": "It is Zed's own official crate (repo zed-industries/zed, homepage gpui.rs). The catch is staleness, not provenance: the whole 0.2.x line shipped in October 2025 and nothing has been published since, so it lags Zed main by months. Zed main has also split the framework into gpui + gpui_platform + gpui_web + gpui_macros, and those split crates are not on crates.io yet."
+  },
+  {
+   "q": "Why do I get E0277 trait-mismatch errors when both crates compile?",
+   "a": "You are mixing two different GPUI lineages. A published gpui-component is built against one specific gpui; if your Cargo.toml pulls a different gpui (gpui-unofficial, a mismatched git rev, or a crates.io/git mix), both dependencies compile independently but your Render impl satisfies one crate's Render trait while open_window/Root::new expect the other's. Keep the pair matched."
+  },
+  {
+   "q": "Do I need a webview at all?",
+   "a": "Not for GPUI. There is no webview and no JS bridge: your UI is Rust, and GPUI owns text shaping, atlasing, and GPU draw end-to-end. If you want React ergonomics anyway, GPUIX paints a React tree from TypeScript into GPUI through napi (desktop) or wasm-bindgen (browser) instead of the DOM."
+  },
+  {
+   "q": "How do I stream tokens from an agent without killing the frame rate?",
+   "a": "Push, don't poll. Model updates as events (EventEmitter + cx.subscribe/cx.emit), accumulate tokens into view state, and coalesce: Paneflow drains terminal wakeups for up to 4ms or 100 events and then does exactly one cx.update() + one cx.notify() for the batch. A setInterval-shaped cx.notify() loop is the exact pattern GPUI was designed to replace."
+  },
+  {
+   "q": "Can I embed a real terminal (not a fake log view)?",
+   "a": "Yes. Pin alacritty_terminal (0.26.0) and drive it yourself: a reader thread advances the VTE processor against the locked Term and emits a single wakeup per logical frame, honouring DEC 2026 synchronized output so a busy TUI cannot generate hundreds of wakeups per frame. Paneflow migrated off Zed's internal fork as soon as 0.26 landed on crates.io."
+  },
+  {
+   "q": "How big is the first build, and what Rust version do I need?",
+   "a": "The first build compiles GPUI (and wgpu on Linux) from source: roughly 5-15 minutes, once. You need a recent Rust stable because gpui HEAD uses just-stabilized std APIs -- Zed pins 1.95.0 and Paneflow pins 1.96.1 via rust-toolchain.toml."
+  },
+  {
+   "q": "Will my app be tiny like a Tauri app?",
+   "a": "Smaller than Electron (no Chromium, no Node/Node_modules), but do not expect a 10MB artifact. Zed's actual v1.22.0 installers are 112MB (macOS dmg) and 119MB (Linux tarball) -- that is fonts, assets, and a full editor. Judge by idle CPU/RAM and startup latency rather than installer size."
+  },
+  {
+   "q": "Do I need Apple developer credentials to ship?",
+   "a": "Only for a frictionless macOS install. A [package.metadata.bundle] block plus cargo-bundle gives you a double-clickable .app with your icon and name, but signing and notarization need a paid Apple Developer ID (codesign + xcrun notarytool). Linux ships as .deb/.rpm/.AppImage and Windows as an .msi/.exe; Paneflow ships signed and notarized macOS builds and notes its Windows ARM64 build is deferred on GPUI DirectX reliability."
+  },
+  {
+   "q": "Where does clicking break in GPUI?",
+   "a": "Element IDs. GPUI's on_click requires the same element ID between mouse-down and mouse-up; if your render function derives IDs from a render-time counter, every frame creates a 'new' element and on_click never fires while on_mouse_down does. Use user-provided or deterministically derived stable IDs."
+  }
+ ],
+ "research_gaps": [
+  "No public apples-to-apples benchmark exists for a GPUI coding-agent app vs an Electron one on identical workloads (the 47-71% memory figures are third-party blog benchmarks of Tauri vs Electron, not GPUI).",
+  "Windows is the least-evidenced target: Paneflow defers Windows ARM64 pending GPUI DirectX reliability, and deck's tray/overlay features are macOS-only or Linux no-ops -- a Linux/Windows-first how-to would need its own verification.",
+  "Nobody has published a measured 'cold start to first painted frame' number for a minimal GPUI app the way the Tauri/Electron comparisons do.",
+  "Auto-update for GPUI apps is thin: Waku reports Sparkle binary deltas on macOS, muxel ships in-app updates, but there is no widely adopted cross-platform updater to recommend.",
+  "No published guidance on multi-agent permission/sandbox UX inside a GPUI app (what an agent may write, how the UI surfaces approvals) beyond Paneflow's read-only MCP bridge and prompt-prefill-by-default safety model."
+ ],
+ "sources": [
+  {
+   "url": "https://www.gpui.rs/",
+   "what": "Official GPUI site: hello-world code, three UI registers, pre-1.0 warning",
+   "access": "fetched 2026-10-01"
+  },
+  {
+   "url": "https://blog.sheerluck.dev/posts/your-first-gpui-app-building-a-desktop-ui-in-rust/",
+   "what": "Best beginner how-to (Linear-style UI, layout/styling only)",
+   "access": "fetched 2026-10-01"
+  },
+  {
+   "url": "https://dev.to/arthurj-dev/building-a-native-terminal-for-ai-coding-agents-in-rust-gpui-2bg4",
+   "what": "Paneflow post-mortem: framework rejections, PTY/GPUI boundary, JSON-RPC, four lessons",
+   "access": "fetched 2026-10-01"
+  },
+  {
+   "url": "https://github.com/arthjean/paneflow",
+   "what": "Paneflow repo (83 stars, GPL-3.0, Rust 1.96.1) + README feature/safety model",
+   "access": "GitHub API 2026-10-01"
+  },
+  {
+   "url": "https://github.com/zed-industries/zed",
+   "what": "Zed (91,149 stars) + v1.22.0 release asset sizes",
+   "access": "GitHub API 2026-10-01"
+  },
+  {
+   "url": "https://github.com/longbridge/gpui-kit",
+   "what": "gpui-component/GPUI Kit README: 75+ components, 200K-line editor, wasm, testing; 15,377 stars",
+   "access": "raw fetch + GitHub API 2026-10-01"
+  },
+  {
+   "url": "https://github.com/hellno/deck",
+   "what": "deck LEARNINGS.md: dependency-channel table, E0277 trap, 12-item gotcha digest, bundling",
+   "access": "raw fetch 2026-10-01"
+  },
+  {
+   "url": "https://crates.io/api/v1/crates/gpui-component",
+   "what": "gpui-component 0.7.0 + download counts",
+   "access": "crates.io API 2026-10-01"
+  },
+  {
+   "url": "https://crates.io/api/v1/crates/gpui",
+   "what": "gpui download counts and frozen-version evidence (0.2.2, last updated 2025-10-22)",
+   "access": "crates.io API 2026-10-01"
+  },
+  {
+   "url": "https://crates.io/api/v1/crates/alacritty_terminal",
+   "what": "alacritty_terminal 0.26.0 download counts",
+   "access": "crates.io API 2026-10-01"
+  },
+  {
+   "url": "https://news.ycombinator.com/item?id=49315709",
+   "what": "Show HN: native coding-agent app in Rust + GPUI (waku.sh), 39 points, comment sentiment",
+   "access": "HN Algolia API 2026-10-01"
+  },
+  {
+   "url": "https://news.ycombinator.com/item?id=45719004",
+   "what": "HN discussion of gpui-component, 515 points / 218 comments",
+   "access": "HN Algolia API 2026-10-01"
+  },
+  {
+   "url": "https://waku.sh",
+   "what": "Waku product page: native GPUI agent app, one provider-neutral timeline, git-ref checkpoint rewind, Sparkle updates",
+   "access": "fetched 2026-10-01"
+  },
+  {
+   "url": "https://github.com/ProjectHax/muxel",
+   "what": "muxel: GPUI agent multiplexer feature set (worktrees, live status, loops, shared memory, SSH)",
+   "access": "GitHub API + README 2026-10-01"
+  },
+  {
+   "url": "https://github.com/stippi/code-assistant",
+   "what": "GPUI GUI coding assistant with TUI + MCP/ACP modes (182 stars, MIT)",
+   "access": "GitHub API 2026-10-01"
+  },
+  {
+   "url": "https://github.com/Augani/kael",
+   "what": "Kael: general-purpose GPUI fork (ex adabraka-gpui) with gradients/webview/Lottie roadmap",
+   "access": "web search + GitHub API 2026-10-01"
+  },
+  {
+   "url": "https://gpuix.dev",
+   "what": "GPUIX: React/TypeScript over GPUI via napi/wasm (alternative path)",
+   "access": "web search 2026-10-01"
+  },
+  {
+   "url": "https://zed.dev/blog/gpui-2-on-preview",
+   "what": "GPUI 2 rewrite background, Zed team on framework strategy",
+   "access": "fetched 2026-10-01"
+  },
+  {
+   "url": "https://github.com/remorses/gpuix",
+   "what": "GPUIX repo (2,495 stars) - React bindings for GPUI",
+   "access": "GitHub search API 2026-10-01"
+  }
+ ]
+}
