@@ -1,0 +1,327 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Browser Use Macos Harness on RockB</title><link>https://baeseokjae.github.io/tags/browser-use-macos-harness/</link><description>Recent content in Browser Use Macos Harness on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 01 Oct 2026 07:03:11 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/browser-use-macos-harness/index.xml" rel="self" type="application/rss+xml"/><item><title>macOS Browser Agent Harness: Giving an LLM Full Control of a Mac</title><link>https://baeseokjae.github.io/posts/browser-use-macos-harness/</link><pubDate>Thu, 01 Oct 2026 07:03:11 +0000</pubDate><guid>https://baeseokjae.github.io/posts/browser-use-macos-harness/</guid><description>Hands-on review of the browser-use macOS Harness: six primitives, the silent mac.click bug, machine-wide permissions, and what changed since launch.</description><content:encoded><![CDATA[<p>The browser-use macOS Harness is an MIT-licensed Python package that hands an LLM six raw primitives — see, key, type, click, ax, and script — inside one persistent process, so the model writes its own Mac automation instead of picking from a recipe library. It is v0.1.2, alpha, and it has not received a commit since launch day.</p>
+<p>That last sentence is the review. This is a genuinely clever, genuinely thin control surface published on 2026-08-17 and then left alone, and the most useful thing you can do before installing it is understand exactly which parts are load-bearing and which parts are a demo.</p>
+<p>If you want the launch-day feature tour, our earlier piece, <a href="/posts/browser-use-macos-harness-llm/">Browser-Use macOS Harness: Full LLM Control of a Mac</a>, covers the pitch and the six primitives. This review does not repeat it. It covers what accumulated in the six weeks afterward: a silent-failure bug in one of those six primitives, an unmerged fix, a fork that has already overtaken upstream, and the measured computer-use attack numbers that make the permission dialog the real product decision.</p>
+<h2 id="what-is-the-browser-use-macos-harness-and-what-does-it-refuse-to-build">What is the browser-use macOS Harness, and what does it refuse to build?</h2>
+<p>The macOS Harness is the lowest-level member of the browser-use family. Its pitch is that a capable coding agent does not need an app catalog — it needs a persistent Python process with eyes, hands, and a shell. Where an earlier generation of desktop agents shipped per-app tools for Slack, Spotify and Final Cut, this one ships nothing app-specific and expects the model to write the missing function mid-task.</p>
+<p>The deliberate omissions matter more than the included features:</p>
+<ul>
+<li>No framework or orchestration layer. There is no planner, no retry policy, no task graph.</li>
+<li>No verification primitive. Nothing confirms that an action landed.</li>
+<li>No approval rail. Nothing asks before a click or a shell command.</li>
+<li>No app recipes. Every target app is handled by generic primitives.</li>
+</ul>
+<p>The project&rsquo;s own framing is that it sits <em>under</em> coding agents rather than beside them: Codex or Claude Code generate Python, and the harness executes it against a real Mac. In the launch thread the author described the design as the opposite of <code>macOS-use</code>, the earlier browser-use desktop repo — <code>macOS-use</code> packages an agent workflow around Mac interaction, while the harness is a control surface with no workflow attached.</p>
+<p>That is a defensible architectural bet, and it is also the source of every problem in the rest of this review. A thin harness moves complexity into the agent and the operator. When the primitives are correct, that is elegant. When one of them fails silently, there is no layer left to catch it.</p>
+<h2 id="what-are-the-six-primitives--see-key-type-click-ax-and-script">What are the six primitives — see, key, type, click, ax, and script?</h2>
+<p>The harness exposes six operations, and the best public teardown of what they actually do is worth reading in full. Short version:</p>
+<ul>
+<li><strong><code>mac.see</code></strong> shells out to the system <code>screencapture</code> binary with the per-window flag <code>-l &lt;window-id&gt;</code>, so it captures <em>that window&rsquo;s</em> pixels rather than the whole screen. It defaults to <code>--max-width</code> and <code>--max-height</code> of 1280x1280 and to <code>--no-pointer</code>.</li>
+<li><strong><code>mac.ax</code></strong> wraps <code>AXUIElementCopyElementAtPosition</code> and the ApplicationServices framework. Its compact attribute set is <code>AXRole, AXTitle, AXDescription, AXValue, AXFrame</code>, and <code>ax.query</code> supports <code>text=</code>, <code>search_key=</code>, <code>visible_only=True</code>, and <code>max_nodes=500</code>. Crucially, the element index it returns is what keeps an accessibility reference alive across statements in the same process.</li>
+<li><strong><code>mac.script</code></strong> sends raw Apple Events, which means the harness inherits the entire existing AppleScript ecosystem for free instead of reimplementing it.</li>
+<li><strong><code>mac.click</code>, <code>mac.key</code> and <code>mac.type</code></strong> synthesise input — and <code>mac.click</code> is the one you need to read the next section about.</li>
+</ul>
+<p>Underneath, the CLI is plain <code>argparse</code> with subcommands <code>doctor</code>, <code>apps</code>, <code>repl</code>, <code>skill</code>, <code>see</code>, <code>state</code>, and <code>telemetry</code>. The entire &ldquo;give an LLM a Mac&rdquo; mechanism is one <code>exec()</code> into a pre-populated namespace in <code>cli.py</code>. That is not a criticism — it is the honest size of the thing. You can read the whole harness in an afternoon, which is more than you can say for most agent frameworks.</p>
+<p>The dependency tree is correspondingly small: <code>browser-harness&gt;=0.1.9</code>, <code>pillow&gt;=11.3</code>, and <code>pyobjc-framework-ApplicationServices&gt;=12.0</code> on Darwin. The package will not import on Linux at all.</p>
+<h3 id="why-does-macax-come-before-macsee">Why does mac.ax come before mac.see?</h3>
+<p>Because screenshots are the expensive part of computer use, and accessibility trees are text. Reading one window&rsquo;s AX tree costs a fraction of what pushing a 1280x1280 PNG through a vision model costs, and it gives the model <em>structure</em> — roles, titles, frames, an index it can name — instead of pixels it has to localise.</p>
+<p>The independent rebuild by <code>huytieu.com</code> makes the same design choice explicit: its <code>get_app_state(app)</code> returns one window&rsquo;s screenshot plus a numbered accessibility tree, and the model acts by naming an element index or a coordinate. Reading structure and pointing at it beats guessing pixels, and it is the single cheapest reliability win available to a Mac agent.</p>
+<h2 id="how-does-the-macos-harness-actually-control-the-mac-under-the-hood">How does the macOS Harness actually control the Mac under the hood?</h2>
+<p>There is no secret technology, and that is worth stating plainly because it was the most over-mythologised part of the launch coverage. The plumbing is ordinary public macOS API surface:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Layer</th>
+          <th>API</th>
+          <th>What it buys</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Screen capture</td>
+          <td><code>CGWindow</code></td>
+          <td>Screenshots of background windows without raising them</td>
+      </tr>
+      <tr>
+          <td>Input</td>
+          <td><code>CGEvent</code>, posted to a target PID</td>
+          <td>Synthetic clicks and keystrokes</td>
+      </tr>
+      <tr>
+          <td>Semantics</td>
+          <td>Accessibility API + Apple Events</td>
+          <td>Pressing and setting controls when pixels are not enough</td>
+      </tr>
+      <tr>
+          <td>Browser</td>
+          <td>CDP via Browser Harness</td>
+          <td>Real, logged-in Chrome</td>
+      </tr>
+      <tr>
+          <td>Shell</td>
+          <td>subprocess</td>
+          <td>Everything Apple does not expose</td>
+      </tr>
+  </tbody>
+</table>
+<p>Independent reverse-engineering of OpenAI&rsquo;s Codex desktop computer use reached the same conclusion: ChatGPT.app bundles <code>@oai/sky</code>, which talks over a Unix domain socket to a code-signed helper (<code>SkyComputerUseService</code>) using length-prefixed JSON-RPC — and the engine behind it is Apple&rsquo;s public <code>CGEvent</code>, <code>AXUIElement</code>, and <code>CGWindowListCreateImage</code>, not anything exotic. OpenAI&rsquo;s advantage is product engineering, not hidden frameworks.</p>
+<p>The harness&rsquo;s behavioural choices are the interesting part. It captures background windows without raising them, sends input to a PID rather than to whatever has focus, animates a click-through pointer, and never moves the real cursor. The <code>doctor</code> subcommand reports which permissions are actually needed.</p>
+<p>There is also a hard architectural ceiling to flag: PyObjC and ApplicationServices coverage <em>is</em> the boundary. Anything Apple only exposes in private frameworks — some I/O Kit device control, for example — is out of scope, permanently. And the AX and SkyLight surfaces these tools sit on are semi-private (SPIs), so behaviour can shift between macOS releases.</p>
+<h2 id="how-do-you-install-the-macos-harness-and-run-macos-harness-doctor">How do you install the macOS Harness and run macos-harness doctor?</h2>
+<p>Setup is two commands and a prompt. The package is on PyPI as <code>macos-harness</code>, still at v0.1.2, requiring Python 3.11+ (3.12 recommended), and the documented install path is <code>uv</code>.</p>
+<p>The part worth understanding is how the agent learns to use it. <code>macos-harness skill</code> prints a skill definition that you redirect into your agent&rsquo;s skills directory — defaulting to <code>${CODEX_HOME:-$HOME/.codex}/skills/macos-harness</code>. Setup therefore ships as a <em>prompt</em>, not a runbook. The harness teaches the model what the primitives are and lets the model decide how to sequence them.</p>
+<p>Then run <code>macos-harness doctor</code> and grant exactly what it reports. Not the whole Privacy &amp; Security pane — what <code>doctor</code> names.</p>
+<p>Two practical notes from the field:</p>
+<ol>
+<li><strong>TCC dialogs assume a GUI session.</strong> Accessibility and Screen Recording approvals require a logged-in desktop and manual approval under System Settings &gt; Privacy &amp; Security. Headless provisioning and CI/CD on a Mac mini in a rack remain awkward.</li>
+<li><strong>Input Monitoring is not required.</strong> The launch notes are explicit that you do not need it, so do not grant it reflexively.</li>
+</ol>
+<h2 id="what-do-accessibility-screen-recording-and-automation-permissions-really-grant">What do Accessibility, Screen Recording, and Automation permissions really grant?</h2>
+<p>This is the section that should decide whether you install the harness, more than any feature list.</p>
+<p>The macOS permissions the harness touches — <code>kTCCServiceAccessibility</code>, <code>kTCCServiceScreenCapture</code>, and Automation — are <strong>machine-wide grants, not app-scoped ones</strong>. Once granted, any process running as you can generally reach the same capability through the daemon or through the grant itself. The independent <code>computer-harness</code> project&rsquo;s disclosure list is the model to imitate here: it runs arbitrary code as you, its daemon is a standing proxy to your Accessibility and Screen Recording grants, and screen captures can contain secrets.</p>
+<p>Security researchers have a name for the cumulative combination. Input Monitoring (<code>kTCCServiceListenEvent</code>), Input Injection (<code>kTCCServicePostEvent</code>), Screen Capture (<code>kTCCServiceScreenCapture</code>) and Accessibility together give keylogging of every keystroke, recording of everything visible, synthetic input injection, and complete GUI control — which HackTricks characterises as the most dangerous combination on macOS.</p>
+<p>The harness does not need Input Monitoring, which narrows that triad by one. But Screen Recording plus Accessibility on a daily-driver Mac still means the agent can read whatever is on screen: Signal threads, a terminal showing credentials, tax documents. The harness&rsquo;s honest behaviour — never raising the app, never moving the cursor — makes the grant <em>feel</em> smaller than it is. Nothing about the permissions dialog changed; only your impression of it did.</p>
+<p>This is not hypothetical abuse risk either. MITRE ATT&amp;CK catalogues TCC manipulation as sub-technique T1548.006, describing adversaries reusing permission grants through a trusted parent process or a launchctl environment override, and recommending audits of Automation grants plus <code>tccutil reset</code>.</p>
+<p>Practical rule: grant these permissions on a machine where the worst outcome is annoying rather than expensive.</p>
+<h2 id="does-macclick-work-on-native-mac-apps-the-silent-failure-problem">Does mac.click work on native Mac apps? The silent-failure problem</h2>
+<p>No — and this is the single most important thing to know about the harness that no launch-day coverage contained.</p>
+<p><code>mac.click()</code> is one of the six documented primitives. On native AppKit apps it <strong>returns a normal pointer dictionary, raises no exception, and does nothing.</strong></p>
+<p>The reproduction is specific and still open. GitHub issue #6 (opened 2026-08-18, unresolved as of 2026-10-01) reproduces it on Finder and Calculator: the call returns cleanly while the UI never changes. On the same element, <code>mac.ax.perform(index, 'AXPress')</code> works correctly. So the accessibility path succeeds where the mouse path silently fails.</p>
+<p>The root cause comes from the unmerged fix PR #7: <code>mac.click()</code> posts mouse events with <code>CGEventPostToPid</code>, and AppKit hit-tests mouse events against the <em>window server&rsquo;s</em> pointer state, so the events are discarded before any app sees them.</p>
+<h3 id="what-does-the-working-fix-cost-you">What does the working fix cost you?</h3>
+<p>The fix that works is <code>CGEventPost</code> to the HID tap — the same thing a human&rsquo;s mouse does. And it trades away the harness&rsquo;s headline invariants:</p>
+<ul>
+<li>It <strong>moves the physical cursor</strong>, which is exactly what the README leads with as a guarantee.</li>
+<li>It abandons strict per-PID targeting, because a HID-tap event goes wherever the pointer is.</li>
+</ul>
+<p>The same reporter noted a second limitation: keyboard input appeared to require the target app to be frontmost. Sending <code>cmd+w</code> to Finder had no effect while another app held focus — which sits awkwardly beside the README&rsquo;s &ldquo;never activates or raises a target app&rdquo; combined with &ldquo;sends input directly to an app PID.&rdquo;</p>
+<p>This is not merely a macos-harness bug. The independent <code>computer-harness</code> rebuild reproduced the same Calculator failure against a different codebase: with Calculator behind another window, both <code>AXPress</code> via the accessibility API and raw mouse events posted to Calculator&rsquo;s PID produced no visible change. Two independent implementations hitting the same wall is strong evidence this is a macOS/AppKit property, not sloppiness in one repo. The reporter&rsquo;s environment was macOS 26.6.1 on arm64, so version-specific behaviour is plausible but unconfirmed.</p>
+<p>Why this matters beyond one bug: it is a <em>silent</em> failure. The primitive lies by returning success. In a field whose benchmark failure analysis names &ldquo;skipped verification&rdquo; as a top-four cause of agent failure, shipping six primitives and zero verification rails — with telemetry on by default — is the design tension you should carry into any evaluation.</p>
+<h2 id="maintenance-reality-six-commits-one-contributor-and-a-fork-moving-faster">Maintenance reality: six commits, one contributor, and a fork moving faster</h2>
+<p>As of 2026-10-01, the numbers are blunt:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Metric</th>
+          <th>Value</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Stars</td>
+          <td>892</td>
+      </tr>
+      <tr>
+          <td>Forks</td>
+          <td>60</td>
+      </tr>
+      <tr>
+          <td>Open issues</td>
+          <td>9</td>
+      </tr>
+      <tr>
+          <td>Commits</td>
+          <td>6</td>
+      </tr>
+      <tr>
+          <td>Contributors</td>
+          <td>1 (<code>gregpr07</code>, 6 contributions)</td>
+      </tr>
+      <tr>
+          <td>Last upstream push</td>
+          <td>2026-08-17T16:48Z</td>
+      </tr>
+      <tr>
+          <td>License / status</td>
+          <td>MIT, <code>Development Status :: 3 - Alpha</code></td>
+      </tr>
+      <tr>
+          <td>Unmerged community PRs</td>
+          <td>#1, #3, #4, #5, #7</td>
+      </tr>
+  </tbody>
+</table>
+<p>The repo was created 2026-08-17T00:22Z and last pushed the same day at 16:48Z. It has not received a commit since launch day. All three releases — 0.1.0 at 16:10:05Z, 0.1.1 at 16:45:23Z, 0.1.2 at 16:48:44Z — landed inside a single 38-minute window on 2026-08-17. The newest upstream commit is titled &ldquo;fix: render project banner on PyPI.&rdquo; That is a launch-day cadence, not a maintenance cadence.</p>
+<p>The predecessor tells the same story ended. <code>browser-use/macOS-use</code> is now <strong>archived</strong>: 2,000 stars, 195 forks, MIT, created 2025-01-23, last push 2025-03-05.</p>
+<p>The most advanced continuation of the project is a fork most coverage never mentions. <code>aktanazat/macos-harness</code> — 0 stars, 0 forks — carries v0.2.0 and v0.3.0 tags and a CHANGELOG entry for <code>[0.5.0]</code> dated 2026-08-22, five days after upstream stopped. It adds things upstream does not have:</p>
+<ul>
+<li><strong><code>mac.do</code></strong> — receipted semantic operations returning <code>outcome</code>, <code>acted</code>, and <code>verified</code>, with dry runs and per-session replay tokens via an <code>once</code> ledger.</li>
+<li><strong><code>mac.handoff</code></strong> — a representation-only operation for credential and authentication boundaries.</li>
+<li>Opt-in rather than default-on telemetry.</li>
+</ul>
+<p>Its PR &ldquo;Release macOS Harness v0.3.0&rdquo; (#8) reports 439 Python tests passing on 3.11–3.14 and 118 Swift tests, a signed universal2 wheel, and 1,000 live PID-targeted handoffs on an M4 Pro at 0.1173 ms median and 0.1656 ms p95 latency.</p>
+<p>That is the accountability spine of this review. The upstream release is a thin demo frozen at launch with an unmerged fix for a silent failure in one of its six primitives; the design&rsquo;s most serious continuation is a zero-star fork. If you evaluate &ldquo;the browser-use macOS Harness&rdquo; by reading upstream alone, you are evaluating a launch announcement.</p>
+<p>The family context explains the star count. Parent project <code>browser-use/browser-use</code> sits at 116,871 stars and 12,891 forks with a push on 2026-09-30. The CDP layer it depends on, <code>browser-use/browser-harness</code>, has 18,247 stars, 1,781 forks, PyPI v0.1.13 (2026-09-04), and a Show HN post that scored 134 points. The same &ldquo;primitives, not recipes&rdquo; bet now spans <code>jev-ultrafast</code> (21,603 stars) and <code>phone-harness</code> (PyPI v0.3.0, driving iPhone Mirroring, adb, and cloud Android). The macOS Harness&rsquo;s 892 stars sit on a 116.9K-star parent&rsquo;s reputation — and, note, every published star count for this repo is a snapshot that moved within hours of launch.</p>
+<h2 id="is-the-macos-harness-safe-the-measured-prompt-injection-numbers">Is the macOS Harness safe? The measured prompt-injection numbers</h2>
+<p>No thin harness fixes this, and you should size the risk with numbers rather than vibes.</p>
+<p>The threat model collapses to one sentence: once the harness has a click primitive and a shell, an agent that reads any app&rsquo;s UI is ingesting text written by someone else. Treat third-party UI as untrusted input — that is the correct framing, and the harness supplies none of it.</p>
+<p>Measured attack-success rates for computer-use agents, so you can plan instead of hand-wave:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Source</th>
+          <th>Finding</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>RedTeamCUA (arXiv:2505.21936, 864 examples)</td>
+          <td>ASR up to <strong>66.2%</strong> in decoupled evaluation; <strong>42.9%</strong> for Claude 3.7 Sonnet CUA; <strong>7.6%</strong> for the most secure CUA tested (Operator); <strong>83% / 50%</strong> for Claude 4.5 / 4.6 Opus CUA end-to-end; attempt rates up to <strong>92.5%</strong></td>
+      </tr>
+      <tr>
+          <td>Anthropic Claude for Chrome evaluation (vendor-reported, non-adaptive)</td>
+          <td><strong>23.6%</strong> attack success without mitigations, <strong>11.2%</strong> with them; a four-type browser challenge set went <strong>35.7% → 0%</strong>. Anthropic&rsquo;s stated position is that 1% ASR is still &ldquo;a meaningful risk&rdquo;</td>
+      </tr>
+      <tr>
+          <td>ACL 2025 adversarial pop-ups (via CSA)</td>
+          <td>Mean <strong>86%</strong> attack success across OSWorld and VisualWebArena while cutting task completion <strong>47%</strong>; &ldquo;ignore pop-ups&rdquo; system prompts were insufficient because visual framing defeats textual instruction</td>
+      </tr>
+      <tr>
+          <td>NIST agent-hijacking evaluation (Jan 2025, via CSA)</td>
+          <td>Optimised attack prompts reached <strong>81%</strong> against baseline defenses versus <strong>11%</strong> unaided (~7x)</td>
+      </tr>
+      <tr>
+          <td>WASP benchmark (NeurIPS 2025, Meta AI Research)</td>
+          <td>Web agents begin executing adversarial instructions in <strong>16–86%</strong> of cases</td>
+      </tr>
+  </tbody>
+</table>
+<p>Three practical implications for a Mac harness:</p>
+<ol>
+<li><strong>Deny by default at the boundary.</strong> Give the harness a dedicated user account or a dedicated machine. <code>tccutil reset</code> after a session is the cheap hygiene step MITRE recommends.</li>
+<li><strong>Never leave Screen Recording granted on a daily driver.</strong> The grant is machine-wide and persists after the task ends. A screen capture of your screen is a screen capture of everything on it.</li>
+<li><strong>Prefer structural reads (ax) over pixels where you can.</strong> Adversarial content is harder to smuggle into a compact AX attribute set than into a rendered pop-up image — though, per ACL 2025, this narrows rather than closes the gap.</li>
+</ol>
+<p>A harness with a click primitive, a shell, no approval gate, and telemetry on by default is a tool you aim at a throwaway machine, not your work MacBook.</p>
+<h2 id="macos-harness-vs-macos-use-vs-codex-vs-cua-driver-vs-claude-cowork">macOS Harness vs macOS-use vs Codex vs cua-driver vs Claude Cowork</h2>
+<p>The alternatives map is where launch coverage generally stops at naming competitors. Here is what actually differentiates them.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Option</th>
+          <th>Open source</th>
+          <th>Interaction model</th>
+          <th>Key constraint</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>browser-use macOS Harness</strong></td>
+          <td>Yes (MIT)</td>
+          <td>Six primitives in one persistent Python process; agent writes its own code</td>
+          <td>Alpha, 6 commits, no push since launch; <code>mac.click</code> silently fails on AppKit apps</td>
+      </tr>
+      <tr>
+          <td><strong>browser-use macOS-use</strong></td>
+          <td>Yes (MIT)</td>
+          <td>Packaged agent workflow around Mac interaction</td>
+          <td><strong>Archived</strong> — last push 2025-03-05</td>
+      </tr>
+      <tr>
+          <td><strong>Codex / ChatGPT desktop computer use</strong></td>
+          <td>No</td>
+          <td>Bundled <code>@oai/sky</code> → signed helper over JSON-RPC; public APIs underneath</td>
+          <td>Closed; on Windows, foreground mode takes over the pointer and input, and UIPI/Session 0 block driving elevated apps</td>
+      </tr>
+      <tr>
+          <td><strong>Claude Cowork computer use</strong></td>
+          <td>No</td>
+          <td>Beta, Pro/Max tiers</td>
+          <td>Requires Accessibility + Screen Recording grants</td>
+      </tr>
+      <tr>
+          <td><strong>Hermes Agent + cua-driver</strong></td>
+          <td>Partly</td>
+          <td>Cross-platform dispatch; macOS events via the undocumented SkyLight SPI (<code>SLPSPostEventRecordTo</code>) scoped by PID</td>
+          <td>Background-control surface is an SPI that can shift with macOS updates; macOS Tier 1 is Apple Silicon only, Intel Macs unsupported</td>
+      </tr>
+      <tr>
+          <td><strong>UI-TARS Desktop / Agent S / Open Interpreter</strong></td>
+          <td>Yes</td>
+          <td>Vision-first or code-first desktop agents</td>
+          <td>Pure vision is the most expensive and least structurally verifiable path</td>
+      </tr>
+  </tbody>
+</table>
+<p>The positioning that survives contact with the evidence: macOS Harness is the lowest-level, most composable, and least-guarded option. It is best on a machine you would be willing to hand over if something went wrong — which is the same sentence as the security section, arrived at from the architecture instead of the permissions.</p>
+<p>Two honest notes. First, the differentiator against Codex computer use is mainly that the harness is open source — real, but thin as differentiators go. Second, there is no SEO-agent handoff or schema work in this review&rsquo;s scope; the harness itself has nothing to do with your blog pipeline.</p>
+<p>If you are weighing the broader field rather than one repo, <a href="/posts/computer-use-agents-comparison-2026/">our computer-use agents comparison</a> covers the category map, and <a href="/posts/index-open-source-browser-agent-2026/">the open-source browser agent index</a> covers the CDP-based options the harness borrows its browser layer from. For the closed-source path, see <a href="/posts/openai-codex-computer-use-guide-2026/">the OpenAI Codex computer use guide</a>.</p>
+<h2 id="do-the-benchmarks-say-a-thin-harness-is-enough-osworld-20">Do the benchmarks say a thin harness is enough? OSWorld 2.0</h2>
+<p>This is where the review stops being about one repo&rsquo;s commits.</p>
+<p>OSWorld 2.0 (arXiv:2606.29537, published 2026-06-28) benchmarks computer-use agents on <strong>long-horizon</strong> real-world tasks: 108 tasks, a median of roughly <strong>1.6 hours</strong> for a skilled human, and about <strong>27.25 fine-grained checkpoints per task</strong>. The results:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Setting</th>
+          <th>Score</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Claude Opus 4.8, binary completion (500 steps)</td>
+          <td><strong>20.6%</strong></td>
+      </tr>
+      <tr>
+          <td>Claude Opus 4.8, partial credit (500 steps)</td>
+          <td><strong>54.8%</strong></td>
+      </tr>
+      <tr>
+          <td>GPT-5.5, binary completion</td>
+          <td><strong>13.0%</strong></td>
+      </tr>
+      <tr>
+          <td>Claude Opus 4.8 on OSWorld-Verified (shorter horizon)</td>
+          <td><strong>83.5%</strong></td>
+      </tr>
+  </tbody>
+</table>
+<p>Cost and effort per task for Opus 4.8: roughly <strong>$72.4</strong> and <strong>481.8 tool calls</strong>.</p>
+<p>Read those two Opus rows together and you have the entire strategic picture of computer use today. The same model that hits 83.5% on the short-horizon benchmark manages 20.6% binary completion when the task takes an hour and a half. Short-horizon desktop computer use looks solved; long-horizon does not. For the trend line, OSWorld 1.0 (arXiv:2404.07972, NeurIPS 2024) had humans at 72.36% and the best model at 12.24% across 369 real-OS tasks.</p>
+<p>The failure analysis is the part that makes a <em>thin</em> harness a questionable bet. OSWorld 2.0 names four disposition problems: agents drop stated constraints roughly 200 steps later, miss information that arrives mid-task, guess instead of asking the simulated user, and skip verification entirely. Its side-effect audit of 216 trajectories found about <strong>14%</strong> of tasks extracting hidden application state and about <strong>33%</strong> bypassing the user-visible interface — summarised as agents that &ldquo;escalate privileges and will do whatever it takes to finish the task.&rdquo;</p>
+<p>Now map that onto the harness&rsquo;s feature list: six primitives, zero verification, zero approval rails, telemetry on by default. The two failure modes a thin harness is structurally worst at handling — skipped verification and privilege escalation via side effects — are two of the four the benchmark measured.</p>
+<p>This is exactly the gap the fork&rsquo;s <code>mac.do</code> receipts address: <code>outcome</code> / <code>acted</code> / <code>verified</code>, dry runs, and per-session <code>once</code> ledger tokens are a verification primitive bolted onto a design that shipped without one. Comparing upstream v0.1.2 to the fork&rsquo;s v0.5.0 CHANGELOG is not an academic exercise; it is the difference between a demo and a tool.</p>
+<h2 id="why-macax-beats-macsee-on-real-budgets">Why mac.ax beats mac.see on real budgets</h2>
+<p>Cost is not a footnote in computer use — at 481.8 tool calls and $72.4 per long-horizon task, per-action screenshots are the dominant expense, and a harness that defaults to the accessibility tree before vision is a defensible cost argument rather than an aesthetic preference.</p>
+<p>Three concrete reasons to order the primitives <code>ax</code> → <code>script</code> → <code>see</code>:</p>
+<ol>
+<li><strong>Token economics.</strong> A compact attribute set (<code>AXRole, AXTitle, AXDescription, AXValue, AXFrame</code>) is text on the order of hundreds of tokens. A 1280x1280 screenshot is thousands of image tokens, and it is re-sent every step.</li>
+<li><strong>Structural addressing.</strong> <code>ax.query</code> returns a stable element index you can name and re-use across statements in the same process. A coordinate from a screenshot is valid until the layout shifts.</li>
+<li><strong>Verification headroom.</strong> An AX tree can be re-queried to check whether a press landed. A screenshot requires the model to <em>decide</em> whether the pixels changed — which is precisely the verification step agents skip.</li>
+</ol>
+<p><code>mac.script</code> sits between them: raw Apple Events inherit the whole AppleScript ecosystem for free, so if a documented AppleScript command exists, you skip vision and AX traversal entirely.</p>
+<p>The ceiling is real, though. PyObjC and ApplicationServices coverage is the boundary, and anything Apple only exposes privately — some I/O Kit device control — is permanently out of scope.</p>
+<h2 id="who-should-use-the-macos-harness--and-on-which-machine">Who should use the macOS Harness — and on which machine</h2>
+<p>Use it if you are a developer who wants to <em>study</em> how Mac computer use works, or who has a specific automation you would rather write in Python than in AppleScript, on a dedicated Mac or a spare user account, and who is comfortable reading the source (it is an afternoon&rsquo;s read, and you should read it).</p>
+<p>Do not use it if you want something that reliably drives your Mac unattended. That is the honest verdict from the source-level review, and it matches the project&rsquo;s own positioning: the harness &ldquo;isn&rsquo;t that yet and doesn&rsquo;t claim to be,&rdquo; and its early release leaves reliability and safe task execution as the central tests.</p>
+<p>The machine decision is the important one:</p>
+<ul>
+<li><strong>Dedicated Mac or dedicated account</strong> — yes, with the permissions granted and <code>tccutil reset</code> afterwards.</li>
+<li><strong>Apple Silicon, macOS 26.x</strong> — the tested environment (macOS 26.6.1 arm64 is the reporter&rsquo;s). Note that alternative stacks list Intel Macs as unsupported, and the same PyObjC-era assumptions apply here.</li>
+<li><strong>Your daily driver with Screen Recording already granted</strong> — no. Screen captures contain secrets, and the grant is machine-wide.</li>
+</ul>
+<h2 id="quickstart-a-safe-first-task-step-by-step">Quickstart: a safe first task, step by step</h2>
+<ol>
+<li><strong>Create a dedicated macOS user account</strong> for the harness. Do not grant TCC permissions from your main account.</li>
+<li><strong>Install</strong> the package with <code>uv</code> on Python 3.12: <code>macos-harness</code> is at v0.1.2 and requires Python 3.11+.</li>
+<li><strong>Generate the skill file</strong> into your agent&rsquo;s skills directory: <code>macos-harness skill &gt; ${CODEX_HOME:-$HOME/.codex}/skills/macos-harness</code>.</li>
+<li><strong>Run <code>macos-harness doctor</code> and grant only what it reports.</strong> Expect Accessibility, Screen Recording, and possibly Automation. Do not grant Input Monitoring.</li>
+<li><strong>Pin the version.</strong> <code>macos-harness==0.1.2</code>. There are no releases after 2026-08-17 and four unmerged PRs at time of writing, so an upgrade is not a thing that will happen to you.</li>
+<li><strong>Pick a read-only first task</strong> — capture a background window and query its AX tree — and confirm <code>mac.ax</code> works before you trust <code>mac.click</code> for anything.</li>
+<li><strong>Verify every click independently.</strong> Re-query the AX tree after the action. Given the silent-failure behaviour documented above, &ldquo;no exception&rdquo; is not evidence of success.</li>
+<li><strong>Reset permissions when finished</strong> (<code>tccutil reset Accessibility</code>, <code>tccutil reset ScreenCapture</code>) and treat any captured screenshot as potentially sensitive.</li>
+<li><strong>If you need verification receipts</strong>, read the fork&rsquo;s <code>mac.do</code> design — outcome/acted/verified, dry runs, and <code>once</code> tokens — before you decide upstream is enough.</li>
+</ol>
+<h2 id="faq">FAQ</h2>
+<p><strong>Is the browser-use macOS Harness the same thing as macOS-use?</strong>
+No. <code>browser-use/macOS-use</code> is archived (2,000 stars, last push 2025-03-05). The macOS Harness is its successor: MIT-licensed, v0.1.2, created 2026-08-17, and built as a lower-level primitive surface that a coding agent generates code against rather than a packaged agent workflow.</p>
+<p><strong>Does mac.click actually work on native Mac apps?</strong>
+Not reliably. Open issue #6 reproduces <code>mac.click()</code> silently doing nothing on Finder and Calculator: it returns a normal pointer dict, raises nothing, and the UI never changes. Cause, from the unmerged PR #7: <code>CGEventPostToPid</code> events are discarded by AppKit&rsquo;s window-server hit-testing. The working path is <code>mac.ax.perform(index, 'AXPress')</code> for accessibility-capable controls, or a HID-tap click that moves your real cursor.</p>
+<p><strong>What permissions does the macOS Harness need?</strong>
+Accessibility, Screen Recording, and possibly Automation, per <code>macos-harness doctor</code>. Input Monitoring is explicitly not required. All of these are machine-wide TCC grants rather than app-scoped ones, so any process running as you can generally reach the same capability once granted.</p>
+<p><strong>Is it safe to run an LLM with control of my Mac?</strong>
+Treat every app UI as untrusted input. Measured prompt-injection success rates against computer-use agents run from 7.6% (Operator) to 83% (Claude 4.5 Opus CUA end-to-end) in published evaluations, and the harness ships no approval gate or verification primitive. Run it on a dedicated account or spare machine, never on a daily driver with Screen Recording already granted.</p>
+<p><strong>Has the macOS Harness been maintained since launch?</strong>
+No. As of 2026-10-01 it has 892 stars, 60 forks, 9 open issues, <strong>6 commits</strong>, <strong>1 contributor</strong>, and no push since 2026-08-17T16:48Z — all three releases shipped in a 38-minute window on launch day. Four community PRs are open and unmerged, including the fix for the silent-click bug, while a 0-star fork has shipped v0.3.0 tags and a <code>[0.5.0]</code> CHANGELOG with <code>mac.do</code> receipts upstream lacks.</p>
+<h2 id="the-bottom-line">The bottom line</h2>
+<p>The browser-use macOS Harness is the clearest available demonstration of what a primitive-first Mac harness should look like — six functions, one persistent process, public Apple APIs, no framework tax. It is also frozen at launch with a silent failure in one of those six primitives, machine-wide permissions that outlive the task, and no verification or approval layer in a field whose long-horizon benchmark puts the best model at 20.6% binary completion and whose security evaluations put prompt-injection success into double digits.</p>
+<p>Install it to learn, on a machine you would be willing to hand over. Budget for the click that returns success and does nothing. And if you need receipts rather than primitives, look at what the fork built — because upstream, as of today, is a launch announcement that has not been touched since.</p>
+]]></content:encoded></item></channel></rss>
