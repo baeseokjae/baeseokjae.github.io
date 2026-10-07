@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>On-Device Agent Sandbox Security on RockB</title><link>https://baeseokjae.github.io/tags/on-device-agent-sandbox-security/</link><description>Recent content in On-Device Agent Sandbox Security on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 01 Oct 2026 08:05:33 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/on-device-agent-sandbox-security/index.xml" rel="self" type="application/rss+xml"/><item><title>PhoneBuddy SDK Review: A Mobile On-Device Agent SDK in Rust for iOS and Android</title><link>https://baeseokjae.github.io/posts/phonebuddy-sdk-rust-mobile-llm-agent/</link><pubDate>Thu, 01 Oct 2026 08:05:33 +0000</pubDate><guid>https://baeseokjae.github.io/posts/phonebuddy-sdk-rust-mobile-llm-agent/</guid><description>PhoneBuddy SDK review: a pure-Rust mobile on-device agent SDK for iOS and Android, with C FFI, Swift and Kotlin bindings — and the audit gaps behind it.</description><content:encoded><![CDATA[<p>The best mobile on-device agent SDK answer in 2026 is a pure-Rust engine that runs entirely inside your app process. PhoneBuddySDK, open-sourced by APUS-AI-Lab under Apache-2.0, ships a planner, tool loop, sandboxed file system, virtual shell and JavaScript interpreter with C FFI, Swift and Kotlin bindings — and no child processes anywhere.</p>
+<h2 id="what-phonebuddy-sdk-actually-is-and-what-it-is-not">What PhoneBuddy SDK Actually Is (and What It Is Not)</h2>
+<p>PhoneBuddySDK is a Rust core crate compiled to a C ABI (<code>phone_buddy.h</code>) with first-class Swift (<code>PhoneBuddy.swift</code>) and Kotlin (<code>NativeAgent.kt</code> plus JNI) wrappers layered on top. It landed on GitHub on 2026-08-18 under Apache-2.0. As of 2026-10-01 the repository shows 36 stars, 13 forks, one open issue, and a language breakdown of roughly 1.36 MB of Rust against 36 KB of C — a ratio that tells you where the engineering lives. The C layer is a boundary, not an implementation.</p>
+<p>What it is not matters just as much:</p>
+<ul>
+<li><strong>It is not a cloud agent with a mobile client.</strong> Every capability is re-implemented in Rust and executed in the app&rsquo;s own process.</li>
+<li><strong>It is not a GUI-automation agent.</strong> It does not tap, swipe or read your screen. It calls typed tools.</li>
+<li><strong>It is not a hosted model service.</strong> The default transport talks to remote frontier models; an alternate mode delegates inference to a model you host on the device.</li>
+<li><strong>It is not a finished platform.</strong> There is no public CI workflow, no Android instrumentation suite, and no published app-store review record.</li>
+</ul>
+<p>The project is explicit that it derives from xAI&rsquo;s open-source desktop harness, <code>xai-org/grok-build</code>. The NOTICE file enumerates the adaptations: <code>std::process</code> and <code>tokio::process</code> replaced by pure-Rust BusyBox applets, an in-memory Tokio task manager for subagents, <code>rustls-ring</code> TLS, and the new C FFI, Swift and Kotlin layers. That derivation is the real story here — not the feature list.</p>
+<h2 id="why-desktop-agent-architecture-breaks-on-a-phone">Why Desktop Agent Architecture Breaks on a Phone</h2>
+<p>Desktop coding agents assume they may spawn a shell. Claude Code, Codex and Grok Build all build their power on <code>bash</code>, on subprocesses, on binaries that exist on the host. On iOS that assumption is fatal: there is no <code>fork</code>, no <code>exec</code>, no child process to hand a command to. On Android the process model technically permits it, but the Play policy surface around downloaded executable code does not welcome it.</p>
+<p>So the interesting engineering problem is not &ldquo;how do we run an agent on a phone.&rdquo; It is &ldquo;what remains of a desktop harness when you delete every path that launches a process&rdquo; — and whether the result still completes real tasks.</p>
+<p>PhoneBuddySDK&rsquo;s answer is to replace the missing substrate rather than fake it. Instead of emulating a terminal to trick the model into thinking it has a shell, the SDK re-implements each capability in code and wraps every operation in an execution fence. A file read is a Rust function with a jailed root directory. A directory listing is a Rust function. A <code>grep</code> is a Rust function. The model sees familiar tool names; the runtime performs bounded, auditable work.</p>
+<p>That distinction — reimplementation over emulation — is precisely what an independent audit was able to confirm statically. No <code>std::process</code>. No <code>tokio::process</code>. No child-process launch path in the core crates.</p>
+<h3 id="what-does-in-process-actually-buy-you">What does &ldquo;in-process&rdquo; actually buy you?</h3>
+<p>Two things, and they cut in opposite directions.</p>
+<p>The first is reach. Because the agent lives inside your app, its capability ceiling is your app&rsquo;s own permission set. An agent embedded in a photos app can touch photos. It cannot reach the contacts database. That is a hard boundary enforced by the operating system, not by prompt instructions — which is exactly the property that makes the whole design auditable. There is no escape hatch to audit because there is no escape hatch.</p>
+<p>The second is the limitation. An agent in a photos app cannot book a flight. The in-process bet trades general capability for a small, checkable surface. For app developers shipping a specific feature, that is usually the right trade. For anyone hoping to reproduce a desktop coding agent on a phone, it is a ceiling worth understanding before adoption.</p>
+<h3 id="is-this-a-model-problem-or-an-execution-problem">Is this a model problem or an execution problem?</h3>
+<p>Execution. The same underlying LLM delivers results an order of magnitude apart when you move it from a desktop harness to a phone chatbot. Nothing about the weights changes; what changes is whether the model has tools that produce side effects. Desktop harnesses give the model a filesystem, a shell and a package manager. Mobile chat apps give it a text box.</p>
+<p>The research literature reaches the same conclusion from the opposite direction. GUI-action agents that tap and swipe produce long, interface-dependent action sequences and still cannot reach device capabilities directly. Device-tool agents — the pattern PhoneBuddySDK implements — get explicit arguments and defined execution boundaries instead. PalmClaw (arXiv 2607.13027, 2026-07-14), a native on-device agent framework built on the device-tool premise, reports an 11.5% relative improvement in task success and a 94.9% reduction in completion time against the strongest baseline. Those numbers are the framework&rsquo;s own, but the direction is consistent across the field.</p>
+<h2 id="inside-the-engine-react-loop-virtual-busybox-boa-js-sandbox-in-memory-subagents">Inside the Engine: ReAct Loop, Virtual BusyBox, Boa JS Sandbox, In-Memory Subagents</h2>
+<p>Strip the bindings away and the core is a familiar agent harness assembled from parts that had to be rewritten for a process with no shell.</p>
+<p><strong>The loop.</strong> An autonomous planner plus a ReAct tool loop, with doom-loop detection, a history compactor, a session store, an in-memory subagent orchestrator, and cron-style scheduling with a task monitor.</p>
+<p><strong>The file sandbox.</strong> A jailed workspace rooted at a configured <code>root_dir</code>, with path-traversal prevention and the usual surfaces: <code>read_file</code>, <code>write_file</code>, <code>edit_file</code>, <code>list_dir</code>, <code>grep</code>.</p>
+<p><strong>The virtual shell.</strong> Pure-Rust BusyBox applets covering <code>cat</code>, <code>head</code>, <code>tail</code>, <code>ls</code>, <code>wc</code>, <code>sort</code>, <code>uniq</code>, <code>find</code>, <code>echo</code>, <code>mkdir</code>, <code>rm</code>, <code>cp</code>, <code>mv</code>, <code>du</code>. Each one is a library call wearing a command name.</p>
+<p><strong>The JavaScript sandbox.</strong> An embedded <code>boa_engine</code> instance exposed as <code>run_script</code> for computation and CSV or JSON manipulation — genuinely useful for data wrangling, and simultaneously the most policy-sensitive component in the stack.</p>
+<p><strong>The subagent manager.</strong> In-memory Tokio task orchestration with cooperative cancellation propagated through it. Subagents are tasks, not processes, which is the only shape that works on iOS.</p>
+<h3 id="what-are-the-verified-limits">What are the verified limits?</h3>
+<p>This is where the SDK stops being marketing and starts being a system. An independent audit published on 2026-08-23 covering main commit <code>c661ba0</code> confirmed these bounds statically:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Control</th>
+          <th>Verified limit</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Boa JavaScript execution</td>
+          <td>20,000,000-iteration cap</td>
+      </tr>
+      <tr>
+          <td>Built-in and host tools</td>
+          <td>120-second timeout wrapper</td>
+      </tr>
+      <tr>
+          <td>Doom-loop guard</td>
+          <td>Nudge after 8 identical calls, break at 16</td>
+      </tr>
+      <tr>
+          <td>Cancellation</td>
+          <td>Cooperative tokens propagated via the in-memory task manager</td>
+      </tr>
+      <tr>
+          <td>Child processes</td>
+          <td>None present in core crates</td>
+      </tr>
+  </tbody>
+</table>
+<p>These are the numbers that matter for a mobile deployment, because they are the difference between an agent that can hang forever and one that is bounded by construction. A 20-million-iteration ceiling on a scripting engine means a pathological script fails rather than pinning a thread until the OS intervenes. A 120-second wrapper means a misbehaving tool cannot silently outlive the user&rsquo;s patience. A doom-loop guard that nudges at 8 and breaks at 16 means a confused model gets two chances before the runtime stops it.</p>
+<h2 id="native-integration-c-abi-swift-and-kotlin-in-practice">Native Integration: C ABI, Swift and Kotlin in Practice</h2>
+<p>The portability bet is a C-ABI-first design: one Rust core, one C header, thin platform adapters. The alternative bet — what <code>antgroup/Napaxi</code> takes — is a shared Rust runtime with adapter contracts where Flutter is the first complete target and Android and iOS share a Core API boundary.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Dimension</th>
+          <th>PhoneBuddySDK</th>
+          <th>Napaxi</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Core language</td>
+          <td>Rust</td>
+          <td>Rust</td>
+      </tr>
+      <tr>
+          <td>Boundary</td>
+          <td>C ABI + Swift + Kotlin wrappers</td>
+          <td>Core API with mobile adapters (Flutter first)</td>
+      </tr>
+      <tr>
+          <td>Stars / forks (2026-10-01)</td>
+          <td>36 / 13</td>
+          <td>33 / 7</td>
+      </tr>
+      <tr>
+          <td>License</td>
+          <td>Apache-2.0 (permissive)</td>
+          <td>GPL-3.0 (copyleft)</td>
+      </tr>
+      <tr>
+          <td>Created</td>
+          <td>2026-08-18</td>
+          <td>2026-07-01</td>
+      </tr>
+      <tr>
+          <td>Last push</td>
+          <td>2026-09-13</td>
+          <td>2026-09-30</td>
+      </tr>
+      <tr>
+          <td>MCP surface</td>
+          <td>Not advertised</td>
+          <td>Explicit</td>
+      </tr>
+      <tr>
+          <td>Cross-app connectivity</td>
+          <td>Not advertised</td>
+          <td>xApp / xAgent / xChannel</td>
+      </tr>
+  </tbody>
+</table>
+<p>The practical cost of the C-ABI route is real and worth stating plainly: Rust 1.94+, Android NDK r25+, and four target toolchains to keep building. That is a build-system tax paid on every CI run. In exchange, the integration surface your Swift and Kotlin engineers touch is small and stable — they call into a generated header, not into Rust lifetime rules.</p>
+<p>The licensing row is the one that decides corporate adoption. Apache-2.0 permits closed-source distribution. GPL-3.0 does not, in the general case, permit shipping a proprietary mobile app without releasing the corresponding source. For a commercial team evaluating the two closest options in this niche, that single line often settles the comparison before any technical criterion is evaluated.</p>
+<h2 id="bring-your-own-model-hosted-protocols-vs-on-device-inference">Bring Your Own Model: Hosted Protocols vs On-Device Inference</h2>
+<p>The transport layer supports three wire protocols: <code>responses</code> with SSE streaming, <code>chat_completions</code>, and <code>messages</code>. That is Anthropic, OpenAI and a Responses-style surface covered from one Rust client. Streaming runs HTTP/2 over <code>rustls-ring</code>.</p>
+<p>The default path is a notable claim: the SDK can emulate client profiles for xAI Grok Build, OpenAI Codex and Anthropic Claude Code at 1:1 fidelity — replicating their exact HTTP headers, thinking signatures and JSON wire schemas from inside a mobile app. For developers building against providers whose APIs are tuned for those first-party clients, that emulation is the difference between working and being rate-limited or rejected.</p>
+<p>The alternate path is <code>LlmMode::Host</code>, which delegates inference to a model running on the device through <code>PbLlmRequestCallback</code>. The intended targets are runtimes like <code>llama.cpp</code> and <code>llama.rn</code> on NPU-class hardware. This is the mode where the whole architecture pays off: no network round-trip, no per-token cost, no data leaving the phone.</p>
+<p>The host-model ecosystem is finally ready for this. Apple exposes its on-device foundation model to third-party developers in Swift, and Google ships Gemini Nano through ML Kit GenAI APIs. Google&rsquo;s FunctionGemma turns natural language into function calls on-device with only 270M parameters — which is close to a purpose-built fit for a tool-calling loop that needs to emit structured arguments rather than prose.</p>
+<p>The market context explains why the timing works. Edge AI is projected at $37.51B in 2026, up 29% year over year, with edge AI hardware on track for $58.9B by 2030. AI in mobile apps grew from $30.56B in 2025 to $41.33B in 2026 at a 35.2% CAGR, heading toward $135.54B by 2030. By the end of 2026, 90% of new mobile apps are expected to incorporate AI capabilities, and 63% of mobile app developers are already integrating AI features. Gartner projects 40% of enterprise applications will incorporate task-specific AI agents by the end of 2026, up from less than 5% in 2025.</p>
+<h2 id="the-app-store-compliance-question-guideline-252-and-the-google-play-interpreter-exception">The App Store Compliance Question: Guideline 2.5.2 and the Google Play Interpreter Exception</h2>
+<p>The README asserts the SDK &ldquo;passes Apple App Store and Google Play app sandbox security reviews with zero permission escalations.&rdquo; That is a project assertion. No public review record exists anywhere, and the independent audit searched for one and found nothing.</p>
+<p>So treat the compliance question on the policy text, not on the claim.</p>
+<p><strong>Apple Guideline 2.5.2</strong> requires apps to be self-contained and restricts downloading, installing or executing code that introduces or changes app functionality. The clause exists to stop an app from becoming a launcher for arbitrary later code. An embedded JavaScript interpreter does not make that policy question disappear. An argument can be made that a <code>boa_engine</code> instance ships with the binary and can therefore only ever execute code the app already contained — but &ldquo;an argument can be made&rdquo; is a different standard from &ldquo;a reviewer has accepted it,&rdquo; and no accepted instance is on record.</p>
+<p><strong>Google Play&rsquo;s Device and Network Abuse policy</strong> prohibits downloading executable <code>dex</code>, <code>JAR</code> or <code>.so</code> artifacts outside Play, while permitting VM and interpreter code under conditions. That carve-out is friendlier on its face, but it is conditional rather than blanket.</p>
+<p>The practical position for a team planning to ship: the architecture is defensible, the claim is unverified, and the embedded JS engine is the specific component a reviewer will ask about. Prepare an answer for it before submission rather than after a rejection. If <code>run_script</code> is not on your product&rsquo;s critical path, disabling it removes the question entirely.</p>
+<h2 id="what-the-independent-audit-verified--and-what-remains-unproven">What the Independent Audit Verified — and What Remains Unproven</h2>
+<p>The audit that did the real work here ran on main commit <code>c661ba0</code> and confirmed, statically: no process-launch path in the core crates, path jailing, bounded JavaScript, tool timeouts, cancellation-token propagation, and functioning Swift, Kotlin and C integration.</p>
+<p>It also documented what it could not verify, and those caveats are the most valuable part of the report:</p>
+<ul>
+<li><strong>174 Rust tests are defined, but there is no public GitHub Actions workflow.</strong> A test count is not a test result. The auditor could not execute them because the host lacked a Rust toolchain.</li>
+<li><strong>No Android instrumentation suite exists.</strong> The platform with the more permissive process model is the one with no device-level test coverage published.</li>
+<li><strong>The v0.1.2 release points at an earlier commit than the audited main.</strong> Findings from main must not be attributed to the release package without retesting. This is the single most important line in the audit: the sandbox properties you would be shipping are the ones in the tag, not the ones in <code>main</code>.</li>
+<li><strong>No public App Store or Google Play review record was found.</strong></li>
+</ul>
+<p>An honest reading: the architecture is sound as designed, the static evidence is genuinely strong, and the verification stack that would let a team depend on it is incomplete. Those are three separate statements and none of them cancel out.</p>
+<h2 id="who-should-adopt-it-today-and-who-should-wait">Who Should Adopt It Today (and Who Should Wait)</h2>
+<p><strong>Adopt it if you are prototyping.</strong> Apache-2.0, pure Rust, a clear C boundary and an in-process design that maps directly onto iOS constraints make this the fastest way to find out whether an on-device agent does anything useful for your users. The 1.36 MB Rust / 36 KB C split means the core is small enough to audit yourself.</p>
+<p><strong>Adopt it if you are building an agent inside one app&rsquo;s permission boundary</strong> and you need a tool loop, a sandbox and a file layer rather than a chat wrapper. You are buying the parts nobody wants to write twice.</p>
+<p><strong>Wait if you need a compliance guarantee before you build.</strong> The review record does not exist. If your organization&rsquo;s ship gate requires either a documented app-store acceptance or a completed CI run over the 174 tests, you must produce that evidence yourself — which is doable and probably worth doing.</p>
+<p><strong>Wait if you need a maintained, community-hardened runtime.</strong> 36 stars and a last push of 2026-09-13 describe a young project. Bus factor is one of the real costs of adoption here, and no license grants you a maintenance commitment.</p>
+<p><strong>Reconsider if your business cannot ship GPL-3.0.</strong> If Napaxi&rsquo;s MCP surface and cross-app connectivity matter more to you than Apache-2.0 permissions, that comparison is genuine and reasonable — but check the license against your distribution model first, because it is the deciding constraint for most commercial apps.</p>
+<h2 id="verdict-promising-architecture-incomplete-verification-stack">Verdict: Promising Architecture, Incomplete Verification Stack</h2>
+<p>PhoneBuddySDK is the most architecturally interesting entry in the mobile on-device agent SDK space right now, and it earns that position for one reason: it took a desktop agent harness and solved the problem of what remains when you delete the ability to spawn a process. The answer — reimplement every capability, fence every operation, bound every loop, and orchestrate subagents as tasks rather than children — is correct for the platform.</p>
+<p>The independent audit supports that reading with verified constants: a 20-million-iteration JavaScript cap, a 120-second tool timeout, a doom-loop guard that nudges at 8 and breaks at 16, cooperative cancellation, and no child-process path in the core.</p>
+<p>What it does not support is the marketing. There is no CI, no Android instrumentation suite, no public app-store review record, and the released tag lags the audited commit. An embedded JavaScript interpreter keeps Apple&rsquo;s Guideline 2.5.2 question open, and the <code>LlmMode::Host</code> path is the mode that best justifies the whole design — but the verification work an adopting team must do themselves is real.</p>
+<p>The honest verdict: adopt it as an architecture and a prototype substrate today, and treat the sandbox and compliance claims as a test plan you inherit rather than a property you receive.</p>
+<h2 id="faq">FAQ</h2>
+<h3 id="is-phonebuddysdk-really-pure-rust">Is PhoneBuddySDK really pure Rust?</h3>
+<p>The core agent engine is. The repository&rsquo;s language breakdown on 2026-10-01 shows approximately 1.36 MB of Rust against 36 KB of C, with a small shell component. The C exists as a stable ABI boundary — the <code>phone_buddy.h</code> header — that the Swift and Kotlin wrappers bind to. The agent loop, file sandbox, virtual shell, JavaScript engine integration and subagent manager are all Rust. No child-process path exists in the core crates, which the independent audit confirmed statically.</p>
+<h3 id="does-it-work-on-ios-given-that-ios-forbids-spawning-processes">Does it work on iOS given that iOS forbids spawning processes?</h3>
+<p>That constraint is the reason the SDK is built the way it is. Instead of shelling out, it re-implements each capability in Rust — file operations, a virtual BusyBox-style command set, a bounded JavaScript sandbox — and runs them in the host app&rsquo;s own process. The agent&rsquo;s reach is therefore bounded by the host app&rsquo;s own permissions. iOS compliance is an architectural premise of the project, not an afterthought, though no public App Store review record confirming an actual submission has been found.</p>
+<h3 id="can-the-agent-write-to-arbitrary-files-on-the-device">Can the agent write to arbitrary files on the device?</h3>
+<p>No. The file tools operate inside a jailed workspace rooted at a configured <code>root_dir</code>, with path-traversal prevention applied to the operations. That is verified statically by the independent audit. The practical consequence is that the agent can manipulate files your app can already reach, and cannot reach anything your app does not already have permission to touch.</p>
+<h3 id="how-does-it-compare-to-napaxi">How does it compare to Napaxi?</h3>
+<p>Both are Rust mobile agent SDKs and they overlap on sessions, tools, workspace state and platform hooks. Napaxi is GPL-3.0 and takes an adapter-first approach with Flutter as the first complete target, plus an explicit MCP surface and cross-app connectivity through xApp, xAgent and xChannel. PhoneBuddySDK is Apache-2.0, uses a C ABI with first-class Swift and Kotlin wrappers, and does not advertise MCP. For closed-source commercial apps the license difference — permissive versus copyleft — is usually the deciding factor.</p>
+<h3 id="does-it-run-models-locally-or-does-it-need-the-cloud">Does it run models locally, or does it need the cloud?</h3>
+<p>Both are supported. The default transport speaks three wire protocols (<code>responses</code> with SSE streaming, <code>chat_completions</code>, and <code>messages</code>) over HTTP/2 with <code>rustls-ring</code>, and can emulate first-party client profiles for Grok Build, Codex and Claude Code. Separately, <code>LlmMode::Host</code> delegates inference to an on-device model through <code>PbLlmRequestCallback</code>, targeting runtimes such as <code>llama.cpp</code> and <code>llama.rn</code> on NPU-class hardware. The on-device path is the one that keeps prompts and data on the phone, and it pairs naturally with on-device foundation models that expose tool-calling APIs.</p>
+]]></content:encoded></item></channel></rss>
