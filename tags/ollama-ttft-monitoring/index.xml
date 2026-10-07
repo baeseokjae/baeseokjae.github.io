@@ -1,0 +1,581 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Ollama Ttft Monitoring on RockB</title><link>https://baeseokjae.github.io/tags/ollama-ttft-monitoring/</link><description>Recent content in Ollama Ttft Monitoring on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 01 Oct 2026 09:31:11 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/ollama-ttft-monitoring/index.xml" rel="self" type="application/rss+xml"/><item><title>ollama-llmwatch Review: Live Prefill Progress Monitoring for Ollama</title><link>https://baeseokjae.github.io/posts/ollama-llmwatch-live-prefill-progress-monitoring/</link><pubDate>Thu, 01 Oct 2026 09:31:11 +0000</pubDate><guid>https://baeseokjae.github.io/posts/ollama-llmwatch-live-prefill-progress-monitoring/</guid><description>ollama-llmwatch is a zero-dependency terminal monitor that tails Ollama&amp;#39;s server log to show live prefill progress, tok/s, cache reuse and TTFT.</description><content:encoded><![CDATA[<p>ollama-llmwatch is a free, MIT-licensed Python terminal monitor that tails Ollama&rsquo;s own server log and turns it into a live prefill board: tok/s sparklines, prompt-cache reuse percentage, time-to-first-token, a progress bar with ETA, and plain-language diagnostic hints. It never calls the Ollama API and adds zero inference overhead.</p>
+<h2 id="what-is-ollama-llmwatch-and-why-does-ollama-model-monitoring-need-it">What Is ollama-llmwatch and Why Does Ollama Model Monitoring Need It?</h2>
+<p>Most Ollama monitoring tools watch the wrong layer. They scrape an API response, count tokens after the fact, or read a Prometheus endpoint that may not exist. None of them can tell you what is happening during prefill — the window where your prompt is being read and nothing at all is being emitted.</p>
+<p>ollama-llmwatch takes a different route. It reads Ollama&rsquo;s server log file passively and reconstructs what the runner is doing right now. The project is a small, MIT-licensed Python TUI created in August 2026, sitting at 4 GitHub stars with roughly 70 PyPI downloads in the last month as of October 7, 2026 — genuinely early software in a genuinely underserved lane.</p>
+<p>That lane exists because of a hole in Ollama itself. Issue #3144, &ldquo;add /metrics endpoint,&rdquo; has been open since March 14, 2024 with 141 reactions and 48 comments, making it the most-requested observability feature in the repository. Two competing implementations are open right now: PR #16998 (July 1, 2026, an opt-in <code>GET /metrics</code> behind <code>OLLAMA_METRICS=1</code>, +936/-50 across 13 files) and PR #18508 (September 17, 2026, +407 across 4 files, described by its author as an alternative rather than a replacement). Streaming prefill progress was proposed separately in PR #13901 on January 25, 2026, and has sat open with zero comments ever since, described by its own author as a messy proof of concept.</p>
+<p>Until one of those lands, there is no supported server-side metrics surface for Ollama. Every tool in this space is working around a missing server feature, and log-readers like llmwatch exist precisely because the log is the only place the information already lives.</p>
+<h2 id="why-does-ollama-send-nothing-at-all-during-prefill">Why Does Ollama Send Nothing At All During Prefill?</h2>
+<p>Because of how the request lifecycle is structured. When you send a prompt to Ollama, the work splits into two phases:</p>
+<ol>
+<li><strong>Prefill</strong> — the model reads the entire prompt, building the KV cache. No tokens are emitted. From the API&rsquo;s point of view, nothing is happening.</li>
+<li><strong>Generate</strong> — the model emits tokens one at a time. This is what the streaming API reports.</li>
+</ol>
+<p>The API gives you the first token, then a usage object at the end. In between, during prefill, the wire is silent. No token, no progress event, no usage. Every wire-level and API-level monitor is therefore structurally blind to the window where most of the wall-clock time actually goes.</p>
+<p>How much time? The ollama-llmwatch README&rsquo;s own worked example is a coding agent sending 30,000–55,000 tokens of instructions every single turn. On an M1 Max running a 27B model, that is roughly <strong>eight minutes of silent reading</strong> before a single character appears — while the answer itself takes about twenty seconds. The tool&rsquo;s headline metric, the WAIT bar, measures exactly this. Its own sample board shows <strong>91% of session time spent in prefill</strong> across 12 requests totaling 18 minutes and 4 seconds.</p>
+<p>That is the whole argument for the tool in one number. If 91% of your session is prefill and your monitor only reports generation tok/s, you are optimizing the 9%.</p>
+<h2 id="how-does-ollama-llmwatch-work-without-calling-the-ollama-api">How Does ollama-llmwatch Work Without Calling the Ollama API?</h2>
+<p>It tails the server log file. That single design decision explains most of the tool&rsquo;s strengths and all of its limitations.</p>
+<p>The log is verbose and structured. Every line is tagged with a slot and a task id, for example:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 720 25"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='120' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='152' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='176' y='4' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='192' y='4' fill='currentColor' style='font-size:1em'>|</text>
+<text text-anchor='middle' x='208' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='216' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='224' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='232' y='4' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='248' y='4' fill='currentColor' style='font-size:1em'>2</text>
+<text text-anchor='middle' x='256' y='4' fill='currentColor' style='font-size:1em'>3</text>
+<text text-anchor='middle' x='264' y='4' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='272' y='4' fill='currentColor' style='font-size:1em'>3</text>
+<text text-anchor='middle' x='288' y='4' fill='currentColor' style='font-size:1em'>|</text>
+<text text-anchor='middle' x='304' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='312' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='320' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='328' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='336' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='344' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='360' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='368' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='376' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='384' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='392' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='400' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='408' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='416' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='424' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='432' y='4' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='440' y='4' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='456' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='464' y='4' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='472' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='480' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='488' y='4' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='496' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='504' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='512' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='528' y='4' fill='currentColor' style='font-size:1em'>=</text>
+<text text-anchor='middle' x='544' y='4' fill='currentColor' style='font-size:1em'>4</text>
+<text text-anchor='middle' x='552' y='4' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='560' y='4' fill='currentColor' style='font-size:1em'>9</text>
+<text text-anchor='middle' x='568' y='4' fill='currentColor' style='font-size:1em'>6</text>
+<text text-anchor='middle' x='576' y='4' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='592' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='600' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='608' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='616' y='4' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='624' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='632' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='640' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='648' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='664' y='4' fill='currentColor' style='font-size:1em'>=</text>
+<text text-anchor='middle' x='680' y='4' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='688' y='4' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='696' y='4' fill='currentColor' style='font-size:1em'>2</text>
+<text text-anchor='middle' x='704' y='4' fill='currentColor' style='font-size:1em'>7</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>The tool watches those <code>print_timing</code> lines with <code>tail -F</code> and reconstructs state from them. Because it reads a file rather than joining the request path, it adds <strong>no inference overhead whatsoever</strong> — it cannot slow down a request because it is not in the request. Because it reads Ollama&rsquo;s log rather than Ollama&rsquo;s API, it works identically whether your client is a Python script, Claude Code, a Codex CLI, an IDE plugin, or something that does not speak HTTP at all. And because the log carries a slot/task id, it can attribute progress to individual requests, which is how the per-request recent table and the cache accounting work.</p>
+<p>The trade-off is equally direct: <strong>the log format is internal and unstable.</strong> Ollama offers no stability guarantee for it. The project mitigates this by shipping tests against real captured logs in <code>tests/fixtures/*.log</code> to catch drift early, but a minor Ollama release that reshapes those lines will break the parser until the author catches up. That is an inherent cost of the log-reading approach, not a fixable bug.</p>
+<p>Ollama&rsquo;s log lives in different places per platform, which the tool has to handle:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Platform</th>
+          <th>Ollama log location</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>macOS</td>
+          <td><code>~/.ollama/logs/server.log</code></td>
+      </tr>
+      <tr>
+          <td>Linux (systemd)</td>
+          <td><code>journalctl -u ollama</code></td>
+      </tr>
+      <tr>
+          <td>Docker</td>
+          <td>container stdout / <code>docker logs</code></td>
+      </tr>
+      <tr>
+          <td>Windows</td>
+          <td><code>%LOCALAPPDATA%\Ollama\server.log</code></td>
+      </tr>
+  </tbody>
+</table>
+<p>Notably, that asymmetry maps directly onto the tool&rsquo;s platform support record — see the limitations section below.</p>
+<h2 id="what-do-the-numbers-on-the-live-board-actually-mean">What Do the Numbers on the Live Board Actually Mean?</h2>
+<p>The board is dense by design. Each panel answers a different question, and the diagnostic hints are what make it readable without you needing to carry a mental model of Ollama&rsquo;s internals.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Panel</th>
+          <th>What it shows</th>
+          <th>The question it answers</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>PREFILL</td>
+          <td>tok/s peak / avg / low with sparklines</td>
+          <td>How fast is the prompt being read, and is it degrading?</td>
+      </tr>
+      <tr>
+          <td>GENERATE</td>
+          <td>tok/s peak / avg / low with sparklines</td>
+          <td>How fast is output coming out?</td>
+      </tr>
+      <tr>
+          <td>CACHE</td>
+          <td>Cache reuse percentage</td>
+          <td>How much of this prompt did I actually have to pay for?</td>
+      </tr>
+      <tr>
+          <td>TTFT</td>
+          <td>Time to first token: min / avg / max</td>
+          <td>How long before I see anything?</td>
+      </tr>
+      <tr>
+          <td>WAIT</td>
+          <td>Share of session spent reading vs generating</td>
+          <td>Which problem do I actually have?</td>
+      </tr>
+      <tr>
+          <td>SYSTEM</td>
+          <td>Swap warning</td>
+          <td>Is the model spilling out of memory?</td>
+      </tr>
+      <tr>
+          <td>Recent requests</td>
+          <td>Per-request table</td>
+          <td>Which request was the slow one?</td>
+      </tr>
+      <tr>
+          <td>Progress</td>
+          <td>Live progress bar with ETA</td>
+          <td>How much longer?</td>
+      </tr>
+  </tbody>
+</table>
+<p>The <strong>hints</strong> are the most useful part for anyone who has not memorized Ollama&rsquo;s internals. Instead of leaving you to interpret <code>n_tokens = 39528, progress = 0.0</code>, the tool states the conclusion:</p>
+<ul>
+<li><code>! cache gone - rereading all 39,528 tok</code></li>
+<li><code>! same prompt 5x - likely stuck</code></li>
+<li><code>! 3 cancels in a row - client keeps timing out</code></li>
+<li><code>! slow: 40 vs 100 tok/s usual - 2 models loaded (34 GB), swapping</code></li>
+</ul>
+<p>That is a diagnostic layer, not a dashboard. The difference matters: a dashboard gives you numbers you must interpret; these lines give you a verdict you can act on.</p>
+<h3 id="how-does-the-progress-bar-stay-honest">How does the progress bar stay honest?</h3>
+<p>By projection, with a clamp. Ollama only writes a progress line every <strong>512 tokens</strong>, which at typical prefill speeds means updates land 5–10 seconds apart. A bar that only moved every 5–10 seconds would be useless for an eight-minute prefill. So llmwatch takes the last measured rate and projects position forward, repainting roughly <strong>10 times per second</strong>, while clamping the estimate so the bar never claims work that has not happened yet. It is an honest interpolation rather than a fake, which is why it does not overshoot and then snap backwards.</p>
+<h3 id="why-does-it-deliberately-not-show-cpu-or-gpu-percentage">Why does it deliberately not show CPU or GPU percentage?</h3>
+<p>Because those numbers do not move when performance does. A GPU running locally sits pinned near 100% whether you are getting 13 tok/s or 8 tok/s — utilization is not a signal for inference speed, it is a signal that the GPU is busy. The tool&rsquo;s authors say so explicitly in the README. Instead, slowdowns are detected from <strong>measured throughput</strong> and its trend, which is the quantity you actually care about.</p>
+<h2 id="what-is-the-prompt_eval_cached_count-trap-in-ollama-0333">What Is the prompt_eval_cached_count Trap in Ollama 0.33.3?</h2>
+<p>This is the single most valuable thing in the tool&rsquo;s documentation, and it applies to anyone measuring prefill throughput — whether or not they run llmwatch.</p>
+<p>Ollama 0.33.3 shipped on September 2, 2026. It added <code>prompt_eval_cached_count</code> to <code>/api/generate</code> and <code>/api/chat</code>, and <strong>redefined <code>prompt_eval_duration</code> to cover only the uncached prompt tokens</strong>. Meanwhile <code>prompt_eval_count</code> still means the total prompt size.</p>
+<p>That means the formula everyone has always used:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 456 25"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>=</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='144' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='152' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='176' y='4' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='184' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='192' y='4' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='200' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='208' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='216' y='4' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='224' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='232' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='240' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='248' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='256' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='272' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='288' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='296' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='304' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='312' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='320' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='328' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='336' y='4' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='344' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='352' y='4' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='360' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='368' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='376' y='4' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='384' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='392' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='400' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='408' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='416' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='424' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='432' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='440' y='4' fill='currentColor' style='font-size:1em'>n</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>now divides the <strong>total</strong> token count by the time for <strong>only some</strong> of them. The error scales with your cache-hit ratio — which means it is worst in exactly the steady-state agent loop developers actually care about, where the cache is warm and most of the prompt is cached.</p>
+<p>In one measured example, the naive formula reported <strong>4,375 tok/s where the honest figure was 115 tok/s</strong> — a <strong>38x over-report, with no error and no warning.</strong> Ollama has its own <code>Metrics.Summary()</code> changed to handle this correctly, and <code>prompt_eval_cached_count</code> is declared as a nullable <code>*int</code> in <code>api/types.go</code> (<code>PromptEvalCachedCount *int, omitempty</code>), which means an absent field means <em>unknown</em>, not <em>zero</em>. Tooling that treats missing as zero will quietly produce nonsense.</p>
+<h3 id="how-do-you-calculate-prefill-throughput-correctly">How Do You Calculate Prefill Throughput Correctly?</h3>
+<p>Subtract the cached tokens before dividing:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 688 25"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>k</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>=</text>
+<text text-anchor='middle' x='128' y='4' fill='currentColor' style='font-size:1em'>(</text>
+<text text-anchor='middle' x='136' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='144' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='152' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='160' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='168' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='176' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='184' y='4' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='192' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='200' y='4' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='208' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='216' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='224' y='4' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='232' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='240' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='248' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='256' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='264' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='280' y='4' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='296' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='304' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='312' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='320' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='328' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='336' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='344' y='4' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='352' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='360' y='4' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='368' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='376' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='384' y='4' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='392' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='400' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='408' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='416' y='4' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='424' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='432' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='440' y='4' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='448' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='456' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='464' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='472' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='480' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='488' y='4' fill='currentColor' style='font-size:1em'>)</text>
+<text text-anchor='middle' x='504' y='4' fill='currentColor' style='font-size:1em'>/</text>
+<text text-anchor='middle' x='520' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='528' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='536' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='544' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='552' y='4' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='560' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='568' y='4' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='576' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='584' y='4' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='592' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='600' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='608' y='4' fill='currentColor' style='font-size:1em'>_</text>
+<text text-anchor='middle' x='616' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='624' y='4' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='632' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='640' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='648' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='656' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='664' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='672' y='4' fill='currentColor' style='font-size:1em'>n</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>That is the documented fix, and it is what Ollama&rsquo;s own metrics summary does internally.</p>
+<p>The same cache fact is also exposed under three different names depending on which API surface you are using, which makes cross-tool comparison easy to get wrong:</p>
+<table>
+  <thead>
+      <tr>
+          <th>API surface</th>
+          <th>Field name</th>
+          <th>Meaning</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Ollama native</td>
+          <td><code>prompt_eval_cached_count</code></td>
+          <td>Cached prompt tokens</td>
+      </tr>
+      <tr>
+          <td>OpenAI-compatible</td>
+          <td><code>usage.prompt_tokens_details.cached_tokens</code></td>
+          <td>Cached prompt tokens</td>
+      </tr>
+      <tr>
+          <td>Anthropic-compatible</td>
+          <td><code>usage.cache_read_input_tokens</code></td>
+          <td>Cached prompt tokens</td>
+      </tr>
+  </tbody>
+</table>
+<p>There is a further wrinkle: the Anthropic-compatible <code>input_tokens</code> field quietly changed to mean <em>total minus cached</em>. The same identical prompt reported <code>input_tokens</code> of 38 when cold and 1 when warm. If your cost or analytics pipeline consumes that field, your input token counts have silently changed meaning.</p>
+<h3 id="why-is-prompt-layout-worth-35x-locally">Why Is Prompt Layout Worth 3.5x Locally?</h3>
+<p>Because KV-cache reuse is <strong>prefix-ordered and all-or-nothing from the first divergent token.</strong> Everything matching at the head of the prompt is reused; from the first differing token onward, everything is recomputed.</p>
+<p>A measured example makes this concrete. Same model, same 324-token system prompt, identical wording — the only change was moving a 21-token timestamp from the top of the prompt to the bottom. Prefill fell from <strong>64.6 ms to 18.6 ms</strong>: a 3.5x difference, from layout alone.</p>
+<p>Hosted providers document the advice — put stable content first, volatile content last. Locally, until you have a tool that reports cache reuse, you get <strong>zero feedback about whether you are following it.</strong> That is precisely what the CACHE panel and the <code>! cache gone</code> hint provide.</p>
+<p>There is one measurement lesson worth internalizing, learned the hard way by the maintainer of a competing observability tool: comparing whether layout B reuses layout A&rsquo;s cache is the wrong question, because real traffic sends the same layout every turn with a fresh value. Each layout has to be sent <strong>twice</strong> — once with its own values, once with those values changed — and only the second send tells you the truth about cache behavior.</p>
+<h2 id="why-do-turn-times-look-35x-longer-than-request-times">Why Do Turn Times Look 35x Longer Than Request Times?</h2>
+<p>Because turn time is not request time, and for agent users the gap is enormous.</p>
+<p>Measured on one machine with the same model: a median turn of <strong>57.3 seconds at low reasoning effort</strong> versus <strong>33 minutes 29 seconds at high effort</strong> (n=6 and n=5 respectively) — roughly a <strong>35x difference</strong>. Same hardware, same weights, same request shape. The variable is how much the model thinks before it answers.</p>
+<p>This reframes what a monitoring tool should report. A per-request tok/s meter answers &ldquo;how fast is the engine.&rdquo; An agent user needs &ldquo;how long until I get my answer,&rdquo; and those are separated by reasoning effort, tool calls, multiple round trips, and repeated prefill across turns.</p>
+<p>The same measurement discipline applies to speculative decoding, where the tool&rsquo;s data is a useful cautionary tale. Acceptance rates measured on one M1 Max, same model, three prompt types:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Workload</th>
+          <th>Draft acceptance</th>
+          <th>Speed effect</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Code / structured output</td>
+          <td>58–81%</td>
+          <td>~1.5x faster</td>
+      </tr>
+      <tr>
+          <td>Rote output / lists</td>
+          <td>93%</td>
+          <td>~2x faster</td>
+      </tr>
+      <tr>
+          <td>Freeform prose</td>
+          <td>18%</td>
+          <td><strong>0.6x — slower than no drafter</strong></td>
+      </tr>
+  </tbody>
+</table>
+<p>The same drafter makes you twice as fast or noticeably slower depending on what you ask for. Without per-workload measurement you cannot know which one you are getting — and the default assumption (&ldquo;speculative decoding is a speedup&rdquo;) is wrong a third of the time.</p>
+<p>Generation speed itself is bandwidth-bound and model-size-bound. On an M1 Max: 27B at Q4 runs 10–17 tok/s, 14B at Q4 runs 25–30 tok/s, and MoE models such as Qwen3-30B-A3B run much higher because only a fraction of weights are read per token. Note that these are generation numbers; prefill is a different regime and often the larger cost.</p>
+<h2 id="ollama-llmwatch-vs-toptop-vs-ollama-metrics-vs-llmxray-vs-langfuse">Ollama llmwatch vs toptop vs ollama-metrics vs LLMxRay vs Langfuse</h2>
+<p>The category splits cleanly by data source, and each source determines which questions a tool can answer. This is the comparison table to keep.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Tool</th>
+          <th>Data source</th>
+          <th>Live prefill progress?</th>
+          <th>Cache accounting?</th>
+          <th>GPU / KV / queue?</th>
+          <th>Best for</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>ollama-llmwatch</strong></td>
+          <td>Ollama server log (<code>tail -F</code>)</td>
+          <td><strong>Yes</strong></td>
+          <td><strong>Yes, per request</strong></td>
+          <td>No (by design)</td>
+          <td>Always-on terminal pane beside your agent</td>
+      </tr>
+      <tr>
+          <td><strong>toptop</strong></td>
+          <td>HTTP metrics endpoints + Ollama <code>/api/ps</code></td>
+          <td>No</td>
+          <td>No</td>
+          <td>Yes (KV, queue, TTFT, tok/s/watt)</td>
+          <td>Fleet view, Grafana, pasteable verdicts</td>
+      </tr>
+      <tr>
+          <td><strong>ollama-metrics</strong></td>
+          <td>Transparent reverse proxy</td>
+          <td>No</td>
+          <td>No</td>
+          <td>Partial</td>
+          <td>Prometheus sidecar with a ready Grafana dashboard</td>
+      </tr>
+      <tr>
+          <td><strong>LLMxRay</strong></td>
+          <td>Live daemon, browser UI</td>
+          <td>No</td>
+          <td>Yes (measured against live daemon)</td>
+          <td>Yes</td>
+          <td>Browser dashboard, cache-reuse measurement</td>
+      </tr>
+      <tr>
+          <td><strong>Langfuse / LangSmith / Helicone</strong></td>
+          <td>Wire-level request tracing</td>
+          <td>No</td>
+          <td>Provider-reported only</td>
+          <td>No</td>
+          <td>Cloud LLM observability and cost</td>
+      </tr>
+  </tbody>
+</table>
+<p>Two entries deserve more detail.</p>
+<p><strong>toptop</strong> is the closest direct competitor: Rust, GPLv3, roughly 18 stars, a single static binary with zero runtime dependencies, and explicitly branded &ldquo;the local-inference observability layer for your terminal.&rdquo; It auto-discovers local inference servers and scrapes their metrics endpoints with no configuration — llama.cpp, vLLM and TGI Prometheus <code>/metrics</code>, plus Ollama&rsquo;s <code>/api/ps</code>. It shows live generation <em>and</em> prefill tok/s, KV-cache pressure, queue depth and TTFT, and adds tokens/sec/watt by fusing throughput with GPU power draw. <code>toptop --diagnose</code> prints a pasteable 72-column verdict such as <code>MEMORY-BANDWIDTH BOUND - bandwidth 92% / compute 24%</code>; Ollama users get <code>MODEL PARTLY ON CPU</code> or <code>MODEL RUNNING ON CPU</code>. It also exports Prometheus/JSON and runs a long-lived <code>:9709 /metrics</code> endpoint for Grafana, with a multi-host fleet view over SSH.</p>
+<p>The key contrast is the data source. <strong>toptop reads HTTP metrics endpoints; llmwatch reads the log.</strong> toptop therefore sees KV state, queue depth, TTFT and GPU state, but it cannot see in-flight prefill progress or per-request cache accounting the way a log parser can. Neither is strictly better: they are answering different questions from different sources.</p>
+<p><strong>ollama-metrics</strong> represents the proxy-meter category: a transparent reverse proxy that forwards to Ollama and exposes token usage, request duration, inference speed, model memory and load status (~42 stars, last push June 24, 2025). Zero configuration, no modification to Ollama, a pre-built Grafana dashboard, configurable via <code>OLLAMA_HOST</code> / <code>PORT</code>, shipped as <code>ghcr.io/norskhelsenett/ollama-metrics</code>. Its structural limit is worth stating plainly: <strong>it only knows about requests that go through it, and it only learns numbers at response time.</strong> The silent prefill window is invisible to it.</p>
+<p><strong>LLMxRay</strong> (~11 stars, Apache-2.0, npm package <code>llmxray</code> v0.6.0, roughly 380 downloads in the last month) is a browser-based local LLM observatory with chat, streaming, reasoning, RAG, introspection and metrics. Its maintainer published the definitive write-up on Ollama 0.33.3 breaking the standard prefill formula, and it ships a page that measures cache reuse against your live daemon rather than estimating it. It is a dashboard rather than a terminal companion — a different lane from llmwatch&rsquo;s always-on pane.</p>
+<p>Finally, <strong>Langfuse / LangSmith / Helicone</strong> and agent-level meters such as agentacct (~766 stars) and tokentelemetry (~376 stars) sit in adjacent territory. Those tools answer &ldquo;what did this cost me&rdquo; by attributing tokens and dollars per run, task or work step. llmwatch answers &ldquo;why is this request slow right now.&rdquo; Different questions, different data sources, no overlap in what they can see.</p>
+<h2 id="how-do-you-install-and-run-ollama-llmwatch">How Do You Install and Run ollama-llmwatch?</h2>
+<p>The install story is deliberately simple, and the dependency count is the selling point: <strong>zero runtime dependencies, Python 3.9+.</strong></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span><span style="color:#75715e"># via uv</span>
+</span></span><span style="display:flex;"><span>uv tool install ollama-llmwatch
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># via pipx</span>
+</span></span><span style="display:flex;"><span>pipx install ollama-llmwatch
+</span></span></code></pre></div><p>Note the package name: it is <code>ollama-llmwatch</code> on PyPI, not <code>llmwatch</code>, because the name <code>llmwatch</code> was already taken. Both entry points are installed — <code>ollama-llmwatch</code> and <code>llmwatch</code> — so either command starts the board.</p>
+<p>There is also a single-file mode for people who would rather not install anything. Because the project ships a regenerated bundled script (<code>llmwatch.py</code> produced by <code>tools/bundle.py</code>), you can run the file directly. That is a real option on a machine where you cannot or will not install packages.</p>
+<p>Once running, the CLI back-end covers non-interactive use:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>llmwatch --plain          <span style="color:#75715e"># no TUI, plain output</span>
+</span></span><span style="display:flex;"><span>llmwatch --last           <span style="color:#75715e"># just the last request</span>
+</span></span><span style="display:flex;"><span>llmwatch --json           <span style="color:#75715e"># machine-readable</span>
+</span></span><span style="display:flex;"><span>llmwatch --codex          <span style="color:#75715e"># Codex-shaped output</span>
+</span></span><span style="display:flex;"><span>llmwatch --history --days <span style="color:#ae81ff">7</span>
+</span></span><span style="display:flex;"><span>llmwatch --turns --days <span style="color:#ae81ff">7</span>
+</span></span><span style="display:flex;"><span>llmwatch --compare A B    <span style="color:#75715e"># compare two runs</span>
+</span></span><span style="display:flex;"><span>llmwatch --export csv
+</span></span><span style="display:flex;"><span>llmwatch --no-history
+</span></span><span style="display:flex;"><span>llmwatch --debug-unparsed
+</span></span></code></pre></div><p>For OpenAI-compatible servers that are not Ollama, there is a <code>--proxy</code> mode on port 8081, aimed at mlx-lm, LM Studio and vLLM. Those servers&rsquo; logs carry no token counts, so the proxy supplies what the log cannot. llama.cpp is the documented exception and uses <code>--log</code> instead, because its log does carry the needed information.</p>
+<p>History lands in SQLite at <code>~/.local/share/ollama-llmwatch/history.db</code>, in <code>requests</code> and <code>turns</code> tables, storing timings, model names and effort levels. There is deliberately <strong>no column that could hold prompt text</strong> — a privacy decision worth noting for anyone running the tool on work prompts.</p>
+<p><code>--debug-unparsed</code> is the escape hatch to reach for if a new Ollama release changes the log format: it shows you exactly which lines the parser is dropping.</p>
+<h3 id="what-are-the-linux-caveats">What are the Linux caveats?</h3>
+<p>Real ones, and the author states them rather than hiding them. The tool was developed and verified on <strong>macOS</strong>. The Linux path (journald) and the Docker path are, in the author&rsquo;s own words, &ldquo;written but unverified.&rdquo; Windows is not supported. So if you run Ollama under systemd on Linux — the most common server deployment — you are on an unverified code path. It may work; you are the test.</p>
+<h2 id="what-can-ollama-llmwatch-not-do">What Can ollama-llmwatch Not Do?</h2>
+<p>An honest limitations list, in descending order of practical importance:</p>
+<ul>
+<li><strong>Remote servers.</strong> It reads a local log. Monitoring an Ollama instance on another host means getting the log to you first.</li>
+<li><strong>Internal log format dependency.</strong> Ollama offers no stability guarantee for the lines the parser depends on. Fixture-based tests catch drift, but they do not prevent it.</li>
+<li><strong>macOS-only verification.</strong> Linux and Docker are written-but-unverified; Windows unsupported.</li>
+<li><strong>No GPU, KV or queue visibility.</strong> By design — it reads throughput instead. If you need bandwidth-bound vs compute-bound verdicts, that is toptop&rsquo;s lane.</li>
+<li><strong>Very early adoption.</strong> 4 stars, 0 forks, 0 subscribers, 0 open issues; PyPI downloads of 69 in the last month, 14 in the last week, 1 in the last day (as of October 7, 2026). 13 closed issues suggest the author is responsive, but there is no community depth.</li>
+<li><strong>Release skew.</strong> The latest published PyPI version is <strong>0.9.1</strong> (uploaded August 18, 2026), while the GitHub CHANGELOG and README badge already describe <strong>0.9.2</strong> (the package split into <code>llmwatch/</code> modules with <code>llmwatch.py</code> regenerated by <code>tools/bundle.py</code>). Version 0.8.0 shipped to GitHub and <strong>never reached PyPI at all</strong>. Published versions are 0.5.1, 0.5.2, 0.5.3, 0.6.0, 0.7.0, 0.9.1 — gaps included. If you install from PyPI you may not get what the README describes.</li>
+</ul>
+<p>The context for that last point matters: the category is small because the problem is real. Ollama itself is at 182,491 stars and 18,137 forks, llama.cpp at 130,606, vLLM at 93,342, with recent releases v0.35.0 (September 28, 2026) and v0.40.0-rc0 (September 25, 2026). Meanwhile cache-related prefill defects are active on Ollama&rsquo;s own tracker: #16051 (open, MLX bf16 cold prefill 60–400x slower than warm even when the model fits in RAM), #18505 (open, MLX nvfp4 requests stalling in prefill at <code>processed = total - 1</code> for minutes under single-slot load), #18267 (closed, prefix-cache restore truncated to a multiple of 8192 cost a fixed 17–27s re-prefill after every cold prompt), and #17829 (closed, MLX had no prompt caching between requests at all — full re-prefill every agent step). Prefill throughput is an active obsession in r/LocalLLaMA for good reason.</p>
+<h2 id="how-do-you-actually-reduce-prefill-wait">How Do You Actually Reduce Prefill Wait?</h2>
+<p>The diagnostic value of the tool is that it tells you which of these to do. Prefill and generation have different bottlenecks, and the fixes are not interchangeable.</p>
+<p><strong>1. Shrink the prompt.</strong> Prefill cost scales with prompt length. If your WAIT bar says 91% of session time is prefill, prompt size is your lever — not inference flags. Trimming a 40,000-token instruction block is worth more than every sampler setting combined.</p>
+<p><strong>2. Put stable content first.</strong> KV reuse is prefix-ordered and all-or-nothing from the first differing token, worth 3.5x in the measured example above. Move timestamps, session ids, user names and any per-turn value to the <strong>bottom</strong> of the prompt and leave the system prompt and static instructions at the top.</p>
+<p><strong>3. Verify with the second send.</strong> Do not test whether layout B reuses layout A&rsquo;s cache. Send each layout twice — once with its values, once with them changed — and only trust the second measurement.</p>
+<p><strong>4. Check for swap and multi-model residency.</strong> The SYSTEM panel warns on swap, and the hint <code>! slow: 40 vs 100 tok/s usual - 2 models loaded (34 GB), swapping</code> is the canonical version of this problem. If two models are resident and the machine is swapping, every phase slows down until one is unloaded.</p>
+<p><strong>5. Consider MoE models for throughput.</strong> MoE architectures such as Qwen3-30B-A3B run far faster than dense models of similar size because only a fraction of weights is read per token. If you are bandwidth-bound, this is the structural fix rather than the tuning fix.</p>
+<p><strong>6. Measure speculative decoding per workload before trusting it.</strong> 93% acceptance on lists (2x faster) versus 18% on prose (0.6x, slower than no drafter) is the whole story. Turn it on for code, off for prose, and measure rather than assume.</p>
+<p><strong>7. Watch the WAIT bar, not just tok/s.</strong> It is the tool&rsquo;s headline metric for a reason: it tells you which of prefill and generation is actually consuming your session.</p>
+<h2 id="verdict-who-should-run-ollama-llmwatch">Verdict: Who Should Run ollama-llmwatch?</h2>
+<p>The honest verdict is that this is <strong>novel in category and very early in maturity</strong> — and both halves of that sentence are true.</p>
+<p>What it does that nothing else does: it shows in-flight prefill progress, per-request cache accounting, and the WAIT split, because it reads the one place that information exists. If you run a local coding agent against a large model on a Mac and you have ever watched a blank terminal for minutes wondering whether it was working, this tool answers that question directly, with a progress bar that does not lie and hints that tell you what to do about it.</p>
+<p>What to expect from a four-star tool: roughly 70 PyPI downloads last month, macOS-verified only, an unverified Linux path, an internal log format Ollama does not promise to keep, and a PyPI release that trails the GitHub README. Zero runtime dependencies and a genuinely responsive 13-closed-issue history are real mitigations, and a single-file run mode means the risk of installing it is close to zero.</p>
+<p>Who should skip it: anyone monitoring remote Ollama hosts, anyone who needs Prometheus/Grafana integration or fleet-wide views (use toptop or ollama-metrics), anyone who needs GPU utilization and power draw numbers (toptop), and anyone on Windows.</p>
+<p>The most transferable thing here is not the tool — it is the measurement lesson. The <code>prompt_eval_cached_count</code> redefinition quietly made the standard prefill formula over-report by up to 38x, and cache-ordering alone is worth 3.5x. Even if you never install llmwatch, check your own prefill math against Ollama 0.33.3, and check where your volatile prompt content sits.</p>
+<h2 id="faq">FAQ</h2>
+<p><strong>What is ollama-llmwatch?</strong>
+It is a free, MIT-licensed Python terminal monitor for Ollama with zero runtime dependencies and Python 3.9+ support. It tails Ollama&rsquo;s server log passively to display live prefill progress, generation tok/s, prompt-cache reuse, time-to-first-token, and a WAIT bar showing what share of your session went to reading versus generating. It never calls the Ollama API, so it adds no inference overhead.</p>
+<p><strong>Does ollama-llmwatch slow down my Ollama requests?</strong>
+No. It reads the server log file with <code>tail -F</code> and never joins the request path, so it adds zero inference overhead. This is the structural advantage of the log-reading approach over proxy meters, which sit in front of Ollama and only learn their numbers at response time.</p>
+<p><strong>Why does Ollama show no progress during prefill?</strong>
+Ollama&rsquo;s API emits the first token and a usage object at the end, with nothing in between. Prefill — reading the prompt and building the KV cache — produces no tokens, so the wire is silent. Server-side streaming prefill progress was proposed in PR #13901 (January 25, 2026) and remains open with no comments, and there is still no <code>/metrics</code> endpoint (issue #3144, open since March 2024).</p>
+<p><strong>What is prompt_eval_cached_count and why does it matter?</strong>
+Ollama 0.33.3 (September 2, 2026) added <code>prompt_eval_cached_count</code> and redefined <code>prompt_eval_duration</code> to cover only the uncached prompt tokens, while <code>prompt_eval_count</code> still means the total prompt size. The classic formula <code>prompt_eval_count / prompt_eval_duration</code> therefore over-reports prefill throughput by roughly your cache-hit ratio — up to 38x in one measured case, with no warning. The correct formula is <code>(prompt_eval_count - prompt_eval_cached_count) / prompt_eval_duration</code>.</p>
+<p><strong>Is ollama-llmwatch better than toptop or ollama-metrics?</strong>
+They answer different questions. llmwatch is the only one that shows live in-flight prefill progress and per-request cache accounting, because it reads the log. toptop scrapes metrics endpoints and adds KV-cache pressure, queue depth, tokens/sec/watt and bandwidth-versus-compute verdicts. ollama-metrics is a Prometheus sidecar with a ready Grafana dashboard, but is blind to prefill because it only learns numbers at response time. Choose by data source, not by feature count.</p>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>ollama-llmwatch repository and README — <a href="https://github.com/bingcheng45/ollama-llmwatch">https://github.com/bingcheng45/ollama-llmwatch</a></li>
+<li>PyPI package metadata and download stats — <a href="https://pypi.org/pypi/ollama-llmwatch/json">https://pypi.org/pypi/ollama-llmwatch/json</a> and <a href="https://pypistats.org/api/packages/ollama-llmwatch/recent">https://pypistats.org/api/packages/ollama-llmwatch/recent</a></li>
+<li>Ollama prefill metrics analysis (prompt_eval_cached_count, cache ordering, 38x over-report) — <a href="https://lognebudo.github.io/llmxray/docs/en/articles/ollama-prefill-metrics.html">https://lognebudo.github.io/llmxray/docs/en/articles/ollama-prefill-metrics.html</a></li>
+<li>Ollama API usage docs and types — <a href="https://github.com/ollama/ollama/blob/main/docs/api/usage.mdx">https://github.com/ollama/ollama/blob/main/docs/api/usage.mdx</a> and <a href="https://github.com/ollama/ollama/blob/main/api/types.go">https://github.com/ollama/ollama/blob/main/api/types.go</a></li>
+<li>Ollama issue #3144 (no /metrics endpoint), PRs #16998 and #18508, PR #13901 (streaming prefill progress) — <a href="https://github.com/ollama/ollama/issues/3144">https://github.com/ollama/ollama/issues/3144</a></li>
+<li>toptop — <a href="https://github.com/ur-grue/toptop">https://github.com/ur-grue/toptop</a></li>
+<li>ollama-metrics — <a href="https://github.com/NorskHelsenett/ollama-metrics">https://github.com/NorskHelsenett/ollama-metrics</a></li>
+<li>LLMxRay — <a href="https://github.com/LogneBudo/llmxray">https://github.com/LogneBudo/llmxray</a></li>
+<li>Ollama troubleshooting (log locations) — <a href="https://docs.ollama.com/troubleshooting">https://docs.ollama.com/troubleshooting</a></li>
+<li>agentacct (agent cost accounting dashboard) — <a href="https://github.com/mikehasa/agentacct">https://github.com/mikehasa/agentacct</a></li>
+<li>tokentelemetry (agent token telemetry) — <a href="https://github.com/VasiHemanth/tokentelemetry">https://github.com/VasiHemanth/tokentelemetry</a></li>
+</ul>
+]]></content:encoded></item></channel></rss>
