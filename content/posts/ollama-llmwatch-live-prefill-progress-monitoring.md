@@ -54,7 +54,7 @@ It tails the server log file. That single design decision explains most of the t
 
 The log is verbose and structured. Every line is tagged with a slot and a task id, for example:
 
-```
+```text
 slot print_timing: id 0 | task 2313 | prompt processing, n_tokens = 4096, progress = 0.27
 ```
 
@@ -113,7 +113,7 @@ Ollama 0.33.3 shipped on September 2, 2026. It added `prompt_eval_cached_count` 
 
 That means the formula everyone has always used:
 
-```
+```text
 prefill tok/s = prompt_eval_count / prompt_eval_duration
 ```
 
@@ -125,7 +125,7 @@ In one measured example, the naive formula reported **4,375 tok/s where the hone
 
 Subtract the cached tokens before dividing:
 
-```
+```text
 prefill tok/s = (prompt_eval_count - prompt_eval_cached_count) / prompt_eval_duration
 ```
 
