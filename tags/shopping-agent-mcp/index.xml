@@ -1,0 +1,324 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Shopping Agent Mcp on RockB</title><link>https://baeseokjae.github.io/tags/shopping-agent-mcp/</link><description>Recent content in Shopping Agent Mcp on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 01 Oct 2026 07:56:10 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/shopping-agent-mcp/index.xml" rel="self" type="application/rss+xml"/><item><title>NorthCinder Review 2026: A Buyer-Run, Ad-Neutral Shopping Agent MCP</title><link>https://baeseokjae.github.io/posts/northcinder-shopping-agent-mcp/</link><pubDate>Thu, 01 Oct 2026 07:56:10 +0000</pubDate><guid>https://baeseokjae.github.io/posts/northcinder-shopping-agent-mcp/</guid><description>NorthCinder is a local-first MCP server that ranks offers for the buyer and gates checkout behind a single-use mandate. Hands-on review and verdict.</description><content:encoded><![CDATA[<p>NorthCinder is a local-first MCP server that turns a general AI assistant into a buyer-side shopping researcher: it queries only the stores you configure, ranks offers against your own brief, labels sponsored placements beneath every organic result, and requires a signed, single-use approval before any checkout.</p>
+<p>That is a genuinely unusual set of promises for 2026. Most agentic commerce tooling asks you to trust a marketplace, a hosted catalog, or a vendor&rsquo;s own ranking service. NorthCinder asks you to trust code you can read on your own laptop — and then, unusually, publishes a document explaining exactly where that trust stops being verifiable. This review installs it, probes it over MCP, reads the ranking and mandate internals, and then separates the two questions that get conflated in every vendor announcement: <strong>does it work</strong>, and <strong>should you depend on it</strong>.</p>
+<p>The short answers are &ldquo;yes, surprisingly cleanly&rdquo; and &ldquo;not yet, and the reason is coverage, not neutrality.&rdquo;</p>
+<h2 id="what-northcinder-actually-is-and-what-it-refuses-to-be">What NorthCinder Actually Is (and What It Refuses to Be)</h2>
+<p>NorthCinder ships as an npm package (<code>northcinder@0.2.1</code>, MIT, repository <code>cinderline/northcinder</code>) and runs as a stdio MCP server. You point your existing AI app at it, and the app gains a set of shopping-research tools scoped to you. There is no hosted endpoint, no account, no telemetry egress, and no affiliate parameter anywhere in the adapters.</p>
+<p>That last detail is the whole architecture. NorthCinder has no business model at all — nothing to sell, no referral fee to collect, no demand to route. That is why its ad-neutrality claim is cheap to implement rather than expensive to police. When a project earns money from placements, neutrality is a policy that must be enforced against commercial pressure. When a project earns nothing, neutrality is just the absence of an incentive.</p>
+<p>What it refuses to be matters just as much. It is not a shopping bot that autonomously buys things. It is not a marketplace and does not aggregate a proprietary catalog. It does not hold your card details (it explicitly refuses raw card data). It does not place orders through a native store adapter until a human approves a specific, single-use mandate. The shape is consumer-side, read-heavy, per-buyer scoped, with cart handoff rather than merchant-side CRUD — the same lane as a personal research assistant, not the same lane as Shopify&rsquo;s merchant tooling.</p>
+<p>The practical framing: NorthCinder is a <strong>control layer</strong> between your AI assistant and the retail web. The interesting engineering is not the search; it is the ranking rule table and the purchase mandate.</p>
+<h2 id="we-installed-and-probed-it-21-tools-and-an-honest-empty-result">We Installed and Probed It: 21 Tools and an Honest Empty Result</h2>
+<p>Claims about MCP servers are easy to make and easy to check, so we checked. On Node v24.20.0 with npm 12.0.2, on 2026-10-01:</p>
+<ul>
+<li><code>npx northcinder@0.2.1 --version</code> printed <code>northcinder 0.2.1</code>. The package installs with <strong>zero runtime dependencies</strong> and a single optional dependency (<code>playwright-core ^1.61.1</code>) used only by the Amazon adapter.</li>
+<li><code>northcinder init --config-dir ... --mode local -y</code> wrote a config directory with <code>0700</code> permissions containing <code>0600</code> files, including <code>mandate-key.json</code> — the signing key for purchase approvals. It printed the ready-to-paste <code>mcpServers</code> JSON block and reported a truthful coverage line: <code>amazon=not_configured, ebay=not_configured, etsy=not_configured, shopify=not_configured, woocommerce=not_configured</code>.</li>
+<li>A live stdio MCP session (<code>initialize</code> → <code>tools/list</code> → <code>tools/call</code>) returned <code>serverInfo</code> name <code>NorthCinder</code> version <code>0.2.1</code>, protocol version <code>2025-06-18</code>, with capabilities for tools, resources, and prompts. <strong>21 tools</strong> were advertised: <code>search_products</code>, <code>submit_browser_observations</code>, <code>submit_decision_evidence</code>, <code>get_buyers_brief</code>, <code>get_trust_signal</code>, <code>request_purchase_authorization</code>, <code>approve_purchase</code>, <code>decline_purchase</code>, <code>complete_checkout</code>, <code>list_orders</code>, <code>import_order</code>, <code>create_watch</code>, <code>list_watches</code>, <code>cancel_watch</code>, <code>get_profile</code>, <code>update_profile</code>, <code>record_feedback</code>, <code>review_preference_proposal</code>, <code>create_research_plan</code>, <code>record_order_outcome</code>, and <code>get_order</code>. Two resources follow the same model, plus a buyers-brief widget and two prompts.</li>
+</ul>
+<p>The most informative single call was the one that returned nothing. With no stores configured, <code>search_products</code> returned zero finalists with the message &ldquo;No offer met your criteria — nothing is padded in to fill the list,&rdquo; a per-store coverage table explaining the exact <code>not_configured</code> reason for each of the five adapters, and the line &ldquo;Ranking verification not applicable: no results to verify.&rdquo;</p>
+<p>That is the correct behavior and it is rarer than it should be. The default failure mode of a shopping aggregator with thin coverage is to quietly widen the query until something comes back. NorthCinder returns an empty, explained result instead. A tool that tells you it has no answer is a tool you can reason about; a tool that always has an answer is one you have to audit.</p>
+<p>The server&rsquo;s stderr was equally candid about its own posture: the local UI runs on loopback, tokenized approval links are written only into buyer-local state, the checkout rail is <code>cart-permalink</code>, mail-drop ingest is disabled, and approval pushes are off unless you set <code>NORTHCINDER_UI_NTFY_TOPIC</code>.</p>
+<h3 id="two-schema-gotchas-worth-knowing-before-you-write-a-client">Two schema gotchas worth knowing before you write a client</h3>
+<p>Both are real and both cost time:</p>
+<ol>
+<li><strong><code>search_products</code> takes <code>text</code>, not <code>query</code>.</strong> Passing <code>query</code> fails schema validation with &ldquo;expected string, received undefined.&rdquo;</li>
+<li><strong>Money is in minor units.</strong> Prices are integers in cents with a 3-letter ISO currency, so an example call looks like <code>{text: &quot;black wool running shoes&quot;, maxPrice: {amount: 13000, currency: &quot;USD&quot;}}</code> — that is $130.00, not $13,000.</li>
+</ol>
+<p>These are small, but they are the kind of detail that makes a hand-verified review different from a README summary. If a third-party write-up describes a NorthCinder call without mentioning <code>text</code> or minor units, it likely never ran one.</p>
+<h2 id="the-ranking-rule-table-and-what-sponsored-placement-is-forbidden-to-do">The Ranking Rule Table, and What Sponsored Placement Is Forbidden to Do</h2>
+<p>NorthCinder&rsquo;s ordering is not an LLM judgment call. It is a published, additive weight table (<code>RANK_WEIGHTS</code> in <code>docs/RANKING.md</code>), which means the same offer set fed to it twice produces the same order:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Signal</th>
+          <th>Weight</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Price is best</td>
+          <td>+40</td>
+      </tr>
+      <tr>
+          <td>Over budget</td>
+          <td>−25</td>
+      </tr>
+      <tr>
+          <td>Full spec match</td>
+          <td>+30</td>
+      </tr>
+      <tr>
+          <td>Each spec missed</td>
+          <td>−10</td>
+      </tr>
+      <tr>
+          <td>Delivery meets requirement</td>
+          <td>+10</td>
+      </tr>
+      <tr>
+          <td>Each delivery requirement missed</td>
+          <td>−15</td>
+      </tr>
+      <tr>
+          <td>In stock</td>
+          <td>+5</td>
+      </tr>
+      <tr>
+          <td>Pre-order</td>
+          <td>−5</td>
+      </tr>
+      <tr>
+          <td>Out of stock</td>
+          <td>−20</td>
+      </tr>
+      <tr>
+          <td>Merchant trust: trusted</td>
+          <td>+10</td>
+      </tr>
+      <tr>
+          <td>Merchant trust: known</td>
+          <td>+5</td>
+      </tr>
+      <tr>
+          <td>Merchant flagged</td>
+          <td>−40</td>
+      </tr>
+      <tr>
+          <td>Ethics criteria fully matched</td>
+          <td>+8</td>
+      </tr>
+      <tr>
+          <td><strong>Sponsored</strong></td>
+          <td><strong>0</strong></td>
+      </tr>
+  </tbody>
+</table>
+<p>The sponsored row is the one that carries the argument. Sponsored placement contributes <strong>exactly zero points</strong>, and it is additionally confined to a strictly lower tier than every non-sponsored offer. So sponsorship cannot buy rank, cannot buy a tie, and cannot appear above an organic result — not because a policy says so, but because the arithmetic and the tier rule have no path for it to happen.</p>
+<p>This is worth contrasting with the industry norm, where sponsored placement is typically an ordering input or a boost multiplier. A referral-fee model and an affiliate-parameter-aware ranking function are the same thing seen from two angles: one determines the other. NorthCinder&rsquo;s ranking function does not know what a commission is, which is the structural reason its neutrality claim holds up.</p>
+<h2 id="what-the-neutrality-audit-proves--and-the-sentence-that-limits-it">What the Neutrality Audit Proves — and the Sentence That Limits It</h2>
+<p>The project ships a generated neutrality audit (<code>docs/NEUTRALITY-AUDIT.md</code>) built on a fixed seed (<code>20260705</code>) so reruns are byte-identical. It records three passing batteries:</p>
+<ul>
+<li><strong>250 re-rankings</strong> across 50 offer sets × 5 shuffles, with <strong>0 divergences</strong> — the order is invariant to input ordering.</li>
+<li><strong>99 sponsored-flag flips</strong>, with <strong>0 rank improvements</strong>, <strong>0 score changes</strong>, and <strong>0 offers left above an organic offer</strong> — flipping sponsorship changes nothing.</li>
+<li><strong>11 single-dimension attribute probes</strong>, with <strong>0 deltas diverging</strong> from the published weights (the sponsored probe measured exactly 0, as expected).</li>
+</ul>
+<p>Those are meaningful results. Determinism and sponsorship-invariance are precisely the properties you want to be able to falsify, and they are stated in a way that lets you falsify them.</p>
+<p>Now the sentence that limits all of it. <code>RANKING.md</code> states plainly that client-side re-ranking can only prove the order <em>over the inputs the service disclosed</em> — and that a dishonest service could fabricate trust levels, strip a sponsored flag, or curate which offers it returns at all, and still pass with <code>rankingVerified: true</code>.</p>
+<p>Read that twice, because it is the most honest thing published in agentic commerce this year. It means the verification chain proves <strong>the ranker did what the ranker says</strong>, not that the offer set is complete or the inputs are real. A service that quietly deletes the cheapest competitor before ranking it has not violated any weight — it has violated the supply of inputs.</p>
+<p>So the correct claim for NorthCinder is narrower than &ldquo;neutral&rdquo;: it is <strong>neutral over disclosed inputs, with a verifiable rule table, on data you largely supply yourself.</strong> And that last clause is not a marketing add-on. Local-first is what makes the trust claim testable at all. If the buyer-side state lived in a hosted service, neutrality would become a promise from the same party you are supposed to distrust — which is exactly the position BuyWhere and Zinc are in, however good their intentions.</p>
+<h2 id="purchase-approval-as-a-single-use-capability-request-approve-complete">Purchase Approval as a Single-Use Capability: Request, Approve, Complete</h2>
+<p>The mandate gate is the part of NorthCinder most worth stealing, and it generalizes well past shopping. The flow is three stages:</p>
+<ol>
+<li><strong>Request authorization.</strong> <code>request_purchase_authorization</code> produces a scoped request bound to a specific offer, a quantity of exactly one, and a signing key from <code>mandate-key.json</code> that never leaves the local config directory.</li>
+<li><strong>Approve.</strong> <code>approve_purchase</code> requires a one-time code delivered to the human, consumed against a single-use nonce ledger, so an approval cannot be replayed, shared, or reused for a second item.</li>
+<li><strong>Complete.</strong> <code>complete_checkout</code> executes through the cart-permalink rail, or hands off to a native store adapter that must independently confirm the order.</li>
+</ol>
+<p>The properties that make this pattern a genuine capability token rather than a confirmation dialog:</p>
+<ul>
+<li><strong>Single-use nonce.</strong> Approval is consumed, not cached. This is the difference between a permission and a permission <em>instance</em>.</li>
+<li><strong>Quantity-one binding.</strong> The mandate is tied to one offer and one unit, so a &ldquo;yes&rdquo; cannot be stretched into a larger purchase.</li>
+<li><strong>Raw card details refused.</strong> The system declines to become a place where card numbers live, which removes the most attractive breach target.</li>
+<li><strong>Cart-permalink fallback.</strong> When no adapter can complete the order, the agent hands you a link and the purchase happens in your browser, under your own session and your own credentials.</li>
+</ul>
+<p>The last point is where NorthCinder&rsquo;s ambition visibly stops. Zinc&rsquo;s Zinc GPT reference agent wires an LLM plus SerpAPI, Stripe, and Zinc&rsquo;s purchasing rail to complete <strong>real paid orders end to end</strong>, and Zinc publishes a checklist for judging community shopping MCPs — does it place a real paid order, who holds the retailer account, what happens on stockouts, CAPTCHAs, and address failures. Against that checklist, NorthCinder deliberately answers &ldquo;a human clicks the link.&rdquo; That is a defensible design choice for a buyer-side tool, and it is not the same capability as a purchasing rail. Do not buy NorthCinder expecting Zinc.</p>
+<h2 id="merchant-trust-1095-days-top-1m-rank-and-why-unknown-is-not-unsafe">Merchant Trust: 1,095 Days, Top-1M Rank, and Why &ldquo;Unknown&rdquo; Is Not &ldquo;Unsafe&rdquo;</h2>
+<p><code>docs/TRUST.md</code> defines a four-level trust table with hard numeric thresholds, not vibes:</p>
+<ul>
+<li><strong>Known</strong> requires both a domain age of at least <strong>1,095 days</strong> (three years) <em>and</em> a popularity rank inside the <strong>top 1,000,000</strong>.</li>
+<li><strong>Trusted</strong> sits above that bar.</li>
+<li><strong>Flagged</strong> requires deny-grade evidence — a local deny seed or a curated fraud list. It <strong>can never</strong> be produced by automated age/rank/platform heuristics, which prevents a stale domain from being silently blacklisted.</li>
+<li><strong>Unknown</strong> is simply the floor for &ldquo;no history,&rdquo; explicitly not a negative judgment.</li>
+</ul>
+<p>Two design decisions stand out. First, the inputs are measurements and curation hits only — no seller-controlled input can raise a merchant&rsquo;s trust level, so a storefront cannot buy its way up. Second, the refusal to auto-flag is what keeps the system honest at the bottom of the long tail: a new but legitimate shop lands at <code>unknown</code> (+0 points) rather than being penalized like fraud. The −40 flagged penalty is reserved for actual evidence.</p>
+<h2 id="store-coverage-is-the-real-blocker">Store Coverage Is the Real Blocker</h2>
+<p>Everything above describes a well-specified system. This section describes why you still should not deploy it as your shopping stack today. None of the five adapters is turnkey.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Store</th>
+          <th>What it needs</th>
+          <th>Practical status</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Shopify</td>
+          <td>Has moved to UCP (<code>/api/ucp/mcp</code>); requires an <strong>HTTPS UCP agent-profile URL you host yourself</strong>. The deprecated Storefront Catalog endpoint is maintained only until 2026-06-15.</td>
+          <td>Blocked on you hosting a profile document</td>
+      </tr>
+      <tr>
+          <td>WooCommerce</td>
+          <td>An explicit host list exposing the public Store API on the buyer&rsquo;s target sites</td>
+          <td>Workable, but manual per store</td>
+      </tr>
+      <tr>
+          <td>eBay</td>
+          <td>Buy Browse requires an <strong>approved Developers Program keyset</strong>, with a separate production gate</td>
+          <td>Approval-gated</td>
+      </tr>
+      <tr>
+          <td>Etsy</td>
+          <td>An <strong>approved Personal App</strong>, then a separate Commercial Access review; the docs forbid scraping</td>
+          <td>Double approval-gated</td>
+      </tr>
+      <tr>
+          <td>Amazon</td>
+          <td>Read-only Playwright driving <strong>the buyer&rsquo;s own Chrome profile</strong>. No checkout at all.</td>
+          <td>Research only</td>
+      </tr>
+  </tbody>
+</table>
+<p>The Amazon row carries an extra irony: NorthCinder rejects Amazon&rsquo;s Creators API because its Associate tag is an affiliate mechanism, which conflicts with the entire no-affiliate model. The project is consistent, and it pays for that consistency with capability.</p>
+<p>The Shopify row carries a sharper one. NorthCinder&rsquo;s independence claim is layered <strong>on top of the protocol it criticises</strong> — Google and Shopify&rsquo;s UCP covers discovery, cart, identity, checkout, and orders through a <code>/.well-known/ucp</code> manifest, which the project&rsquo;s own README calls convenient but not independent advice. So the buyer-side ranker sits on a merchant-defined catalog contract, and the project&rsquo;s answer to &ldquo;is the offer set complete?&rdquo; is now partly Shopify&rsquo;s answer.</p>
+<p>Coverage, not ranking, is the blocker — and it is upstream of NorthCinder entirely. The honest verdict for a builder is therefore: <strong>fork the mandate gate and the ranker, wire your own catalog.</strong> Those two subsystems are the durable contribution. The adapters are the part you would rewrite anyway.</p>
+<h2 id="1215-stars-13-weekly-npm-installs-6-commits-how-to-read-the-numbers-that-matter">1,215 Stars, 13 Weekly npm Installs, 6 Commits: How to Read the Numbers That Matter</h2>
+<p>Here is where a review earns its keep. NorthCinder has 1,215 GitHub stars, and those stars do not describe the project that was actually measured.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Metric (2026-10-01)</th>
+          <th>Value</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>GitHub stars</td>
+          <td>1,215</td>
+      </tr>
+      <tr>
+          <td>Forks</td>
+          <td>10</td>
+      </tr>
+      <tr>
+          <td>Watchers/subscribers</td>
+          <td>5</td>
+      </tr>
+      <tr>
+          <td>Open issues</td>
+          <td>0</td>
+      </tr>
+      <tr>
+          <td>Commits (all time)</td>
+          <td>6</td>
+      </tr>
+      <tr>
+          <td>Contributors</td>
+          <td>1</td>
+      </tr>
+      <tr>
+          <td>npm downloads, last week</td>
+          <td>13</td>
+      </tr>
+      <tr>
+          <td>npm downloads, last month</td>
+          <td>56</td>
+      </tr>
+      <tr>
+          <td>Last push</td>
+          <td>2026-08-22</td>
+      </tr>
+  </tbody>
+</table>
+<p>Do the division and it gets stark: roughly <strong>93 stars for every weekly install</strong>. A project with 1,215 stars and 13 weekly downloads is not being used. It is being bookmarked.</p>
+<p>The trajectory explains it. The repo was created 2026-08-17T11:42:31Z. By 2026-08-19, third-party snapshots recorded about 1,190 stars — two days. By 2026-08-20, 1,197 (&ldquo;399 stars a day&rdquo;). By 2026-09-03, 1,219 stars with 8 forks. On 2026-10-01, 1,215 stars with 10 forks. Roughly <strong>1,200 of 1,215 stars landed in the first three days</strong>, and the count has been flat for six weeks. The star-history chart shows the same shape: a vertical spike, then a horizontal line.</p>
+<p>The development record matches the flat line. Six commits total, all authored as &ldquo;NorthCinder maintain&rdquo; between 2026-08-17 and 2026-08-22, with one contributor. Five merged pull requests, and every one of them is a <strong>grammar fix from an outside user</strong>; the five closed issues are the matching grammar reports. There is <strong>zero substantive external code contribution</strong>. There is also no Hacker News submission at all — Algolia story search returns 0 hits — so there is no organic discussion thread, and only two GitHub Discussions from 2026-08-29: a merchant-identity pitch asking $0.10 USDC per call over x402, and a cold outreach from an ops agent. Both have zero maintainer replies.</p>
+<p>An early observer flagged the divergence when it was smaller. EnterpriseDNA&rsquo;s AI Pulse for 2026-08-19 questioned the trajectory directly: &ldquo;1,190 stars on GitHub in two days&hellip; Except the rest of the numbers don&rsquo;t back that up. Only 4 forks and 5 watchers. For a project with over a thousand stars, that&rsquo;s a strange gap.&rdquo; Six weeks later, the gap is quantified: 1,215 stars, 10 forks, 5 subscribers, 13 weekly installs.</p>
+<p>None of this is an accusation, and the review should be careful not to make one. Star counts can spike from a single aggregator post or newsletter mention without any manipulation. But the background matters, because GitHub stars are a measurably contaminated signal in exactly this category: an ICSE 2026 measurement study identified roughly <strong>6 million suspected fake stars across 18,617 repositories and 301k accounts</strong>, with AI/LLM repositories the largest non-malicious category and stars selling for <strong>$0.03 to $0.85</strong> each from at least a dozen vendors. Dagster&rsquo;s investigation found fake stars help for under two months and then become a liability.</p>
+<p>The teaching point is procedural, not moral: <strong>read the commit log and the npm download graph before the star number.</strong> Six commits from one author and 13 weekly installs tell you what 1,215 stars cannot. StarScout-style tooling exists precisely because this check is now routine diligence.</p>
+<h3 id="the-third-party-reviews-of-this-project-are-also-a-cautionary-tale">The third-party reviews of this project are also a cautionary tale</h3>
+<p>Within days of launch, the repo was being re-summarised by AI-generated discovery sites. One attributes NorthCinder to a GitHub account <code>jdshfhds</code> with a clone URL for <code>jdshfhds/northcinder</code> <strong>that does not exist</strong>. Another is a content-marketing restatement of the README with no evidence of execution. If you were evaluating shopping agent MCP servers by reading reviews, you would have been misled twice. Run your own <code>npx</code>.</p>
+<h3 id="one-contradiction-to-know-about">One contradiction to know about</h3>
+<p>The release pages contradict the project&rsquo;s own retraction. v0.2.1 retracted the unsupported routine-use host/model claim — &ldquo;no combination is currently qualified&rdquo; — yet the v0.2.0 release notes still advertise &ldquo;Routine research support is qualified for Codex CLI 0.147.0 with gpt-5.6-luna at medium reasoning over local STDIO MCP.&rdquo; Two live pages, opposite claims. Praise the retraction; note the staleness; and treat the in-repo docs and the v0.2.1 changelog as authoritative over the release page.</p>
+<h2 id="how-northcinder-compares-with-buywhere-zinc-and-shopifys-mcp">How NorthCinder Compares With BuyWhere, Zinc, and Shopify&rsquo;s MCP</h2>
+<p>All four products call themselves neutral. Only one has nothing to sell.</p>
+<table>
+  <thead>
+      <tr>
+          <th></th>
+          <th>NorthCinder</th>
+          <th>BuyWhere</th>
+          <th>Zinc / Zinc GPT</th>
+          <th>Shopify MCP + UCP</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Buyer-side or merchant-side</td>
+          <td>Buyer-side</td>
+          <td>Multi-merchant catalog</td>
+          <td>Purchasing rail</td>
+          <td>Merchant-side</td>
+      </tr>
+      <tr>
+          <td>Where ranking lives</td>
+          <td>Buyer&rsquo;s own code</td>
+          <td>Vendor&rsquo;s catalog service</td>
+          <td>Vendor&rsquo;s search + LLM glue</td>
+          <td>Merchant catalog</td>
+      </tr>
+      <tr>
+          <td>Sponsorship in ranking</td>
+          <td>0 points, tier-demoted</td>
+          <td>Affiliate link tracking out of the box</td>
+          <td>Per-transaction incentive (MPP)</td>
+          <td>N/A (merchant scope)</td>
+      </tr>
+      <tr>
+          <td>Revenue model</td>
+          <td>None</td>
+          <td>Referral fees, merchant partnerships, demand routing</td>
+          <td>Transaction fees</td>
+          <td>Merchant platform</td>
+      </tr>
+      <tr>
+          <td>Real order completion</td>
+          <td>No — cart-permalink handoff</td>
+          <td>Via merchant links</td>
+          <td>Yes — real paid orders</td>
+          <td>Yes, in merchant scope</td>
+      </tr>
+      <tr>
+          <td>Catalog breadth</td>
+          <td>Whatever you configure (5 adapters, none turnkey)</td>
+          <td>300M+ products, 900k+ merchants</td>
+          <td>Amazon, Walmart, Target, Best Buy, 50+ US retailers</td>
+          <td>Shopify merchants</td>
+      </tr>
+      <tr>
+          <td>What &ldquo;neutral&rdquo; means</td>
+          <td>Ranking code you can inspect</td>
+          <td>No inventory, no platform to favour</td>
+          <td>No inventory, pay per transaction</td>
+          <td>N/A</td>
+      </tr>
+  </tbody>
+</table>
+<p>BuyWhere&rsquo;s defense is instructive and completely different: it argues that because it has no inventory to sell and no platform to favour, &ldquo;neutral&rdquo; means a <strong>multi-merchant catalog</strong> rather than buyer-owned ranking code. It indexes 300M+ products across 900k+ merchants in Singapore, Malaysia, Indonesia, Thailand, the Philippines, Vietnam, and the US, exposes MCP-native tools (<code>search_products</code>, <code>get_product</code>, <code>compare_products</code>, <code>get_price_history</code>, <code>check_availability</code>, <code>get_alternatives</code>, <code>get_categories</code>, <code>get_trending</code>), and monetizes through referral fees and demand routing rather than API subscriptions — shipping affiliate link tracking out of the box. It also markets a 50–100 line SerpAPI-to-MCP comparison, which frames the decision in <strong>integration cost</strong> terms NorthCinder does not address, and its free tier covers 1,000 calls/month over streamable HTTP at <code>api.buywhere.ai/mcp</code>.</p>
+<p>That is the axis the review should land on: <strong>neutrality as data coverage versus neutrality as code you can inspect.</strong> BuyWhere wins on coverage and loses on incentive alignment — an affiliate-tracking catalog is structurally the ranking input NorthCinder forbids. NorthCinder wins on inspectability and loses on usefulness today. If you need a working catalog this quarter, BuyWhere and Zinc are the answers; if you need a defensible architecture for buyer-owned controls, read NorthCinder&rsquo;s <code>checkout/packages/</code> and <code>docs/TRUST.md</code> first.</p>
+<h2 id="why-this-pattern-matters-now-google-ai-modes-216-price-gap-and-amazons-lockdown">Why This Pattern Matters Now: Google AI Mode&rsquo;s 21.6% Price Gap and Amazon&rsquo;s Lockdown</h2>
+<p>Strip away the star count and the unanswered adapter questions and there is still a good reason to care about buyer-side ranking: the empirical case arrived this year.</p>
+<p>A 23-day controlled study by Productrise (Hugo Huijer, published 2026-09-01) tracked more than 2 million listings across more than 100,000 SERPs and AI Mode responses in the US and UK from 9–31 August 2026. Among products appearing in <strong>both</strong> Google AI Mode and traditional search on the same day, the AI Mode lead price averaged <strong>21.6% higher</strong>. Across all priced listings the median was <strong>$149 versus $100</strong> — about 49% higher. Only <strong>1.28%</strong> of traditional-search products appeared in AI Mode at all. When prices disagreed, AI Mode was pricier <strong>68.4%</strong> of the time (median +22.2%), and the lead seller differed <strong>49.6%</strong> of the time. AI Mode also showed <strong>3.9 products per query</strong> versus 27.8 in traditional search.</p>
+<p>The coverage of that study has been carried by Search Engine Journal and PPC Land, and reasonable people can argue about what drives the gap — surface differences, ranking differences, or availability differences. What it establishes is narrower and sufficient: <strong>agent-mediated product discovery has its own incentives and its own price distribution, and it does not match the search results you are used to.</strong> When the assistant picks three products instead of thirty, the ranking function is the entire market. Owning that function is no longer a philosophical preference.</p>
+<p>Meanwhile the platform side is closing, not opening. Amazon blocked Meta&rsquo;s Muse agent from shopping its site in September 2026, on the stated grounds that &ldquo;continued access by an unauthorized AI agent violates Amazon&rsquo;s Conditions of Use.&rdquo; Its Perplexity case ran an injunction on 10 March 2026, a Ninth Circuit reversal on 4 August 2026, and a denied rehearing on 10 September 2026, leaving contract and ToS claims as the open avenue. Amazon&rsquo;s own Buy for Me identifies itself and lets brands opt out. The direction of travel is clear: platforms intend to control which agents transact, and a buyer-side ranker that runs locally with the buyer&rsquo;s own credentials is one of the few architectures that does not require a platform&rsquo;s permission.</p>
+<p>For scale, this is not a niche: agentic commerce is estimated at <strong>USD 5.7B in 2025 and USD 7.7B in 2026</strong>, reaching <strong>USD 65.5B by 2033</strong> at a 35.7% CAGR, with North America at 38.2% share (Grand View Research). Juniper Research puts total agentic commerce transaction value at <strong>$8B in 2026 rising to $3.5T by 2031</strong> — 43,240% growth across 24 vendors. MCP itself is no longer the constraint: monthly SDK downloads moved from 97M at the December 2025 Linux Foundation donation to roughly <strong>204M/month for the npm TypeScript SDK</strong> and <strong>319M/month for PyPI&rsquo;s <code>mcp</code> package</strong> by September 2026, with public server counts between ~11,000 and ~22,000 and the Agentic AI Foundation at 247 members.</p>
+<h2 id="verdict-read-the-checkout-package-fork-the-mandate-gate-do-not-deploy-it-as-your-shopping-stack">Verdict: Read the Checkout Package, Fork the Mandate Gate, Do Not Deploy It as Your Shopping Stack</h2>
+<p>NorthCinder is the clearest written specification yet for buyer-side commerce controls, and it is honest about its own limits in a way that almost nothing else in this category is. <code>RANKING.md</code> telling you that <code>rankingVerified: true</code> cannot detect a fabricated trust level or a curated offer set is worth more than a hundred &ldquo;bank-grade neutrality&rdquo; marketing pages, because it tells you what to verify yourself.</p>
+<p>Adopt it, with scoping:</p>
+<ul>
+<li><strong>Read first, install second.</strong> Start with <code>checkout/packages/</code> and <code>docs/TRUST.md</code>. The mandate gate — request, one-time-code approval, single-use nonce ledger, quantity-one binding, no raw card data — is a reusable pattern for any agent that can spend money. Steal the pattern even if you never run the server.</li>
+<li><strong>Then read the ranker.</strong> The published weight table plus the fixed-seed audit is a testable neutrality contract. It proves determinism and sponsorship-invariance over disclosed inputs, and that is exactly what it claims to prove. It does not prove catalog completeness, and the docs say so.</li>
+<li><strong>Do not deploy it as your shopping stack today.</strong> No adapter works out of the box; the project is dormant since 2026-08-22; and 1,215 stars against 13 weekly npm installs means you would be one of the first real users, debugging alone against a two-month-old bundle with six commits behind it.</li>
+<li><strong>Calibrate expectations against the alternatives.</strong> Zinc and BuyWhere actually complete commerce; Shopify&rsquo;s official MCP surface will be the default for the merchants locked into it. NorthCinder is the reference architecture, not the rail.</li>
+<li><strong>Then do your own <code>npx</code>.</strong> The two schema gotchas (<code>text</code> not <code>query</code>; money in minor units) and the honest empty result take about fifteen minutes to reproduce. That is less time than you would spend reading one more AI-generated review of it.</li>
+</ul>
+<p>The one-line verdict: <strong>a genuinely well-specified buyer-side control layer that nobody is using yet, published by a project too honest to pretend otherwise.</strong> Treat it as the spec, and treat deployment as a project you have not started.</p>
+<h2 id="frequently-asked-questions">Frequently Asked Questions</h2>
+<h3 id="is-northcinder-free-and-is-it-safe-to-run">Is NorthCinder free, and is it safe to run?</h3>
+<p>Yes to free: it is MIT-licensed with no account, no hosted component, and no telemetry, so the running cost is a Node process. Safety is architectural rather than certified — the config directory is created <code>0700</code> with <code>0600</code> files including the mandate signing key, the local UI binds to loopback, approval links are written only to buyer-local state, and the server refuses raw card details entirely. The residual risk is not the code, it is the store adapters: the Amazon adapter drives your real Chrome profile, and any adapter you configure inherits whatever credentials you supply.</p>
+<h3 id="does-northcinder-place-orders-for-me-automatically">Does NorthCinder place orders for me automatically?</h3>
+<p>No, and that is a design choice rather than a limitation. Order completion runs through three stages — request authorization, one-time-code approval, complete checkout — and the approval is bound to a single offer, a quantity of exactly one, and a single-use nonce, so it cannot be replayed or stretched. When no active adapter can complete the order, the fallback is a cart permalink you open yourself. If you need end-to-end paid orders placed by an agent, Zinc is the rail built for that, and it publishes exactly the checklist (stockouts, CAPTCHAs, address failures) NorthCinder&rsquo;s design sidesteps.</p>
+<h3 id="which-stores-does-the-shopping-agent-mcp-actually-support-today">Which stores does the shopping agent MCP actually support today?</h3>
+<p>Five adapters are advertised and none is turnkey. Shopify has moved to UCP and needs an HTTPS agent-profile URL you host yourself. WooCommerce needs an explicit host list exposing the public Store API. eBay&rsquo;s Buy Browse needs an approved Developers Program keyset with a separate production gate. Etsy needs an approved Personal App plus a Commercial Access review, and its docs forbid scraping. Amazon is read-only Playwright against your own Chrome profile with no checkout. With none configured, <code>search_products</code> correctly returns an empty, explained coverage table instead of padded results.</p>
+<h3 id="the-repo-has-1215-github-stars--why-not-just-use-it">The repo has 1,215 GitHub stars — why not just use it?</h3>
+<p>Because the star count is the least informative number in the repository. Alongside 1,215 stars there are 10 forks, 5 watchers, 6 commits from a single contributor, 0 open issues, 5 merged grammar-fix PRs as the only outside contribution, no Hacker News thread, and roughly 13 npm downloads in the last week against 56 in the last month — a ~93:1 star-to-install ratio. About 1,200 of those stars landed in the first three days of August 2026 and the count has been flat since, with no commits after 2026-08-22. Given ICSE 2026&rsquo;s finding of ~6 million suspected fake stars across 18,617 repos selling for $0.03–$0.85, read the commit log and download graph before the star number.</p>
+<h3 id="what-is-the-actual-neutral-ranking-claim-stated-precisely">What is the actual neutral-ranking claim, stated precisely?</h3>
+<p>It is narrow and it is testable: sponsored placement contributes exactly 0 points and is tier-demoted below every organic offer, re-ranking is deterministic (250 re-rankings, 0 divergences), sponsored-flag flips cause 0 rank improvements (99 flips), and single-dimension probes match the published weights (11 probes, 0 divergences) on a fixed seed of <code>20260705</code>. What it does <strong>not</strong> prove is catalog completeness or input honesty — <code>RANKING.md</code> says outright that a dishonest service could fabricate trust levels, strip a sponsored flag, or curate the offer set and still return <code>rankingVerified: true</code>. Neutrality you can inspect is strictly narrower than neutrality you can trust.</p>
+]]></content:encoded></item></channel></rss>
