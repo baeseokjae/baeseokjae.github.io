@@ -104,7 +104,7 @@ The agent-level instruments sit alongside the client-level ones: `gen_ai.invoke_
 
 The formula is boring, which is the point:
 
-```
+```text
 cost = (fresh_input_tokens  x input_price / 1e6)
      + (cache_read_tokens   x input_price x 0.10 / 1e6)
      + (cache_write_tokens  x input_price x cache_write_multiplier / 1e6)
