@@ -1,0 +1,568 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Task-Scheduling on RockB</title><link>https://baeseokjae.github.io/tags/task-scheduling/</link><description>Recent content in Task-Scheduling on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 01 Oct 2026 08:52:28 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/task-scheduling/index.xml" rel="self" type="application/rss+xml"/><item><title>Sprix Sage Router: State-Aware SELF/COLLABORATE/HANDOFF Routing for A2A Agent Routing</title><link>https://baeseokjae.github.io/posts/sprix-sage-router-a2a-agent-routing/</link><pubDate>Thu, 01 Oct 2026 08:52:28 +0000</pubDate><guid>https://baeseokjae.github.io/posts/sprix-sage-router-a2a-agent-routing/</guid><description>A2A agent routing decides whether an in-flight task continues, recruits peers, or hands off. How the Sprix SAGE router works, with real output.</description><content:encoded><![CDATA[<p>A2A agent routing is the runtime decision of who should execute a task after the handshake: keep it with the incumbent (SELF), keep the incumbent as owner and recruit peers for uncovered requirements (COLLABORATE), or transfer ownership entirely (HANDOFF). The A2A protocol standardises discovery and transport; a router supplies the missing policy layer.</p>
+<p>That is the short answer. The rest of this guide is the part that actually decides whether the router helps or hurts: what a state-aware utility function prices, why the honest benchmark signal is wasted work rather than the utility column, and the mode mix behind those numbers — SELF rising from 20% to 42% of decisions while HANDOFF falls from 66% to 44% — which shows that checkpoint awareness mainly teaches a router to leave a task where it is.</p>
+<h2 id="why-is-a2a-discovery-not-enough-for-agent-routing">Why Is A2A Discovery Not Enough for Agent Routing?</h2>
+<p>Google launched the Agent2Agent (A2A) protocol on 9 April 2025 with more than 50 technology partners, including Atlassian, Box, Cohere, Intuit, LangChain, MongoDB, PayPal, Salesforce, SAP, ServiceNow, UKG and Workday (<a href="https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/">Google Developers Blog</a>). On 23 June 2025 the Linux Foundation announced the Agent2Agent project, seeded by Google&rsquo;s transfer of the specification, SDKs and developer tooling, with AWS, Cisco, Google, Microsoft, Salesforce, SAP and ServiceNow as founding members and more than 100 supporting companies (<a href="https://developers.googleblog.com/en/google-cloud-donates-a2a-to-linux-foundation/">Google Cloud donation post</a>).</p>
+<p>A2A v1.0.0 shipped on 12 March 2026 as the first stable production-ready release, and v1.0.1 followed on 28 May 2026. In August 2026 the protocol was accepted as a Growth Stage project at the Agentic AI Foundation, operating under Linux Foundation-directed governance alongside MCP, goose and AGENTS.md, backed by over 150 organisations (<a href="https://a2a-protocol.org/latest/blog/2026/08/27/a-new-chapter-for-a2a-joining-the-agentic-ai-foundation/">AAIF announcement</a>). The reference <code>a2aproject/A2A</code> repository stood at 25,976 stars and 2,639 forks on 1 October 2026, with 265 open issues (GitHub REST API, Apache-2.0).</p>
+<p>Every one of those milestones solved the same class of problem: a directory problem. A2A tells you which agents exist, what they claim to do, and how to reach them. It does not tell you who should do the work — and it certainly does not tell you what to do when a task is already half finished and the incumbent turns out to be the wrong specialist. That second question is a scheduling question, and scheduling is exactly what the protocol leaves to you.</p>
+<h2 id="what-does-the-a2a-protocol-actually-standardise">What Does the A2A Protocol Actually Standardise?</h2>
+<p>A2A v1.0 is layered, and knowing which layer owns what prevents a lot of wasted architecture debate. Layer 1 is the canonical data model as Protocol Buffer messages, where <code>spec/a2a.proto</code> is the single authoritative normative definition. Layer 2 is the abstract operations. Layer 3 is the protocol bindings: JSON-RPC, gRPC and HTTP+JSON/REST.</p>
+<p>The practical details that matter for a router:</p>
+<table>
+  <thead>
+      <tr>
+          <th>A2A element</th>
+          <th>What it gives you</th>
+          <th>What it does not give you</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Agent Card at <code>/.well-known/agent-card.json</code></td>
+          <td>Declared skills, capabilities, security requirements, provider info</td>
+          <td>Measured reliability per requirement</td>
+      </tr>
+      <tr>
+          <td>JSON-RPC 2.0 over HTTP(S) + SSE</td>
+          <td>Message transport and streaming</td>
+          <td>Any statement of who should be called</td>
+      </tr>
+      <tr>
+          <td>REST binding (<code>application/a2a+json</code>, <code>POST /message:send</code>)</td>
+          <td>HTTP-native integration path</td>
+          <td>Task ownership semantics</td>
+      </tr>
+      <tr>
+          <td>Task lifecycle (submitted → working → terminal)</td>
+          <td>Progress vocabulary; the caller must emit a terminal event</td>
+          <td>Automatic re-planning when progress stalls</td>
+      </tr>
+      <tr>
+          <td><code>A2A-Version</code> header service parameter</td>
+          <td>Version negotiation and extension handling</td>
+          <td>Routing policy versioning</td>
+      </tr>
+  </tbody>
+</table>
+<p>The Agent Card URI was renamed from <code>agent.json</code> in v0.3 and is a permanent RFC 8615 well-known URI. Streaming uses Server-Sent Events, and webhook push notifications cover long-running work. What the protocol never defines is the decision of <em>which</em> card in that directory should own an in-flight task — which is why &ldquo;A2A connected the agents, now someone has to route them&rdquo; became the standard framing within weeks of the v1.0 release.</p>
+<h2 id="what-is-the-sprix-sage-router">What Is the Sprix Sage Router?</h2>
+<p>Sprix SAGE Router (<code>wang2122/sprix-sage-router</code>) is an MIT-licensed, early-stage research preview that reframes agent routing as a <strong>stateful scheduling problem</strong>. &ldquo;SAGE&rdquo; stands for State-Aware Graph Exchange: the router reads the current execution state of a task, filters the candidate roster, and returns a routing decision plus a transport-neutral plan.</p>
+<p>Its provenance, verified against the GitHub REST API on 1 October 2026:</p>
+<ul>
+<li>Created 18 August 2026; v0.1.0 published the same day and v0.3.0 on 28 August 2026</li>
+<li>4,261 stars, 186 forks, 181 watchers, 8 contributors, 43 commits, 2 open issues</li>
+<li>MIT licence, Python 3.10+, <strong>zero runtime dependencies</strong></li>
+<li>Last push 2026-08-28</li>
+</ul>
+<p>That star figure moves fast enough to be a lesson in itself. Independent articles published within days of launch quote about 677 stars (22 August), 3,456 stars and 401 forks (5 September) and 3,814 (7 September). Two of the three mainstream write-ups also quote pre-release benchmark tables that no longer match the v0.3 numbers. <strong>Always date a number</strong>, and prefer the API figure over a blog&rsquo;s cached widget.</p>
+<p>One installation fact you should not get wrong: as of 1 October 2026 PyPI returns 404 for <code>sprix-sage</code>, <code>sprix-sage-router</code> and <code>sprix-a2a</code>. The only install path is <code>git clone</code>. If an article tells you to <code>pip install</code> it, that article is guessing.</p>
+<h2 id="self-vs-collaborate-vs-handoff-which-route-wins">SELF vs COLLABORATE vs HANDOFF: Which Route Wins?</h2>
+<p>The three routes share one utility function, so the choice is a comparison rather than a hard-coded state machine. That matters more than it sounds: a three-branch state machine with hand-tuned thresholds cannot express &ldquo;recruiting two peers is worth it here but not there.&rdquo;</p>
+<table>
+  <thead>
+      <tr>
+          <th>Route</th>
+          <th>What happens</th>
+          <th>The mechanism that justifies it</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>SELF</strong></td>
+          <td>The incumbent keeps the task</td>
+          <td>Its estimated success, adjusted for the work already completed, beats every alternative once redo and transfer costs are priced</td>
+      </tr>
+      <tr>
+          <td><strong>COLLABORATE</strong></td>
+          <td>The incumbent stays owner; peers join to cover missing requirements</td>
+          <td>Marginal requirement coverage exceeds the coordination overhead of extra participants</td>
+      </tr>
+      <tr>
+          <td><strong>HANDOFF</strong></td>
+          <td>A peer takes full ownership</td>
+          <td>The specialist advantage outweighs the discarded work, the context-transfer loss and any deadline impact</td>
+      </tr>
+  </tbody>
+</table>
+<p>The design judgement worth stealing is that <strong>a router needs an explicit reason not to recruit</strong>. Every added participant adds messages, dependencies, conflicting estimates, and an attribution problem when the task eventually fails. COLLABORATE is not a free upgrade over SELF; it is a purchase with a price attached.</p>
+<h2 id="how-does-checkpoint-aware-routing-change-the-decision">How Does Checkpoint-Aware Routing Change the Decision?</h2>
+<p>This is where the project&rsquo;s own numbers get genuinely interesting, and where every existing article stops short. In a 1,000-checkpoint, five-seed trajectory replay, the checkpoint-aware router was compared against a progress-masked variant — identical except that it cannot see how much of the task is already done.</p>
+<p>The headline utility gap is <em>not</em> the story:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Policy</th>
+          <th>Utility</th>
+          <th>Wasted work</th>
+          <th>Switch rate</th>
+          <th>Deadline miss</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Progress-aware SAGE</td>
+          <td>0.298 ± 0.021</td>
+          <td>0.059</td>
+          <td>58.4%</td>
+          <td>23.3%</td>
+      </tr>
+      <tr>
+          <td>Progress-masked SAGE</td>
+          <td>0.291 ± 0.021</td>
+          <td>0.104</td>
+          <td>80.1%</td>
+          <td>23.6%</td>
+      </tr>
+      <tr>
+          <td>Always-continue</td>
+          <td>0.085</td>
+          <td>—</td>
+          <td>—</td>
+          <td>34.4%</td>
+      </tr>
+      <tr>
+          <td>Always-handoff</td>
+          <td>0.290</td>
+          <td>0.130</td>
+          <td>—</td>
+          <td>—</td>
+      </tr>
+      <tr>
+          <td>Hidden-state dynamic oracle</td>
+          <td>0.375</td>
+          <td>—</td>
+          <td>—</td>
+          <td>19.6%</td>
+      </tr>
+  </tbody>
+</table>
+<p>The two utility error bars overlap (0.298 versus 0.291), so the utility column proves almost nothing. The real signals are 43% less wasted work (0.104 → 0.059) and a switch rate falling from 80.1% to 58.4%.</p>
+<p>The mode mix explains the mechanism, and this breakdown is not published in the project README:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Policy</th>
+          <th>SELF</th>
+          <th>COLLABORATE</th>
+          <th>HANDOFF</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Progress-aware SAGE</td>
+          <td>416 (42%)</td>
+          <td>142 (14%)</td>
+          <td>442 (44%)</td>
+      </tr>
+      <tr>
+          <td>Progress-masked SAGE</td>
+          <td>199 (20%)</td>
+          <td>136 (14%)</td>
+          <td>665 (66%)</td>
+      </tr>
+      <tr>
+          <td>Hidden-state dynamic oracle</td>
+          <td>100 (10%)</td>
+          <td>379 (38%)</td>
+          <td>521 (52%)</td>
+      </tr>
+  </tbody>
+</table>
+<p>Checkpoint awareness roughly doubles the decision to stay put and cuts handoffs by about a third. Collaboration barely moves — 14% either way. The lesson is not &ldquo;add more agents&rdquo;; it is that knowing what is already finished mostly teaches the router to leave well enough alone.</p>
+<p>Note also how the oracle behaves: it is the <strong>most handoff-happy</strong> policy in the comparison, choosing HANDOFF 52% of the time and SELF only 10%. Better information does not automatically mean keeping the incumbent — it means not confusing the two decisions.</p>
+<p>A controlled intervention confirms the causality. Holding task, agents, difficulty, artifact portability, budget and deadline fixed while sweeping in-flight completion from 0.0 to 0.9, progress-aware minus progress-masked utility climbs monotonically from <strong>+0.0000 to +0.0684</strong>, and the two policies are identical at zero completion. When there is no work to preserve, checkpoint awareness is worth exactly nothing.</p>
+<h2 id="what-goes-into-the-sage-utility-function">What Goes Into the SAGE Utility Function?</h2>
+<p>The utility is predicted success minus a set of priced costs, with uncertainty and exploration terms on top:</p>
+<ul>
+<li><strong>Predicted success</strong>, from calibrated per-agent, per-requirement estimates rather than one blanket reputation score</li>
+<li><strong>Direct cost</strong> — the provider&rsquo;s quote for the work</li>
+<li><strong>Critical-path latency</strong>, not just total latency</li>
+<li><strong>Risk</strong>, including deadline and budget exposure</li>
+<li><strong>Context-transfer loss</strong> — the part of the current artifact that a new owner cannot actually reuse</li>
+<li><strong>Coordination overhead</strong> — the message, dependency and estimation cost of every extra participant</li>
+<li><strong>Uncertainty and exploration</strong> terms, so the router can buy information</li>
+</ul>
+<p>The key reuse rule is that estimated reuse is the completed fraction multiplied by <strong>artifact portability</strong>, plus observed partial quality. A checkpointed artifact that only its author&rsquo;s framework can read is worth almost nothing to a new owner, no matter how complete it is. That is why artifact portability is a first-class parameter and not a footnote: it is the difference between a handoff that resumes work and a handoff that starts over.</p>
+<p>Crucially, <strong>hard filters run before any scoring</strong>. Permissions, availability and failure state are applied first; a high learned score can never override them. A ranking model that recommends an agent which cannot meet a security requirement is not a slightly worse router — it is a broken one.</p>
+<h2 id="why-is-one-reputation-score-per-agent-not-enough">Why Is One Reputation Score Per Agent Not Enough?</h2>
+<p>Because reputation does not transfer across skills. An agent that is reliable at schema migration may be unreliable at security review, and a single reputation number averages the two into a figure that is wrong for both.</p>
+<p>The project tests this directly. Tracking trust per agent <strong>per requirement</strong> beat a single score per agent after 500 observations per seed in a heterogeneous specialist setting:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Method</th>
+          <th>Brier score</th>
+          <th>Selection regret</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Per-agent, per-requirement trust</td>
+          <td>0.0125 ± 0.0018</td>
+          <td>0.0094 ± 0.0008</td>
+      </tr>
+      <tr>
+          <td>One reputation score per agent</td>
+          <td>0.0355 ± 0.0008</td>
+          <td>0.0310 ± 0.0359</td>
+      </tr>
+  </tbody>
+</table>
+<p>The negative control is the part that earns trust in the benchmark: in a <strong>homogeneous</strong> setting where specialisation is absent, both methods show zero routing regret. The study does not manufacture an advantage that the setup cannot support. That is a rarer virtue in routing benchmarks than it should be.</p>
+<p>The same principle governs team scoring. Coverage moved from a noisy-OR over every selected teammate to <strong>assigned-owner, checkpoint-adjusted coverage</strong> — because crediting the team for every skill anyone on it happens to possess is how you end up with four impressive agents and one unfinished task.</p>
+<h2 id="how-do-you-go-from-an-agent-card-to-an-executionplan-in-python">How Do You Go From an Agent Card to an ExecutionPlan in Python?</h2>
+<p>The repository ships a demo that runs with no dependencies at all. Clone it and run <code>demo.py</code>:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 488 57"
+      >
+      <g transform='translate(8,16)'>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='0' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='0' y='36' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='8' y='20' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='8' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='16' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='16' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='24' y='20' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='24' y='36' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>=</text>
+<text text-anchor='middle' x='32' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='32' y='36' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='40' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='40' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='48' y='20' fill='currentColor' style='font-size:1em'>=</text>
+<text text-anchor='middle' x='48' y='36' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='56' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='56' y='36' fill='currentColor' style='font-size:1em'>=</text>
+<text text-anchor='middle' x='64' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='64' y='20' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='64' y='36' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='72' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='72' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='72' y='36' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='80' y='20' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='80' y='36' fill='currentColor' style='font-size:1em'>6</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='88' y='20' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='88' y='36' fill='currentColor' style='font-size:1em'>7</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='96' y='20' fill='currentColor' style='font-size:1em'>b</text>
+<text text-anchor='middle' x='96' y='36' fill='currentColor' style='font-size:1em'>3</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='104' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='112' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='112' y='20' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='120' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='120' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='120' y='36' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='128' y='20' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='128' y='36' fill='currentColor' style='font-size:1em'>(</text>
+<text text-anchor='middle' x='136' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='136' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='144' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='144' y='36' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='152' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='152' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='160' y='20' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='160' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='168' y='20' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='168' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='176' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='176' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='184' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='184' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='192' y='20' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='192' y='36' fill='currentColor' style='font-size:1em'>)</text>
+<text text-anchor='middle' x='200' y='36' fill='currentColor' style='font-size:1em'>=</text>
+<text text-anchor='middle' x='208' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='208' y='36' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='216' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='216' y='36' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='224' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='224' y='36' fill='currentColor' style='font-size:1em'>8</text>
+<text text-anchor='middle' x='232' y='20' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='232' y='36' fill='currentColor' style='font-size:1em'>5</text>
+<text text-anchor='middle' x='240' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='240' y='36' fill='currentColor' style='font-size:1em'>9</text>
+<text text-anchor='middle' x='248' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='256' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='264' y='20' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='264' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='272' y='20' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='272' y='36' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='280' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='280' y='36' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='288' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='288' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='296' y='20' fill='currentColor' style='font-size:1em'>v</text>
+<text text-anchor='middle' x='296' y='36' fill='currentColor' style='font-size:1em'>=</text>
+<text text-anchor='middle' x='304' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='304' y='36' fill='currentColor' style='font-size:1em'>0</text>
+<text text-anchor='middle' x='312' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='312' y='36' fill='currentColor' style='font-size:1em'>.</text>
+<text text-anchor='middle' x='320' y='20' fill='currentColor' style='font-size:1em'>w</text>
+<text text-anchor='middle' x='320' y='36' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='328' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='328' y='36' fill='currentColor' style='font-size:1em'>3</text>
+<text text-anchor='middle' x='336' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='336' y='36' fill='currentColor' style='font-size:1em'>9</text>
+<text text-anchor='middle' x='344' y='20' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='360' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='360' y='36' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='368' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='368' y='36' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='376' y='20' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='376' y='36' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='384' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='384' y='36' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='392' y='20' fill='currentColor' style='font-size:1em'>-</text>
+<text text-anchor='middle' x='392' y='36' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='400' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='400' y='36' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='408' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='408' y='36' fill='currentColor' style='font-size:1em'>y</text>
+<text text-anchor='middle' x='416' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='416' y='36' fill='currentColor' style='font-size:1em'>=</text>
+<text text-anchor='middle' x='424' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='424' y='36' fill='currentColor' style='font-size:1em'>1</text>
+<text text-anchor='middle' x='432' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='432' y='36' fill='currentColor' style='font-size:1em'>2</text>
+<text text-anchor='middle' x='440' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='440' y='36' fill='currentColor' style='font-size:1em'>9</text>
+<text text-anchor='middle' x='448' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='448' y='36' fill='currentColor' style='font-size:1em'>7</text>
+<text text-anchor='middle' x='456' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='464' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='464' y='36' fill='currentColor' style='font-size:1em'>m</text>
+<text text-anchor='middle' x='472' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='472' y='36' fill='currentColor' style='font-size:1em'>s</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>That is the whole &ldquo;run it yourself&rdquo; argument in four lines: a real COLLABORATE decision with a real utility number, no API keys, no model calls, no package install.</p>
+<p>The adapter path is <code>profile_from_agent_card(...)</code>, which converts an A2A Agent Card into the capability vectors, permission constraints and provider metadata the router needs. The mapping is direct: <code>AgentCard.skills</code> becomes capability vectors, <code>securityRequirements</code> becomes hard permission filters, and provider quotes become structured bids.</p>
+<p>The shape of the state you pass in is what makes it state-aware:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span>state <span style="color:#f92672">=</span> ExecutionState(
+</span></span><span style="display:flex;"><span>    inflight_owner<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;generalist&#34;</span>,
+</span></span><span style="display:flex;"><span>    inflight_completion<span style="color:#f92672">=</span><span style="color:#ae81ff">0.6</span>,
+</span></span><span style="display:flex;"><span>    inflight_quality<span style="color:#f92672">=</span><span style="color:#ae81ff">0.71</span>,
+</span></span><span style="display:flex;"><span>    artifact_transferability<span style="color:#f92672">=</span><span style="color:#ae81ff">0.4</span>,   <span style="color:#75715e"># how much a new owner can actually reuse</span>
+</span></span><span style="display:flex;"><span>    deadline_s<span style="color:#f92672">=</span><span style="color:#ae81ff">900</span>,
+</span></span><span style="display:flex;"><span>    budget<span style="color:#f92672">=</span><span style="color:#ae81ff">1.0</span>,
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre></div><p>Run against the bundled example, that plan emits <code>mode=collaborate</code> with utility 0.7229, success 0.8852, coverage 0.6966, cost 0.09416, latency 1005.7 ms, <code>feasible=true</code> and an empty <code>constraint_violations</code> list. Note that <code>examples/</code> requires <code>PYTHONPATH=&lt;repo root&gt;</code> (or an installed package) — otherwise the import fails and you will wrongly conclude the example is broken.</p>
+<p>The replanning example is the clearest demonstration of the whole thesis:</p>
+
+
+
+<div class="goat svg-container ">
+  
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      font-family="Menlo,Lucida Console,monospace"
+      
+        viewBox="0 0 464 41"
+      >
+      <g transform='translate(8,16)'>
+<path d='M 144,0 L 152,0' fill='none' stroke='currentColor'></path>
+<path d='M 312,16 L 320,16' fill='none' stroke='currentColor'></path>
+<polygon points='160.000000,0.000000 148.000000,-5.600000 148.000000,5.600000' fill='currentColor' transform='rotate(0.000000, 152.000000, 0.000000)'></polygon>
+<polygon points='328.000000,16.000000 316.000000,10.400000 316.000000,21.600000' fill='currentColor' transform='rotate(0.000000, 320.000000, 16.000000)'></polygon>
+<text text-anchor='middle' x='0' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='0' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='8' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='8' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='16' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='16' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='24' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='24' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='32' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='32' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='40' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='40' y='20' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='48' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='56' y='4' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='56' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='64' y='20' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='72' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='80' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='80' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='88' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='88' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='96' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='104' y='4' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='104' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='112' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='120' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='128' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='136' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='144' y='20' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='152' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='160' y='20' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='176' y='4' fill='currentColor' style='font-size:1em'>'</text>
+<text text-anchor='middle' x='176' y='20' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='184' y='4' fill='currentColor' style='font-size:1em'>g</text>
+<text text-anchor='middle' x='184' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='192' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='192' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='200' y='4' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='200' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='208' y='4' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='208' y='20' fill='currentColor' style='font-size:1em'>u</text>
+<text text-anchor='middle' x='216' y='4' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='216' y='20' fill='currentColor' style='font-size:1em'>r</text>
+<text text-anchor='middle' x='224' y='4' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='224' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='232' y='4' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='232' y='20' fill='currentColor' style='font-size:1em'>:</text>
+<text text-anchor='middle' x='240' y='4' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='248' y='4' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='248' y='20' fill='currentColor' style='font-size:1em'>h</text>
+<text text-anchor='middle' x='256' y='4' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='256' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='264' y='4' fill='currentColor' style='font-size:1em'>'</text>
+<text text-anchor='middle' x='264' y='20' fill='currentColor' style='font-size:1em'>n</text>
+<text text-anchor='middle' x='272' y='4' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='272' y='20' fill='currentColor' style='font-size:1em'>d</text>
+<text text-anchor='middle' x='280' y='4' fill='currentColor' style='font-size:1em'>)</text>
+<text text-anchor='middle' x='280' y='20' fill='currentColor' style='font-size:1em'>o</text>
+<text text-anchor='middle' x='288' y='20' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='296' y='20' fill='currentColor' style='font-size:1em'>f</text>
+<text text-anchor='middle' x='344' y='20' fill='currentColor' style='font-size:1em'>'</text>
+<text text-anchor='middle' x='352' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='360' y='20' fill='currentColor' style='font-size:1em'>p</text>
+<text text-anchor='middle' x='368' y='20' fill='currentColor' style='font-size:1em'>e</text>
+<text text-anchor='middle' x='376' y='20' fill='currentColor' style='font-size:1em'>c</text>
+<text text-anchor='middle' x='384' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='392' y='20' fill='currentColor' style='font-size:1em'>a</text>
+<text text-anchor='middle' x='400' y='20' fill='currentColor' style='font-size:1em'>l</text>
+<text text-anchor='middle' x='408' y='20' fill='currentColor' style='font-size:1em'>i</text>
+<text text-anchor='middle' x='416' y='20' fill='currentColor' style='font-size:1em'>s</text>
+<text text-anchor='middle' x='424' y='20' fill='currentColor' style='font-size:1em'>t</text>
+<text text-anchor='middle' x='432' y='20' fill='currentColor' style='font-size:1em'>'</text>
+<text text-anchor='middle' x='440' y='20' fill='currentColor' style='font-size:1em'>,</text>
+<text text-anchor='middle' x='448' y='20' fill='currentColor' style='font-size:1em'>)</text>
+</g>
+
+    </svg>
+  
+</div>
+<p>One recorded failure flips the decision from SELF to HANDOFF. That is checkpoint-aware rerouting in two lines, and no article in the current top results actually shows it.</p>
+<p>The repo&rsquo;s unit tests run in about a second (<code>python -m unittest -q</code> → 46 tests, OK), which makes it a reasonable read: small enough to audit, structured enough to extend.</p>
+<h2 id="how-is-the-benchmark-built--and-what-does-it-actually-show">How Is the Benchmark Built — and What Does It Actually Show?</h2>
+<p>Three synthetic studies sit behind the numbers. All three are project-authored, and the project says so.</p>
+<p><strong>1. Dynamic trajectory replay (1,000 checkpoints, 5 seeds × 200, evaluator <code>checkpoint_artifact_v1</code>)</strong> — the source of the utility, wasted-work and switch-rate table above. Running it locally reproduces every README figure to three decimals and prints its own scope string: <em>&ldquo;synthetic falsification study; not evidence of production or real-endpoint superiority.&rdquo;</em></p>
+<p><strong>2. Trust convergence (500 observations per seed)</strong> — the Brier and regret table above, with the homogeneous negative control.</p>
+<p><strong>3. Independent-task regression suite (2,500 tasks)</strong> — a quality comparison across routing policies:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Policy</th>
+          <th>Quality</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Learned SAGE</td>
+          <td>0.613 ± 0.005</td>
+      </tr>
+      <tr>
+          <td>Greedy team</td>
+          <td>0.577</td>
+      </tr>
+      <tr>
+          <td>Static SAGE</td>
+          <td>0.491</td>
+      </tr>
+      <tr>
+          <td>Learned SAGE with random prior</td>
+          <td>0.447</td>
+      </tr>
+      <tr>
+          <td>Advertised-skill solo</td>
+          <td>0.445</td>
+      </tr>
+      <tr>
+          <td>Incumbent-only</td>
+          <td>0.332</td>
+      </tr>
+  </tbody>
+</table>
+<p>Two things stand out. The gap between learned and greedy is real but modest — about 3.6 points. And swapping the prior for a random one costs 16.6 points, which means <strong>the learned prior does most of the work</strong>. If your priors are wrong, the router is not much better than a coin with an opinion.</p>
+<p>Latency is bounded but environment-specific. The README reports a median of 78.4 ms at 20 agents, 78.9 ms at 40 and 80.1 ms at 80 on one Apple Silicon machine. Re-running the scaling benchmark on container CPU produced 23.27 ms at 5 agents and roughly 250 ms at 20, 40 and 80 — about three times slower in absolute terms, but <strong>flat from 20 to 80 agents</strong>, which reproduces the bounded-prefilter claim rather than the absolute numbers. The prefilter caps candidates (default <code>candidate_limit=12</code>), so per-request routing cost does not scale with roster size.</p>
+<p>Read that honestly and the conclusion is: the design is rigorous, the numbers are not evidence of real-world superiority, and the project is the first to say so. Its own evaluation boundary states that both evaluators are authored with the project, and that a publishable evaluation still requires repeated checkpointed executions on heterogeneous real endpoints plus an independently governed artifact judge.</p>
+<h2 id="what-does-the-prototype-deliberately-not-do">What Does the Prototype Deliberately Not Do?</h2>
+<p>It returns a routing decision and a plan. It does not execute anything:</p>
+<ul>
+<li>No task transmission (<code>message/send</code> is yours to call)</li>
+<li>No endpoint authentication, no signature verification</li>
+<li>No streaming, polling or cancellation</li>
+<li>No artifact handling or evaluation</li>
+<li>No idempotency, secret isolation or human approval gates</li>
+</ul>
+<p>The integration documentation puts the boundary bluntly: <em>do not treat a successful routing decision as a successful task execution.</em> An A2A client remains responsible for all of the above, and an independent directory review scored the project 69/100 — &ldquo;some gaps&rdquo; — listing &ldquo;teams needing production A2A execution, auth or secure transport&rdquo; as an explicit <strong>not a fit</strong>.</p>
+<p>Related work in the same space sets useful expectations. STRMAC reports up to 23.8% improvement over baselines with up to 90.1% less data-collection overhead than exhaustive search (arXiv 2511.02200). Dynamic coalition formation with communication pricing reaches 99.5% of brute-force-optimal utility while activating 1.96 of 8 agents on average, against 38.8% for full broadcast — and degrades to 66% under strong submodularity violations or noisy value estimates (arXiv 2608.07532). Modality-native routing in A2A networks lifts task completion to 52% versus 32% for a text bottleneck at a 1.8× latency cost, but an ablation replacing LLM reasoning with keyword matching erases the gain entirely, 36% versus 36% (arXiv 2604.12213). That last ablation is the most useful warning in the set: the value lives in the reasoning, not the routing scaffold.</p>
+<h2 id="when-is-a-state-aware-router-the-wrong-tool">When Is a State-Aware Router the Wrong Tool?</h2>
+<p>State-aware routing is not a default. Skip it when:</p>
+<ul>
+<li><strong>The workflow is short and deterministic.</strong> If there is no meaningful mid-flight state, there is nothing to be aware of.</li>
+<li><strong>You have one agent.</strong> Routing between one option and itself is a no-op with extra latency.</li>
+<li><strong>You have no calibrated outcome evaluator.</strong> The checkpoint signal does not exist without one. The router reads completeness and quality; if you cannot observe artifact quality, the whole state input is fiction.</li>
+<li><strong>Your tasks are single-requirement.</strong> No coverage gap means COLLABORATE has nothing to buy.</li>
+<li><strong>You need transport, auth or security guarantees.</strong> Those are A2A client responsibilities, not router responsibilities.</li>
+<li><strong>Your routing regret signal is unobservable.</strong> Outcome feedback currently cannot separate agent quality from task difficulty from the router&rsquo;s own prior choices. Without logged propensities and off-policy evaluation, learning can become self-confirming.</li>
+</ul>
+<p>That attribution gap is the honest frontier here. Neither the project nor its reviewers have closed it, and until someone does, &ldquo;the router got better&rdquo; is a hypothesis rather than a measurement.</p>
+<p><strong>A practical adoption checklist:</strong></p>
+<ol>
+<li>Instrument completion, quality and artifact portability per checkpoint before you route on them.</li>
+<li>Enforce permission, availability and failure-state filters <strong>before</strong> scoring — make hard filters unfalsifiable by any learned score.</li>
+<li>Track trust per agent per requirement, not per agent.</li>
+<li>Establish your incumbent-only baseline and your greedy baseline first. If learned routing does not beat greedy, stop.</li>
+<li>Run the trajectory replay on your own traces rather than trusting the synthetic one.</li>
+<li>Log propensities on every decision so off-policy evaluation is possible later.</li>
+<li>Start in shadow mode: produce decisions, compare them to what your team already does, change nothing.</li>
+<li>Keep an A2A client — authentication, streaming, cancellation, idempotency and human approval stay yours.</li>
+</ol>
+<h2 id="faq-a2a-agent-routing">FAQ: A2A Agent Routing</h2>
+<p><strong>What is A2A agent routing?</strong>
+It is the runtime decision of which agent or agent team should execute a task in an Agent2Agent network — covering who owns the task, who joins, and what topology connects them. A2A itself standardises discovery and transport; a router supplies the missing policy layer.</p>
+<p><strong>Does the A2A protocol include a router?</strong>
+No. A2A v1.0 defines Agent Cards, messages, tasks, artifacts, authentication and transport bindings. It tells you which agents exist and how to reach them; it does not decide who should do the work after execution has started.</p>
+<p><strong>What is the difference between SELF, COLLABORATE and HANDOFF?</strong>
+SELF keeps the task with the incumbent. COLLABORATE keeps the incumbent as owner and recruits peers to cover missing requirements. HANDOFF gives a peer full ownership. They share one utility function, so the choice is a comparison, not a hard-coded state machine.</p>
+<p><strong>How do you decide when to hand off an in-flight agent task?</strong>
+Estimate how much of the current owner&rsquo;s work a new owner can actually reuse: completed fraction times artifact portability, plus observed partial quality. Then compare the specialist advantage against the redo cost, transfer loss, coordination overhead and any deadline or budget impact.</p>
+<p><strong>Is Sprix SAGE Router production-ready?</strong>
+No. It describes itself as an early-stage research preview. It returns a routing decision and a transport-neutral plan but does not send tasks, authenticate endpoints, verify signatures, stream, poll or cancel. Production use needs an A2A client, calibrated evaluators, identity and signing, observability and human approval gates.</p>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Sprix SAGE Router repository, README / ALGORITHM.md / docs/INTEGRATION.md / docs/OPERATIONS.md — <a href="https://github.com/wang2122/sprix-sage-router">https://github.com/wang2122/sprix-sage-router</a> (verified 2026-10-01, commit bdc9c24)</li>
+<li>Agent2Agent (A2A) Protocol Specification v1.0.0 — <a href="https://a2a-protocol.org/latest/specification/">https://a2a-protocol.org/latest/specification/</a></li>
+<li>A2A reference repository and release history — <a href="https://github.com/a2aproject/A2A">https://github.com/a2aproject/A2A</a> (GitHub REST API, verified 2026-10-01)</li>
+<li>A2A joins the Agentic AI Foundation — <a href="https://a2a-protocol.org/latest/blog/2026/08/27/a-new-chapter-for-a2a-joining-the-agentic-ai-foundation/">https://a2a-protocol.org/latest/blog/2026/08/27/a-new-chapter-for-a2a-joining-the-agentic-ai-foundation/</a></li>
+<li>Google Cloud donates A2A to the Linux Foundation — <a href="https://developers.googleblog.com/en/google-cloud-donates-a2a-to-linux-foundation/">https://developers.googleblog.com/en/google-cloud-donates-a2a-to-linux-foundation/</a></li>
+<li>A2A launch announcement, 9 April 2025 — <a href="https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/">https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/</a></li>
+<li>STRMAC state-aware routing — <a href="https://arxiv.org/abs/2511.02200">https://arxiv.org/abs/2511.02200</a></li>
+<li>Dynamic coalition formation and communication pricing — <a href="https://arxiv.org/abs/2608.07532">https://arxiv.org/abs/2608.07532</a></li>
+<li>Modality-native routing in A2A networks (MMA2A) — <a href="https://arxiv.org/abs/2604.12213">https://arxiv.org/abs/2604.12213</a></li>
+<li>RouteLLM: preference-trained routing — <a href="https://arxiv.org/abs/2406.18665">https://arxiv.org/abs/2406.18665</a></li>
+<li>MasRouter: Multi-Agent System Routing — <a href="https://arxiv.org/abs/2502.11133">https://arxiv.org/abs/2502.11133</a></li>
+</ul>
+]]></content:encoded></item></channel></rss>
