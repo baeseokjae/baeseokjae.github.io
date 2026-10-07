@@ -15,7 +15,7 @@ tags:
 - local-ai
 - mixture-of-experts
 title: 'Qwen 3 Model Guide 2026: Original Lineup, Sizes, Context and Memory'
-lastmod: 2026-10-07 00:00:00+00:00
+lastmod: 2026-10-08T00:55:31+09:00
 ---
 
 Qwen3's original open-weight release arrived on April 29, 2025. It contains six dense models and two mixture-of-experts (MoE) models. This guide covers that release; later Qwen3 updates and Qwen3.x families must be checked against their own model cards. [Source: Qwen's release announcement](https://qwenlm.github.io/blog/qwen3/).
@@ -75,6 +75,8 @@ Current Ollama exposes a `think` field for models that support it and separates 
 Longer reasoning can consume more tokens and time; it does not guarantee a better answer. For a coding task, evaluate the resulting patch and tests. A plausible explanation is not a substitute for checking whether the code runs.
 
 ## Running an Original Qwen3 Model with Ollama
+
+For a broader shortlist, compare the [Ollama coding model options](/posts/best-ollama-models-coding-2026/). For hardware planning across model families, see the [local LLM model and memory guide](/posts/best-local-llm-models-2026/).
 
 Install the appropriate package from [Ollama's download page](https://ollama.com/download). This example selects the 8B tag rather than assuming that an unqualified family name identifies the desired checkpoint:
 
