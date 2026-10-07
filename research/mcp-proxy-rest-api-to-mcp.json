@@ -1,0 +1,356 @@
+{
+  "topic": "MCP Proxy: Add MCP Support to Any REST API Without Code Changes",
+  "slug": "mcp-proxy-rest-api-to-mcp",
+  "keyword": "mcp rest api bridge",
+  "type": "how-to",
+  "research_date": "2026-10-01",
+  "summary": "Three no-code paths turn an existing REST API into MCP tools, and they split by where you already run infrastructure: (1) gateway plugins that convert an OpenAPI schema into MCP tools at the edge (Kong AI MCP Proxy, AWS Bedrock AgentCore Gateway, Amazon API Gateway MCP proxy); (2) a generator library you host yourself (FastMCP.from_openapi + OpenAPIProvider, openapi-mcp-generator); (3) the reverse direction, MCP->OpenAPI (mcpo, LiteLLM /mcp-rest). The real gotcha is not plumbing: an OpenAPI document describes resources and an LLM needs jobs, so a naive 1:1 conversion produces too many low-signal tools. FastMCP's own docs say LLMs perform 'significantly better' with curated MCP servers than auto-converted ones, Kong exposes per-tool ACLs precisely because raw conversion leaks privileged routes, and AWS added semantic tool search for the same reason. The defensible how-to therefore covers: pick the conversion surface (gateway vs code), filter the spec, then harden auth/rate limits/observability.",
+  "decision_matrix": [
+    {
+      "path": "Kong AI MCP Proxy plugin",
+      "where_it_runs": "inside Kong Gateway 3.12+ (AI Gateway Enterprise)",
+      "input": "OpenAPI schema on a Kong Service/Route",
+      "no_code": true,
+      "best_for": "you already front the API with Kong and want OAuth 2.1 + per-tool ACLs at the edge"
+    },
+    {
+      "path": "AWS Bedrock AgentCore Gateway",
+      "where_it_runs": "fully managed AWS service",
+      "input": "OpenAPI 3.0 or Smithy 2.0 spec in S3, or Lambda",
+      "no_code": true,
+      "best_for": "AWS-native shops; inbound+outbound auth, semantic tool search, CloudWatch observability"
+    },
+    {
+      "path": "Amazon API Gateway MCP proxy",
+      "where_it_runs": "managed, on API Gateway",
+      "input": "existing REST API routes",
+      "no_code": true,
+      "best_for": "existing REST APIs already on API Gateway; add an MCP-compatible endpoint"
+    },
+    {
+      "path": "FastMCP.from_openapi()",
+      "where_it_runs": "your process (streamable HTTP/stdio)",
+      "input": "OpenAPI v3+ spec",
+      "no_code": "config-level (a few lines of Python; no per-endpoint tool code)",
+      "best_for": "local/self-hosted MCP server, full control of route maps, auth via the httpx client"
+    },
+    {
+      "path": "openapi-mcp-generator",
+      "where_it_runs": "your process",
+      "input": "OpenAPI spec",
+      "no_code": "CLI codegen",
+      "best_for": "TypeScript teams wanting a generated project they own"
+    },
+    {
+      "path": "mcpo (MCP -> OpenAPI, reverse)",
+      "where_it_runs": "your process",
+      "input": "an MCP server command/URL",
+      "no_code": true,
+      "best_for": "the inverse case: an OpenAPI-only client (e.g. Open WebUI) must call MCP tools"
+    },
+    {
+      "path": "LiteLLM /mcp-rest",
+      "where_it_runs": "LiteLLM proxy",
+      "input": "registered MCP servers",
+      "no_code": true,
+      "best_for": "calling MCP tools over plain HTTP when you already know the tool name"
+    }
+  ],
+  "competitors": [
+    {
+      "url": "https://developer.konghq.com/plugins/ai-mcp-proxy/",
+      "title": "Kong AI MCP Proxy plugin (docs)",
+      "key_points": [
+        "Positioned as a protocol bridge: accepts MCP requests, parses the tool call, matches it to an OpenAPI operation, converts it to an HTTP request, then wraps the HTTP response back into MCP format.",
+        "Four modes via config.mode: passthrough-listener (proxy an existing MCP server), conversion-listener (convert REST paths to tools AND accept MCP on the Route), conversion-only (convert paths to tools, serve no MCP endpoint), plus the server block for grouped tools.",
+        "Hard prerequisite: the upstream Service must expose a valid OpenAPI schema; conversion modes must be scoped to a Route (applying to a Service without a Route skips conversion and logs a warning).",
+        "Uses MCP protocol version 2025-06-18 and supports upstream servers on 2025-06-18 / 2025-11-25; 2024-era upstream versions are not supported.",
+        "v3.13+ adds per-tool ACL control evaluated separately for tool discovery (default_acl) and tool invocation (per-tool ACL), logging allow/deny; the docs describe migration steps for deployments that shipped without ACLs.",
+        "Consumer/Consumer Group scoping is NOT supported in any mode; requires Kong Gateway 3.12+ and AI Gateway Enterprise tier."
+      ]
+    },
+    {
+      "url": "https://developer.konghq.com/cookbooks/secure-internal-mcp-gateway",
+      "title": "Secure Internal MCP Gateway cookbook (Kong)",
+      "key_points": [
+        "End-to-end recipe: per-team Routes run the plugin in conversion-only mode to declare tools, one aggregation Route runs it as a listener to expose a single MCP server, with Kong AI MCP OAuth2 Plugin enforcing OAuth 2.1 at the edge.",
+        "Kong Gateway 3.14+ maps token claims directly to Kong Consumers/Consumer Groups, giving per-tool ACLs without a separate auth plugin.",
+        "Unauthenticated MCP clients get 401 plus a WWW-Authenticate header pointing at the Protected Resource Metadata endpoint advertising the authorization server and scopes.",
+        "Token validation can be JWKS-based JWT (3.14+) or RFC 7662 introspection (IdP called per request, with caching) via client_id + client_secret."
+      ]
+    },
+    {
+      "url": "https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway.html",
+      "title": "Amazon Bedrock AgentCore Gateway (AWS docs)",
+      "key_points": [
+        "Converts APIs, Lambda functions and existing services into MCP-compatible tools and is the only solution AWS positions as providing both ingress and egress authentication in a fully managed service.",
+        "Tool input types: OpenAPI, Smithy, Lambda; also fronts existing MCP servers and A2A traffic via passthrough targets.",
+        "Key capabilities map almost 1:1 onto the manual to-do list: Translation (MCP<->HTTP/Lambda), Composition (many APIs behind one endpoint), Secure Credential Exchange, Semantic Tool Selection.",
+        "Semantic Tool Selection exists specifically to fight 'tool overload' - hundreds of tools cause hallucinations and wrong tool picks; it also reduces prompt size and latency.",
+        "1-click integrations include Salesforce, Slack, Jira, Asana, Zendesk; works with CrewAI, LangGraph, LlamaIndex and Strands Agents."
+      ]
+    },
+    {
+      "url": "https://repost.aws/articles/ARy9ar569iSO-DRe5cIihUyQ/re-invent-2025-modernize-containers-for-ai-agents-using-agentcore-gateway",
+      "title": "re:Invent 2025 - Modernize containers for AI agents using AgentCore Gateway",
+      "key_points": [
+        "Concrete migration story: three EKS microservices (appointments, customer/claims, technician scheduling) each already published a Swagger/OpenAPI spec; nobody wanted to build and operate three extra MCP servers.",
+        "Gateway accepts a spec in Amazon S3 and auto-generates MCP tool endpoints; the demo's setup script fetched each JSON spec, injected the server URL (required by Gateway but frequently missing from auto-generated Swagger), uploaded to S3, and registered a target.",
+        "Three microservices became three Gateway targets with no MCP server code written at all; one gateway instance supports many targets, so growth means uploading a spec rather than deploying a process.",
+        "The agent side used Strands Agents SDK + Claude Haiku 4.5 on Bedrock, deployed to AgentCore Runtime, speaking ordinary MCP - the framework never knows it is a Gateway."
+      ]
+    },
+    {
+      "url": "https://aws.amazon.com/blogs/machine-learning/introducing-amazon-bedrock-agentcore-gateway-transforming-enterprise-ai-agent-tool-development/",
+      "title": "Introducing Amazon Bedrock AgentCore Gateway (AWS blog)",
+      "key_points": [
+        "Explicitly frames the value as 'zero-code MCP tool creation from APIs and AWS Lambda functions' with built-in inbound and outbound authorization.",
+        "Each gateway manages multiple targets; each target exposes multiple tools; Gateway handles conversion between MCP and the target's native protocol (streamable HTTP supported).",
+        "Introduces the built-in x_amz_bedrock_agentcore_search tool, callable through standard tools/call, for discovering the right tool among thousands."
+      ]
+    },
+    {
+      "url": "https://gofastmcp.com/integrations/openapi",
+      "title": "OpenAPI <-> FastMCP (docs)",
+      "key_points": [
+        "FastMCP.from_openapi(openapi_spec=..., client=httpx.AsyncClient(base_url=...), name=...) generates an MCP server from any OpenAPI spec; under the hood it uses OpenAPIProvider (v3.0.0+).",
+        "Default behaviour changed: every endpoint becomes an MCP Tool (pragmatic, because most LLM clients only support tools); older semantic mapping is opt-in via route_maps.",
+        "RouteMap matches on methods / regex pattern / tags and maps to TOOL, RESOURCE, RESOURCE_TEMPLATE or EXCLUDE - this is the supported way to hide /admin/* routes or internal-tagged routes.",
+        "Explicit warning in the docs: LLMs achieve 'significantly better performance' with well-designed curated MCP servers than auto-converted OpenAPI servers, especially for complex APIs with many endpoints/parameters - they recommend it for bootstrapping and prototyping, not for mirroring an API to LLM clients.",
+        "Parameter fidelity is handled: query arrays serialised per style/explode (form defaults explode=True; pipeDelimited/spaceDelimited differ), path arrays use simple comma-separated style, and JSON bodies preserve the declared Content-Type.",
+        "Auth is configured on the httpx client (headers/timeout), which is also how credentials stay out of the generated tool schemas."
+      ]
+    },
+    {
+      "url": "https://open-webui.github.io/mcpo",
+      "title": "mcpo - MCP-to-OpenAPI proxy server (open-webui)",
+      "key_points": [
+        "Solves the inverse problem: takes an MCP server (stdio command, or SSE / streamable-http URL) and re-exposes its tools as OpenAPI endpoints with auto-generated Swagger UI at /docs - the recommended bridge for Open WebUI.",
+        "One command: uvx mcpo --port 8000 --api-key top-secret -- your_mcp_server_command; Docker image ghcr.io/open-webui/mcpo:main.",
+        "Per-server mount isolation: a config with memory + time servers yields /memory and /time with their own /docs, so identical tool names in two servers do not collide (route prefix = the config server key).",
+        "Security caveats worth calling out: the proxy holds the credentials - upstream Authorization headers live in the config file and OAuth tokens are stored on disk under ~/.mcpo/tokens/ by default (storage_type file), with no documented encryption at rest or key rotation.",
+        "Exposed tools inherit OpenAPI's limits: they cannot use Open WebUI's event system for real-time UI updates or interactive user input (native Python tools only)."
+      ]
+    },
+    {
+      "url": "https://docs.litellm.ai/docs/mcp_rest_api",
+      "title": "MCP REST API (LiteLLM)",
+      "key_points": [
+        "Calls MCP tools directly over HTTP instead of JSON-RPC: GET /v1/mcp/server, GET /mcp-rest/tools/list, POST /mcp-rest/tools/call, authenticated with the LiteLLM API key.",
+        "Tool naming is the sharp edge: names are {server_prefix}{separator}{upstream_tool_name} with '-' as the default separator (override via MCP_TOOL_PREFIX_SEPARATOR), and unprefixed names need an explicit server_id.",
+        "The documented failure modes are exactly the ones a hand-rolled bridge hits: missing_parameter (400), arguments: null (500 - must be {} or omitted), wrong separator (tool not found), and tool_server_mismatch (403) when a prefixed name does not belong to the supplied server_id.",
+        "Separate JSON-RPC transport (/mcp, /{server_name}/mcp) coexists for Claude Desktop/Cursor, so one deployment can serve both REST callers and MCP clients."
+      ]
+    },
+    {
+      "url": "https://modelcontextprotocol.io/specification/2025-06-18/server/tools",
+      "title": "MCP specification - Tools (2025-06-18)",
+      "key_points": [
+        "The contract any bridge must implement: declare the tools capability (listChanged), serve tools/list (paginated) and tools/call, and optionally emit notifications/tools/list_changed.",
+        "Tool names SHOULD be 1-128 chars, case-sensitive, limited to A-Z a-z 0-9 _ - . and unique within a server - a converted REST path like /users/{id}/posts is not a legal tool name, so the bridge must rename.",
+        "Results separate unstructured content (text/image/audio/resource_link/embedded resource) from structuredContent; when an outputSchema is declared, servers MUST return conforming structured results and clients SHOULD validate them.",
+        "Two error channels matter for agent retries: protocol errors (JSON-RPC, e.g. unknown tool) which models rarely fix, and tool execution errors (isError: true, e.g. date in the past) which carry actionable feedback models can self-correct from.",
+        "Servers MUST validate all tool inputs, implement access controls, rate limit invocations and sanitize outputs; clients SHOULD confirm sensitive operations and log tool usage for audit."
+      ]
+    },
+    {
+      "url": "https://mr.technology/payloads/aws-bedrock-agentcore-ga-serverless-agent-runtime-july-2026",
+      "title": "AWS Bedrock AgentCore GA analysis (third-party)",
+      "key_points": [
+        "Reports AgentCore went GA (this piece says 2026-07-25; AWS's own devguide dates GA to October 2025) and frames Gateway as 'the AWS-hosted MCP server' that removes hosting/scaling a custom MCP server per integration.",
+        "Lists what Gateway absorbs that a hand-rolled bridge does not: SigV4/IAM/OAuth auth, per-tool rate limits, JSON Schema 2020-12 validation, per-tool CloudWatch metrics."
+      ]
+    },
+    {
+      "url": "https://naftiko.io/blog/agentcore-gateway-solves-reachability-shape-and-reuse-are-still-yours",
+      "title": "AgentCore Gateway Solves Reachability. Shape and Reuse Are Still Yours.",
+      "key_points": [
+        "The strongest framing for the article's thesis: 'An OpenAPI document describes resources; an agent needs jobs.' Gateway faithfully projects whatever shape you hand it, so deciding which tools should exist stays upstream work no generator can do for you.",
+        "Even when generation works, the generated surface is agent-only: a portal screen, nightly reconciliation job or partner integration often needs the same business facts in non-MCP form, which is why teams keep one designed artifact and register it."
+      ]
+    },
+    {
+      "url": "https://marmelab.com/blog/2026/04/16/create-mcp-from-openapi.html",
+      "title": "Creating an MCP Server from OpenAPI Documentation (Marmelab)",
+      "key_points": [
+        "Hands-on field report: FastMCP.from_openapi + mcp.run('streamable-http') worked, but the first attempt failed because FastMCP supports OpenAPI v3+ while the target (Supabase/PostgREST) only emits OpenAPI v2.",
+        "Fix was to convert Swagger 2.0 to OpenAPI 3 with an external editor - a spec-version mismatch is the most common silent blocker before any MCP client connects.",
+        "Verdict: generating an MCP server from a spec is fast and tempting for prototypes, but they would not recommend it for production use as-is."
+      ]
+    }
+  ],
+  "stats": [
+    {
+      "fact": "Kong AI MCP Proxy requires Kong Gateway 3.12+ and the AI Gateway Enterprise tier; it speaks MCP protocol version 2025-06-18 and supports upstream MCP servers on 2025-06-18 and 2025-11-25 (2024-era versions unsupported).",
+      "source": "https://developer.konghq.com/plugins/ai-mcp-proxy/"
+    },
+    {
+      "fact": "The AI MCP Proxy plugin runs in four modes - passthrough-listener, conversion-listener, conversion-only, plus a grouped-server mode - and conversion requires the plugin to be scoped to a Route with an upstream Service exposing a valid OpenAPI schema.",
+      "source": "https://developer.konghq.com/plugins/ai-mcp-proxy/"
+    },
+    {
+      "fact": "Kong added per-tool ACL control in v3.13, evaluating ACLs separately for tool discovery (default_acl) and tool invocation (per-tool ACL), with allow/deny audit logging; Consumer/Consumer Group scoping is not supported in any mode.",
+      "source": "https://developer.konghq.com/plugins/ai-mcp-proxy/"
+    },
+    {
+      "fact": "Amazon Bedrock AgentCore Gateway accepts OpenAPI, Smithy and Lambda as tool input types and is described by AWS as the only solution providing both ingress and egress authentication in a fully managed service.",
+      "source": "https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway.html"
+    },
+    {
+      "fact": "AWS's documented re:Invent migration turned three EKS microservices with existing Swagger specs into three Gateway targets / callable MCP tools with zero MCP server code, by injecting the server URL into each spec, uploading to S3 and registering targets.",
+      "source": "https://repost.aws/articles/ARy9ar569iSO-DRe5cIihUyQ/re-invent-2025-modernize-containers-for-ai-agents-using-agentcore-gateway"
+    },
+    {
+      "fact": "Gateway ships a built-in semantic tool search exposed as the MCP tool x_amz_bedrock_agentcore_search, aimed at 'tool overload' where hundreds of tools cause hallucinations, wrong tool selection and inefficient execution paths.",
+      "source": "https://aws.amazon.com/blogs/machine-learning/introducing-amazon-bedrock-agentcore-gateway-transforming-enterprise-ai-agent-tool-development/"
+    },
+    {
+      "fact": "FastMCP's OpenAPI integration (OpenAPIProvider, v3.0.0+) converts every endpoint to an MCP Tool by default; the docs state LLMs achieve 'significantly better performance' with curated servers than auto-converted ones and recommend the approach for bootstrapping/prototyping, not for mirroring an API to LLM clients.",
+      "source": "https://gofastmcp.com/integrations/openapi"
+    },
+    {
+      "fact": "FastMCP route maps match on HTTP methods, a regex pattern and OpenAPI tags, and can map a route to TOOL, RESOURCE, RESOURCE_TEMPLATE or EXCLUDE - the supported mechanism for keeping /admin/* or tag:internal routes out of the tool surface.",
+      "source": "https://gofastmcp.com/integrations/openapi"
+    },
+    {
+      "fact": "FastMCP supports OpenAPI v3+ only; a real project hit a hard failure because Supabase/PostgREST emits Swagger 2.0 and had to convert the spec before the MCP server would start.",
+      "source": "https://marmelab.com/blog/2026/04/16/create-mcp-from-openapi.html"
+    },
+    {
+      "fact": "MCP tool names SHOULD be 1-128 characters using only A-Z, a-z, 0-9, underscore, hyphen and dot, case-sensitive and unique per server - REST path shapes must be rewritten by any converter.",
+      "source": "https://modelcontextprotocol.io/specification/2025-06-18/server/tools"
+    },
+    {
+      "fact": "MCP tool results must separate unstructured content (text/image/audio/resource links/embedded resources) from structuredContent; if a tool declares an outputSchema, servers MUST return conforming structured results (defaulting to JSON Schema 2020-12) and clients SHOULD validate them.",
+      "source": "https://modelcontextprotocol.io/specification/2025-06-18/server/tools"
+    },
+    {
+      "fact": "MCP distinguishes protocol errors (JSON-RPC, e.g. unknown tool) from tool execution errors (isError: true) which carry actionable feedback so models can self-correct and retry - a bridge that turns every upstream 4xx into a protocol error breaks agent retry loops.",
+      "source": "https://modelcontextprotocol.io/specification/2025-06-18/server/tools"
+    },
+    {
+      "fact": "mcpo exposes any MCP server (stdio command or SSE / streamable-http URL) as OpenAPI endpoints with Swagger UI at /docs in one command, and has ~4,387 GitHub stars (MIT, Python).",
+      "source": "https://github.com/open-webui/mcpo"
+    },
+    {
+      "fact": "mcpo stores OAuth tokens on disk under ~/.mcpo/tokens/ by default (storage_type=file, callback port 3030) and keeps upstream Authorization headers in its config; the README documents no encryption at rest or key rotation, so the proxy is the credential holder.",
+      "source": "https://github.com/open-webui/mcpo"
+    },
+    {
+      "fact": "LiteLLM's MCP REST bridge names tools as {server_prefix}-{tool} with '-' as the default separator (override via MCP_TOOL_PREFIX_SEPARATOR) and returns documented errors for the common bridges' mistakes: 400 missing_parameter, 500 for arguments: null (use {}), 403 tool_server_mismatch, 404 server_not_found.",
+      "source": "https://docs.litellm.ai/docs/mcp_rest_api"
+    },
+    {
+      "fact": "LiteLLM exposes MCP tools two ways from one deployment - a REST surface (/mcp-rest/tools/list, /mcp-rest/tools/call) and a JSON-RPC transport (/mcp or /{server_name}/mcp) used by Claude Desktop and Cursor.",
+      "source": "https://docs.litellm.ai/docs/mcp_rest_api"
+    },
+    {
+      "fact": "Mrflatt/mcp-proxy is a single Go binary (MIT) that fronts many upstream MCP servers as ONE mcp meta-tool for discovery/dispatch, to avoid flooding LLM context with dozens of tools; direct mode (--direct) is opt-in when full tool visibility is wanted.",
+      "source": "https://pkg.go.dev/github.com/Mrflatt/mcp-proxy"
+    },
+    {
+      "fact": "Ecosystem sizing: FastMCP (PrefectHQ/fastmcp, Apache-2.0, Python) ~27,946 stars with a commit on 2026-10-01; harsha-iiiv/openapi-mcp-generator (MIT, TypeScript) ~637 stars, last pushed 2026-09-26; open-webui/mcpo (MIT, Python) ~4,387 stars, last pushed 2026-05-17.",
+      "source": "https://api.github.com/repos/PrefectHQ/fastmcp, https://api.github.com/repos/harsha-iiiv/openapi-mcp-generator, https://api.github.com/repos/open-webui/mcpo (queried 2026-10-01 via gh CLI)"
+    },
+    {
+      "fact": "Amazon API Gateway added MCP proxy support that transforms existing REST APIs into MCP-compatible endpoints - a managed alternative when the API is already on API Gateway (primary vendor doc was not extractable this run; see sources_unavailable).",
+      "source": "http://westloop.io/post/amazon-api-gateway-adds-mcp-proxy-support"
+    }
+  ],
+  "angles": [
+    "Pick the conversion surface first, not the tool: gateway-edge (Kong plugin, AgentCore Gateway, API Gateway) if the API already sits behind that gateway, in-process library (FastMCP) if you want no new infrastructure, generated project (openapi-mcp-generator) if a TypeScript team wants to own the code.",
+    "The honest caveat that raises the article above the vendor docs: an OpenAPI document describes resources while an agent needs jobs. FastMCP's own docs say LLMs do significantly better with curated servers than auto-converted ones, Kong ships per-tool ACLs because raw conversion exposes privileged routes, and AWS built semantic tool search because hundreds of tools make models hallucinate. 'Zero code' is not 'zero design'.",
+    "Treat the spec as input to be filtered, not mirrored: FastMCP route maps / EXCLUDE for /admin/* and tag:internal, Kong conversion-only plus a listener for grouping, AWS targets per capability.",
+    "The spec-version trap: FastMCP needs OpenAPI v3+, so a Swagger 2.0 source (PostgREST/Supabase) fails until converted - check this before anything else, it is a silent, fast failure that looks like a broken server.",
+    "Name and schema normalisation is where hand-rolled bridges quietly break: MCP forbids slashes and spaces in tool names, and LiteLLM's documented errors (wrong separator, arguments: null, tool_server_mismatch) are exactly what naive path-to-tool conversion produces.",
+    "Error semantics decide whether your agent can self-heal: return upstream 4xx/422 as tool execution errors (isError: true) so the model can correct the argument, and reserve JSON-RPC protocol errors for unknown tools or malformed calls.",
+    "Credential ownership moves into the proxy: with mcpo the upstream bearer lives in the config and OAuth tokens sit unencrypted under ~/.mcpo/tokens/, and Kong needs the AI MCP OAuth2 plugin plus token claims mapped to Consumers before per-tool ACLs mean anything.",
+    "The reverse direction is equally valid and often overlooked: mcpo and LiteLLM's /mcp-rest exist to let OpenAPI-only clients call MCP tools - name it so readers do not build the bridge they do not need.",
+    "Avoid tool explosion at the discovery layer: Mrflatt/mcp-proxy exposes many MCP servers as one meta-tool, AWS added semantic search, LiteLLM offers unprefixed names scoped by server_id - all three acknowledge that a fat tool list degrades model selection.",
+    "Test the loop end-to-end against a real MCP client (Claude Desktop, Cursor, Insomnia): connect, tools/list, then a tools/call that exercises auth, a path parameter and a 4xx path - vendor docs all stop at the happy path."
+  ],
+  "keywords": [
+    "mcp rest api bridge",
+    "add mcp support to rest api",
+    "convert rest api to mcp server",
+    "openapi to mcp server",
+    "mcp proxy plugin kong",
+    "ai mcp proxy plugin",
+    "aws bedrock agentcore gateway openapi",
+    "amazon api gateway mcp proxy",
+    "fastmcp from_openapi",
+    "fastmcp route maps exclude routes",
+    "openapi-mcp-generator cli",
+    "mcpo mcp to openapi proxy",
+    "litellm mcp rest api tools call",
+    "no code mcp server for existing api",
+    "mcp tools/list tools/call tutorial",
+    "mcp tool naming rules 128 characters",
+    "mcp tool execution error iserror self correct",
+    "openapi v2 swagger 2.0 to mcp conversion failure",
+    "curated mcp server vs auto-converted openapi",
+    "mcp tool overload semantic tool search",
+    "per-tool acl mcp gateway oauth 2.1",
+    "self-hosted mcp server from openapi spec"
+  ],
+  "outline": [
+    "H2: What 'adding MCP support without code changes' actually means",
+    "H2: Three ways to convert a REST API into MCP tools (pick by where your API already runs)",
+    "H3: Path 1 - Gateway plugins: Kong AI MCP Proxy, AgentCore Gateway, API Gateway",
+    "H3: Path 2 - In-process libraries: FastMCP.from_openapi and route maps",
+    "H3: Path 3 - Reverse bridges: mcpo and LiteLLM when your client only speaks OpenAPI",
+    "H2: Step 1 - Check your OpenAPI spec is convertible (v3+ and a complete server URL)",
+    "H2: Step 2 - Generate the MCP surface and verify tools/list",
+    "H2: Step 3 - Do not mirror the API: curate the tool set",
+    "H2: Step 4 - Normalise tool names and schemas for MCP's rules",
+    "H2: Step 5 - Wire authentication without leaking credentials into schemas",
+    "H2: Step 6 - Get the error semantics right so agents can self-correct",
+    "H2: Step 7 - Add rate limits, ACLs and observability at the proxy layer",
+    "H2: Testing checklist: from tools/list to a real client call",
+    "H2: When zero-code conversion is the wrong answer",
+    "H2: FAQ"
+  ],
+  "faq_candidates": [
+    {
+      "q": "Can I add MCP support to a REST API without writing an MCP server?",
+      "a": "Yes - three families: gateway plugins that convert an OpenAPI schema at the edge (Kong AI MCP Proxy on Gateway 3.12+, AWS Bedrock AgentCore Gateway with an OpenAPI/Smithy spec in S3, Amazon API Gateway MCP proxy), in-process libraries that generate a server from an OpenAPI spec (FastMCP.from_openapi), and CLI generators that emit a project you host (openapi-mcp-generator)."
+    },
+    {
+      "q": "Which OpenAPI version do I need?",
+      "a": "OpenAPI v3 or later for FastMCP - a Swagger 2.0 spec (common with PostgREST/Supabase) fails immediately until you convert it. Gateway and Kong target OpenAPI 3.x schemas as well."
+    },
+    {
+      "q": "Should I convert every endpoint into a tool?",
+      "a": "No. FastMCP's own documentation says LLMs perform significantly better with curated MCP servers than auto-converted OpenAPI servers; default conversion makes every endpoint a tool, and route maps / EXCLUDE exist to hide admin and internal routes. AWS added semantic tool search and Mrflatt/mcp-proxy collapses many servers into one meta-tool for the same reason."
+    },
+    {
+      "q": "How should the bridge report upstream API errors?",
+      "a": "Return them as MCP tool execution errors (isError: true) with actionable text so the model can retry with corrected arguments, and reserve JSON-RPC protocol errors for unknown tools or malformed requests. Collapsing every upstream 4xx into a protocol error removes the agent's ability to self-correct."
+    },
+    {
+      "q": "Where do credentials live?",
+      "a": "In whatever sits in the middle. FastMCP keeps them on the httpx client used by the generated server; Kong needs the AI MCP OAuth2 plugin (OAuth 2.1 at the edge, token claims mapped to Consumers for per-tool ACLs); mcpo holds upstream Authorization headers in its config and stores OAuth tokens on disk under ~/.mcpo/tokens/ with no documented encryption at rest."
+    },
+    {
+      "q": "What if my tool name has slashes or spaces?",
+      "a": "Rename it. MCP tool names should be 1-128 characters limited to A-Z a-z 0-9 underscore hyphen and dot, case-sensitive and unique per server, so a REST path like /users/{id}/posts must be rewritten (for example users_get_posts) by the converter."
+    }
+  ],
+  "competitor_gaps": [
+    "Vendor docs stop at the happy path: none of the Kong/AWS/FastMCP pages show a tools/call that exercises auth, a path parameter and an upstream 4xx in one loop, and none quantify when auto-conversion stops scaling.",
+    "The conversion decision is never framed as a single matrix (edge gateway vs in-process vs generated vs reverse bridge) - each vendor only argues its own placement.",
+    "FastMCP's own 'stop converting your REST APIs' caveat is buried in an integration page and absent from the tutorial-grade blog posts that dominate this keyword.",
+    "No source covers the MCP error-channel split (protocol vs tool execution errors) as a bridge design requirement, although it is the difference between an agent that self-corrects and one that loops.",
+    "Credential-ownership trade-offs (who stores the upstream token, where it lands on disk) are marketing-filtered: mcpo's token directory and Kong's enterprise-tier requirement are the two facts readers most need before choosing."
+  ],
+  "notes": {
+    "slug_front_matter": "slug: mcp-proxy-rest-api-to-mcp, keyword: mcp rest api bridge, type: how-to",
+    "research_scope": "Competitor = the primary vendor documentation and reference implementation for each conversion path (Kong, AWS AgentCore/API Gateway, FastMCP, mcpo, LiteLLM) plus one hands-on field report and two third-party analyses, rather than five mid-tier blog posts that restate vendor docs.",
+    "source_quality_warning": "Two GA dates for Bedrock AgentCore disagree: AWS's devguide page states GA October 2025, a third-party analysis says 25 July 2026. The Writer should attribute any GA date to its source and prefer the AWS page for the product statement. Several sources in this niche are AI-generated aggregator sites (mcpmarkets.com, mseep.ai, hysenlabs.com) that restate READMEs - they were used only to confirm details already present in the upstream repo docs.",
+    "verification_status": "Every competitor URL above was retrieved or searched successfully on 2026-10-01 except the two listed in sources_unavailable; GitHub stars/last-push came from the authenticated GitHub API (gh CLI) on the same date."
+  },
+  "sources_unavailable": [
+    "https://gofastmcp.com/blog/stop-converting-rest-apis-to-mcp - 404 on fetch (the caveat is quoted verbatim inside https://gofastmcp.com/integrations/openapi, which did retrieve)",
+    "https://docs.aws.amazon.com/apigateway/latest/developerguide/mcp-proxy.html - page reached but no content extractable; API Gateway MCP proxy support is corroborated by a secondary source only"
+  ]
+}
