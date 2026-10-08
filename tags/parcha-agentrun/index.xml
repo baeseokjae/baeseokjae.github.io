@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Parcha Agentrun on RockB</title><link>https://baeseokjae.github.io/tags/parcha-agentrun/</link><description>Recent content in Parcha Agentrun on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 01 Oct 2026 11:29:54 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/parcha-agentrun/index.xml" rel="self" type="application/rss+xml"/><item><title>AgentRun: A DSL That Turns Agent Chains Into Deterministic Workflows (2026 Review)</title><link>https://baeseokjae.github.io/posts/agentrun-dsl-agent-workflows-2026/</link><pubDate>Thu, 01 Oct 2026 11:29:54 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agentrun-dsl-agent-workflows-2026/</guid><description>AgentRun is a TypeScript DSL that wraps model calls in a deterministic, inspectable workflow document. A 2026 review of the 0.1.0 beta line and its limits.</description><content:encoded><![CDATA[<p>AgentRun (agent.run()) is an open-source TypeScript DSL that describes an agent workflow as a JSON document: a developer-authored graph of typed nodes, with the model invoked only where a node actually needs judgment. You write the workflow once, version it, and run it — instead of letting a prompt loop decide its own next step at runtime.</p>
+<p>That is the honest one-paragraph answer. What follows is a review of what AgentRun actually ships in beta, where the determinism claim holds up, where it does not, and which teams should care in 2026.</p>
+<h2 id="what-is-agentrun-precisely">What Is AgentRun, Precisely?</h2>
+<p>AgentRun is a workflow definition language plus a host runtime adapter, published by Parcha Labs (built by Grep.ai) under Apache-2.0. The repository at <a href="https://github.com/Parcha-ai/agentrun">github.com/Parcha-ai/agentrun</a> was created on 2026-09-23 and, as of the 2026-10-08 review date, shows 94 stars, 10 forks, and 5 open issues. It is a TypeScript repo of roughly 1.9 megabytes — small enough to read end to end in an afternoon, which is unusual for this category.</p>
+<p>The project ships three npm packages:</p>
+<ul>
+<li><code>@parcha/agentrun-dsl</code> — the workflow document schema and authoring primitives</li>
+<li><code>@parcha/agentrun-jev</code> — the typed-decision layer</li>
+<li><code>@parcha/agentrun-pi</code> — an agent authoring extension</li>
+</ul>
+<p>It was announced with a <a href="https://news.ycombinator.com/item?id=49821438">Show HN post</a> on 2026-09-23 that reached 51 points and 12 comments, and charted the Hacker News front page on 2026-09-24. That is a modest but real signal: front-page placement, small sustained traffic, and a repository that fifteen days later still had no stable release.</p>
+<p>The word &ldquo;deterministic&rdquo; in the title needs unpacking immediately, because it is the single most misread term in this space.</p>
+<h2 id="is-agentrun-a-deterministic-system-or-a-graph-around-probabilistic-nodes">Is AgentRun a Deterministic System, or a Graph Around Probabilistic Nodes?</h2>
+<p>It is the second thing, and the project is honest about that. AgentRun does not make model outputs deterministic. It makes the <em>control flow</em> deterministic: which node runs next is decided by code and by the workflow document, not by a model choosing its own next edge.</p>
+<p>Anthropic drew this line cleanly in <a href="https://www.anthropic.com/engineering/building-effective-agents"><em>Building Effective Agents</em></a> (December 2024). Workflows are &ldquo;systems where LLMs and tools are orchestrated through predefined code paths.&rdquo; Agents are &ldquo;systems where LLMs dynamically direct their own processes and tool usage.&rdquo; By that definition, AgentRun is a workflow framework with agent-shaped nodes — not an agent framework with workflow-shaped supervision.</p>
+<p>This distinction matters commercially because it is the axis the whole market is converging on. The sharpest phrasing of it comes from <a href="https://decodethefuture.org/en/agentic-workflows-vs-ai-agents/">Decode the Future&rsquo;s 2026 analysis</a>: &ldquo;an agentic workflow is a system where a developer wrote the graph and the LLM fills in the nodes; an AI agent is a system where the LLM draws the next edge of the graph at runtime.&rdquo; Everything else in this review follows from where a product sits on that line.</p>
+<p><strong>Where AgentRun sits:</strong> on the developer-draws-the-graph side, decisively. The agent is invoked as a node when investigation is needed, then control returns to the document.</p>
+<h3 id="why-determinism-is-a-governance-argument-not-just-a-style-preference">Why Determinism Is a Governance Argument, Not Just a Style Preference</h3>
+<p>The commercial case for deterministic scaffolding is not aesthetic. <a href="https://www.gartner.com/en/newsroom/press-releases/2025-06-25-gartner-predicts-over-40-percent-of-agentic-ai-projects-will-be-canceled-by-end-of-2027">Gartner&rsquo;s 2025-06-25 press release</a> projected that <strong>over 40% of agentic AI projects will be canceled by the end of 2027</strong>, citing escalating costs, unclear business value, and inadequate risk controls. Every one of those three failure modes is easier to attack when control flow is authored rather than emergent.</p>
+<p>A deterministic graph gives you three things a prompt loop does not: a bounded execution path you can test, a cost ceiling you can reason about per node, and an audit artifact — the workflow document — that a risk owner can read without running anything. That last item is the strongest argument AgentRun has, and it is the one the README undersells.</p>
+<h2 id="what-does-an-agentrun-workflow-document-actually-contain">What Does an AgentRun Workflow Document Actually Contain?</h2>
+<p>The workload document is the product. Practically, an AgentRun workflow defines:</p>
+<ol>
+<li><strong>Nodes</strong> — discrete steps, each either a code transform or a model invocation.</li>
+<li><strong>Schemas</strong> — JSON Schema contracts on node inputs and outputs, so a malformed model response fails at the boundary rather than three steps later.</li>
+<li><strong>Typed decisions</strong> — nodes whose output is a constrained choice among options, not free text.</li>
+<li><strong>Host hooks</strong> — checkpoint, memo, and recovery interfaces that the <em>host</em> implements (more on this below).</li>
+<li><strong>Digest metadata</strong> — a <code>workflowSha256</code> covering the whole document, including host metadata, so two parties can confirm they are running the same workflow.</li>
+</ol>
+<p>The fifth item is quietly the most interesting. A content-addressed workflow document means &ldquo;which version of the SOP ran&rdquo; becomes a verifiable question rather than a matter of git archaeology. Combined with the Pi authoring extension, it turns the standard operating procedure into an artifact with a hash.</p>
+<h2 id="typed-decisions-jev-thresholds-and-separately-evaluable-gates">Typed Decisions: Jev, Thresholds, and Separately Evaluable Gates</h2>
+<p>Jev is AgentRun&rsquo;s decision layer, and it is the most under-covered differentiator against general graph frameworks. Instead of asking a model to produce prose and then parsing it, Jev nodes express decisions as a typed choice with an explicit option set and a confidence value — patterns the docs describe as judge, gate, verify, and sift.</p>
+<p>Why this is structurally better than text parsing: a typed decision node is independently evaluable. You can unit-test the decision contract without a model, log every decision with its confidence, and route low-confidence results down a different edge of the graph. In a plain prompt loop, that branch is usually an <code>if response.includes(...)</code> buried in application code.</p>
+<h3 id="the-calibration-caveat-you-must-not-skip">The Calibration Caveat You Must Not Skip</h3>
+<p>AgentRun&rsquo;s own documentation is commendably blunt here: <em>&ldquo;Confidence is a model output, not an empirically calibrated accuracy guarantee. The demo&rsquo;s 70% threshold is illustrative.&rdquo;</em></p>
+<p>Read that twice. A confidence score from a language model is a self-reported number, not a probability that has been validated against outcomes. A workflow that gates on <code>confidence &gt; 0.7</code> is not enforcing a 70% accuracy floor — it is enforcing a 70% <em>self-assessment</em> floor. If your workflow routes on that number, you own the task of calibrating it against labeled outcomes for your domain.</p>
+<p>There is also a live bug that illustrates the gap between &ldquo;typed&rdquo; and &ldquo;correct.&rdquo; In <code>0.1.0-beta.5</code>, the team fixed GitHub issue #25: System One rounded each probability to two decimal places, which meant roughly 1% of real eight-option choices summed to 0.99, failed the <code>probability_mass</code> constraint, and rejected the entire Jev request. A strict type system caught the violation — and then failed a request that was, in substance, fine. Typed decisions eliminate parse errors; they do not eliminate modeling errors.</p>
+<h2 id="agentrun-vs-langgraph-temporal-mastra-and-inngest">AgentRun vs LangGraph, Temporal, Mastra, and Inngest</h2>
+<p>This is the comparison that decides adoption, and it has to be made on two separate axes that vendors routinely blur: agent-native features and durable execution.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Project</th>
+          <th>What it actually gives you</th>
+          <th>Scale (GitHub stars, 2026-10-08)</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>AgentRun</strong></td>
+          <td>Inspectable workflow document, typed decision nodes, host-owned runtime</td>
+          <td>94</td>
+      </tr>
+      <tr>
+          <td><strong>LangGraph</strong></td>
+          <td>Agent-native orchestration: streaming, memory, HITL via <code>interrupt()</code>, Studio</td>
+          <td>42,884</td>
+      </tr>
+      <tr>
+          <td><strong>Mastra</strong></td>
+          <td>TypeScript agent framework with workflows, evals, memory</td>
+          <td>28,637</td>
+      </tr>
+      <tr>
+          <td><strong>Temporal</strong></td>
+          <td>Durable execution engine; long-running, fault-tolerant workflows</td>
+          <td>23,534</td>
+      </tr>
+      <tr>
+          <td><strong>trigger.dev</strong></td>
+          <td>Background jobs with durable retries, TypeScript-first</td>
+          <td>16,500</td>
+      </tr>
+      <tr>
+          <td><strong>Dagger</strong></td>
+          <td>Container-native pipeline engine</td>
+          <td>16,325</td>
+      </tr>
+      <tr>
+          <td><strong>Inngest</strong></td>
+          <td>Event-driven durable step functions</td>
+          <td>5,926</td>
+      </tr>
+      <tr>
+          <td><strong>Restate</strong></td>
+          <td>Durable execution with a Rust core</td>
+          <td>4,529</td>
+      </tr>
+      <tr>
+          <td><strong>DBOS Transact</strong></td>
+          <td>Durable execution backed by a database</td>
+          <td>1,613</td>
+      </tr>
+  </tbody>
+</table>
+<p>The scale column is deliberately in the table: a 94-star repository two weeks after launch is in a completely different adoption regime from LangGraph at 42,884. That is not a criticism — every one of those projects started at zero — but it tells you who is on the hook if something breaks.</p>
+<p><a href="https://www.langchain.com/resources/langgraph-vs-temporal">LangChain&rsquo;s own framing</a> of the durable-execution question is worth quoting because it is correct: <em>&ldquo;Temporal executes your workflows, LangGraph builds your agents.&rdquo;</em> AgentRun makes a third bet — that the workflow document itself should be the durable artifact, with execution delegated outward.</p>
+<h3 id="should-you-use-agentrun-instead-of-a-durable-execution-engine">Should You Use AgentRun Instead of a Durable Execution Engine?</h3>
+<p>No. The honest read is compositional, and AgentRun&rsquo;s docs say so explicitly: <em>&ldquo;Checkpoint, memo, and recovery interfaces are host hooks, not a bundled durable scheduler,&rdquo;</em> and idempotency keys <em>&ldquo;do not confer exactly-once delivery.&rdquo;</em></p>
+<p>That is a big deal. If a node performs an external side effect — charges a card, sends an email, posts a message — AgentRun will not guarantee it happens exactly once across a crash. You get the interfaces to build that guarantee, not the guarantee.</p>
+<p>The correct architecture for a serious deployment is therefore:</p>
+<ul>
+<li><strong>Durable engine underneath</strong> (Temporal, Restate, DBOS, or Inngest) owning retries, replay, and exactly-once side effects.</li>
+<li><strong>AgentRun document on top</strong> owning the shape of the reasoning: which node runs when, what schemas gate each transition, and what a hash-verified record of the SOP looks like.</li>
+</ul>
+<p>Teams that adopt AgentRun <em>as</em> their durability story will discover the gap in production, which is the worst place to find it.</p>
+<h2 id="authoring-workflows-with-the-pi-extension-sops-your-agent-writes">Authoring Workflows with the Pi Extension: SOPs Your Agent Writes</h2>
+<p>The genuinely new 2026 angle is not the DSL — DSLs for orchestration are decades old, and several competitors landed on the same thesis this year. It is that the DSL is designed to be <em>written by an agent</em>.</p>
+<p>The Pi extension packages a skill that lets an active model inspect available tools and author a workflow document directly. Two design details are worth noting because they show real engineering discipline:</p>
+<ol>
+<li><strong>Candidates never overwrite a draft.</strong> New workflow candidates are written to unique directories, so an agent&rsquo;s proposal cannot clobber a human&rsquo;s working version.</li>
+<li><strong><code>workflowSha256</code> covers the whole document, including host metadata</strong>, so digest comparison catches drift that a content-only hash would miss.</li>
+</ol>
+<p>There is an author contract and host-owned acceptance checks in the loop, which means the agent&rsquo;s proposal is not trusted by construction — it is proposed, then validated. This is the pattern showing up across 2026 tooling: the SOP stops being a wiki page and becomes a versioned, reviewable, machine-maintained artifact. It is the same shape you see in CI harnesses and content pipelines, and it is the part of AgentRun most likely to be copied.</p>
+<h2 id="adoption-limits-trusted-execution-durability-and-exactly-once">Adoption Limits: Trusted Execution, Durability, and Exactly-Once</h2>
+<p>Read AgentRun&rsquo;s &ldquo;Contracts and limits&rdquo; section before you read the marketing. Verbatim, from the docs:</p>
+<blockquote>
+<p><em>&ldquo;JavaScript runs in the process. Validation can execute probes. Run unknown workflows in a host-controlled isolation boundary.&rdquo;</em></p></blockquote>
+<p>The same section states there is <strong>&ldquo;no general hard-kill sandbox here&rdquo;</strong> and that synchronous JavaScript can block the process.</p>
+<p>Strip the careful language and the practical consequence is: <strong>a workflow document is executable code with the trust level of your application process.</strong> If your workflow documents can come from an untrusted author — a third party, a customer, an agent running without tight controls, a scraped marketplace — you have accepted the job of building isolation yourself. AgentRun does not do it for you, and says so.</p>
+<p>Three adoption gates follow:</p>
+<ul>
+<li><strong>Untrusted author?</strong> You need a container or VM boundary. This is a hard requirement, not a hardening nicety.</li>
+<li><strong>Side-effectful nodes?</strong> You need a durable engine underneath, because idempotency keys do not confer exactly-once delivery.</li>
+<li><strong>Confidence-gated routing?</strong> You need your own calibration dataset, because confidence is a model output, not a measured accuracy guarantee.</li>
+</ul>
+<h3 id="the-prerelease-reality">The Prerelease Reality</h3>
+<p>The beta line moved fast. <code>0.1.0-beta.1</code> through <code>0.1.0-beta.5</code> shipped between 2026-09-23 and 2026-09-26, and by the 2026-10-08 review date the npm <code>beta</code> dist-tag had reached <strong><code>0.1.0-beta.9</code></strong> — while <code>latest</code> still pointed at <code>beta.4</code>. Download counts for the last month (2026-09-05 to 2026-10-04) were 1,733 for <code>agentrun-dsl</code>, 1,583 for <code>agentrun-jev</code>, and 1,092 for <code>agentrun-pi</code>.</p>
+<p>Two things to take from those numbers. First, there is real usage — low four figures a month is meaningful for an unannounced-beta tool. Second, the API surface is still moving under breaking changes between betas, and <code>latest</code> lagging several betas behind <code>beta</code> means a naive <code>npm install</code> may not give you the newest behavior.</p>
+<p>Also note what does <em>not</em> exist: there is <strong>no published cost benchmark or success-rate benchmark for AgentRun itself.</strong> The author&rsquo;s <a href="https://news.ycombinator.com/item?id=49821438">argument on Hacker News</a> — avoiding &ldquo;a full agent loop where one isn&rsquo;t needed&rdquo; — is a sound design argument. It is not a measured result. The demos use scripted fixtures rather than live model calls. Treat the savings as a hypothesis you should validate on your own workload, not as a number.</p>
+<h2 id="when-a-workflow-dsl-beats-an-agent-loop-and-when-it-doesnt">When a Workflow DSL Beats an Agent Loop (and When It Doesn&rsquo;t)</h2>
+<p><a href="https://dailyaiworld.com/public/blogs/deterministic-workflows-vs-probabilistic-agentic-loops">The 2026 consensus is hybrid</a> — deterministic macro-transitions with probabilistic micro-actions — and AgentRun is a clean implementation of the deterministic half.</p>
+<p><strong>Use a workflow DSL when:</strong></p>
+<ul>
+<li>The process is stable and repeated. Invoicing, compliance review, release gating, content pipelines, ticket triage. Anything with a recognizable SOP.</li>
+<li>You need auditability. A hash-verified document is a far better artifact for a risk owner than a session transcript.</li>
+<li>Cost must be budgeted per step rather than emergent. Determinism means you know how many model calls a run can make before it starts.</li>
+<li>The failure mode of an open-ended loop — unpredictable latency, infinite-loop risk, untestable execution paths — is unacceptable.</li>
+</ul>
+<p><strong>Stay with an agent loop when:</strong></p>
+<ul>
+<li>The task genuinely has unknown structure. Exploration, debugging, research synthesis, incident triage with no known shape.</li>
+<li>Steps are cheap and the workflow changes weekly. Versioning a document costs something; if the graph is different every run, you are paying overhead for a guarantee you cannot use.</li>
+<li>The work is a single judgment call. Wrapping one model invocation in a five-node graph with schemas is process theater.</li>
+</ul>
+<p><strong>The failure mode of determinism</strong> is brittleness on unhandled inputs: a DAG that has never seen a particular document shape will fail on it, where a probabilistic loop would improvise. AgentRun&rsquo;s answer is to put an LLM node exactly at the junction where improvisation is needed — which is the right design, and also the reason the &ldquo;deterministic&rdquo; label invites over-reading.</p>
+<h2 id="is-agentruns-thesis-original">Is AgentRun&rsquo;s Thesis Original?</h2>
+<p>No, and the brief should say so, because it is evidence for the trend rather than against the product. Three independent implementations landed on &ldquo;code decides, LLM executes&rdquo; in 2026:</p>
+<ul>
+<li><strong>AINL</strong> (<a href="https://www.ainativelang.com/whitepaper">ainativelang.com</a>) — a graph-first DSL compiled to a canonical IR, with a &ldquo;compile-once / run-many&rdquo; economic argument and a broader emitter story (FastAPI, React/TypeScript, Prisma, OpenAPI, Docker, cron, MCP).</li>
+<li><strong>atman</strong> (Rust, MIT/Apache, atman-dsl v1.13.2 on 2026-09-25) — a flow DSL whose own comparison table contrasts &ldquo;LLM-driven (model decides tool use)&rdquo; against &ldquo;flow-driven (code decides, LLM executes),&rdquo; with deterministic replayable event traces.</li>
+<li><strong>AgentSPEX</strong> (<a href="https://arxiv.org/abs/2604.13346">arXiv 2604.13346</a>, April 2026) — the academic version: a declarative, human-readable DSL for agent systems with specification, verification, logging, and a visual editor with synchronized graph and workflow views, evaluated on seven benchmarks plus a user study.</li>
+</ul>
+<p>AgentRun&rsquo;s specific bet within that convergence is a combination none of the others ship together: <strong>TypeScript + JSON Schema + Jev typed decisions + Pi agent authoring, plus a deliberate refusal to own the runtime.</strong> AINL tries to emit deployable targets; atman bakes in flow-level capability limits; AgentRun stops at the workflow document and hands you the host hooks.</p>
+<p>That refusal is both its discipline and its risk. It keeps the product small and readable. It also means every production concern — isolation, durability, exactly-once — is your problem to solve.</p>
+<h2 id="verdict-who-should-adopt-agentrun-in-2026">Verdict: Who Should Adopt AgentRun in 2026?</h2>
+<p><strong>Adopt it now, in production-adjacent settings,</strong> if you are a small TypeScript team with a stable, repeated process, an existing durable execution engine (or a willingness to add one), and a real need for an auditable SOP artifact. The repo is small enough to read, the license is permissive, and the typed-decision layer is a genuine improvement over parsing model prose.</p>
+<p><strong>Watch it, don&rsquo;t depend on it,</strong> if you need production guarantees today. The beta line reaching <code>beta.9</code> within a fortnight, <code>latest</code> lagging several betas behind, breaking changes between betas, and no published benchmark data add up to production-adjacent, not production-ready.</p>
+<p><strong>Avoid it as your only control layer,</strong> if workflow documents can come from untrusted authors. There is no hard-kill sandbox. That is AgentRun&rsquo;s own statement, and it is the correct engineering description, not a caveat someone inserted to be safe.</p>
+<p>The pattern AgentRun implements is going to win in more places than it loses, because the 2026 economics — Gartner&rsquo;s cancellation figure, <a href="https://www.csis.org/analysis/lost-definition-how-confusion-over-agentic-ai-risks-governance">CSIS&rsquo;s January 2026 warning</a> that definitional ambiguity in &ldquo;agentic&rdquo; procurement undermines governance frameworks — all point the same direction: agent systems that cannot be audited will not survive a risk review. AgentRun&rsquo;s contribution is making the audit artifact the primary deliverable and being candid about everything it declines to own. That candor is, in the end, the most valuable thing in the repository.</p>
+<h2 id="faq">FAQ</h2>
+<p><strong>Is AgentRun a replacement for LangGraph?</strong>
+No. LangGraph is agent-native orchestration: streaming, built-in short- and long-term memory, human-in-the-loop via a single <code>interrupt()</code> call, 30+ production API endpoints, A2A/MCP/Agent Protocol support, and Studio. AgentRun deliberately omits all of that and offers a workflow document instead. LangChain&rsquo;s own framing — &ldquo;many teams run both&rdquo; — is the accurate architecture: LangGraph for agent reasoning, AgentRun or a durable engine for the surrounding control flow.</p>
+<p><strong>Does AgentRun give me exactly-once execution?</strong>
+No. The documentation states plainly that checkpoint, memo, and recovery interfaces are host hooks rather than a bundled durable scheduler, and that idempotency keys do not confer exactly-once delivery. If your workflow performs side effects, pair AgentRun with a durable execution engine (Temporal, Restate, DBOS, Inngest) that owns that guarantee.</p>
+<p><strong>Is a confidence threshold in a Jev decision a reliability guarantee?</strong>
+No. AgentRun&rsquo;s docs are explicit: confidence is a model output, not an empirically calibrated accuracy guarantee, and the demo&rsquo;s 70% threshold is illustrative. To use confidence-based routing in production, you must calibrate the score against labeled outcomes in your own domain and pick a threshold that reflects measured accuracy.</p>
+<p><strong>Can I safely run third-party workflow documents?</strong>
+Only inside your own isolation boundary. AgentRun&rsquo;s trust model says JavaScript runs in the process, validation can execute probes, and there is no general hard-kill sandbox — synchronous JavaScript can block the process. If document authors are not trusted, container or VM isolation is mandatory.</p>
+<p><strong>What is the Pi extension for?</strong>
+Pi is AgentRun&rsquo;s agent-authoring extension. It packages a skill that lets an active model inspect available tools and write workflow documents directly. Candidates are written to unique directories and never overwrite a draft, and each document carries a <code>workflowSha256</code> digest covering the full document including host metadata — turning the SOP into a versioned, hash-verifiable artifact rather than a wiki page.</p>
+<h2 id="sources">Sources</h2>
+<ul>
+<li><code>Parcha-ai/agentrun</code> (repository, README, <code>docs/guide.md</code> &ldquo;Contracts and limits&rdquo;, <code>docs/authoring.md</code>, <code>docs/host-integration.md</code>, <code>CHANGELOG.md</code>, GitHub issue #25) — <a href="https://github.com/Parcha-ai/agentrun">https://github.com/Parcha-ai/agentrun</a></li>
+<li>AgentRun Show HN submission (51 points, 12 comments, 2026-09-23; author&rsquo;s &ldquo;full agent loop where one isn&rsquo;t needed&rdquo; argument) — <a href="https://news.ycombinator.com/item?id=49821438">https://news.ycombinator.com/item?id=49821438</a></li>
+<li><code>@parcha/agentrun-dsl</code> on the npm registry (dist-tags and version timeline) — <a href="https://registry.npmjs.org/@parcha/agentrun-dsl">https://registry.npmjs.org/@parcha/agentrun-dsl</a></li>
+<li>GitHub issue #25, &ldquo;validateAnswers refuses System One choice answers whose probabilities sum to 0.99&rdquo; (opened 2026-09-26, closed 2026-09-26) — <a href="https://github.com/Parcha-ai/agentrun/issues/25">https://github.com/Parcha-ai/agentrun/issues/25</a></li>
+<li>Anthropic, <em>Building Effective Agents</em> (December 2024) — the workflow-versus-agent definition used throughout — <a href="https://www.anthropic.com/engineering/building-effective-agents">https://www.anthropic.com/engineering/building-effective-agents</a></li>
+<li>Decode the Future, <em>Agentic Workflows vs AI Agents</em> (2026) — the &ldquo;who draws the next edge&rdquo; framing — <a href="https://decodethefuture.org/en/agentic-workflows-vs-ai-agents/">https://decodethefuture.org/en/agentic-workflows-vs-ai-agents/</a></li>
+<li>Gartner press release, 2025-06-25 — over 40% of agentic AI projects canceled by end of 2027 — <a href="https://www.gartner.com/en/newsroom/press-releases/2025-06-25-gartner-predicts-over-40-percent-of-agentic-ai-projects-will-be-canceled-by-end-of-2027">https://www.gartner.com/en/newsroom/press-releases/2025-06-25-gartner-predicts-over-40-percent-of-agentic-ai-projects-will-be-canceled-by-end-of-2027</a></li>
+<li>CSIS, <em>Lost in Definition: How Confusion over Agentic AI Risks Undermining U.S. Governance Frameworks</em> (January 2026) — <a href="https://www.csis.org/analysis/lost-definition-how-confusion-over-agentic-ai-risks-governance">https://www.csis.org/analysis/lost-definition-how-confusion-over-agentic-ai-risks-governance</a></li>
+<li>LangChain, <em>LangGraph vs Temporal</em> — &ldquo;Temporal executes your workflows, LangGraph builds your agents&rdquo; — <a href="https://www.langchain.com/resources/langgraph-vs-temporal">https://www.langchain.com/resources/langgraph-vs-temporal</a></li>
+<li>Daily AI World, <em>Deterministic Workflows vs Probabilistic Agentic Loops</em> — the 2026 hybrid consensus — <a href="https://dailyaiworld.com/public/blogs/deterministic-workflows-vs-probabilistic-agentic-loops">https://dailyaiworld.com/public/blogs/deterministic-workflows-vs-probabilistic-agentic-loops</a></li>
+<li>AINL whitepaper (compile-once / run-many, canonical IR, emitter targets) — <a href="https://www.ainativelang.com/whitepaper">https://www.ainativelang.com/whitepaper</a></li>
+<li>AgentSPEX: An Agent SPecification and EXecution Language (arXiv 2604.13346, 14 Apr 2026) — <a href="https://arxiv.org/abs/2604.13346">https://arxiv.org/abs/2604.13346</a></li>
+<li>LangGraph (agent-native orchestration; stars re-read 2026-10-08) — <a href="https://github.com/langchain-ai/langgraph">https://github.com/langchain-ai/langgraph</a></li>
+<li>Temporal (durable execution engine; stars re-read 2026-10-08) — <a href="https://github.com/temporalio/temporal">https://github.com/temporalio/temporal</a></li>
+<li>Mastra (TypeScript agent framework) — <a href="https://github.com/mastra-ai/mastra">https://github.com/mastra-ai/mastra</a></li>
+<li>trigger.dev (background jobs with durable retries) — <a href="https://github.com/triggerdotdev/trigger.dev">https://github.com/triggerdotdev/trigger.dev</a></li>
+<li>Dagger (container-native pipeline engine) — <a href="https://github.com/dagger/dagger">https://github.com/dagger/dagger</a></li>
+<li>Inngest (event-driven durable step functions) — <a href="https://github.com/inngest/inngest">https://github.com/inngest/inngest</a></li>
+<li>Restate (durable execution with a Rust core) — <a href="https://github.com/restatedev/restate">https://github.com/restatedev/restate</a></li>
+<li>DBOS Transact (durable execution backed by a database) — <a href="https://github.com/dbos-inc/dbos-transact-py">https://github.com/dbos-inc/dbos-transact-py</a></li>
+<li>atman flow DSL (Rust, MIT/Apache; atman-dsl v1.13.2, 2026-09-25) — <a href="https://github.com/W-Mai/atman">https://github.com/W-Mai/atman</a></li>
+</ul>
+<p>Repository, npm and GitHub figures were re-read from their primary sources during the Publisher&rsquo;s evidence pass on 2026-10-08; where a value had moved since the 2026-10-01 draft, the article shows the re-read value.</p>
+]]></content:encoded></item></channel></rss>
