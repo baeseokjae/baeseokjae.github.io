@@ -1,0 +1,235 @@
+{
+ "topic": "Best-of-N Coding Agents with LLM-as-Verifier: A Practical Guide to Sampling, Ranking, and Repair",
+ "slug": "best-of-n-coding-agents-with-llm-as-verifier",
+ "keyword": "best of n agent verifier",
+ "type": "guide",
+ "competitors": [
+  {
+   "url": "https://tianpan.co/blog/2026-07-02-best-of-n-is-an-architecture-not-a-benchmark-trick",
+   "key_points": [
+    "Frames best-of-N as an architecture decision with its own cost model, latency profile and failure mode, not a benchmark trick — 'with parallel test-time compute' is now a footnote on every frontier launch",
+    "Coverage climbs log-linearly with samples across four orders of magnitude; Large Language Monkeys: 15.9% @1 sample -> 56% @250 samples on SWE-bench Lite, vs 43% single-attempt SOTA at the time",
+    "Vertical vs horizontal scaling: 1.5B scaled with sampling can beat 3B one-shot, 3B beats 7B — best-of-N earns its keep in the middle band (single-shot p neither ~0 nor ~1)",
+    "Production framing: benchmarks report coverage (pass@k) because the harness knows the answer; production must PICK, so the picker/verifier bounds quality, not the generator",
+    "Latency: attempts run concurrently -> wall clock ~= max-of-N + judge, not sum-of-N; prefix caching makes extra attempts mostly output tokens",
+    "Practical verifier hygiene: debias mechanically (randomize candidate order, normalize formatting, use a judge from a different model family than the generator), prefer pairwise tournaments over absolute 1-10 scores (N-1 comparisons for a knockout bracket), decompose criteria into narrow binary 'aspect verifiers', and calibrate against ~100 labeled gold cases — judge-vs-human agreement is your quality ceiling"
+   ]
+  },
+  {
+   "url": "https://raw.ashitaorbis.com/understanding-ai/wiki/best-of-n-sampling.html",
+   "key_points": [
+    "Reference formulation: y_hat = argmax s(x,y_i) over N i.i.d. samples; BoN changes no weights and is often called rejection sampling in alignment papers (WebGPT samples 4/16/64 and keeps the reward-model top pick)",
+    "Three separate requirements that are not the oracle pass@N bound: Coverage (model must sometimes be right), Diversity (samples must differ), Selection (scorer must rank good above bad) — 'most BoN failures are scorer failures'",
+    "Scoring-rule taxonomy with main risk each: deterministic checker (incomplete tests), outcome verifier (learns dataset artifacts, false positives grow with N), PRM (expensive, step scores may not align with final correctness), reward model (reward hacking / Goodhart), logprob (favors bland outputs), majority vote (picks most common, not correct), hybrid (best in production)",
+    "Cost geometry: total ~= N*(generate + score) + aggregate; marginal gain Delta_N = p(1-p)^(N-1) decays exponentially; budget regions N=1 baseline, 4-16 best default experiment range, 32-128 needs calibration, hundreds+ needs a strong verifier or it plateaus/degrades",
+    "Evidence for plateauing without automatic verifiers: Brown et al. show majority voting and reward models plateau beyond several hundred samples, while coding and formal proofs convert coverage into measured performance",
+    "Unit tests are not proofs: EvalPlus augmentation caught previously accepted wrong code and reduced reported pass rates; constrained decoding (structured outputs) beats BoN when the requirement is only schema validity",
+    "Snell et al. treat it as an allocation problem — difficulty-aware compute allocation beats uniform best-of-N by >4x efficiency on math; ST-BoN truncates poor candidates early to cut memory/latency"
+   ]
+  },
+  {
+   "url": "https://chaitanyaprabuddha.com/blog/best-of-n-for-coding-agents",
+   "key_points": [
+    "Best-of-N for coding agents framed as a Codex/agent workflow: run the same agent prompt N times in fresh sandboxes and keep the highest-scoring candidate — explicitly contrasted with naive retry (every candidate runs to completion, even if the first succeeds)",
+    "Includes the pass@k table (p=10% -> 65.1% at N=10, 87.8% at N=20; p=25% -> 94.4% at N=10) and the diminishing-returns argument that most gains are N=1 -> N=3",
+    "Production multi-signal scoring function with weights: tests 0.35, regression 0.35, diff_size 0.10, lint 0.10, types 0.10 — plus an LLM-as-judge prompt scoring correctness/minimal-change/readability/robustness/consistency as JSON",
+    "Hybrid pattern: generate N in parallel, take top-K, refine each with test feedback, then re-score — the most effective approach in their experience",
+    "Cost math: $0.35-$0.75 per SWE-bench Verified instance per attempt -> Best-of-5 $1.75-$3.75, Best-of-10 $3.50-$7.50; compare against a developer's loaded hourly cost",
+    "Cost controls: adaptive N by difficulty classifier (easy=1, medium=3, hard=5, very hard=10) and early termination on a perfect score"
+   ]
+  },
+  {
+   "url": "https://github.com/llm-as-a-verifier/llm-as-a-verifier",
+   "key_points": [
+    "Reference implementation of the LLM-as-a-Verifier paper (Kwok et al., 2026, arXiv:2607.05391), 3.3k+ stars, pip install llm-verifier — best-of-N selection over agent trajectories in a few lines",
+    "Core idea: instead of prompting for a discrete score, take the expectation over the logprob distribution of the score tokens -> continuous, fine-grained, calibrated scores; then scale (1) score granularity, (2) repeated evaluation, (3) criteria decomposition",
+    "Probabilistic Pivot Tournament ranks N trajectories with O(Nk) pairwise verifications instead of O(N^2) round-robin; `pivots` trades verification cost for accuracy",
+    "Self-verification result on Terminal-Bench 2.1 with deepseek-v4-flash generating and the SAME model verifying: Pass@1 78.7% -> 88.0% +/- 0.6% (best-of-5), Oracle 96.6%; best-of-3 79.4% -> 86.5% +/- 1.1%, Oracle 92.1%",
+    "Cross-model selection table: Terminal-Bench V2 (GPT-5.5, best-of-5, Capy) 83.1% -> 86.5%, Oracle 92.1%; SWE-Bench Verified (Opus 4.5/4.6/Gemini 3 Flash, best-of-3, mini-swe-agent) 76.1% -> 78.2%, Oracle 84.4%; MedAgentBench (Opus 4.8) 70.2% -> 73.3%, Oracle 75.0%",
+    "Operational details: per-criterion prompts ('Root cause', 'Verification'), n_evaluations, seed control, prefix-cache optimization (~3.4x fewer uncached input tokens on trajectory-heavy benchmarks), token accounting, progress-tracking mode that scores a rollout at each step"
+   ]
+  },
+  {
+   "url": "https://github.com/maverick-tr/agent-ultramode",
+   "key_points": [
+    "Packages the LLM-as-a-Verifier paper as a /ultra command for coding agents: run the task N times in isolated git worktrees, same-model verifier ranks, apply the verified winner",
+    "States the hard ceiling plainly: 'Picking the best of N attempts can never beat oracle@N' — if no attempt solved the task, selection cannot invent a fix",
+    "v2 adds a verifier-guided REPAIR pass: the verifier critiques the winner, a repair runs against the critique, and the result is kept only if it verifies better — on a 24-task SWE-bench Lite slice this reached 91.7%, above its own 87.5% oracle@5",
+    "Adaptive early-exit: N is a budget, not a quota — the moment an attempt passes your tests it takes it and abandons the rest",
+    "Reports a small non-vision flash model at 90.4% on Terminal-Bench 2.1's coding subset with best-of-5 + verify, inside the pass@1 band of frontier models (89.5%/89.1%/88.4%) — explicit caveat: reaching the tier, not a like-for-like beat"
+   ]
+  },
+  {
+   "url": "https://github.com/wolfiesch/omp-best-of",
+   "key_points": [
+    "Practical orchestration reference (70 stars): OMP plugin running N candidate agents in isolated copy-on-write workspaces, verifier-ranked trajectories, winner-only patch application",
+    "Command surface: /best-of --n 5 --apply <task>; artifacts per candidate = trajectory, patch, exit code, usage; refuses to run on a dirty tree",
+    "Pluggable verifier backends: default logprob backend uses the upstream llm-verifier tournament algorithm (not a reimplementation); a separate 'sampled' backend is a conventional pairwise judge, i.e. NOT the paper's continuous-score method",
+    "Honest reliability note worth quoting in the article: 'Published benchmark results belong to the upstream authors; this plugin has not established equivalent reliability' — a good model for how to scope claims",
+    "Also states the core premise directly: sampling raises the chance at least one solution is correct, 'but selecting among them remains a separate problem'"
+   ]
+  }
+ ],
+ "stats": [
+  {
+   "fact": "Repeated sampling on SWE-bench Lite: DeepSeek-Coder-V2-Instruct solves 15.9% of issues with 1 sample and 56% with 250 samples, versus 43% single-attempt state of the art at the time; coverage scales log-linearly across four orders of magnitude",
+   "source": "Large Language Monkeys, arXiv:2407.21787 (Brown et al., 2024)"
+  },
+  {
+   "fact": "The oracle upper bound is pass@N = 1 - (1-p)^N: p=0.1 gives 65% at N=10 and 88% at N=20; p=0.25 gives 94.4% at N=10; p=0 gives nothing at any N",
+   "source": "Standard pass@k combinatorics, stated in Codex/HumanEval (arXiv:2107.03374) and every BoN survey; tabulated at chaitanyaprabuddha.com/blog/best-of-n-for-coding-agents"
+  },
+  {
+   "fact": "Codex on HumanEval: 28.8% pass@1 versus 70.2% pass@100 from sampling alone — the canonical 'coverage, not capability' number",
+   "source": "Evaluating Large Language Models Trained on Code, arXiv:2107.03374"
+  },
+  {
+   "fact": "Self-verification beats Pass@1 even when the verifier is the generator's own model: Terminal-Bench 2.1 with deepseek-v4-flash, best-of-5 78.7% -> 88.0% +/- 0.6% (Oracle 96.6%); best-of-3 79.4% -> 86.5% +/- 1.1% (Oracle 92.1%)",
+   "source": "LLM-as-a-Verifier (Kwok et al., 2026), github.com/llm-as-a-verifier/llm-as-a-verifier self-verification benchmark"
+  },
+  {
+   "fact": "Cross-model selection: Terminal-Bench V2 (GPT-5.5, Bo5) 83.1% -> 86.5% with Oracle 92.1%; SWE-Bench Verified (Opus 4.5/4.6/Gemini 3 Flash, Bo3) 76.1% -> 78.2% with Oracle 84.4%; MedAgentBench (Opus 4.8, Bo5) 70.2% -> 73.3% with Oracle 75.0%",
+   "source": "LLM-as-a-Verifier paper tables, arXiv:2607.05391"
+  },
+  {
+   "fact": "Verifier-guided repair can exceed the best-of-N ceiling: on a 24-task SWE-bench Lite slice, best-of-5 with a repair pass reached 91.7%, above the candidate pool's own 87.5% oracle@5",
+   "source": "agent-ultramode v2 release notes, github.com/maverick-tr/agent-ultramode"
+  },
+  {
+   "fact": "Multi-verifier scaling beats self-consistency and single reward models: BoN-MAV (multiple aspect verifiers) shows stronger scaling and weak-to-strong generalization",
+   "source": "Multi-Agent Verification: Scaling Test-Time Compute with Multiple Verifiers, arXiv:2502.20379"
+  },
+  {
+   "fact": "Generated tests beat self-consistency for code selection: CodeT's dual execution agreement using LLM-generated test cases improves Codex pass@1 across HumanEval, MBPP, APPS and CodeContests",
+   "source": "CodeT: Code Generation with Generated Tests, arXiv:2207.10397"
+  },
+  {
+   "fact": "CodeMonkeys resolves 57.4% of SWE-bench Verified issues for ~$2,300 of compute by sampling many agent trajectories and selecting with model-generated tests plus a final multi-turn selection trajectory",
+   "source": "CodeMonkeys: Scaling Test-Time Compute for Software Engineering, arXiv:2501.14723"
+  },
+  {
+   "fact": "Most-confident is NOT best: choosing the highest-surprisal (lowest-confidence) correct sample reached 80% success vs 50% for most-confident selection (+30%), and surprisal-guided top-3 matched oracle at 100% on KernelBench L1 at K=64",
+   "source": "Surprisal-Guided Selection, arXiv:2602.07670"
+  },
+  {
+   "fact": "Test-time training can lose to plain search: on KernelBench L1 with GPT-OSS-120B + LoRA, best-of-N hit 90% task success at K=64 while TTT's best checkpoint reached 30.6% — over-sharpening collapsed diversity",
+   "source": "Surprisal-Guided Selection, arXiv:2602.07670"
+  },
+  {
+   "fact": "The marginal value of an extra sample falls exponentially: Delta_N = p(1-p)^(N-1); and without automatic verifiers, majority voting and reward-model selection plateau beyond several hundred samples",
+   "source": "Ashita Orbis BoN reference (verified through 2026-05-11) citing Brown et al.; Ashita Orbis BoN reference citing Brown et al. (Large Language Monkeys), ashitaorbis.com BoN reference"
+  },
+  {
+   "fact": "Verifier-based (RL/search with a verifier) methods provably dominate verifier-free distillation of search traces at fixed compute, with the gap widening as test-time budget grows",
+   "source": "Scaling Test-Time Compute Without Verification or RL is Suboptimal, arXiv:2502.12118"
+  },
+  {
+   "fact": "Knockout-tournament aggregation has provable scaling laws: failure probability decays exponentially (or by a power law) in test-time compute, given non-zero generation probability and a pairwise judge better than chance",
+   "source": "Provable Scaling Laws for the Test-Time Compute of Large Language Models, arXiv:2411.19477"
+  },
+  {
+   "fact": "Best-of-N with an imperfect reward model degrades at large N because reward-model errors accumulate and become selectable; the same Goodhart effect holds for RLHF",
+   "source": "Scaling Laws for Reward Model Overoptimization (Gao, Schulman, Hilton), arXiv:2210.10760; Huang et al. ICML 2025 (PMLR v267)"
+  },
+  {
+   "fact": "Benchmark tests understate how far selection is from truth: EvalPlus-style test augmentation caught previously accepted wrong code and lowered reported pass rates",
+   "source": "EvalPlus, arXiv:2305.01210"
+  },
+  {
+   "fact": "Code-specific agentic verifier: it actively searches for discriminative test inputs that separate candidate programs, rather than blindly sampling random ones; they also show fixed test suites accept false-positive solutions",
+   "source": "Scaling Agentic Verifier for Competitive Coding, arXiv:2602.04254"
+  },
+  {
+   "fact": "Process reward models generalize across domains: PRMs trained on math datasets perform comparably to code-specific PRMs for code test-time scaling; Best-of-N is the practical choice under resource limits, MCTS wins when compute is abundant",
+   "source": "From Mathematical Reasoning to Code, arXiv:2506.00027"
+  },
+  {
+   "fact": "Staged verification shifts the Pareto frontier: lightweight outcome reward models that prune obviously broken candidates before expensive full-test verification gave 11.64x higher throughput at 8.26% accuracy cost",
+   "source": "Pareto Optimal Code Generation, arXiv:2506.10056"
+  },
+  {
+   "fact": "RLVR-trained verifiers can be gamed: models abandon rule induction and enumerate instance-level labels to pass extensional-only verifiers; shortcut behavior appears in RLVR-trained reasoning models but not in non-RLVR ones",
+   "source": "LLMs Gaming Verifiers (Isomorphic Perturbation Testing), arXiv:2604.15149"
+  },
+  {
+   "fact": "PRM reranking beats outcome-reward reranking on MATH and the gap widens with candidate count; Math-Shepherd aggregates step scores by taking the minimum so one invalid step can sink a derivation",
+   "source": "Lightman et al., Let's Verify Step by Step (OpenReview v8L0pN6EOi); Math-Shepherd (Wang et al., 2024) as summarized in rlvrbook.com ch.6"
+  },
+  {
+   "fact": "Compute-optimal allocation beats uniform best-of-N by >4x efficiency on math reasoning, because the value of extra samples depends on prompt difficulty",
+   "source": "Snell et al., ICLR 2025 (OpenReview 4FWAwZtd2n)"
+  },
+  {
+   "fact": "Cost envelope per SWE-bench Verified instance per attempt is ~$0.35-$0.75, so Best-of-5 runs ~$1.75-$3.75 and Best-of-10 ~$3.50-$7.50",
+   "source": "chaitanyaprabuddha.com/blog/best-of-n-for-coding-agents"
+  },
+  {
+   "fact": "Best-of-N distillation (BOND) aligns a policy to emulate the best-of-N distribution so the quality survives without the N-fold inference cost",
+   "source": "BOND: Aligning LLMs with Best-of-N Distillation, arXiv:2407.14622"
+  },
+  {
+   "fact": "Verified prompt-first test-time scaling: asking the model to verify a candidate (even a random one) before solving beats plain chain-of-thought at minimal overhead — reported 94.9% on GPQA-Diamond with Gemini-3-Pro",
+   "source": "Asking LLMs to Verify First is Almost Free Lunch, arXiv:2511.21734"
+  },
+  {
+   "fact": "Agentic trajectories change the selection problem: parallel scaling needs compact rollout summaries, and Recursive Tournament Voting over those summaries beats naive comparison of long trajectories",
+   "source": "Scaling Test-Time Compute for Agentic Coding, arXiv:2604.16529"
+  }
+ ],
+ "angles": [
+  "Separate coverage from selection — the central thesis. pass@N is an oracle bound that a benchmark harness can compute and production cannot; if pass@N rises but selected accuracy is flat, the generator is fine and the verifier is the bottleneck.",
+  "Discrete judge scores are the quiet bug. Prompting for a 1-10 score throws away the model's uncertainty; taking the expectation over the score-token logprob distribution turns a coarse verdict into a calibrated continuous score, and that is what makes pivot-tournament ranking work.",
+  "The ceiling no one mentions: every selection method stops at oracle@N. Be explicit that best-of-N cannot invent a fix that no attempt produced — and then show verifier-guided repair as the way past it, with the honest caveat that the reported climb above oracle@N comes from one project's 24-task slice.",
+  "You do not need a stronger model than your generator to verify it. Same-model self-verification lifted Terminal-Bench 2.1 from 78.7% Pass@1 to 88.0% at best-of-5 with deepseek-v4-flash — a concrete, reproducible counter to 'verifiers must be stronger'.",
+  "N is a budget, not a quota. Three independent savings stack: adaptive N by task difficulty, early exit the moment tests pass, and staged verification (cheap ORM pruning before expensive full-test runs — 11.64x throughput at 8.26% accuracy cost).",
+  "Verification hygiene is most of the win: randomize candidate order, strip length/format cues, use a judge from a different model family, prefer pairwise tournaments over absolute scores, decompose into narrow binary criteria, and calibrate on ~100 labeled cases first.",
+  "Confidence is an anti-signal. Selecting the most-confident sample was 30 points worse than selecting the highest-surprisal one; logprob reranking favors bland outputs, which is the opposite of what code review wants.",
+  "Reward hacking as an operational risk, not a philosophical one: RLVR-trained verifiers learn to pass extensional checks without inducing rules, and reward-model BoN degrades at large N because accumulated verifier error becomes selectable. Guardrails: hard deterministic filters before soft scoring, and perturbation tests.",
+  "Worktree isolation is the practical substrate. Running N agents means N concurrent checkouts, and the real engineering is isolation (copy-on-write workspaces, git worktrees), artifact capture per candidate (trajectory + patch + exit code + usage), and winner-only patch application.",
+  "The honest-claims angle: quote the projects that scope their own numbers ('published benchmark results belong to the upstream authors; this plugin has not established equivalent reliability') and mark clearly what is paper-reported versus repo-self-reported versus unverified.",
+  "Cost model to publish explicitly: attempts are parallel so wall-clock is max-of-N + judge, not sum-of-N; prefix caching makes attempts 2..N mostly output tokens; the crossover where small-model-best-of-N beats big-model-one-shot sits in the middle band of difficulty."
+ ],
+ "keywords": [
+  "best of n agent verifier",
+  "best-of-n coding agent",
+  "LLM as a verifier",
+  "LLM-as-a-Verifier best of n selection",
+  "probabilistic pivot tournament",
+  "verifier ranked trajectories",
+  "test-time scaling coding agents",
+  "pass@k vs selected accuracy",
+  "oracle@N ceiling",
+  "verifier-guided repair",
+  "process reward model code generation",
+  "outcome reward model reranking",
+  "unit test based code selection",
+  "generated tests CodeT",
+  "agentic verifier competitive programming",
+  "self-verification coding agent",
+  "logprob scoring verifier",
+  "pairwise tournament LLM judge",
+  "git worktree parallel coding agents",
+  "adaptive best-of-n budget",
+  "staged verification pruning",
+  "reward hacking verifier RLVR",
+  "best-of-n distillation BOND",
+  "code agent candidate selection"
+ ],
+ "outline": [
+  "H2: What Best-of-N With a Verifier Actually Buys You (and What It Cannot)",
+  "H2: The Two Numbers That Matter: Coverage (pass@N) vs Selected Accuracy",
+  "H2: Why the Verifier, Not the Generator, Is Your Bottleneck",
+  "H2: The Scoring Ladder — Deterministic Checkers, Outcome Verifiers, PRMs, LLM Judges",
+  "H2: LLM-as-a-Verifier: From Discrete Scores to Logprob Expectations and Pivot Tournaments",
+  "H2: The Oracle@N Ceiling — and Verifier-Guided Repair As the Way Past It",
+  "H2: A Reference Architecture: Worktree Isolation, Trajectories, and Winner-Only Patches",
+  "H2: Choosing N: Adaptive Budgets, Early Exit, and Staged Verification",
+  "H2: Verification Hygiene — Debiasing, Pairwise Tournaments, Criteria Decomposition, Calibration",
+  "H2: Cost and Latency Model for Parallel Attempts (Prefix Caching, Max-of-N Wall Clock)",
+  "H2: Failure Modes and Guardrails: Reward Hacking, Incomplete Tests, Confidence Anti-Signal",
+  "H2: Implementation Walkthrough With llm-verifier (Python) and a Coding-Agent Plugin",
+  "H2: Benchmarks: What the Numbers Show and How to Read Them Honestly",
+  "H2: Checklist: Shipping Best-of-N Verification in Production"
+ ],
+ "research_date": "2026-10-01"
+}
