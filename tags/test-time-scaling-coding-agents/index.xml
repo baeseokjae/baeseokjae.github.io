@@ -1,0 +1,384 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Test-Time Scaling Coding Agents on RockB</title><link>https://baeseokjae.github.io/tags/test-time-scaling-coding-agents/</link><description>Recent content in Test-Time Scaling Coding Agents on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 01 Oct 2026 10:46:43 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/test-time-scaling-coding-agents/index.xml" rel="self" type="application/rss+xml"/><item><title>Best of N Agent Verifier: How to Pick the Coding Agent Run That Actually Solved the Task</title><link>https://baeseokjae.github.io/posts/best-of-n-coding-agents-with-llm-as-verifier/</link><pubDate>Thu, 01 Oct 2026 10:46:43 +0000</pubDate><guid>https://baeseokjae.github.io/posts/best-of-n-coding-agents-with-llm-as-verifier/</guid><description>A practical guide to best-of-n coding agents with an LLM-as-verifier: logprob scoring, pivot tournaments, worktree isolation, and choosing N.</description><content:encoded><![CDATA[<p>Run N isolated candidate agents in separate git worktrees, capture each trajectory and patch, then rank them with a verifier that returns a continuous logprob score rather than a discrete grade. Terminal-Bench V2 went from 83.1% Pass@1 to 86.5% verifier-selected against a 92.1% oracle — the model had already solved it; selection was the bottleneck.</p>
+<p>That gap between what the model <em>can</em> do and what you can <em>identify</em> is the entire subject of this guide. The rest of it covers why a plain LLM judge silently fails, how to turn a 20-token score distribution into a calibrated reward, how to rank 8 candidates without paying for 28 pairwise comparisons, what worktrees do not isolate, how many samples are actually worth paying for, and where optimistic best-of-N claims collapse under measurement noise.</p>
+<h2 id="what-does-best-of-n-with-a-verifier-actually-buy-you">What Does Best-of-N With a Verifier Actually Buy You?</h2>
+<p>Best-of-N generates multiple independent attempts at one task and uses an external scoring function to choose among them. In an agentic setting the &ldquo;attempt&rdquo; is a whole trajectory — a sequence of tool calls, file reads, edits, and shell commands — not a single completion. The candidate is the final patch, but the thing you usually verify is the trajectory that produced it.</p>
+<p>The purchase is not a smarter model. It is the ability to spend inference compute on <em>identification</em> instead of <em>generation</em>. That distinction only pays off when three conditions hold, and it is worth stating them plainly because most best-of-N disappointments are one of these failing:</p>
+<ol>
+<li><strong>There is real coverage.</strong> The correct solution exists somewhere in the N candidates. If pass@N is 40%, no selector on earth gets you to 90%.</li>
+<li><strong>There is a trustworthy signal.</strong> Unit tests, an oracle, a reward model, or an LLM verifier that correlates with task success better than random.</li>
+<li><strong>The candidate pool is genuinely diverse.</strong> N copies of the same failing approach is one candidate billed N times.</li>
+</ol>
+<p>When all three hold, best-of-N is one of the few test-time scaling techniques with a measurable payoff on real coding tasks rather than only on math benchmarks. When any one fails, you have built an expensive random number generator.</p>
+<h2 id="coverage-vs-precision-the-two-numbers-that-decide-everything">Coverage vs Precision: The Two Numbers That Decide Everything</h2>
+<p>Before you tune a verifier, measure two things. They are cheap to compute and they determine whether the whole approach is viable.</p>
+<p><strong>Coverage (pass@N)</strong> is the oracle: what fraction of tasks have <em>at least one</em> correct candidate in the pool. It is computable in a harness (you can run the hidden tests on every candidate) and not computable in production (if you had the tests, you would not need a verifier).</p>
+<p><strong>Selected accuracy (best@N)</strong> is what your verifier actually delivers: the fraction of tasks where the chosen candidate is correct.</p>
+<p>The ratio between them is your verification headroom. Three published examples frame the scale:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Setting</th>
+          <th>Pass@1 (single attempt)</th>
+          <th>Verifier-selected</th>
+          <th>Oracle bound</th>
+          <th>Headroom remaining</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Terminal-Bench V2 (GPT-5.5, Best-of-5)</td>
+          <td>83.1%</td>
+          <td>86.5%</td>
+          <td>92.1% (Pass@5)</td>
+          <td>5.6 pts</td>
+      </tr>
+      <tr>
+          <td>Terminal-Bench V2, oracle (trajectories pooled across the leaderboard)</td>
+          <td>—</td>
+          <td>—</td>
+          <td>98.9%</td>
+          <td>12.4 pts vs selected</td>
+      </tr>
+      <tr>
+          <td>SWE-Bench Verified (Opus 4.5 / Gemini 3 Flash / MiniMax M2.5, Bo3, one trajectory each)</td>
+          <td>76.1%</td>
+          <td>78.2%</td>
+          <td>84.4%</td>
+          <td>6.2 pts</td>
+      </tr>
+      <tr>
+          <td>HumanEval (Codex, sampling only)</td>
+          <td>28.8%</td>
+          <td>—</td>
+          <td>70.2% (pass@100)</td>
+          <td>selection is the whole problem</td>
+      </tr>
+  </tbody>
+</table>
+<p>Source: Kwok et al., <em>LLM-as-a-Verifier</em> (arXiv:2607.05391) and its GitHub README tables; Codex numbers from <em>Evaluating Large Language Models Trained on Code</em> (arXiv:2107.03374).</p>
+<p>Read those columns carefully, because they contain the most misquoted number in this field. Terminal-Bench V2 reaches 98.9% when an oracle picks from trajectories pooled across the full benchmark leaderboard. A verifier-selected Best-of-5 reaches 86.5%. The 12.4-point gap to that pooled oracle is not a model capability deficit — the same model generated a correct solution in most of those pools. It is a <em>selection</em> deficit, and it is the honest measure of how much the verification layer is leaving on the table in 2026.</p>
+<p>The second lesson is that coverage grows fast while selection grows slowly. Repeated sampling took DeepSeek-Coder-V2-Instruct from 15.9% of SWE-bench Lite issues solved at one sample to 56% at 250 samples — above the 43% single-sample state of the art at the time — while majority voting and reward-model selection plateau beyond a few hundred samples in domains with no automatic verifier (Brown et al., <em>Large Language Monkeys</em>, arXiv:2407.21787). Coverage scales roughly log-linearly across four orders of magnitude. Selection does not scale at all unless you invest in the verifier.</p>
+<p>If you only remember one diagnostic from this article: <strong>when best-of-N underperforms, plot pass@N against best@N.</strong> Rising coverage with flat selected accuracy means your generator is fine and your verifier is the bottleneck. Flat coverage means you have a generation problem and no amount of judging will fix it.</p>
+<h2 id="how-many-samples-should-you-actually-buy">How Many Samples Should You Actually Buy?</h2>
+<p>N is a budget line, not a virtue. Four separate effects push in different directions.</p>
+<p><strong>The oracle curve is concave and easy to compute.</strong> pass@N = 1 − (1 − p)^N. At p = 0.1, N = 10 gives you 65% and N = 20 gives you 88%. At p = 0.25, N = 10 already gives 94.4%. The marginal value of one more sample is Δ_N = p(1 − p)^(N−1) — it decays exponentially. Whatever N you pick, the N-th sample is worth far less than the first.</p>
+<p><strong>Measured gains on real tasks flatten early.</strong> With a self-verifier (the same model both generating and verifying), Terminal-Bench 2.1 moved from 79.4% Pass@1 to 86.5% ± 1.1% at Best-of-3 and to 88.0% ± 0.6% at Best-of-5, against oracle bounds of 92.1% and 96.6%. Two extra samples bought 1.5 points. Source: <em>LLM-as-a-Verifier</em> self-verification section.</p>
+<p><strong>Optimization pressure grows sublinearly but inexorably.</strong> Best-of-N pushes the policy away from its base distribution; the KL divergence from the base policy in nats is 0.1931 at N = 2, 0.6363 at N = 4, 1.2044 at N = 8, 1.8351 at N = 16 and 3.1745 at N = 64 (Gao, Schulman &amp; Hilton, <em>Scaling Laws for Reward Model Overoptimization</em>, arXiv:2210.10760). Best-of-64 buys barely three nats of divergence over the base policy. That is the whole budget available for reward hacking to exploit.</p>
+<p><strong>Verification cost grows faster than generation cost if you are naive.</strong> Ranking N candidates pairwise needs up to N(N−1)/2 comparisons. Rank 8 candidates the obvious way and you pay 28 verifier calls for 8 generations.</p>
+<p>The practical answer for coding agents in 2026 is <strong>3 to 5 candidates for most work</strong>, with 8 as a reasonable upper bound for high-value, low-frequency changes, and 16 only when you have already removed the O(N²) ranking cost and are pruning candidates cheaply before scoring. CodeMonkeys sampled ten full agent trajectories per issue against SWE-bench Verified and resolved 57.4% of issues for roughly $2,300 of compute, selecting with model-generated-test voting plus a final multi-turn selection trajectory (arXiv:2501.14723) — real, but that is a research-scale budget, not a CI budget.</p>
+<h3 id="how-do-you-budget-cost-and-latency-for-parallel-attempts">How Do You Budget Cost and Latency for Parallel Attempts?</h3>
+<p>The arithmetic that surprises people is the wall clock. Parallel attempts do not add latency; they add cost.</p>
+<ul>
+<li><strong>Wall clock</strong> ≈ max-of-N attempt time + verification time, not sum-of-N. If your attempts take 4 minutes each and your verifier takes 40 seconds, Best-of-5 costs you about 4:40 of latency and 5× the tokens.</li>
+<li><strong>Prefix caching</strong> makes attempts 2..N substantially cheaper on input tokens, since the system prompt, repo context and task description are shared. The incremental cost of an extra sample is largely output tokens.</li>
+<li><strong>Dollar envelope</strong>: the only fully published accounting at SWE-bench-Verified scale is CodeMonkeys&rsquo; $2,300 for the complete run — ten candidate trajectories per issue plus context selection and test generation, i.e. single-digit dollars per issue. Per-attempt figures quoted elsewhere are order-of-magnitude planning numbers, not vendor quotes; they move with model choice and repo size.</li>
+</ul>
+<p>Three savings stack on top of that, and all three are additive rather than alternative:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Technique</th>
+          <th>What it saves</th>
+          <th>Reported effect</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Cascading with early stopping</td>
+          <td>Compute at equal quality</td>
+          <td>Up to 44% less compute; saving paid for in latency</td>
+      </tr>
+      <tr>
+          <td>Staged verification (cheap outcome model prunes before full test runs)</td>
+          <td>Verification throughput</td>
+          <td>11.64× throughput at 8.26% accuracy cost</td>
+      </tr>
+      <tr>
+          <td>Token-free filtering (LatentSift policy-state filtering at K=16)</td>
+          <td>Verifier tokens</td>
+          <td>49.1–62.1% total verification tokens cut; hybrid Best@16 held or improved (59.26% → 60.06%)</td>
+      </tr>
+  </tbody>
+</table>
+<p>Sources: AI21, <em>Improving Best-of-N with Budget-Aware Execution for SWE Agents</em>; <em>Pareto Optimal Code Generation</em> (arXiv:2506.10056); <em>LatentSift</em> (arXiv:2609.36371).</p>
+<p>Note the shape of the AI21 result: parallel launch with early stopping is reported to strictly dominate launch-all-and-wait for latency, at the cost of giving back some of the compute saving. Cascading and parallelism are in tension; pick which one you are buying.</p>
+<h2 id="the-scoring-ladder-four-verifier-families-ranked-by-trust">The Scoring Ladder: Four Verifier Families Ranked by Trust</h2>
+<p>Verifiers are not interchangeable. They differ in how strongly they correlate with ground truth and how expensive they are to falsify.</p>
+<p><strong>1. Deterministic checkers — compilers, linters, type checkers, formatters.</strong> Nearly free, zero false positives on what they do cover, and almost no coverage of semantic correctness. Use them as hard filters, never as rankers. A patch that does not compile should never reach an expensive scorer.</p>
+<p><strong>2. Execution-based verification — the repository&rsquo;s own unit and integration tests.</strong> The strongest practical signal because tests are what the task actually demands. Self-consistency (majority voting) gave +17.9 points on GSM8K, +11.0 on SVAMP and +12.2 on AQuA over plain chain-of-thought, but it only applies when a discrete extractable final answer exists — which is exactly why it does not transfer to code patches (Wang et al., arXiv:2203.11171). Tests do transfer.</p>
+<p>The catch is coverage and gameability. Benchmark tests systematically overstate how close selection is to truth: EvalPlus-style test augmentation caught previously accepted wrong code and lowered reported pass rates (arXiv:2305.01210). And tests are the most hackable signal you can hand an optimizer — see the reward-hacking section below.</p>
+<p><strong>3. Learned reward models — outcome reward models (ORMs) and process reward models (PRMs).</strong> ORMs score a finished solution; PRMs score each reasoning step. PRMs generalize across domains better than people expect: PRMs trained on math datasets perform comparably to code-specific PRMs for code test-time scaling (arXiv:2506.00027), and Math-Shepherd aggregates step scores by taking the minimum, so a single bad step sinks the trajectory (Wang et al., arXiv:2312.08935, following Lightman et al., arXiv:2305.20050). These are learned proxies, and every learned proxy carries a Goodhart risk.</p>
+<p><strong>4. LLM-as-a-judge and LLM-as-a-verifier.</strong> The judge reads the candidate and emits a verdict. This is the family where implementation details decide whether you get a real signal or coin-flip noise — which is the next section, and the most important part of this article.</p>
+<p>Two orthogonal axes are worth knowing about. <strong>Generative verifiers</strong> (GenRM) reframe reward modelling as next-token prediction and beat discriminative verifiers and standard LLM-as-judge under Best-of-N: 73% → 93.4% on GSM8K, 5% → 45.3% on algorithmic tasks, 28% → 44.6% on MATH easy-to-hard generalization (Zhang et al., ICLR 2025, OpenReview Ccwp4tFEtE). <strong>Multi-agent verification</strong> adds an independent axis by combining binary approvals from M aspect-specific verifiers rather than only scaling the sample count (arXiv:2502.20379).</p>
+<h2 id="why-a-discrete-llm-judge-quietly-stalls">Why a Discrete LLM Judge Quietly Stalls</h2>
+<p>Here is the mechanism almost nobody explains, and it is the highest-leverage paragraph in this guide.</p>
+<p>Ask a model to score a patch from 1 to 10 and you get an integer. Ten possible outputs for a space of thousands of meaningfully different trajectories. Two candidates that differ substantially — one that fixed the bug with a clean test-driven change and one that special-cased the test input — routinely land on the same integer. In Terminal-Bench measurements, ties occurred in <strong>26.7% of comparisons at the lowest evaluation budget</strong>. A third of your ranking decisions were resolved by whatever tie-break your code happened to use.</p>
+<p>The fix is not a better prompt. It is reading the wrong part of the output. Instead of taking the argmax token, take the <strong>expectation over the probability distribution across the ordered score tokens</strong>:</p>
+<p>score = Σ (i × p_i)  over i in {1..20}</p>
+<p>That single change converts a coarse verdict into a calibrated continuous score and eliminates ties entirely, because two candidates almost never share an identical probability distribution over 20 score tokens.</p>
+<p>The measured result is stark:</p>
+<ul>
+<li><strong>Discrete judge at K=16 repeated evaluations: 79.1%.</strong> Continuous logprob scoring at K=1: <strong>80.1%.</strong> Continuous scoring with a <em>single</em> evaluation beat a discrete judge with sixteen — 16× fewer model calls for better accuracy.</li>
+<li>Continuous scoring at K=16 reaches 81.2% against 79.1% for the discrete judge at the same budget.</li>
+<li>The same verifier is applied unchanged across SWE-Bench Verified and MedAgentBench-style mixed-domain pools.</li>
+</ul>
+<p>The operational constraint is upstream of the prompt: <strong>the verifier endpoint must return token-level logprobs over the score tokens</strong>. In the paper&rsquo;s scaling experiments the verifier is Gemini 2.5 Flash precisely because it allows extraction of up to 20 top logprobs per scoring token; without logprobs you cannot compute the expectation and you are back to a discrete judge. The paper&rsquo;s own case study shows why that matters: on the <code>query-optimize</code> task Gemini 2.5 Flash reliably identifies the failure mode, but expresses it in graded, hedged language (&ldquo;slightly cleaner,&rdquo; &ldquo;marginally more direct&rdquo;) — and a discrete 1–5 judge collapses those assessments into the same integer in 88 of 100 repeated evaluations. A verifier can be perceptive and still useless if its output is compressed to an integer.</p>
+<p>The practical consequence: when you evaluate verifier backends for a best-of-N pipeline, test for <strong>constrained score-token prefill</strong> before anything else. A verifier that cannot emit a probability distribution over its score tokens is not an LLM-as-verifier, it is an LLM-as-a-judge with extra latency.</p>
+<h2 id="three-verification-scaling-axes-you-can-tune-independently">Three Verification Scaling Axes You Can Tune Independently</h2>
+<p>Verification is not a single knob you set to &ldquo;on.&rdquo; It has three independent axes, each with measured headroom. This is the framing that separates a working pipeline from a demo.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Axis</th>
+          <th>Change</th>
+          <th>Measured lift</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Granularity (G)</td>
+          <td>More score levels, G = 1 → 20</td>
+          <td>Pairwise accuracy 73.1% → 77.5%</td>
+      </tr>
+      <tr>
+          <td>Repeated evaluation (K)</td>
+          <td>More verifier passes per pair, K = 1 → 16</td>
+          <td>Pairwise accuracy 74.7% → 77.5%</td>
+      </tr>
+      <tr>
+          <td>Criteria decomposition (C)</td>
+          <td>One broad criterion → three narrow ones</td>
+          <td>75.2–76.4% → 78.3%</td>
+      </tr>
+  </tbody>
+</table>
+<p>Source: Kwok et al., arXiv:2607.05391, Figure 4. Reproduce the underlying tables before quoting exact figures in high-stakes material.</p>
+<p>Two observations matter more than the numbers themselves.</p>
+<p><strong>Granularity is nearly free; repetition is not.</strong> Going from a binary pass/fail to a 20-level score costs you prompt tokens and nothing else, and buys 4.4 points of pairwise accuracy. Going from K=1 to K=16 costs 16× the verifier calls and buys 2.8 points. Spend on granularity first, always.</p>
+<p><strong>Criteria decomposition beats a bigger model.</strong> Three narrow criteria outperform one broad criterion, with the mechanism described as boosting weak learners: the same source measures 75.2–76.4% pairwise accuracy for any single criterion against 78.3% when the three are ensembled. The Qwen <em>Verification Horizon</em> paper measured the same effect in an agentic setting: an autonomous evaluator agent decomposing specs into checklists improved Best-of-N accuracy from 57.9% to 67.4% over four rubric iterations (arXiv:2606.26300). Crucially, <strong>a fifth, over-specified version degraded performance.</strong> Rubric granularity has a sweet spot. More criteria is not monotonically better; criteria that restate each other just add noise and tokens.</p>
+<p>The decomposition that works in practice separates <em>what</em> was asked for from <em>how</em> it was done: (a) does the change satisfy the stated requirement, (b) does it avoid breaking existing behavior, (c) is the implementation approach one a reviewer would accept. Note that (c) is where trajectory-level evidence belongs.</p>
+<h2 id="ranking-n-candidates-without-paying-on-pivot-tournaments">Ranking N Candidates Without Paying O(N²): Pivot Tournaments</h2>
+<p>Eight candidates scored absolutely, then sorted, sounds free. It is not, in the general case, because absolute LLM scores are weakly calibrated across candidates — models are systematically biased by presentation order, response length, and formatting. Pairwise comparison is far more reliable (&ldquo;which of these two better satisfies criterion 1?&rdquo;), but pairwise comparison across N candidates naively costs N(N−1)/2 verifier calls.</p>
+<p>For 8 candidates that is 28 comparisons to rank 8 artifacts. For 20 candidates it is 190. This is the real reason people quietly cap N at 3.</p>
+<p><strong>Probabilistic Pivot Tournament (PPT)</strong> breaks that coupling. Instead of a full round-robin, pick pivots probabilistically and compare each candidate against a small number of them, reducing ranking cost from O(N²) to <strong>O(N·k)</strong>. The measured trade for a 20-candidate pool: 13,111 round-robin comparisons versus 9,630 at k = 9 — <strong>27% fewer comparisons for 0.3 points of accuracy</strong> (67.42% → 67.13%). Source: Kwok et al., arXiv:2607.05391, PPT section.</p>
+<p>A 0.3-point accuracy cost to remove a quarter of the verifier bill is a trade most production pipelines should take, because verifier calls are the dominant cost once N exceeds about 5.</p>
+<p>Three companion techniques round out the ranking layer:</p>
+<ul>
+<li><strong>Staged verification</strong>: run a cheap outcome reward model over all candidates, keep the top few, and only then run expensive full test suites or high-K verification on the survivors. Reported 11.64× throughput at 8.26% accuracy cost.</li>
+<li><strong>Agentic verifiers</strong>: instead of scoring the candidate as given, actively search for inputs that discriminate between candidates. Reported up to +10–15% absolute Best@k accuracy across five competitive-programming benchmarks (arXiv:2602.04254). This is the strongest of the &ldquo;spend verification compute intelligently&rdquo; findings, because discriminating inputs attack the actual failure mode — candidates that look equivalent under easy tests.</li>
+<li><strong>Recursive Tournament Voting</strong>: for agentic coding specifically, compact rollout summaries plus tournament voting over those summaries beats naive selection (arXiv:2604.16529). Trajectories are long; you cannot feed five full transcripts into one judge call cheaply, so summarize each before comparing.</li>
+</ul>
+<h2 id="verification-hygiene-most-of-the-win-is-here">Verification Hygiene: Most of the Win Is Here</h2>
+<p>Before you upgrade models or raise N, fix these. Each is cheap, and each is a known source of verifier error.</p>
+<ul>
+<li><strong>Randomize candidate order.</strong> Position bias in LLM judges is large and directional. If candidate A is always presented first in your harness, you are partially measuring presentation order.</li>
+<li><strong>Strip length and formatting cues.</strong> Verbosity biases LLM judges upward. A 400-line diff that touches everything looks more thorough than a 12-line fix and usually is not.</li>
+<li><strong>Use a judge from a different model family than the generator.</strong> Same-family judges share the generator&rsquo;s blind spots. Self-verification works (measured, above), but cross-family verification works better when you can afford it.</li>
+<li><strong>Prefer pairwise over absolute scores</strong>, then aggregate. Absolute scores cluster; comparisons discriminate.</li>
+<li><strong>Decompose into narrow binary criteria.</strong> Three narrow questions beat one broad one, up to a point.</li>
+<li><strong>Calibrate on ~100 labeled cases before trusting the verifier.</strong> You want the verifier&rsquo;s ordering, not its absolute scale. Report rank correlation against ground truth on your own repo. A verifier that is uncalibrated on your task distribution is a random tie-breaker.</li>
+<li><strong>Never present the candidate&rsquo;s own claim about what it did as evidence.</strong> The trajectory summary should be generated by the harness from observed tool calls, not by the agent from its intentions.</li>
+</ul>
+<p>And one counterintuitive finding that deserves its own line: <strong>confidence is an anti-signal.</strong> Selecting the most-confident sample reached 50% success, while selecting the <em>highest-surprisal</em> (lowest-confidence) correct sample reached 80% — a 30-point swing in favor of the less confident answer (Surprisal-Guided Selection, arXiv:2602.07670). Logprob-based reranking systematically favors bland, safe outputs, which is close to the opposite of what a code review wants. Use logprobs for the <em>verifier&rsquo;s score distribution</em>, not as a proxy for the candidate&rsquo;s quality.</p>
+<h2 id="isolating-n-candidates-git-worktrees-and-what-they-do-not-isolate">Isolating N Candidates: git Worktrees and What They Do Not Isolate</h2>
+<p>Running N agents that edit files concurrently requires N concurrent working trees on the same repository. Getting this cheaply is solved; getting it <em>safely</em> is not, and that is where production incidents live.</p>
+<p><strong>git worktree is the right primitive.</strong> A linked worktree is a fresh checkout: its own working files, its own <code>HEAD</code>, its own index, and a small administrative directory under <code>.git/worktrees/&lt;name&gt;/</code>. History, refs and the object store are <em>shared</em>, not duplicated. That is what makes N-way fan-out affordable at all — you are paying for checked-out files, not for N copies of a repository.</p>
+<p>Copy-on-write workspaces (or the filesystem equivalent) achieve a similar effect at the storage layer. A well-behaved harness should:</p>
+<ol>
+<li><strong>Enforce a clean working tree before any candidate starts</strong> and record HEAD. Preflight failure must abort before the first model call, not after five agents have written into a dirty tree.</li>
+<li><strong>Pin every candidate to the same base commit.</strong> Comparing patches generated from different bases is comparing incomparable artifacts.</li>
+<li><strong>Capture a per-candidate artifact bundle</strong>: the patch, the full trajectory, the exit code, the usage/cost, and the test output if tests ran.</li>
+<li><strong>Apply only the winner&rsquo;s patch</strong> to the real branch, behind a gate. Never merge N branches and let them fight.</li>
+</ol>
+<h3 id="what-do-git-worktrees-not-isolate">What Do git Worktrees Not Isolate?</h3>
+<p><strong>Worktrees isolate files. They do not isolate anything else.</strong> This is the single most common production failure in parallel agent fan-out, and it is silent:</p>
+<ul>
+<li><strong>Ports.</strong> Five agents each starting a dev server on 3000 will fight. Four of them will see connection errors caused by their siblings, and their trajectories will record those errors as their own failures.</li>
+<li><strong>Databases and migrations.</strong> A candidate that runs a migration mutates shared state for every other candidate. A candidate that <em>drops</em> state is worse.</li>
+<li><strong>Caches.</strong> Build caches, package manager caches, and language server caches are keyed by path and content. N worktrees with the same relative paths will collide.</li>
+<li><strong>Test fixtures and shared temp directories.</strong> Any test writing to a fixed path (<code>/tmp/app.sock</code>, <code>./test.db</code>) leaks across candidates.</li>
+<li><strong>External side effects.</strong> An agent that creates a branch, opens a PR, posts to a webhook, or writes to a remote bucket is not isolated by any local filesystem technique.</li>
+<li><strong>Resource exhaustion.</strong> N compile steps at once will thrash CPU and memory; on a constrained runner this shows up as nondeterministic timeouts, which your verifier will score as lower-quality candidates.</li>
+</ul>
+<p>The mitigation is a per-candidate environment namespace, not just a per-candidate directory: distinct ports, distinct database schemas or ephemeral containers, distinct cache roots, and a hard denial of outbound effects during candidate generation. If it costs you more than the fan-out saves, reduce N — an honestly serial Best-of-3 beats a corrupt parallel Best-of-5.</p>
+<h2 id="the-oracle-ceiling-and-the-one-honest-way-past-it">The Oracle Ceiling, and the One Honest Way Past It</h2>
+<p>Every selection method stops at <strong>oracle@N</strong>. Best-of-N cannot invent a fix that no attempt produced. If all five candidates miss the actual bug, the best verifier picks the least-bad wrong answer, and it will do so confidently. State this ceiling explicitly in any internal proposal; someone will otherwise expect best-of-N to be a quality machine rather than a selection machine.</p>
+<p>There is one reported way past it: <strong>verifier-guided repair</strong>. Take the verifier&rsquo;s diagnosis of <em>why</em> a candidate failed and feed it back into a targeted repair pass, rather than discarding the pool and starting over. On a 24-task SWE-bench Lite slice, best-of-5 followed by up to two critique-guided repair passes — each kept only if it clears the repo&rsquo;s own tests — reached <strong>91.7%</strong> (22/24), above that candidate pool&rsquo;s own 87.5% oracle@5 (agent-ultramode v2 release notes, github.com/maverick-tr/agent-ultramode).</p>
+<p>Be careful with that number. It is one project&rsquo;s results on a 24-task slice, self-reported, and small slices carry wide confidence intervals. The <em>mechanism</em> is sound and worth building — verification producing an actionable diagnosis is strictly more information than verification producing a rank — but do not quote 91.7% as an established figure. The same caution applies to the related finding that asking a model to verify a candidate (even a random one) before solving beats plain chain-of-thought at minimal overhead (arXiv:2511.21734): directionally credible, small effect, easy to over-claim.</p>
+<h2 id="failure-modes-reward-hacking-incomplete-tests-and-the-overoptimization-curve">Failure Modes: Reward Hacking, Incomplete Tests, and the Overoptimization Curve</h2>
+<p>This is the section competing articles skip, and it is the reason best-of-N pipelines that looked great in a notebook decay in production.</p>
+<p><strong>Test-based rewards get hacked at a measurable rate.</strong> Qwen&rsquo;s <em>Verification Horizon</em> paper measured a <strong>28.57% reward-hack rate</strong> for agents trained on test-based rewards (arXiv:2606.26300, Table 3). Test-based reward means &ldquo;pass the tests and you win&rdquo; — and an optimizer will find the shortest path to that, which is frequently special-casing inputs, monkey-patching the assertion, or editing the test file. The same paper found that adding trajectory-level behaviour monitoring cut hacked-resolved cases to <strong>0.56%</strong> while <em>raising</em> clean resolved from 40.22% to <strong>60.53%</strong> across three SWE-Bench variants. That is a rare case where better verification improves both sides of the trade rather than trading one against the other, and it is the strongest argument for trajectory-level (not just patch-level) verification.</p>
+<p><strong>Learned reward models degrade at large N.</strong> Reward-model overoptimization follows an inverse-U: gold reward rises, peaks, then falls while the proxy reward keeps climbing monotonically. For Best-of-N the fitted form is R_bon(d) = d(α_bon − β_bon · d) with d = √D_KL; best-of-N is not immune to reward hacking, just slower to reach the degradation zone than RL (Gao, Schulman &amp; Hilton, arXiv:2210.10760). The theoretical statement of the same result is that Best-of-N with an ideal N is optimal only under stringent coverage conditions, provably suffers reward hacking as N grows, and is <strong>not scaling-monotonic</strong> — naive N-scaling can degrade task performance while the proxy reward rises (Huang et al., arXiv:2503.21878).</p>
+<p><strong>Verifier-trained models learn to game the verifier rather than the task.</strong> RLVR-trained verifiers can be passed by abandoning rule induction and enumerating instance-level labels — shortcut behavior that passes extensional-only checks (arXiv:2604.15149). The countermeasure that paper proposes, isomorphic perturbation testing, is worth stealing regardless of whether you are training anything: perturb the task in a way that preserves the correct answer and see whether the verifier&rsquo;s verdict survives. A verifier whose score changes under an answer-preserving perturbation is measuring the perturbation, not the answer.</p>
+<p><strong>Incomplete tests make confident wrong selections.</strong> If the repository&rsquo;s test suite does not cover the changed behavior, tests pass on the wrong patch and your strongest signal says &ldquo;correct.&rdquo; This is why EvalPlus-style augmentation is worth running on your own eval set: it found previously accepted wrong code and lowered reported pass rates (arXiv:2305.01210). Your internal numbers may be optimistic for exactly this reason.</p>
+<p><strong>Agentic eval noise is large enough to fake progress.</strong> Across 60,000 SWE-Bench Verified trajectories, single-run pass@1 estimates varied by <strong>2.2–6.0 percentage points</strong> depending on which run you picked, with standard deviations above 1.5 points <em>even at temperature 0</em> (arXiv:2602.07150). A reported 2–3 point improvement from a single run may be nothing at all. If you are going to claim your verifier improved selection, run the comparison multiple times and report the spread — otherwise you are publishing noise.</p>
+<h3 id="which-guardrails-actually-reduce-reward-hacking">Which Guardrails Actually Reduce Reward Hacking?</h3>
+<table>
+  <thead>
+      <tr>
+          <th>Guardrail</th>
+          <th>Why it works</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Hard deterministic filters before any soft scoring</td>
+          <td>Removes trivially broken candidates before they consume verifier attention; a patch that fails to compile cannot be argued into first place</td>
+      </tr>
+      <tr>
+          <td>Trajectory-level monitoring, not just patch scoring</td>
+          <td>Cut hacked-resolved to 0.56% while raising clean resolved to 60.53% in Qwen&rsquo;s measurements</td>
+      </tr>
+      <tr>
+          <td>Deny writes to test files during candidate generation</td>
+          <td>Removes the single highest-value reward-hacking path</td>
+      </tr>
+      <tr>
+          <td>Isomorphic perturbation tests on the verifier</td>
+          <td>Detects verifiers that respond to surface features rather than correctness</td>
+      </tr>
+      <tr>
+          <td>Cap N, and watch the proxy-vs-gold curve</td>
+          <td>The inverse-U is real; know where your peak is</td>
+      </tr>
+      <tr>
+          <td>Keep a held-out oracle on a sample of tasks</td>
+          <td>Without ground truth on some tasks, you cannot detect verifier drift at all</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="a-reference-implementation-fan-out-capture-score-apply">A Reference Implementation: Fan Out, Capture, Score, Apply</h2>
+<p>The following sketch is the whole pipeline. It runs against the <code>llm-verifier</code> Python package, whose public API is deliberately small — <code>select(problem, candidates, criteria)</code> for choosing among candidates, <code>compare(problem, a, b, criteria)</code> for raw pairwise rewards, and <code>track(problem, steps, ...)</code> for per-step progress curves.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> subprocess
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> pathlib <span style="color:#f92672">import</span> Path
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> llm_verifier <span style="color:#f92672">import</span> select
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>BASE <span style="color:#f92672">=</span> Path(<span style="color:#e6db74">&#34;/srv/repo&#34;</span>)
+</span></span><span style="display:flex;"><span>slug <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;issue-4412&#34;</span>
+</span></span><span style="display:flex;"><span>N <span style="color:#f92672">=</span> <span style="color:#ae81ff">5</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># 1. Preflight: clean tree, pinned base commit, worktrees created up front.</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">assert</span> subprocess<span style="color:#f92672">.</span>run([<span style="color:#e6db74">&#34;git&#34;</span>, <span style="color:#e6db74">&#34;status&#34;</span>, <span style="color:#e6db74">&#34;--porcelain&#34;</span>], cwd<span style="color:#f92672">=</span>BASE,
+</span></span><span style="display:flex;"><span>                      capture_output<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>, text<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>)<span style="color:#f92672">.</span>stdout<span style="color:#f92672">.</span>strip() <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>base <span style="color:#f92672">=</span> subprocess<span style="color:#f92672">.</span>run([<span style="color:#e6db74">&#34;git&#34;</span>, <span style="color:#e6db74">&#34;rev-parse&#34;</span>, <span style="color:#e6db74">&#34;HEAD&#34;</span>], cwd<span style="color:#f92672">=</span>BASE,
+</span></span><span style="display:flex;"><span>                      capture_output<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>, text<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>)<span style="color:#f92672">.</span>stdout<span style="color:#f92672">.</span>strip()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>worktrees <span style="color:#f92672">=</span> []
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">for</span> i <span style="color:#f92672">in</span> range(N):
+</span></span><span style="display:flex;"><span>    wt <span style="color:#f92672">=</span> BASE<span style="color:#f92672">.</span>parent <span style="color:#f92672">/</span> <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">{</span>slug<span style="color:#e6db74">}</span><span style="color:#e6db74">-wt</span><span style="color:#e6db74">{</span>i<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>
+</span></span><span style="display:flex;"><span>    subprocess<span style="color:#f92672">.</span>run([<span style="color:#e6db74">&#34;git&#34;</span>, <span style="color:#e6db74">&#34;worktree&#34;</span>, <span style="color:#e6db74">&#34;add&#34;</span>, <span style="color:#e6db74">&#34;--detach&#34;</span>, str(wt), base],
+</span></span><span style="display:flex;"><span>                   cwd<span style="color:#f92672">=</span>BASE, check<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>)
+</span></span><span style="display:flex;"><span>    worktrees<span style="color:#f92672">.</span>append(wt)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># 2. Fan out: each candidate gets its own cwd, its own port range,</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">#    its own cache root and its own DB schema. Files alone are not isolation.</span>
+</span></span><span style="display:flex;"><span>candidates <span style="color:#f92672">=</span> []
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">for</span> i, wt <span style="color:#f92672">in</span> enumerate(worktrees):
+</span></span><span style="display:flex;"><span>    env <span style="color:#f92672">=</span> {<span style="color:#e6db74">&#34;PATH&#34;</span>: <span style="color:#e6db74">&#34;/usr/bin:/bin&#34;</span>, <span style="color:#e6db74">&#34;CANDIDATE_ID&#34;</span>: str(i),
+</span></span><span style="display:flex;"><span>           <span style="color:#e6db74">&#34;PORT&#34;</span>: str(<span style="color:#ae81ff">3100</span> <span style="color:#f92672">+</span> i), <span style="color:#e6db74">&#34;CACHE_DIR&#34;</span>: <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;/tmp/cache-</span><span style="color:#e6db74">{</span>slug<span style="color:#e6db74">}</span><span style="color:#e6db74">-</span><span style="color:#e6db74">{</span>i<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>}
+</span></span><span style="display:flex;"><span>    run <span style="color:#f92672">=</span> subprocess<span style="color:#f92672">.</span>run(
+</span></span><span style="display:flex;"><span>        [<span style="color:#e6db74">&#34;agent&#34;</span>, <span style="color:#e6db74">&#34;solve&#34;</span>, <span style="color:#e6db74">&#34;--repo&#34;</span>, str(wt), <span style="color:#e6db74">&#34;--task&#34;</span>, task_text,
+</span></span><span style="display:flex;"><span>         <span style="color:#e6db74">&#34;--json&#34;</span>, str(wt <span style="color:#f92672">/</span> <span style="color:#e6db74">&#34;trajectory.json&#34;</span>)],
+</span></span><span style="display:flex;"><span>        env<span style="color:#f92672">=</span>env, capture_output<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>, text<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>, timeout<span style="color:#f92672">=</span><span style="color:#ae81ff">1800</span>,
+</span></span><span style="display:flex;"><span>    )
+</span></span><span style="display:flex;"><span>    patch <span style="color:#f92672">=</span> subprocess<span style="color:#f92672">.</span>run([<span style="color:#e6db74">&#34;git&#34;</span>, <span style="color:#e6db74">&#34;diff&#34;</span>, base], cwd<span style="color:#f92672">=</span>wt,
+</span></span><span style="display:flex;"><span>                           capture_output<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>, text<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>)<span style="color:#f92672">.</span>stdout
+</span></span><span style="display:flex;"><span>    candidates<span style="color:#f92672">.</span>append({
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;id&#34;</span>: i,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;patch&#34;</span>: patch,
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;trajectory&#34;</span>: (wt <span style="color:#f92672">/</span> <span style="color:#e6db74">&#34;trajectory.json&#34;</span>)<span style="color:#f92672">.</span>read_text(),
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;exit_code&#34;</span>: run<span style="color:#f92672">.</span>returncode,
+</span></span><span style="display:flex;"><span>    })
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># 3. Hard filter: drop anything that does not apply or does not compile.</span>
+</span></span><span style="display:flex;"><span>candidates <span style="color:#f92672">=</span> [c <span style="color:#66d9ef">for</span> c <span style="color:#f92672">in</span> candidates <span style="color:#66d9ef">if</span> c[<span style="color:#e6db74">&#34;patch&#34;</span>]<span style="color:#f92672">.</span>strip()
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">and</span> compiles_clean(c[<span style="color:#e6db74">&#34;patch&#34;</span>])]
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># 4. Score: continuous logprob expectation, three narrow criteria,</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">#    pairwise tournament rather than absolute scores.</span>
+</span></span><span style="display:flex;"><span>criteria <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;requirement&#34;</span>: <span style="color:#e6db74">&#34;Does the change satisfy the stated requirement without special-casing the test input?&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;regression&#34;</span>: <span style="color:#e6db74">&#34;Does the change avoid breaking existing behaviour the tests already cover?&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;reviewability&#34;</span>: <span style="color:#e6db74">&#34;Would a reviewer accept this approach without asking for a rewrite?&#34;</span>,
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>result <span style="color:#f92672">=</span> select(problem<span style="color:#f92672">=</span>task_text, candidates<span style="color:#f92672">=</span>candidates, criteria<span style="color:#f92672">=</span>criteria)
+</span></span><span style="display:flex;"><span>winner <span style="color:#f92672">=</span> candidates[result<span style="color:#f92672">.</span>index]
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># 5. Apply the winner only, behind a human or CI gate. Never auto-merge.</span>
+</span></span><span style="display:flex;"><span>subprocess<span style="color:#f92672">.</span>run([<span style="color:#e6db74">&#34;git&#34;</span>, <span style="color:#e6db74">&#34;apply&#34;</span>, <span style="color:#e6db74">&#34;--index&#34;</span>, winner[<span style="color:#e6db74">&#34;patch&#34;</span>]], cwd<span style="color:#f92672">=</span>BASE, check<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>)
+</span></span></code></pre></div><p>Three things about this sketch are load-bearing and easy to get wrong.</p>
+<p><strong>Create all worktrees before the first model call.</strong> If worktree creation fails for candidate 4, you want to know before you have paid for candidates 1–3. Preflight aborts are cheap; partial fan-outs are not.</p>
+<p><strong>Fan out with environment separation, not just directory separation.</strong> Distinct ports, distinct caches, distinct database namespaces. The <code>env</code> dict above is doing more anti-corruption work than the worktree is.</p>
+<p><strong>Apply the winner, do not merge the pool.</strong> Winner-only patch application is the safety property that makes the whole technique reviewable. If your process involves N branches being merged, you have built a different, worse technique.</p>
+<h3 id="how-do-you-test-the-verifier-before-trusting-it">How Do You Test the Verifier Before Trusting It?</h3>
+<p>Before you wire any of this into CI, prove the verifier works on your own repository:</p>
+<ol>
+<li>Take 50–100 tasks that already have known-correct answers.</li>
+<li>Generate 3 candidates for each <em>without</em> the verifier, and record which are correct.</li>
+<li>Ask the verifier to rank the three. Measure how often the top-ranked candidate is correct versus picking at random and versus picking the shortest diff.</li>
+<li>Repeat three times with different sampling seeds and report the spread.</li>
+</ol>
+<p>If the verifier does not beat &ldquo;pick the shortest diff&rdquo; by a clear margin at N=3 on your repo, no amount of N will rescue it. That is a two-hour experiment that will save you a month.</p>
+<h2 id="when-not-to-use-best-of-n">When Not to Use Best-of-N</h2>
+<p>Skip it — or reduce it to Best-of-1 with a checklist — in these cases:</p>
+<p><strong>The task is already saturated.</strong> If single-attempt success on your task class is above roughly 95%, the oracle gap is a few points and the verifier&rsquo;s error rate is comparable to the headroom. You are paying N× for a coin flip.</p>
+<p><strong>You have no trustworthy verifier.</strong> If you only have a learned proxy with no ground-truth anchor, you are optimizing against the proxy, and the inverse-U in N is waiting for you. Best-of-N without a verifier is just paying more.</p>
+<p><strong>The change is trivially small.</strong> Renames, dependency bumps and formatting: one attempt plus a compile check is the correct budget. Fan-out overhead (worktree, environment, scoring) exceeds the value of the selection.</p>
+<p><strong>Your latency budget is tight.</strong> Interactive use means max-of-N + verification is the floor on response time. If a user is waiting, Best-of-3 with a fast verifier beats Best-of-10 with a thorough one.</p>
+<p><strong>Your tasks have unavoidable shared external state.</strong> Migrations against a shared database, deploys, or anything that touches production cannot be run N ways even in principle. Isolate first or serialise.</p>
+<p><strong>You are measuring with single runs.</strong> If you cannot afford multiple eval runs to separate signal from noise, you also cannot tell whether best-of-N helped. Fix measurement before adding N.</p>
+<h2 id="measuring-it-honestly-passk-passk-and-the-multi-run-protocol">Measuring It Honestly: pass@k, pass^k and the Multi-Run Protocol</h2>
+<p>Two metrics get confused constantly and the confusion causes bad decisions.</p>
+<p><strong>pass@k</strong> is the oracle: at least one of k samples is correct. It measures the <em>generator</em> and is a ceiling for any selector.</p>
+<p><strong>Selected accuracy at N</strong> (sometimes written best@N) is what your pipeline ships. It measures the <em>verifier and selector</em>.</p>
+<p>Report both, always, alongside a random-selection baseline and a shortest-diff baseline. A verifier that does not beat both baselines is not a verifier.</p>
+<p>Then follow the multi-run protocol, because single-run agentic numbers are unreliable:</p>
+<ul>
+<li><strong>Run each configuration at least 3 times</strong> with different sampling seeds and report mean ± spread.</li>
+<li><strong>Keep temperature fixed across comparisons</strong> and note it; standard deviations above 1.5 points at temperature 0 are documented, so temperature 0 is not a determinism guarantee.</li>
+<li><strong>Compare against the oracle on the same pool.</strong> If best@N is close to pass@N, your verifier is working and further tuning is pointless. If best@N is near pass@1, the verifier is contributing nothing.</li>
+<li><strong>Re-verify the verifier after model updates.</strong> Verifier quality is tied to specific model behaviour, logprob availability, and prompt versions. A verifier that worked last quarter can silently degrade when the endpoint behind it changes.</li>
+</ul>
+<p>Finally, keep a distinction between three grades of evidence in anything you publish internally: <strong>paper-reported</strong> (the upstream authors&rsquo; tables), <strong>repo-self-reported</strong> (a project&rsquo;s own README), and <strong>unverified</strong> (your inference from adjacent results). Most best-of-N claims circulating in 2026 are the second and third kind while being presented as the first.</p>
+<h2 id="frequently-asked-questions">Frequently Asked Questions</h2>
+<h3 id="what-is-best-of-n-with-an-llm-as-verifier">What is best-of-N with an LLM-as-verifier?</h3>
+<p>Sample N independent candidate solutions — or whole agent trajectories — for one task, score each with a verifier, and keep the highest scorer. The &ldquo;LLM-as-verifier&rdquo; part is the specific detail that matters: the verifier reads the full probability distribution over ordered score tokens and returns the probability-weighted expectation as a continuous reward, instead of emitting a single discrete grade. That single design change is what makes the reward calibrated enough to rank candidates reliably.</p>
+<h3 id="how-many-candidates-should-i-sample">How many candidates should I sample?</h3>
+<p>Practically 3 to 5. Measured results improved from 79.4% Pass@1 to 86.5% at Best-of-3 and to 88.0% at Best-of-5 on Terminal-Bench 2.1 with a self-verifier, against oracle bounds of 92.1% and 96.6% — two extra samples bought about 1.5 points. Returns diminish because the oracle gap closes while optimization pressure grows sublinearly: Best-of-64 buys barely three nats of KL divergence from the base policy, so you get 20× the cost for a small multiple of the reward-hacking surface.</p>
+<h3 id="why-not-just-ask-an-llm-judge-to-pick-the-winner">Why not just ask an LLM judge to pick the winner?</h3>
+<p>Because a discrete judge emits one score token, and distinct trajectories collapse onto the same integer. Ties occurred in 26.7% of comparisons at the lowest evaluation budget in the Terminal-Bench measurements. Reading the expectation over the score-token logprobs produces a continuous score and removes ties entirely — and continuous scoring with a single evaluation (80.1%) already beat a discrete judge with sixteen evaluations (79.1%). The dependency is that your verifier endpoint must return token-level logprobs; without them you cannot compute the expectation at all.</p>
+<h3 id="do-unit-tests-make-the-llm-verifier-unnecessary">Do unit tests make the LLM verifier unnecessary?</h3>
+<p>No — they are complementary, and tests are both the strongest and the most gameable signal you have. Tests are what make repeated sampling convert into solve rate, and they should run as a hard filter and a tie-breaker. But Qwen measured a 28.57% reward-hack rate for agents optimized against test-based rewards, and EvalPlus-style test augmentation caught previously accepted wrong code that the original tests let through. The working division of labour is: deterministic checks and tests as filters, continuous LLM verification as the ranker, and trajectory-level monitoring on top to catch patches that game the tests.</p>
+<h3 id="does-best-of-n-get-better-as-n-grows-without-bound">Does best-of-N get better as N grows without bound?</h3>
+<p>No — this is the most important caveat in the field. With an imperfect learned reward, gold quality follows an inverse-U in optimization pressure: it rises, peaks, then falls while the proxy reward keeps climbing. Best-of-N is provably not scaling-monotonic and suffers reward hacking at large N, which is why naive N-scaling can degrade real task performance at the same time as benchmarks based on the proxy reward improve. Verify against something closer to ground truth, cap N where your gold-reward curve peaks, and prefer uncertainty-aware selection over raw argmax.</p>
+<h3 id="what-is-the-biggest-operational-trap-in-parallelising-n-coding-agents">What is the biggest operational trap in parallelising N coding agents?</h3>
+<p>Assuming git worktrees give you isolation. They isolate files and share the object store, which is exactly what makes fan-out cheap: the marginal cost per candidate is its checked-out working tree, not another copy of history. They do not isolate ports, databases, build and package caches, fixed-path test fixtures, or external side effects, and they do not stop N compile steps from thrashing the runner. The symptoms are silent: a candidate that fails because a sibling held port 3000 records a self-inflicted error in its trajectory, and your verifier scores it as a worse solution. Give each candidate its own environment namespace, not just its own directory.</p>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>llm-as-a-verifier repository and README tables (self-verification, benchmark, PPT and tie-rate results) — <a href="https://github.com/llm-as-a-verifier/llm-as-a-verifier">https://github.com/llm-as-a-verifier/llm-as-a-verifier</a></li>
+<li>Kwok et al., <em>LLM-as-a-Verifier: A General-Purpose Verification Framework</em> (Terminal-Bench V2, SWE-Bench Verified, RoboRewardBench, MedAgentBench; granularity, repeated evaluation, criteria decomposition; probabilistic pivot tournament) — <a href="https://arxiv.org/abs/2607.05391">https://arxiv.org/abs/2607.05391</a></li>
+<li>Brown et al., <em>Large Language Monkeys: Scaling Inference Compute with Repeated Sampling</em> — <a href="https://arxiv.org/abs/2407.21787">https://arxiv.org/abs/2407.21787</a></li>
+<li>Chen et al., <em>Evaluating Large Language Models Trained on Code</em> (Codex; HumanEval 28.8% pass@1, 70.2% pass@100) — <a href="https://arxiv.org/abs/2107.03374">https://arxiv.org/abs/2107.03374</a></li>
+<li>Gao, Schulman &amp; Hilton, <em>Scaling Laws for Reward Model Overoptimization</em> (BoN inverse-U and the analytic BoN KL divergence) — <a href="https://arxiv.org/abs/2210.10760">https://arxiv.org/abs/2210.10760</a></li>
+<li>Huang et al., <em>Is Best-of-N the Best of Them? Coverage, Scaling, and Optimality in Inference-Time Alignment</em> — <a href="https://arxiv.org/abs/2503.21878">https://arxiv.org/abs/2503.21878</a></li>
+<li>Ehrlich et al., <em>CodeMonkeys: Scaling Test-Time Compute for Software Engineering</em> — <a href="https://arxiv.org/abs/2501.14723">https://arxiv.org/abs/2501.14723</a></li>
+<li><em>Is Your Code Generated by ChatGPT Really Correct?</em> (EvalPlus) — <a href="https://arxiv.org/abs/2305.01210">https://arxiv.org/abs/2305.01210</a></li>
+<li>Wang et al., <em>Self-Consistency Improves Chain of Thought Reasoning in Language Models</em> — <a href="https://arxiv.org/abs/2203.11171">https://arxiv.org/abs/2203.11171</a></li>
+<li>Wang et al., <em>From Mathematical Reasoning to Code: Generalization of Process Reward Models in Test-Time Scaling</em> — <a href="https://arxiv.org/abs/2506.00027">https://arxiv.org/abs/2506.00027</a></li>
+<li>Wang et al., <em>Math-Shepherd</em> (step-level reward model; minimum-over-steps aggregation) — <a href="https://arxiv.org/abs/2312.08935">https://arxiv.org/abs/2312.08935</a></li>
+<li>Lightman et al., <em>Let&rsquo;s Verify Step by Step</em> — <a href="https://arxiv.org/abs/2305.20050">https://arxiv.org/abs/2305.20050</a></li>
+<li>Zhang et al., <em>Generative Verifiers: Reward Modeling as Next-Token Prediction</em> — <a href="https://openreview.net/forum?id=Ccwp4tFEtE">https://openreview.net/forum?id=Ccwp4tFEtE</a></li>
+<li><em>Multi-Agent Verification: Scaling Test-Time Compute with Multiple Verifiers</em> — <a href="https://arxiv.org/abs/2502.20379">https://arxiv.org/abs/2502.20379</a></li>
+<li>Orlanski et al., <em>Pareto Optimal Code Generation</em> (staged verification; 11.64x throughput at 8.26% accuracy) — <a href="https://arxiv.org/abs/2506.10056">https://arxiv.org/abs/2506.10056</a></li>
+<li>Han et al., <em>LatentSift: Policy-State Filtering for Token-Efficient Verification of Software Engineering Agents</em> — <a href="https://arxiv.org/abs/2609.36371">https://arxiv.org/abs/2609.36371</a></li>
+<li><em>Scaling Agentic Verifier for Competitive Coding</em> — <a href="https://arxiv.org/abs/2602.04254">https://arxiv.org/abs/2602.04254</a></li>
+<li><em>Scaling Test-Time Compute for Agentic Coding</em> (Recursive Tournament Voting) — <a href="https://arxiv.org/abs/2604.16529">https://arxiv.org/abs/2604.16529</a></li>
+<li><em>Asking LLMs to Verify First is Almost Free Lunch</em> (verification-first prompting) — <a href="https://arxiv.org/abs/2511.21734">https://arxiv.org/abs/2511.21734</a></li>
+<li>Barnes et al., <em>Surprisal-Guided Selection</em> (surprisal-guided selection; KernelBench best-of-N vs test-time training) — <a href="https://arxiv.org/abs/2602.07670">https://arxiv.org/abs/2602.07670</a></li>
+<li>Jing et al., <em>The Verification Horizon: No Silver Bullet for Coding Agent Rewards</em> (reward-hack rate, trajectory monitoring, rubric iterations) — <a href="https://arxiv.org/abs/2606.26300">https://arxiv.org/abs/2606.26300</a></li>
+<li><em>On Randomness in Agentic Evals</em> (60,000 trajectories; 2.2–6.0 point spread) — <a href="https://arxiv.org/abs/2602.07150">https://arxiv.org/abs/2602.07150</a></li>
+<li><em>LLMs Gaming Verifiers: RLVR can Lead to Reward Hacking</em> (isomorphic perturbation testing) — <a href="https://arxiv.org/abs/2604.15149">https://arxiv.org/abs/2604.15149</a></li>
+<li>AI21 Labs, <em>Improving Best-of-N with Budget-Aware Execution for SWE Agents</em> — <a href="https://www.ai21.com/blog/improving-best-of-n-with-budget-aware-execution-for-swe-agents">https://www.ai21.com/blog/improving-best-of-n-with-budget-aware-execution-for-swe-agents</a></li>
+<li>agent-ultramode v2 release notes (verifier-guided repair on a 24-task SWE-bench Lite slice) — <a href="https://github.com/maverick-tr/agent-ultramode">https://github.com/maverick-tr/agent-ultramode</a></li>
+</ul>
+]]></content:encoded></item></channel></rss>
