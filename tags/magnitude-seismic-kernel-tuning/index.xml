@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Magnitude Seismic Kernel Tuning on RockB</title><link>https://baeseokjae.github.io/tags/magnitude-seismic-kernel-tuning/</link><description>Recent content in Magnitude Seismic Kernel Tuning on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 08 Oct 2026 10:38:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/magnitude-seismic-kernel-tuning/index.xml" rel="self" type="application/rss+xml"/><item><title>Magnitude Review 2026: A Self-Optimizing Inference Engine for Agent Workloads</title><link>https://baeseokjae.github.io/posts/magnitude-self-optimizing-inference-engine-2026/</link><pubDate>Thu, 01 Oct 2026 22:03:22 +0000</pubDate><guid>https://baeseokjae.github.io/posts/magnitude-self-optimizing-inference-engine-2026/</guid><description>Magnitude is an Apache-2.0 local inference engine that assesses your hardware from metadata — not by benchmarking it — tunes its own kernels on that device, and rewires your coding agent to use it. The real numbers.</description><content:encoded><![CDATA[<p>Magnitude is an Apache-2.0 local inference engine that assesses your hardware from metadata, compiles and tunes its own numerical kernels on that device, then serves an open model on port 10100 and rewrites your coding agent&rsquo;s config to use it. &ldquo;Self-optimizing&rdquo; here means a kernel autotuner under a fixed precision policy, not a learning system. The claims below were re-verified against the live <a href="https://github.com/magnitudedev/magnitude/blob/main/README.md">repository</a>, its <a href="https://github.com/magnitudedev/magnitude/blob/main/LICENSE">Apache-2.0 license</a>, the <a href="https://docs.magnitude.dev/introduction.md">product documentation</a> and the <a href="https://news.ycombinator.com/item?id=49911995">launch thread</a> on 8 October 2026. This is a source-verification review, not a hands-on benchmark: every figure is either the vendor&rsquo;s own artifact or a named third party&rsquo;s self-reported measurement.</p>
+<p>That reading of the title matters more than the marketing number attached to it. Magnitude AI (YC S25) launched on Hacker News on 30 September 2026 with the claim &ldquo;up to 2x faster than llama.cpp,&rdquo; and the repository&rsquo;s own benchmark script does support that number — for one machine, one model, one phase, and one baseline configuration. The more interesting parts of the project are the ones nobody put in the headline: a published tolerance table that makes the speed claim auditable, an ownership model that splits &ldquo;what the model means&rdquo; from &ldquo;how the arithmetic runs,&rdquo; and a catalog that estimates your tokens per second from the device&rsquo;s bandwidth before it lets you download 20 GB of model you cannot afford.</p>
+<p>This review covers what Magnitude actually is, what the 92% decode figure covers, how it compares to the local inference tools you already run, and who should wait.</p>
+<h2 id="what-is-magnitude-and-what-does-self-optimizing-actually-mean">What Is Magnitude, and What Does &ldquo;Self-Optimizing&rdquo; Actually Mean?</h2>
+<p>Magnitude is three things stacked. First, a hardware assessment that reads your chip and memory, derives the device&rsquo;s memory bandwidth from the driver&rsquo;s report, a published specification matched by device name, or the device&rsquo;s class, then ranks complete configurations — model, quantization, context size and estimated tokens per second — before anything is downloaded. The assessment is metadata-only and analytical: nothing runs on the device, so the figure is a reported or published peak, not an achieved measurement. The <a href="https://github.com/magnitudedev/magnitude/blob/main/inference/engine/executor/src/assessment/bandwidth.rs">bandwidth module</a> says plainly that the number comes &ldquo;from what discovery already knows: the driver&rsquo;s report, a published specification matched by device name, or the device&rsquo;s class. Nothing runs on the device,&rdquo; and the <a href="https://github.com/magnitudedev/magnitude/blob/main/design/icn/performance-estimation.md">performance-estimation doc</a> adds that &ldquo;estimation is arithmetic: the model&rsquo;s planned decode demand over the selected device&rsquo;s memory bandwidth. It opens no device and runs no model, benchmark or tuning.&rdquo; Second, an inference engine written in Rust around Seismic, a compiler and runtime for numerical kernels that owns compilation, device resources and execution across CPU, Metal, CUDA and Vulkan. Third, a Connections flow that rewrites a supported harness&rsquo;s config so the agent points at <code>http://127.0.0.1:10100</code>.</p>
+<p>The self-optimizing part is an autotuner, and it is honest about its constraints. Magnitude ships authored numerical programs, compiles several physical variants of each one for your device, measures them, and keeps the fastest variant that still passes a fixed numerical check. That check is published in the repository&rsquo;s <a href="https://github.com/magnitudedev/magnitude/blob/main/inference/docs/precision.md">precision documentation</a>: F32 kernels must hold 0.00001 absolute and 0.0001 relative error (0.01%), F16 must hold 0.001 and 0.002 (0.2%), BF16 must hold 0.01 and 0.01 (1%), and integer, boolean and index state must be exact. The policy sentence attached to it is blunt: speed never compensates for failing a numerical check.</p>
+<p>Nothing learns, nothing phones home after a model is downloaded, and no accuracy is traded for throughput. That is a narrower claim than &ldquo;the AI tunes itself,&rdquo; and it is a much stronger one. It is also the reason the 92% is auditable rather than aspirational — you can inspect the rule the tuner was not allowed to break.</p>
+<p>Tuning cost is disclosed too. A co-founder in the launch thread described it as a one-time process of roughly a minute whenever you download a new model, after which tuning any longer asymptotes. Time varies with hardware.</p>
+<h2 id="is-magnitude-really-2x-faster-than-llamacpp">Is Magnitude Really 2x Faster Than llama.cpp?</h2>
+<p>Partly, and the qualifier is doing real work. The &ldquo;up to 2x&rdquo; figure on the website is a top line. The four numbers behind it live in <a href="https://github.com/magnitudedev/magnitude/blob/main/scripts/benchmark-chart.py"><code>scripts/benchmark-chart.py</code></a> in the repository, and they are not uniform:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Hardware / backend</th>
+          <th>Phase</th>
+          <th>llama.cpp</th>
+          <th>Magnitude</th>
+          <th>Delta</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Mac M4 Pro 48 GB, Metal</td>
+          <td>Prefill</td>
+          <td>466 tok/s</td>
+          <td>507 tok/s</td>
+          <td>+9%</td>
+      </tr>
+      <tr>
+          <td>Mac M4 Pro 48 GB, Metal</td>
+          <td>Decode</td>
+          <td>30 tok/s</td>
+          <td>57 tok/s</td>
+          <td>+92%</td>
+      </tr>
+      <tr>
+          <td>DGX Spark, CUDA</td>
+          <td>Prefill</td>
+          <td>2,033 tok/s</td>
+          <td>2,507 tok/s</td>
+          <td>+23%</td>
+      </tr>
+      <tr>
+          <td>DGX Spark, CUDA</td>
+          <td>Decode</td>
+          <td>49 tok/s</td>
+          <td>58 tok/s</td>
+          <td>+19%</td>
+      </tr>
+  </tbody>
+</table>
+<p>The caption for that chart, verbatim from the script, is: Qwen 3.6 35B A3B, 4-bit, 64k context, no speculative decoding.</p>
+<p>So &ldquo;2x&rdquo; is the Metal decode number on one Mac. The same artifact shows single-digit prefill improvement on that machine and a 19% decode improvement on CUDA. Any review that prints 2x without those four rows is repeating a top line the vendor&rsquo;s own data table does not generalize.</p>
+<p>The method deserves credit for being stated. The benchmark is a prose-repetition task: the text of Moby Dick up to 64k context, then asking the model to repeat the last section. llama.cpp was configured with no speculative decoding, default prefill batch sizes, flash attention on, and a 16-bit KV cache. The team said they tried 8-bit keys with 4-bit values on llama.cpp and that it &ldquo;bombed decode speed for llama.cpp in our testing&rdquo; — which is a fair reason to leave it out, and also a reminder that the baseline is a conservative one.</p>
+<p>Counter-evidence arrived in the same thread and belongs in the same section. An M5 Max owner measured MLX at 175 tok/s against Magnitude&rsquo;s 161, and the team acknowledged a Metal 4 matmul optimization gap on M5 and newer silicon. A 5070 Ti owner measured llama.cpp about 20-30% faster at decode on that card, and a second M5 Max owner reported both prefill and decode roughly 2x faster from llama.cpp. The honest generalization is &ldquo;faster than llama.cpp on the configurations the vendor measured, on hardware the vendor likes&rdquo; — not &ldquo;faster than local inference.&rdquo;</p>
+<p>One more thing the headline hides: the gain is a bundle of three shipped accelerations — device-tuned kernels, KV cache quantized to 8-bit keys and 4-bit values, and a per-model assigned draft model for speculative decoding — while the baseline ran with 16-bit KV and no speculation. No ablation separating the three has been published. Attribute the delta to the bundle, and say plainly that the split is unmeasured. If you want the underlying prefill-versus-decode mechanics, they are covered in our guide to <a href="https://baeseokjae.github.io/posts/llm-inference-engineering-guide/">LLM inference engineering</a>.</p>
+<h2 id="how-does-magnitude-compare-to-llamacpp-ollama-lm-studio-and-mlx">How Does Magnitude Compare to llama.cpp, Ollama, LM Studio and MLX?</h2>
+<p>The axis that matters is not tokens per second. It is who chooses the model, and whether the tool is shaped for an agent or for a human at a prompt.</p>
+<table>
+  <thead>
+      <tr>
+          <th>Tool</th>
+          <th>Who picks model / quant / context</th>
+          <th>Tunes kernels on your device</th>
+          <th>Rewrites your agent config</th>
+          <th>Where it wins</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Magnitude</td>
+          <td>Assessment derives bandwidth from metadata and ranks configurations</td>
+          <td>Yes (Seismic autotuner)</td>
+          <td>Yes, one-click Connections</td>
+          <td>Agent serving on supported desktop hardware</td>
+      </tr>
+      <tr>
+          <td>llama.cpp</td>
+          <td>You pick the GGUF and launch flags</td>
+          <td>No (pre-built kernels)</td>
+          <td>No</td>
+          <td>Maximum control, widest hardware and model coverage</td>
+      </tr>
+      <tr>
+          <td>Ollama</td>
+          <td>You name a model tag</td>
+          <td>No</td>
+          <td>Partially (OpenAI-compatible port)</td>
+          <td>Simplest path to a model you already chose</td>
+      </tr>
+      <tr>
+          <td>LM Studio</td>
+          <td>You</td>
+          <td>No</td>
+          <td>Partially</td>
+          <td>GUI-first local use, broad model browsing</td>
+      </tr>
+      <tr>
+          <td>MLX</td>
+          <td>You</td>
+          <td>No (Apple-authored kernels)</td>
+          <td>No</td>
+          <td>Apple Silicon throughput, especially newer M-series</td>
+      </tr>
+      <tr>
+          <td>vLLM</td>
+          <td>You</td>
+          <td>No</td>
+          <td>No</td>
+          <td>Multi-user production throughput, not single-machine agents</td>
+      </tr>
+  </tbody>
+</table>
+<p>The practical consequence is that Magnitude is not a model runner so much as a model chooser that also runs the model. Ollama and LM Studio execute whatever tag you name; Magnitude decides which model, quantization and context size your machine should run by assessing it first, then tunes for that configuration and normalizes reasoning formats, tool-call formats, chat templates and history conventions so a harness can switch models without model-specific code. If you want the simplest way to run a model you picked, Ollama is still the smaller tool — our <a href="https://baeseokjae.github.io/posts/ollama-vs-lm-studio-local-ai-2026/">Ollama vs LM Studio comparison</a> covers that choice.</p>
+<p>Two boundaries worth stating. Magnitude is single-machine and single-user by design: models load on demand, unload when idle or under memory pressure, and sessions share prefix caches. It is not a production serving layer, and it does not try to be — that is <a href="https://baeseokjae.github.io/posts/vllm-vs-ollama-production-2026/">vLLM&rsquo;s territory</a>. And the machine-specific recommendation only matters if your model choices are constrained anyway; the <a href="https://github.com/magnitudedev/magnitude/blob/main/inference/catalog/models.json">catalog</a> holds 23 models as of 8 October 2026, every entry GGUF-based and pinned to a specific Hugging Face repository and quantization variant, each carrying an Artificial Analysis Intelligence Index score measured against a frontier of Claude Opus 5.5 at 57.6 (methodology 4.3.2, as of 29 September 2026). Examples include Qwen3.8 27B at 33.7 — about 59% of the frontier — Qwen3.6 35B-A3B at 18.2, Gemma 4 31B at 19.0, and Nemotron 3.5 Lightning 30B-A3B at 12.9 with an NVFP4 QAT build. Our roundup of <a href="https://baeseokjae.github.io/posts/best-local-llm-models-2026/">the best local LLM models</a> is the companion piece for what those models actually are.</p>
+<h2 id="what-hardware-does-magnitude-support-and-where-does-it-not-work-yet">What Hardware Does Magnitude Support, and Where Does It Not Work Yet?</h2>
+<p>The compatibility floor is published, which is rarer than it should be. From the repository&rsquo;s <a href="https://github.com/magnitudedev/magnitude/blob/main/inference/docs/compatibility.md">compatibility documentation</a>:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Backend</th>
+          <th>Requirement</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Metal</td>
+          <td>macOS 15 on arm64 (Apple Silicon)</td>
+      </tr>
+      <tr>
+          <td>CUDA</td>
+          <td>Compute capability 8.0 (Ampere) or newer, driver R525 / CUDA 12.0+</td>
+      </tr>
+      <tr>
+          <td>Vulkan</td>
+          <td>Vulkan 1.3 device with a current vendor driver</td>
+      </tr>
+      <tr>
+          <td>CPU fallback</td>
+          <td>x86-64-v2 or AArch64 with glibc 2.35 on Linux</td>
+      </tr>
+  </tbody>
+</table>
+<p>Platforms are macOS (Apple Silicon and Intel), Windows x64 and Linux x64/arm64, with Windows agents inside <a href="https://docs.magnitude.dev/api/windows-wsl.md">WSL documented separately</a>. Intel Macs run CPU only. Phones and mobile GPUs are explicitly out of scope, as is hardware older than roughly the last seven or eight years. One documentation nuance to know: the <a href="https://docs.magnitude.dev/hardware.md">hardware page prose</a> says &ldquo;Vulkan 1.1 or later&rdquo; while the enforced floor in compatibility.md is Vulkan 1.3 — treat 1.3 as the requirement.</p>
+<p>The not-yet list is where you should focus if you are buying time. Multi-GPU is unsupported — the team confirmed it is on the near-term roadmap, and an <a href="https://github.com/magnitudedev/magnitude/issues">open issue documents a dual-GPU machine</a> where Magnitude detected each card twice and then refused to use the second. The open-issue list on 8 October 2026 is concentrated in hardware detection and unsupported-model load: #142 &ldquo;Stuck in assessing models&rdquo; (12 comments), #148 a CPU-only Intel N100 whose first inference never completes, #151 an AMD Vulkan iGPU auto-selected despite a manifest declaring <code>backend=cpu</code>, #154 where 0.2.3 selects the AMD iGPU as the primary device on hybrid machines and excludes dGPU VRAM from the fit calculation, and #160 <code>attention_project_gemv</code> asking for 512 threads per threadgroup where the M1 Max pipeline allows 448. The launch thread&rsquo;s &ldquo;this model couldn&rsquo;t start&rdquo; report (#149) has since been closed with 17 comments; it is the kind of first-run failure the hardware-detection bugs above can produce.</p>
+<p>Hardware detection bugs on hybrid iGPU/dGPU laptops and some CPU-only machines are the current weak spot, not throughput.</p>
+<h2 id="how-do-you-connect-magnitude-to-your-coding-agent">How Do You Connect Magnitude to Your Coding Agent?</h2>
+<p>The service listens on port 10100 and speaks two dialects, per the <a href="https://docs.magnitude.dev/api/overview.md">API overview</a> and <a href="https://docs.magnitude.dev/api/endpoints.md">endpoint reference</a>. OpenAI-compatible endpoints live under <code>http://127.0.0.1:10100/inference/v1</code> — <code>/chat/completions</code> and <code>/responses</code>, plus <code>/models</code> and <code>/health</code>. The Anthropic-compatible surface is <code>http://127.0.0.1:10100/inference/anthropic/v1/messages</code> with a matching <code>count_tokens</code> endpoint, where <code>max_tokens</code> is required.</p>
+<p>No API key is needed from localhost. Remote access requires <code>network.enabled</code> plus an <code>apiKey</code> in <code>~/.magnitude/config.json</code>, and only inference is exposed remotely — the documented pattern, in the <a href="https://docs.magnitude.dev/remote-server.md">remote-server guide</a>, is a dedicated Mac Studio or DGX Spark running inference while your laptop runs the agent. <code>magnitude serve</code> gives you the same thing headless on macOS, Windows and Linux, which is what makes the project a genuine llama.cpp competitor rather than a desktop app with good UX.</p>
+<p>Supported harnesses as of this writing are Pi, OpenCode, Hermes, OpenClaw, Codex, Claude Code, Oh My Pi and Cline (<a href="https://docs.magnitude.dev/integrations/overview.md">integrations overview</a>); every other app connects through the OpenAI-compatible base URL. Connections rewrites the harness&rsquo;s own config file — useful, and worth knowing before you wonder why your agent&rsquo;s settings changed. If you prefer to wire things by hand and see the cost of doing so, our <a href="https://baeseokjae.github.io/posts/aider-ollama-local-coding-2026/">Aider + Ollama walkthrough</a> shows the manual version, and <a href="https://baeseokjae.github.io/posts/best-ollama-models-coding-2026/">best Ollama models for coding</a> covers the workload this engine targets.</p>
+<h2 id="what-is-seismic-and-why-is-the-engine-built-around-it">What Is Seismic, and Why Is the Engine Built Around It?</h2>
+<p>Seismic is Magnitude&rsquo;s numerical compiler and runtime, and it exists to own a boundary. The <a href="https://github.com/magnitudedev/magnitude/blob/main/inference/README.md">inference README</a> states the split precisely: the engine owns model interpretation, generation, scheduling and state; Seismic owns numerical compilation, device resources and execution on CPU, Metal, CUDA and Vulkan. The <a href="https://github.com/magnitudedev/magnitude/blob/main/inference/docs/engine/overview.md">engine overview</a> enumerates the owners inside the engine — chat and transport, the service handling admission, batching, fairness and capacity negotiation, generation, model execution, logical state with history visibility, sharing, checkpoints, forks and commitment, then Seismic libraries and the Seismic toolchain. The <a href="https://github.com/magnitudedev/magnitude/blob/main/inference/docs/seismic/overview.md">Seismic overview</a> describes the same boundary from the other side: Seismic turns authored computational structure into implementations selected for a particular hardware and backend.</p>
+<p>Hand-written kernels exist for eight model families (common, dflash, gemma4, lfm2, llama, muse_glimmer, nemotron_h and qwen35). The frozen previous implementation lives under <code>old-inference/</code>, where llama.cpp is retained as a preservation reference and, more usefully, as a source of independent numerical fixtures — an external comparator neither engine controls.</p>
+<p>That is the part of the repository that makes the performance claim credible. Parity is checked at primitive boundaries against upstream llama.cpp tests, official tools such as llama-bench and llama-perplexity, differential cases against a thin native C++ oracle, and an external comparator. The repository&rsquo;s own <a href="https://github.com/magnitudedev/magnitude/blob/main/design/inference/benchmarking.md">benchmarking contract</a> says the quiet part out loud: &ldquo;Performance ceilings and cross-engine parity remain measured claims, never guarantees inferred from unit tests or a small number of favorable cases.&rdquo; A correctness failure invalidates the matching speed claim. Ownership tables per subsystem, an explicit optimality argument for the compiler, the published tolerance table, and four parity evidence lanes are not normal launch material. They are what let a reader audit the number instead of trusting it.</p>
+<h2 id="what-are-the-real-limitations-in-october-2026">What Are the Real Limitations in October 2026?</h2>
+<p>The catalog is 23 models and the hand-written kernels cover eight families. Anything outside that set is not going to receive the same attention, and model switching can break in-flight requests — a real consideration if your workflow swaps models mid-session rather than per-session.</p>
+<p>There is no authentication story beyond a local API key, no rate limiting, and no multi-tenancy. There is no fine-tuning (the founders confirmed in the launch thread that training is not supported), no moderation and no image generation; this is chat-completions-shaped inference only. The hybrid inference cloud the founders describe is roadmap, not shipped.</p>
+<p>Adoption is hard to measure and easy to overstate. The <code>@magnitudedev/cli</code> <a href="https://api.npmjs.org/downloads/point/last-month/@magnitudedev/cli">npm package recorded 5,635 downloads</a> in the 30 days ending 4 October 2026 (237 in the last week), but the docs say no npm installation is required because the desktop installer bundles the CLI — so npm undercounts real installs by an unknown factor. For scale on the same day the <a href="https://api.github.com/repos/magnitudedev/magnitude">repository metadata</a> was read: ollama/ollama sits at 182,551 stars, llama.cpp at 130,661, vLLM at 93,378, MLX at 28,686. Magnitude had 6,496 stars, 444 forks, 37 open issues and 12 named contributors, with 1,164 commits since its first on 13 July 2026 and <a href="https://github.com/magnitudedev/magnitude/releases">76 releases</a> to date. It is roughly three months old. The Rust half of the repository (32.2 MB) is more than three times the TypeScript half (9.7 MB), which tells you where the work has gone.</p>
+<p>The pace is worth noting without treating it as stability: the newest release is <code>@magnitudedev/cli@0.2.6</code> (5 October 2026), and 0.2.0 through 0.2.6 all landed inside about six days. Fast releases are good news for a young engine and bad news for anyone who needs a frozen target.</p>
+<h2 id="who-should-run-magnitude-and-who-should-wait">Who Should Run Magnitude, and Who Should Wait?</h2>
+<p>Run it if you are on Apple Silicon or an Ampere-or-newer NVIDIA GPU with roughly 24 GB or more, you drive a coding agent rather than a chat window, you have a repository or document class that cannot leave the building, and you would rather have a metadata-derived recommendation than an afternoon of GGUF guesswork. The assessment&rsquo;s real product is a decision you can trust before the download — the estimate is arithmetic on a bandwidth figure the engine already holds, never a benchmark run on your machine — and the Connections flow removes the config-writing chore entirely.</p>
+<p>Wait if you need multi-user throughput (use vLLM), a multi-GPU box, an unsupported chip, any model rather than one of 23, or a sub-second experience without a GPU. Also wait if a cluster of hardware-detection issues on hybrid iGPU/dGPU laptops would hit your exact machine — check the open issues against your hardware before installing.</p>
+<p>The open question is business model, and it is worth naming rather than burying. The engine, catalog and client are Apache-2.0 today with no paid tier and no license-gated features, and everything runs offline after a download. The founders have said they plan to monetize through per-token pricing on a hybrid inference cloud that passes on the same efficiency gains, with local-to-cloud switching that does not break a prefix cache. That is a coherent wedge. It is also unproven, so treat &ldquo;free forever&rdquo; as a stated plan rather than a contract. For the broader economics of running local at all, our <a href="https://baeseokjae.github.io/posts/local-llm-rig-cost-payback-2026/">local rig cost-payback analysis</a> is the prerequisite reading, and the <a href="https://baeseokjae.github.io/posts/local-ai-model-serving-frameworks-2026/">local AI model serving frameworks guide</a> covers the rest of the local stack — harness choices move cost, engine choices move tokens per second.</p>
+<h2 id="faq">FAQ</h2>
+<p><strong>What is Magnitude?</strong></p>
+<p>Magnitude is an Apache-2.0 local inference engine and desktop app from Magnitude AI (YC S25). It assesses your hardware from metadata — deriving the device&rsquo;s memory bandwidth from the driver&rsquo;s report, a published specification, or the device class, with nothing run on the device — ranks complete model, quantization and context configurations for that machine, compiles and tunes its own kernels on the device, then serves the model on localhost:10100 and rewrites your coding agent&rsquo;s config to use it. The engine is Rust around Seismic, its numerical compiler and runtime for CPU, Metal, CUDA and Vulkan.</p>
+<p><strong>Is &ldquo;up to 2x faster than llama.cpp&rdquo; true?</strong></p>
+<p>It is true for exactly the two configurations Magnitude published: Qwen 3.6 35B-A3B at 4-bit, 64k context, no speculative decoding — decode 30 to 57 tok/s (+92%) on an M4 Pro 48 GB via Metal, and 49 to 58 tok/s (+19%) on a DGX Spark via CUDA, where prefill gains were +9% and +23%. Both engines used the same settings family, with llama.cpp on flash attention, default prefill batches, no speculative decoding and 16-bit KV. It is a vendor benchmark on two machines, not a guarantee for yours, and independent users have measured MLX faster on an M5 Max (175 vs 161 tok/s) and llama.cpp 20-30% faster on a 5070 Ti.</p>
+<p><strong>Does Magnitude replace Ollama or LM Studio?</strong></p>
+<p>They solve overlapping but different problems. Ollama and LM Studio run whatever model tag you name; Magnitude decides which model, quantization and context size your machine should run by assessing it first, then tunes kernels and speculation for that configuration and wires itself into your agent harness. Magnitude also normalizes reasoning formats, tool-call formats and chat templates so a harness can switch models without model-specific code. If you want the simplest way to run a model you already picked, Ollama is still the smaller tool; if you want a metadata-derived recommendation plus agent-shaped serving, that is Magnitude&rsquo;s job.</p>
+<p><strong>What hardware do I need, and what does it not support?</strong></p>
+<p>Magnitude supports Apple Silicon Macs on macOS 15 or newer (Metal), NVIDIA GPUs from Ampere (compute capability 8.0) with driver R525 or newer, Vulkan 1.3 devices on Windows and Linux, and CPU-only fallback on x86-64-v2 or AArch64 with glibc 2.35 on Linux. Intel Macs run CPU only. Out of scope as of October 2026: phones and mobile GPUs, older CUDA cards, and multi-GPU systems — the team confirmed multi-GPU is near-term roadmap, and open issues #142, #148, #151, #154 and #160 document hardware detection and model-load failures on hybrid iGPU/dGPU machines and some CPU-only systems.</p>
+<p><strong>Is Magnitude still open source if the company plans an inference cloud?</strong></p>
+<p>The engine, catalog and client code are Apache-2.0 today with no paid tier or license-gated features, and model weights carry their own separate licenses. The founders have said they plan to charge per token for a hybrid inference cloud that passes on the same efficiency gains, and that switching between local and cloud workloads should not break a prefix cache. That plan does not currently gate anything locally — everything runs offline after a model is downloaded — but it is the stated direction, so treat &ldquo;free forever&rdquo; as a plan rather than a contract.</p>
+<h2 id="primary-sources">Primary sources</h2>
+<ul>
+<li><a href="https://github.com/magnitudedev/magnitude/blob/main/README.md">Repository README</a></li>
+<li><a href="https://github.com/magnitudedev/magnitude/blob/main/scripts/benchmark-chart.py">Benchmark chart script</a></li>
+<li><a href="https://github.com/magnitudedev/magnitude/blob/main/inference/docs/precision.md">Precision policy</a></li>
+<li><a href="https://github.com/magnitudedev/magnitude/blob/main/inference/docs/compatibility.md">Compatibility floors</a></li>
+<li><a href="https://github.com/magnitudedev/magnitude/blob/main/inference/engine/executor/src/assessment/bandwidth.rs">Bandwidth assessment module</a></li>
+<li><a href="https://github.com/magnitudedev/magnitude/blob/main/inference/engine/executor/src/assessment/mod.rs">Metadata-only assessment overview</a></li>
+<li><a href="https://github.com/magnitudedev/magnitude/blob/main/design/icn/performance-estimation.md">Generation-performance estimation</a></li>
+<li><a href="https://docs.magnitude.dev/integrations/overview.md">Integrations overview</a></li>
+<li><a href="https://github.com/magnitudedev/magnitude/blob/main/inference/docs/engine/overview.md">Engine overview</a></li>
+<li><a href="https://github.com/magnitudedev/magnitude/blob/main/inference/docs/seismic/overview.md">Seismic overview</a></li>
+<li><a href="https://github.com/magnitudedev/magnitude/blob/main/inference/README.md">Inference README</a></li>
+<li><a href="https://github.com/magnitudedev/magnitude/blob/main/inference/catalog/models.json">Model catalog</a></li>
+<li><a href="https://github.com/magnitudedev/magnitude/blob/main/LICENSE">Repository license</a></li>
+<li><a href="https://news.ycombinator.com/item?id=49911995">Launch HN thread</a></li>
+<li><a href="https://docs.magnitude.dev/introduction.md">Product documentation</a></li>
+</ul>
+]]></content:encoded></item></channel></rss>
