@@ -5,8 +5,7 @@ cover:
   image: /images/pydantic-ai-tutorial-2026.png
   relative: false
 date: 2026-04-22 01:13:32+00:00
-description: Build production-ready AI agents with Pydantic AI — type-safe structured
-  outputs, tool calling, dependency injection, and automatic validation retries.
+description: 'Updated October 2026 for pydantic-ai 2.54.0 - the current provider strings, the output_type= and result.output API, corrected install instructions and a dated provider count.'
 draft: false
 schema: schema-pydantic-ai-tutorial-2026
 tags:
@@ -16,128 +15,98 @@ tags:
 - llm
 - type-safety
 - tutorial
-title: 'Pydantic AI Tutorial 2026: Type-Safe Python Agents With Automatic Validation
-  and Self-Correction'
+lastmod: 2026-10-08 00:00:00+00:00
+title: 'Pydantic AI Tutorial 2026 (refreshed): Type-Safe Python Agents With Automatic Validation'
 ---
 
-Pydantic AI is a Python agent framework built by the Pydantic team that brings type-safe, validated LLM interactions to production. Install it with `pip install pydantic-ai`, define your agent with a Pydantic `BaseModel` as the result type, and the framework automatically validates LLM output — retrying if validation fails — without any manual JSON parsing or schema wrestling.
+Pydantic AI is a Python agent framework from the Pydantic team: install it with `pip install pydantic-ai`, declare a Pydantic `BaseModel` as your agent's output type, and the framework validates the model's response and retries automatically when validation fails — no manual JSON parsing, no schema wrestling. This page was first published in April 2026. The October 2026 revision below re-checked every copy-paste surface on it against `pydantic-ai` 2.54.0 and the vendor's current documentation, because four of the strings the original page carried no longer resolve at all.
 
 ## What Is Pydantic AI?
 
-Pydantic AI is an open-source Python agent framework, released in November 2024, that applies Pydantic's battle-tested validation engine directly to LLM interactions. With 16,500+ GitHub stars and 2,000+ forks as of April 2026, it has become one of the fastest-adopted agent frameworks in the Python ecosystem. Pydantic already powers the validation layer for OpenAI SDK, Google ADK, Anthropic SDK, LangChain, LlamaIndex, and CrewAI — Pydantic AI extends this same validation philosophy to the agent orchestration layer itself. Unlike LangChain, which relies on prompt engineering and string parsing to coerce LLM outputs into structure, Pydantic AI uses native Python type annotations and `BaseModel` schemas so your IDE catches type errors at write time, not at runtime. The design goal — as stated in the official docs — is to bring the FastAPI ergonomics of type-safe, auto-documented APIs to GenAI agent development: define the schema, wire up the model, and let the framework handle validation, retries, and error recovery automatically.
+Pydantic AI is an open-source Python agent framework that applies Pydantic's validation engine to LLM interactions. Its repository was created on 2024-06-21, and the current line is 2.54.0, uploaded to PyPI on 2026-10-03 ([repository](https://github.com/pydantic/pydantic-ai), [PyPI project page](https://pypi.org/project/pydantic-ai/)). The repository reports 20,489 stars and 2,879 forks as of 2026-10-08 ([pydantic/pydantic-ai](https://github.com/pydantic/pydantic-ai)). Pydantic Validation is described by the project as the validation layer of the OpenAI SDK, the Anthropic SDK, the Google ADK and LangChain, and Pydantic AI applies that same approach to the agent loop itself ([README](https://github.com/pydantic/pydantic-ai/blob/main/README.md)).
 
-### How Pydantic AI Compares to LangChain and CrewAI
+Where LangChain offers broad abstractions over many integrations, Pydantic AI treats type safety as the core feature: every structured output is validated against a `BaseModel` at runtime, with automatic retries when the model returns something that does not parse. The project's own comparison page sets out where it differs from LangChain, Google ADK, the Claude Agent SDK and others ([comparisons](https://pydantic.dev/docs/ai/comparisons/overview/)). The design goal is the FastAPI ergonomics applied to agents — declare the schema, wire up the model, and let the framework handle validation and retries.
 
-Pydantic AI focuses on type safety as a first-class feature. Where LangChain provides broad abstractions over dozens of integrations, Pydantic AI trades breadth for correctness: every structured output is validated against a `BaseModel` schema at runtime, with automatic retries when the LLM returns invalid data. CrewAI provides higher-level orchestration for role-based multi-agent teams, while Pydantic AI operates at a lower level — think of it as the foundation you'd build a CrewAI-style system on top of, with stronger type guarantees throughout.
+### The FastAPI Analogy
 
-### The FastAPI-of-AI Promise
+FastAPI replaced boilerplate route handlers with type-annotated functions that validate payloads and generate OpenAPI docs. Pydantic AI does the same for agents: instead of writing prompt templates and hand-parsing JSON, you declare a typed output model and the framework validates the result. That means static analysis tools such as mypy and pyright work across your agent code, and your IDE knows the shape of every agent result.
 
-The FastAPI analogy runs deep. FastAPI replaced boilerplate Flask route handlers with type-annotated functions that auto-generate OpenAPI docs and validate request/response payloads. Pydantic AI does the same for LLM agents: instead of writing prompt templates, manually parsing JSON, and hoping the model follows your schema, you declare a typed result model and the framework handles the rest. This means static analysis tools like mypy and pyright work end-to-end across your agent code.
+## Install and the Python Floor (corrected)
 
-## Setting Up Your First Pydantic AI Project
-
-Setting up Pydantic AI takes under five minutes for any developer with Python 3.10+ and a model API key. The core package installs cleanly: `pip install pydantic-ai` pulls in the framework and its model adapters. For provider-specific extras you can use `pip install pydantic-ai[openai]`, `pydantic-ai[anthropic]`, or `pydantic-ai[gemini]`. As of April 2026, Pydantic AI supports 20+ model providers including OpenAI, Anthropic, Gemini, DeepSeek, Groq, Ollama (local), Azure AI Foundry, and Amazon Bedrock — switching providers requires only changing one string in your Agent constructor. The recommended project structure mirrors FastAPI conventions: an `agents/` directory for agent definitions, a `models/` directory for Pydantic schemas, and `tools/` for callable functions. Environment variables follow provider conventions (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`), and the framework reads them automatically without any extra configuration code.
+The core install is unchanged:
 
 ```bash
 pip install pydantic-ai
-export OPENAI_API_KEY="sk-..."
 ```
 
+The default install pulls the `pydantic_ai` package, its core dependencies, the libraries needed for the OpenAI, Anthropic and Google models, plus the CLI, MCP, Evals, Web UI and Logfire integrations ([installation doc](https://github.com/pydantic/pydantic-ai/blob/main/docs/install.md)). Anything else is an extra, for example `pydantic-ai[bedrock,temporal]`, or you can install `pydantic-ai-slim` with only the extras you need.
+
+**Provider extras no longer exist on the root package.** The April version of this page told readers to run `pip install pydantic-ai[openai]`, `pydantic-ai[anthropic]` or `pydantic-ai[gemini]`. None of those three extras, nor `google`, is defined for the root package: an install attempt in a clean environment emits `warning: The package 'pydantic-ai==2.54.0' does not have an extra named 'gemini'`, and the extras PyPI publishes for `pydantic-ai` 2.54.0 contain neither `gemini`, `google`, `openai`, `anthropic` nor `gateway` ([pyproject.toml](https://github.com/pydantic/pydantic-ai/blob/main/pyproject.toml), [PyPI project page](https://pypi.org/project/pydantic-ai/)). The extras that do exist — `bedrock`, `temporal`, `xai`, `groq`, `voyageai` and so on — are forwarded to `pydantic-ai-slim`. For the three bundled providers, a plain `pip install pydantic-ai` is all you need.
+
+**The Python floor is inconsistent across the vendor's own surfaces.** The repository's install doc says `(Requires Python 3.11+)`, while the rendered installation page at `pydantic.dev` shows `(Requires Python 3.10+)` and PyPI metadata declares `requires_python: >=3.10` ([installation doc](https://github.com/pydantic/pydantic-ai/blob/main/docs/install.md), [install page](https://pydantic.dev/docs/ai/overview/install/), [PyPI project page](https://pypi.org/project/pydantic-ai/)). This page now recommends Python 3.11 or newer, matching the stricter of the vendor's statements; nothing here was tested below 3.11.
+
+**Environment variables follow the provider, and the Google one is `GOOGLE_API_KEY`.** The framework reads `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` for those providers, and the Gemini provider expects `GOOGLE_API_KEY` — the library's own error message for a Google model in 2.54.0 names `GOOGLE_API_KEY`, not `GEMINI_API_KEY` ([Google provider docs](https://pydantic.dev/docs/ai/models/google/)).
+
+## Model Strings That Resolve Today
+
+Every model is selected with a `<provider>:<model>` string, so switching providers is a one-line change. The table below lists the strings verified against the vendor's provider documentation on 2026-10-08.
+
+| Provider | Current string | Note |
+|---|---|---|
+| OpenAI | `openai:gpt-6-sol` | Bare `openai:` resolves to `OpenAIResponsesModel` (the Responses API). Pin the legacy Chat Completions API with `openai-chat:`. |
+| Anthropic | `anthropic:claude-sonnet-4-6` | Unchanged; still the documented example. |
+| Google (Gemini API) | `google:gemini-3.7-flash` | The vendor's documented example. The `google-gla:` prefix is gone. Vertex AI uses `google-cloud:`. |
+| Ollama (local) | `ollama:qwen3` | Documented example; any tag present in your local Ollama resolves through the same prefix. |
+
+Sources for the table: the vendor's [OpenAI page](https://pydantic.dev/docs/ai/models/openai/) (bare `openai:` and the `openai-chat:` alternative), [Anthropic page](https://pydantic.dev/docs/ai/models/anthropic/), [Google page](https://pydantic.dev/docs/ai/models/google/) (the `google:` and `google-cloud:` prefixes) and [Ollama page](https://pydantic.dev/docs/ai/models/ollama/).
+
+Re-running the original page's Google string in an isolated environment is the sharpest illustration of the change: `Agent('google-gla:gemini-2.0-flash')` now raises `UserError: Unknown model: google-gla:gemini-2.0-flash. Did you mean 'google:gemini-2.0-flash'?`, so a copied `google-gla:` line is a hard failure at agent construction, not a warning. Two cautions about reading that error message. First, the tag it suggests is the April string with only the prefix corrected — it is not the example the vendor currently documents. Second, construction validates the prefix, not the tag: `Agent('google:gemini-2.0-flash')` and `Agent('google:gemini-3.7-flash')` both construct and then fail identically asking for `GOOGLE_API_KEY`, so a successful construction is not evidence that a tag is still served. The vendor's Google page documents `Agent('google:gemini-3.7-flash')` as the Gemini-API example ([Google provider docs](https://pydantic.dev/docs/ai/models/google/)).
+
+Two related corrections belong here. First, this page previously used `openai:gpt-4o` in every example; the vendor's OpenAI page now documents `openai:gpt-6-sol` and a bare `openai:` prefix that routes to the Responses API, so the examples below have been moved to the documented model and the routing difference is called out ([OpenAI provider docs](https://pydantic.dev/docs/ai/models/openai/)). Second, the Google provider error message is how you discover the environment variable name — a `google:` model without `GOOGLE_API_KEY` fails with that instruction rather than silently falling back.
+
+The provider directory is larger than the April page suggested. Counting the vendor's provider table gives 34 provider rows and 37 distinct `<prefix>:` model-string prefixes as of 2026-10-08, so the old undated "20+ model providers" figure has been replaced with that dated count ([provider directory](https://pydantic.dev/docs/ai/models/overview.md), [rendered provider list](https://pydantic.dev/docs/ai/models/overview/)). The count is a documentation-directory count — the number of prefixes the vendor documents — not a count of independently verified integrations.
+
+## Your First Agent
+
+A Pydantic AI agent wraps a model, an optional set of instructions, optional tools and an output type. The keyword that declares a structured result is `output_type=`, not `result_type=`:
+
 ```python
+from pydantic import BaseModel
 from pydantic_ai import Agent
 
-agent = Agent("openai:gpt-4o")
-result = agent.run_sync("What is the capital of France?")
-print(result.data)  # "Paris"
-```
-
-### Configuring Model Providers
-
-Switching models requires only a string change in your Agent constructor — no additional configuration or adapter code needed:
-
-```python
-# OpenAI
-agent = Agent("openai:gpt-4o")
-
-# Anthropic
-agent = Agent("anthropic:claude-sonnet-4-6")
-
-# Local via Ollama (no API key required)
-agent = Agent("ollama:llama3.2")
-
-# Google Gemini
-agent = Agent("google-gla:gemini-2.0-flash")
-```
-
-## Building Your First AI Agent
-
-A Pydantic AI agent is a Python object that wraps a model, a system prompt, optional tools, and a typed result schema. The minimal example — `Agent("openai:gpt-4o")` — creates a string-output agent using OpenAI's GPT-4o. For synchronous code, `agent.run_sync(prompt)` blocks until the model responds; for async applications, `await agent.run(prompt)` integrates directly with asyncio and FastAPI route handlers. Streaming responses work with `agent.run_stream(prompt)` as an async context manager, yielding text chunks as they arrive from the model. The returned `RunResult` object carries `.data` (the validated output), `.usage()` (token counts and cost tracking), and `.all_messages()` (the full conversation history for multi-turn use cases). System prompts can be static strings passed to the constructor or dynamic functions decorated with `@agent.system_prompt` that receive the dependency context and generate prompts at runtime based on user data or configuration. The entire API surface is intentionally minimal — if you know FastAPI, you already know most of Pydantic AI's patterns.
-
-```python
-from pydantic_ai import Agent
+class City(BaseModel):
+    name: str
+    country: str
 
 agent = Agent(
-    "openai:gpt-4o",
-    system_prompt="You are a helpful assistant. Be concise."
+    "openai:gpt-6-sol",
+    output_type=City,
+    instructions="Answer with the city and its country.",
 )
 
-result = agent.run_sync("Explain async/await in Python in one sentence.")
-print(result.data)
-print(result.usage())  # Usage(requests=1, tokens=...)
+result = agent.run_sync("What is the capital of France?")
+
+print(result.output)          # validated City instance, not .data
+print(result.usage)           # RunUsage(...) — a property, not a call
+print(result.all_messages())  # full conversation history
 ```
 
-### Streaming Responses
+Three API details changed since April 2026 and are the most common copy-paste failures readers hit with the old page. `result_type=` is gone — constructing an agent with it raises `TypeError: Agent.__init__() got an unexpected keyword argument 'result_type'`; the accepted parameter is `output_type`. The result object is `AgentRunResult` and the validated value is `result.output`, not `result.data` (`AgentRunResult` has no `data` attribute). Usage is a property (`result.usage`), not a method, so `result.usage()` raises `TypeError: 'RunUsage' object is not callable`. `result.all_messages()` is still a method and still returns the conversation history.
 
-```python
-import asyncio
-from pydantic_ai import Agent
-
-agent = Agent("anthropic:claude-sonnet-4-6")
-
-async def stream_response():
-    async with agent.run_stream("Write a haiku about Python.") as stream:
-        async for chunk in stream.stream_text(delta=True):
-            print(chunk, end="", flush=True)
-
-asyncio.run(stream_response())
-```
+For async code use `await agent.run(prompt)`; for streaming text use `agent.run_stream(prompt)` as an async context manager. The full surface is described in the vendor's [agent documentation](https://pydantic.dev/docs/ai/core-concepts/agent/).
 
 ## Structured Outputs With Pydantic Models
 
-Structured outputs are the defining feature of Pydantic AI: define a `BaseModel` subclass as your agent's `result_type` and the framework guarantees that every response conforms to your schema — or automatically retries the query until it does. This eliminates the most common failure mode in LLM applications: brittle JSON parsing that breaks when the model adds an unexpected field, nests objects differently, or returns prose instead of valid JSON. In a production e-commerce scenario, for example, you might define `ProductExtraction(BaseModel)` with fields for `name: str`, `price: float`, `currency: str`, `availability: bool`, and `attributes: dict[str, str]`. Pass unstructured product description text to the agent and get back a fully-validated Python object that your IDE understands, your type checker approves, and your database ORM can insert directly. The validation retry mechanism uses the Pydantic validation error message as additional context for the LLM on the next attempt — so the model learns from its mistake within the same request, dramatically improving success rates on complex schemas compared to single-shot prompting. This self-correction capability is what makes Pydantic AI particularly reliable for production workloads.
+Structured output is the feature the framework is built around: define a `BaseModel` as the agent's `output_type` and every response is validated against it, with automatic retries when validation fails. That removes the most common failure mode in LLM applications — brittle JSON parsing that breaks when a model adds a field, nests objects differently or answers in prose. The framework feeds the validation error back to the model on the next attempt, so the model can correct itself within the same run.
+
+Retry behaviour is worth stating precisely, because the old page described it loosely. When an output tool is in use, each output tool gets its own retry counter, and the output side of the agent's retry budget is the default per-tool limit. The budget defaults to 1 and is set with an `AgentRetries` mapping — `Agent(..., retries={"output": 2})` on the agent, or `agent.run(..., retries={"output": 2})` for a single run — or per output tool with `ToolOutput(model, max_retries=N)` ([output documentation](https://pydantic.dev/docs/ai/core-concepts/output/)).
+
+Nested models work the way Pydantic users expect:
 
 ```python
+from typing import List, Optional
 from pydantic import BaseModel
 from pydantic_ai import Agent
-
-class MovieReview(BaseModel):
-    title: str
-    year: int
-    sentiment: str  # "positive", "negative", "neutral"
-    score: float    # 0.0 to 10.0
-    summary: str
-
-agent = Agent(
-    "openai:gpt-4o",
-    result_type=MovieReview,
-    system_prompt="Extract structured movie review data from user input."
-)
-
-result = agent.run_sync(
-    "Inception (2010) was mind-blowing, a perfect 10/10 thriller."
-)
-review = result.data
-print(review.title)      # "Inception"
-print(review.year)       # 2010
-print(review.score)      # 10.0
-print(review.sentiment)  # "positive"
-```
-
-### Complex Nested Models
-
-```python
-from pydantic import BaseModel
-from typing import List, Optional
 
 class Address(BaseModel):
     street: str
@@ -151,68 +120,26 @@ class CompanyProfile(BaseModel):
     products: List[str]
     revenue_usd_millions: Optional[float] = None
 
-agent = Agent("openai:gpt-4o", result_type=CompanyProfile)
-result = agent.run_sync("Tell me about Stripe the payments company.")
-profile = result.data
-print(profile.headquarters.city)  # "San Francisco"
+agent = Agent("openai:gpt-6-sol", output_type=CompanyProfile)
+profile = agent.run_sync("Tell me about Stripe, the payments company.").output
+print(profile.headquarters.city)
 ```
 
-## Tool Calling and Function Integration
+Structured output and streaming are no longer mutually exclusive either. A structured agent can stream validated output with `stream_output()`, which yields the validated object as the stream progresses rather than only at the end; `stream_text()` remains the text path ([output documentation](https://pydantic.dev/docs/ai/core-concepts/output/)). The April answer to "can I stream and validate at the same time?" was no; on 2.54.0 it is yes, and the two-step workaround the old FAQ recommended is no longer necessary.
 
-Tool calling in Pydantic AI uses the `@agent.tool` decorator to register Python functions that the LLM can invoke autonomously during a conversation. The LLM reads the function's docstring to understand what the tool does, reads the type annotations to understand input and output types, and decides when to call it based on the user's query — no separate schema definition, no JSON Schema boilerplate, no manual tool routing. This approach, used in the official Pydantic AI examples repository (16,500+ GitHub stars), covers real-world cases from weather APIs to SQL query execution to bank account lookups. Tools receive a `RunContext[DepsType]` as their first argument, giving them access to the dependency injection context — databases, API clients, configuration — in a fully type-safe way. The LLM can call multiple tools in sequence, use one tool's output as input to another, and combine tool results with its own reasoning before returning a final structured answer. Pydantic AI validates all tool inputs against their type annotations before executing the function, so type errors surface immediately rather than propagating silently through your agent pipeline. Well-written docstrings are critical: the LLM uses them to decide which tool to call and how to populate its arguments.
+## Tool Calling and Dependency Injection
 
-```python
-import httpx
-from pydantic import BaseModel
-from pydantic_ai import Agent, RunContext
-
-class WeatherReport(BaseModel):
-    location: str
-    temperature_celsius: float
-    conditions: str
-    humidity_percent: int
-
-agent = Agent(
-    "openai:gpt-4o",
-    result_type=WeatherReport,
-    system_prompt="Use the weather tool to fetch current conditions for the requested city."
-)
-
-@agent.tool
-async def get_weather(ctx: RunContext[None], city: str) -> dict:
-    """Fetch current weather data for a given city name. Returns temperature, conditions, and humidity."""
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(f"https://wttr.in/{city}?format=j1")
-        data = resp.json()
-        current = data["current_condition"][0]
-        return {
-            "temp_c": float(current["temp_C"]),
-            "desc": current["weatherDesc"][0]["value"],
-            "humidity": int(current["humidity"])
-        }
-
-result = agent.run_sync("What's the weather like in Tokyo right now?")
-print(result.data.temperature_celsius)
-```
-
-### How LLMs Choose Which Tool to Call
-
-Write docstrings that describe *what* the tool does, *when* to use it, and *what* its parameters represent. A well-documented tool is called correctly; a vague docstring leads to incorrect tool selection or missing arguments. For agents with many tools, use `@agent.tool_plain` for tools that don't need the `RunContext` — this signals to the LLM that the tool has no side effects on agent state.
-
-## Dependency Injection for Type-Safe Context
-
-Dependency injection in Pydantic AI solves the global state problem that plagues most LLM agent frameworks: instead of using module-level variables or environment lookups inside tool functions, you declare a typed dependency container and inject it at runtime via the `deps_type` parameter on the Agent constructor. This pattern — familiar to FastAPI developers — makes agents fully testable because tests can inject mock dependencies without patching globals or monkeypatching module state. A typical production agent might depend on a database connection pool, an HTTP client, a user authentication context, and a configuration object. Define these as a `dataclass` or `BaseModel`, annotate your tools with `RunContext[MyDeps]`, and Pydantic AI ensures your tools receive exactly the right types with full IDE autocomplete and static analysis support. The dependency container is constructed outside the agent and passed at call time: `agent.run_sync(prompt, deps=MyDeps(db=pool, client=http_client))`. This makes agents composable — the same agent definition works with different dependency configurations in different environments, supporting local development, testing, staging, and production without any code changes to the agent itself.
+Tools are plain Python functions registered with `@agent.tool`; the model reads the docstring to decide when to call them and the type annotations to build the arguments. Tools that need no run context can be registered with `@agent.tool_plain`, and tools that do receive a `RunContext[Deps]` as their first argument ([agent documentation](https://pydantic.dev/docs/ai/core-concepts/agent/)).
 
 ```python
 from dataclasses import dataclass
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
-import asyncpg
 
 @dataclass
 class Deps:
-    db_pool: asyncpg.Pool
     user_id: int
+    max_sources: int = 5
 
 class OrderSummary(BaseModel):
     total_orders: int
@@ -222,207 +149,81 @@ class OrderSummary(BaseModel):
 agent = Agent(
     "anthropic:claude-sonnet-4-6",
     deps_type=Deps,
-    result_type=OrderSummary,
-    system_prompt="Summarize the user's order history from the database."
+    output_type=OrderSummary,
+    instructions="Summarize the user's order history.",
 )
 
 @agent.tool
 async def get_orders(ctx: RunContext[Deps]) -> list[dict]:
     """Fetch all orders for the current user from the database."""
-    rows = await ctx.deps.db_pool.fetch(
-        "SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC",
-        ctx.deps.user_id
-    )
-    return [dict(row) for row in rows]
+    return await ctx.deps.db.fetch_orders(ctx.deps.user_id)
+
+summary = agent.run_sync("How much have I spent?", deps=Deps(user_id=42)).output
 ```
 
-## Multi-Agent Patterns and Orchestration
+Dependency injection is what makes agents testable: the dependency container is built outside the agent and passed at call time, so tests can inject a mock database or HTTP client instead of monkeypatching module state. The `deps_type=Deps` declaration is on the constructor; the value is supplied to `run_sync(prompt, deps=...)` or `run(prompt, deps=...)`.
 
-Multi-agent orchestration with Pydantic AI enables complex workflows where specialized agents hand off tasks to each other with full type safety preserved across agent boundaries. Pydantic AI supports this through agent delegation: one agent can call another agent's `run()` method inside a tool function, passing structured Pydantic models between agents at each handoff point. This eliminates a common failure mode in multi-agent systems where unstructured string passing between agents allows errors to propagate silently through a pipeline — in Pydantic AI, every agent boundary is an explicit type contract. A research-and-summarization pipeline might use a `ResearchAgent` that returns a `ResearchFindings(BaseModel)` with source URLs, key facts, and confidence scores, then pass that validated output to a `WriterAgent` that produces a `BlogPost(BaseModel)` with title, sections, and metadata. The Pydantic AI repository includes working examples of multi-agent patterns including a coding agent skill that uses sub-agents for code generation, review, and test execution. Each agent's typed output becomes the next agent's validated input, making the system debuggable, testable, and maintainable as the number of agents and the complexity of workflows grows.
+## Testing With TestModel
 
-```python
-from pydantic import BaseModel
-from pydantic_ai import Agent
-
-class ResearchFindings(BaseModel):
-    topic: str
-    key_facts: list[str]
-    sources: list[str]
-    confidence: float
-
-class BlogPost(BaseModel):
-    title: str
-    introduction: str
-    sections: list[str]
-    conclusion: str
-
-researcher = Agent(
-    "openai:gpt-4o",
-    result_type=ResearchFindings,
-    system_prompt="Research topics thoroughly and cite your sources."
-)
-
-writer = Agent(
-    "anthropic:claude-sonnet-4-6",
-    result_type=BlogPost,
-    system_prompt="Write engaging blog posts from research findings."
-)
-
-@writer.tool
-async def research_topic(ctx, topic: str) -> dict:
-    """Research a topic using the research agent and return structured findings."""
-    result = await researcher.run(topic)
-    return result.data.model_dump()
-```
-
-## Testing and Evaluating Your Agents
-
-Testing AI agents with Pydantic AI is fundamentally more tractable than with other frameworks because every agent interaction has an explicit typed contract. Pydantic AI provides `TestModel` — a deterministic mock that returns schema-conformant responses without making real API calls, essential for CI/CD pipelines where LLM API costs and latency make live testing impractical. The built-in eval framework extends this to production monitoring: define test cases with expected structured outputs, run them against your agent, and track pass rates over time as you change models or prompts. This is the kind of production observability tooling that most agent frameworks leave entirely to the developer to build from scratch. For unit testing individual tools, the dependency injection pattern makes mocking trivial: inject a mock database or HTTP client via `deps`, call the tool function directly, and assert on its output without any LLM involvement. `pytest` integration is straightforward — use `agent.override(model=TestModel())` as a context manager to swap the real model for the test mock within a test function. For regression testing, record real LLM interactions with pytest-recording or VCR cassettes and replay them in CI.
+`TestModel` is the deterministic mock shipped with the framework: it returns schema-conformant responses without any API call, which is what makes agent tests viable in CI. Install it as an override for the duration of a test:
 
 ```python
 from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
-from pydantic import BaseModel
 
-class Sentiment(BaseModel):
-    label: str
-    confidence: float
-
-agent = Agent("openai:gpt-4o", result_type=Sentiment)
-
-def test_sentiment_analysis():
+def test_sentiment_analysis(agent, sentiment_model):
     with agent.override(model=TestModel()):
         result = agent.run_sync("I love this product!")
-        # TestModel returns schema-valid mock data without API calls
-        assert isinstance(result.data, Sentiment)
-        assert result.data.label in ["positive", "negative", "neutral"]
-        assert 0.0 <= result.data.confidence <= 1.0
+        assert isinstance(result.output, sentiment_model)
 ```
 
-## Observability: Debugging With Pydantic Logfire
+Note the assertion: `result.output`, the current accessor, not the `result.data` the April page used. The vendor's [testing guide](https://pydantic.dev/docs/ai/guides/testing/) covers `TestModel`, `FunctionModel` for tool-level control, and overriding the model with pytest fixtures, which is the cleaner way to share the override across a test session.
 
-Pydantic Logfire is the native observability backend for Pydantic AI, built on OpenTelemetry so traces, spans, and metrics export to any compatible backend — Grafana, Datadog, Honeycomb, or the Logfire SaaS platform. Integrating Logfire takes three lines of code: `pip install logfire`, `import logfire`, `logfire.configure()` — after which every agent run, tool call, model request, and validation event is automatically traced with full context. Each span captures the model name, prompt tokens, completion tokens, cost estimate, tool inputs and outputs, and validation results, giving you a complete audit trail for debugging agent failures in production. The cost tracking feature aggregates token usage across nested agent calls, making it straightforward to identify expensive prompts or tools that are invoked more than expected. For teams already using OpenTelemetry with a different backend, Logfire respects the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable — there's no Pydantic-specific lock-in. The Logfire integration also instruments the automatic retry mechanism, recording each failed validation attempt and the corrected LLM response, which is invaluable for diagnosing structured output failures and understanding whether your schemas or your prompts need adjustment.
+## Observability With Logfire
+
+Logfire remains the native observability path, built on OpenTelemetry so traces and metrics export to any compatible backend. The three lines are unchanged:
 
 ```python
 import logfire
 from pydantic_ai import Agent
-
-logfire.configure()  # reads LOGFIRE_TOKEN from env
-logfire.instrument_pydantic_ai()
-
-agent = Agent("openai:gpt-4o", system_prompt="You are a helpful assistant.")
-result = agent.run_sync("Summarize the benefits of type safety in Python.")
-# Full trace — model, tokens, cost, tool calls — now visible in Logfire
-```
-
-## Production Best Practices
-
-Running Pydantic AI agents in production requires attention to error handling, concurrency, cost management, and deployment patterns that differ meaningfully from development usage. The framework's model gateway feature (available in `pydantic-ai[gateway]`) provides a unified proxy layer for routing requests across multiple providers — try GPT-4o, fall back to Claude Sonnet if rate-limited — and centralizing API key management across your infrastructure. Error handling best practice is to catch `ModelRetry` exceptions (raised after all automatic validation retries are exhausted) at the application layer and implement graceful degradation rather than letting them propagate as 500 errors. Rate limiting is most effectively implemented with `asyncio.Semaphore` around concurrent agent runs, or with a task queue like ARQ or Celery for high-throughput batch workloads. Pydantic AI's async-native design means a single event loop can handle dozens of concurrent agent calls efficiently, but each call holds an open HTTP connection to the model API — connection pooling via a shared `httpx.AsyncClient` configured as a dependency significantly reduces per-call overhead. For FastAPI integration, mount agents as async route handlers that construct the dependency context from the request state and stream responses back using `StreamingResponse` with `run_stream()`, giving users real-time feedback while the agent works.
-
-```python
-from fastapi import FastAPI
-from fastapi.responses import StreamingResponse
-from pydantic_ai import Agent
-
-app = FastAPI()
-agent = Agent("openai:gpt-4o")
-
-@app.post("/chat")
-async def chat(request: dict):
-    async def generate():
-        async with agent.run_stream(request["message"]) as stream:
-            async for chunk in stream.stream_text(delta=True):
-                yield chunk
-    return StreamingResponse(generate(), media_type="text/plain")
-```
-
-## Complete Project: A Production-Ready Research Agent
-
-This end-to-end example combines structured outputs, tool calling, dependency injection, and observability into a single production-ready agent that researches a topic and returns a structured report. Notice how every boundary — the dependency container, the tool return types, the final result — is explicitly typed, making the entire agent system statically analyzable with mypy or pyright and fully testable with `TestModel`.
-
-```python
-import logfire
-from dataclasses import dataclass
-from pydantic import BaseModel
-from pydantic_ai import Agent, RunContext
-import httpx
 
 logfire.configure()
 logfire.instrument_pydantic_ai()
 
-@dataclass
-class ResearchDeps:
-    http_client: httpx.AsyncClient
-    max_sources: int = 5
-
-class Source(BaseModel):
-    url: str
-    title: str
-    relevance_score: float
-
-class ResearchReport(BaseModel):
-    topic: str
-    summary: str
-    key_findings: list[str]
-    sources: list[Source]
-    confidence: float
-    follow_up_questions: list[str]
-
-research_agent = Agent(
-    "openai:gpt-4o",
-    deps_type=ResearchDeps,
-    result_type=ResearchReport,
-    retries=2,
-    system_prompt=(
-        "You are an expert research assistant. Use the available tools to "
-        "gather information, evaluate sources critically, and produce "
-        "structured research reports with confidence scores."
-    )
-)
-
-@research_agent.tool
-async def web_search(ctx: RunContext[ResearchDeps], query: str) -> list[dict]:
-    """Search the web for information. Returns a list of results with titles and URLs."""
-    resp = await ctx.deps.http_client.get(
-        "https://api.search.example.com/search",
-        params={"q": query, "limit": ctx.deps.max_sources}
-    )
-    return resp.json()["results"]
-
-@research_agent.tool
-async def fetch_page_content(ctx: RunContext[ResearchDeps], url: str) -> str:
-    """Fetch and return the main text content of a web page. Use to read full articles."""
-    resp = await ctx.deps.http_client.get(url, follow_redirects=True)
-    return resp.text[:5000]
-
-async def run_research(topic: str) -> ResearchReport:
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        deps = ResearchDeps(http_client=client, max_sources=5)
-        result = await research_agent.run(
-            f"Research the following topic thoroughly: {topic}",
-            deps=deps
-        )
-        return result.data
+agent = Agent("openai:gpt-6-sol", name="hello_world_agent", instructions="Be concise.")
+agent.run_sync("Summarize why type safety matters in Python.")
 ```
 
-## FAQ
+`logfire.configure()` reads the project token from the environment and `logfire.instrument_pydantic_ai()` instruments agent runs, model requests, tool calls and validation events ([Logfire integration](https://pydantic.dev/docs/ai/integrations/logfire/)). One correction to the April production notes: the Pydantic AI Gateway is no longer reached through a `pydantic-ai[gateway]` extra — no such extra exists on the root package — it is a separate product with its own key and cost monitoring, and the vendor's install doc links it as a companion rather than an extra ([installation doc](https://github.com/pydantic/pydantic-ai/blob/main/docs/install.md)).
 
-**Does Pydantic AI work with local models like Ollama?**
+## Common Questions
 
-Yes. Pydantic AI supports Ollama out of the box with `Agent("ollama:llama3.2")`. For structured outputs, the model must support function calling or JSON mode — most modern Ollama models (Llama 3.2+, Mistral, Qwen 2.5) support this. Performance of automatic validation retries depends on the model's instruction-following capability; GPT-4o and Claude Sonnet achieve near-100% first-attempt success on well-designed schemas, while smaller local models may require more retries or simpler schemas.
+**Does Pydantic AI work with local models such as Ollama?**
+Yes, through the `ollama:` prefix. The vendor's documented example is `Agent('ollama:qwen3')` ([Ollama provider docs](https://pydantic.dev/docs/ai/models/ollama/)). Structured output requires the local model to support tool calling or JSON mode; whether a specific tag such as `llama3.2` is present depends on what you have pulled locally, which no documentation check can establish.
 
-**How many validation retries does Pydantic AI attempt before failing?**
+**How many validation retries happen before a run fails?**
+The output retry budget defaults to 1 and is configured with an `AgentRetries` mapping, for example `Agent(..., retries={"output": 2})`, or per output tool through `ToolOutput(max_retries=N)` ([output documentation](https://pydantic.dev/docs/ai/core-concepts/output/)). Each retry carries the previous validation error as additional context.
 
-By default, Pydantic AI retries up to 1 time when structured output validation fails. Configure this with `retries` on the Agent constructor: `Agent("openai:gpt-4o", result_type=MyModel, retries=3)`. Each retry includes the Pydantic validation error message as additional context, giving the model the information it needs to correct its output. Set `retries=0` to disable automatic retries if you want to handle validation failures manually at the application layer.
+**Can I stream and still get a validated object?**
+Yes on 2.54.0: `stream_output()` yields validated structured output as the stream runs, so the two-call workaround the April version recommended is unnecessary ([output documentation](https://pydantic.dev/docs/ai/core-concepts/output/)).
 
-**Can I use Pydantic AI alongside existing LangChain code?**
+## What Changed in This October 2026 Refresh
 
-Pydantic AI operates independently of LangChain and doesn't integrate with LangChain chain abstractions. You can call Pydantic AI agents from within LangChain pipelines as ordinary Python function calls, passing strings or serialized Pydantic model outputs between them. For new agent development, Pydantic AI's type-safe approach is generally preferable; for existing LangChain projects, incremental adoption — replacing individual chains with Pydantic AI agents — is a practical migration strategy that avoids a full rewrite.
+This revision corrects copy-paste surfaces that the April version published and that the current library no longer accepts:
 
-**How does Pydantic AI handle streaming with structured outputs?**
+- `google-gla:gemini-2.0-flash` (the April string) is replaced by the vendor's documented `google:gemini-3.7-flash`; `google-gla:` now raises `UserError` naming the replacement prefix, and Vertex AI remains `google-cloud:` ([Google provider docs](https://pydantic.dev/docs/ai/models/google/)).
+- `result_type=` is replaced by `output_type=` throughout; the old keyword raises `TypeError` at agent construction ([Anthropic provider docs](https://pydantic.dev/docs/ai/models/anthropic/), [README](https://github.com/pydantic/pydantic-ai/blob/main/README.md)).
+- `result.data` is replaced by `result.output`, and `result.usage()` by the `result.usage` property.
+- The `pydantic-ai[gemini]` / `[openai]` / `[anthropic]` install lines are removed because no such extras exist; the default install already covers OpenAI, Anthropic and Google ([pyproject.toml](https://github.com/pydantic/pydantic-ai/blob/main/pyproject.toml), [PyPI project page](https://pypi.org/project/pydantic-ai/)).
+- The `pydantic-ai[gateway]` reference is removed; the Gateway is a separate product.
+- `GEMINI_API_KEY` is corrected to `GOOGLE_API_KEY` for the Gemini provider ([Google provider docs](https://pydantic.dev/docs/ai/models/google/)).
+- The undated "20+ model providers" figure is replaced by a dated count of 34 provider rows and 37 prefixes (2026-10-08), and the April star and fork figures are replaced by 20,489 stars and 2,879 forks on the same date ([provider directory](https://pydantic.dev/docs/ai/models/overview.md), [repository](https://github.com/pydantic/pydantic-ai)).
+- The claim that "streaming and structured outputs are mutually exclusive" is withdrawn; `stream_output()` provides both ([output documentation](https://pydantic.dev/docs/ai/core-concepts/output/)).
+- The old FAQ's unsourced "near-100% first-attempt success" figure and the "thousands of daily agent interactions in production" line were not re-confirmable from any vendor page and have been removed rather than restated.
+- The version is pinned to 2.54.0, the current release, uploaded 2026-10-03 ([releases](https://github.com/pydantic/pydantic-ai/releases/latest), [PyPI project page](https://pypi.org/project/pydantic-ai/)).
 
-Streaming and structured outputs are mutually exclusive in a single agent run: `run_stream()` yields text tokens in real time but cannot validate the final output against a `BaseModel` until the stream completes. For use cases requiring both streaming UX and structured data, the recommended pattern is to stream the model's text response to the UI for display, then run a second non-streaming call with `result_type` to get a validated structured object for backend processing. The framework does not double-bill for this pattern when using response caching.
+## Sources and Verification Notes
 
-**Is Pydantic AI production-ready for high-throughput applications?**
+Everything factual above was re-read from the vendor's own documentation and package metadata on 2026-10-08 (UTC): the [installation doc](https://github.com/pydantic/pydantic-ai/blob/main/docs/install.md), [pyproject.toml](https://github.com/pydantic/pydantic-ai/blob/main/pyproject.toml), [provider directory](https://github.com/pydantic/pydantic-ai/blob/main/docs/models/overview.md), the [Google](https://pydantic.dev/docs/ai/models/google/), [Anthropic](https://pydantic.dev/docs/ai/models/anthropic/), [Ollama](https://pydantic.dev/docs/ai/models/ollama/) and [OpenAI](https://pydantic.dev/docs/ai/models/openai/) provider pages, the [output](https://pydantic.dev/docs/ai/core-concepts/output/), [agent](https://pydantic.dev/docs/ai/core-concepts/agent/), [testing](https://pydantic.dev/docs/ai/guides/testing/) and [Logfire](https://pydantic.dev/docs/ai/integrations/logfire/) pages, the [README](https://github.com/pydantic/pydantic-ai/blob/main/README.md), the [repository](https://github.com/pydantic/pydantic-ai), the [latest release](https://github.com/pydantic/pydantic-ai/releases/latest) and the [PyPI project page](https://pypi.org/project/pydantic-ai/).
 
-Yes, with appropriate architecture. Pydantic AI's async-native design supports hundreds of concurrent agent calls on a single event loop. For high throughput, use `asyncio.gather()` for parallel independent calls, a task queue (ARQ, Celery) for background processing, and the model gateway feature for automatic failover across providers. Multiple teams are running thousands of daily agent interactions in production with Pydantic AI, and the framework's explicit type contracts make debugging production incidents significantly faster than with loosely-typed alternatives like vanilla LangChain.
+The four copy-paste failures described above were reproduced by installing `pydantic-ai` 2.54.0 into an isolated virtual environment (Python 3.12) and running the tutorial's own calls against the library's built-in `TestModel` path. No live model API key was available for this revision, so no claim is made about model output quality, real retry counts or token cost; the checks cover syntax, accepted keyword arguments, accessor names and error messages, which are independent of the model backend. Those local runs were author-side verification only and are not published as a downloadable dataset. Star, fork and version figures are point-in-time values read on 2026-10-08 and will move.
