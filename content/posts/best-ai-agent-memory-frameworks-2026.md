@@ -4,6 +4,7 @@ cover:
   image: /images/best-ai-agent-memory-frameworks-2026.png
   relative: false
 date: 2026-04-15 13:01:50+00:00
+lastmod: 2026-10-12T17:28:35Z
 description: Compare Mem0, Zep, and Letta — the top AI agent memory frameworks in
   2026 — with benchmarks, architecture breakdowns, and a decision framework.
 draft: false
@@ -32,6 +33,7 @@ AI agent memory splits into two fundamentally different problems that most frame
 | **Mem0** | Vector + Graph + KV | 49.0% | ~48K | Apache 2.0 | Fastest personalization, cross-framework use |
 | **Zep** | Temporal Knowledge Graph | 63.8% | ~24K | Apache 2.0 | Temporal reasoning, entity tracking |
 | **Letta** | OS-inspired tiered (Core/Recall/Archival) | N/A (runtime) | ~21K | Apache 2.0 | Long-running agents, self-managed memory |
+| **GoodMem** | PostgreSQL/pgvector; configurable dense + sparse retrieval; optional reranking and synthesis | Not reported in supplied materials | N/A (private server repository) | GoodMem Free Binary License; Apache-2.0 SDKs | Shared institutional knowledge with access controls; self-hosted deployments |
 | **Cognee** | KG + Vector pipelines | ~N/A | ~12K | Apache 2.0 | Institutional knowledge from raw docs |
 | **LangMem** | Multiple types | N/A | Bundled w/ LC | MIT | Existing LangChain stacks |
 | **Hindsight** | Multi-strategy + Reflect | 91.4% | ~4K | MIT | Maximum accuracy, research use cases |
@@ -143,6 +145,12 @@ response = client.send_message(
 print(response.messages[-1].text)
 ```
 
+## GoodMem: Shared Knowledge with Access Controls
+
+GoodMem is a memory and retrieval service from PAIR Systems for teams building agents around shared institutional knowledge. It combines document ingestion, configurable dense and sparse retrieval, and optional reranking in a self-hostable service backed by PostgreSQL with pgvector. Built-in roles, resource-level grants, and scoped API keys let teams define which resources each agent can use.
+
+Teams can connect GoodMem to their agent applications through REST and gRPC APIs or client SDKs. Its built-in MCP server is currently in early access. Prometheus metrics and optional OpenTelemetry trace export support operational monitoring. For agents that work with internal policies, product documentation, or operating procedures, GoodMem brings document retrieval and access controls into one service.
+
 ## Benchmark Results: LongMemEval and Beyond
 
 LongMemEval (arXiv:2603.04814) is the most cited benchmark for conversational agent memory, testing recall accuracy over long multi-session conversations with temporal questions. The 2026 scores with GPT-4o:
@@ -230,7 +238,7 @@ Mem0's pricing cliff is the most common complaint in production deployments: the
 
 Self-hosting Mem0 requires running your own Qdrant (or other vector DB) instance plus the optional graph DB. Zep's self-hosted Graphiti has less feature parity than Zep Cloud's full implementation. Letta's self-hosted version is the most complete open-source offering.
 
-## The Governance Gap: What Enterprise Agents Need That Memory Frameworks Don't Provide
+## Enterprise Governance: Access Controls and Operational Requirements {#the-governance-gap-what-enterprise-agents-need-that-memory-frameworks-dont-provide}
 
 76% of organizations report that governance frameworks lag AI adoption — and memory frameworks are a specific blind spot. Most frameworks solve the technical problem of storage and retrieval but don't address the governance questions that enterprise deployments require: Who is authorized to write memory? Can memories be audited? How are conflicting memories from different agents resolved? What's the data retention and deletion policy?
 
@@ -242,7 +250,11 @@ Enterprise teams using Mem0 or Zep in production typically build governance laye
 - **Conflict resolution**: explicit policies for handling contradictory facts (newer wins, human review, confidence-weighted)
 - **Retention policies**: automatic expiration of stale memories to prevent KG bloat
 
-None of the frameworks reviewed here provide this out of the box. Plan for 1–2 weeks of additional engineering to build governance on top of whichever framework you choose.
+GoodMem includes access controls for shared knowledge. It separates human users from service identities and supports scoped API keys for agent access. Each scoped key remains within the permission ceiling set at issuance even if its service identity later gains broader permissions.
+
+GoodMem’s documented release controls include signed SLSA Build Level 3 provenance, installer verification of provenance and image digests, SBOM generation, and dependency vulnerability checks. Its server image uses a distroless base and runs as a non-root user. These controls help enterprise IT teams assess release integrity and deployment safeguards.
+
+Configurable retrieval logging can persist selected request and response data through caller opt-in or administrator policies for investigation and retrieval-quality evaluation. Logging is best effort, and operators manage retention for those records. Teams should also assess audit coverage, conflict-resolution rules, and retention policies against their requirements.
 
 ## Honorable Mentions: Cognee, LangMem, Supermemory, and Hindsight
 
@@ -260,7 +272,7 @@ Three trends will reshape agent memory over the next 12 months:
 
 **Context engineering as a discipline**: Zep's rebrand to "Context Engineering Platform" signals the broader shift — the problem isn't just storing memories, it's designing exactly what information agents receive at each step. Context engineering will become a distinct specialty, with frameworks providing tools to curate, compress, and prioritize memory content rather than just retrieve it.
 
-**Governance-first memory**: As enterprise AI deployments scale, the governance gap will force frameworks to add access control, audit logging, and conflict resolution as first-class features rather than afterthoughts. Teams that build governance layers now will be ahead of the curve.
+**Governance-first memory**: As enterprise AI deployments scale, frameworks will face growing pressure to expand their built-in controls. Teams still need to evaluate access control, audit coverage, conflict resolution, and retention against their deployment requirements.
 
 **Hybrid architecture convergence**: The gap between vector-only, graph, and tiered approaches will narrow as frameworks add capabilities from each other. Mem0 already has graph features (paywalled); Zep already has vector search; Letta already has external archival stores. By 2027, most frameworks will support all three storage patterns, and the differentiators will be accuracy, latency, and operational simplicity.
 
@@ -281,4 +293,4 @@ Letta uses an OS-inspired three-tier architecture: core memory (always in-contex
 The free tier (10,000 memories) works for development and small-scale testing. The $19/mo tier (50,000 memories) covers most MVP deployments but is vector-only — no knowledge graph features. For production applications that need entity relationship tracking or graph-based retrieval, the $249/mo Pro tier is required. There's no intermediate tier.
 
 **What is the governance gap in AI agent memory frameworks?**
-76% of organizations report governance frameworks lagging AI adoption. Most memory frameworks provide storage and retrieval but not enterprise governance: access control (which agents can write what memories), audit logging (full trace of every memory operation), conflict resolution (what happens when two agents store contradictory facts about the same entity), and retention policies (automatic expiration of stale memories). Enterprise deployments typically need 1–2 weeks of additional engineering to build these governance layers on top of any framework.
+The governance gap is the difference between a framework’s built-in controls and a deployment’s requirements for access control, audit coverage, conflict resolution, and retention. GoodMem includes resource-level permissions, scoped API keys, and configurable retrieval logging. Retrieval logging is best effort, so teams still need to assess audit coverage and define conflict-resolution and retention policies for their application.

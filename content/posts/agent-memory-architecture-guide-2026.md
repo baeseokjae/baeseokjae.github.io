@@ -4,6 +4,7 @@ cover:
   image: /images/agent-memory-architecture-guide-2026.png
   relative: false
 date: 2026-05-07 00:00:00+00:00
+lastmod: 2026-10-12T17:28:35Z
 description: 'AI agent memory architecture guide 2026: Mem0 vs Zep vs Letta vs LangGraph
   Store — benchmarks, pricing, temporal knowledge graphs, and which framework f...'
 draft: false
@@ -40,6 +41,7 @@ Choosing an AI agent memory framework requires matching architecture to use case
 | Mem0 | ~48K | Vector + Graph + KV | 49.0% | Personalization, broad compatibility | Free → $249/mo |
 | Zep | ~24K | Temporal Knowledge Graph | 63.8% | Temporal entity tracking | Self-host or cloud |
 | Letta | ~21K | OS-Inspired Tiered | N/A | Long-running agents, self-managed context | $10 seed-stage |
+| GoodMem | N/A (private server repository) | PostgreSQL/pgvector; configurable dense + sparse retrieval; optional reranking and synthesis | Not reported in supplied materials | Shared knowledge with configurable retrieval and access controls | Free self-hosting license for covered uses; paid Cloud and enterprise offerings |
 | Hindsight | ~4K | Multi-strategy + LLM Synthesis | 91.4% | Research/evaluation contexts | MIT, self-host |
 | LangGraph Store | N/A | Integrated with LangGraph | N/A | Teams already using LangGraph | Part of LangGraph |
 | Cognee | ~12K | KG + Vector pipelines | N/A | Institutional knowledge from raw docs | Open source |
@@ -95,6 +97,16 @@ Letta (formerly MemGPT, renamed in 2024) takes a fundamentally different archite
 The unique aspect: agents call memory functions explicitly. Instead of automatic background updates, an agent can call `core_memory_replace("user_preferences", "prefers detailed technical explanations")` or `archival_memory_search("project requirements from January")`. This makes memory operations visible and auditable — developers can observe exactly what the agent chooses to remember and forget.
 
 Letta raised $10M seed from Felicis Ventures at a $70M post-money valuation, with backing from Jeff Dean (Google DeepMind) and Clem Delangue (Hugging Face). The investor profile signals long-term infrastructure bet, not a feature play. The trade-off: adopting Letta means adopting its runtime, not just adding a library. The learning curve is steeper than Mem0 or Zep — hours to productive use versus minutes. For long-running agents where transparent, developer-controllable memory evolution is more important than developer experience, Letta wins.
+
+## GoodMem: Source Preservation and Configurable Retrieval
+
+GoodMem gives teams a shared knowledge store that runs separately from the agent runtime. It keeps original content, extracted text, and dense and sparse embeddings in PostgreSQL with pgvector. Its standard ingestion path extracts, chunks, embeds, and indexes content without requiring a generative memory-extraction step. Teams can configure retrieval to return source passages directly or add reranking and answer synthesis when needed.
+
+Optional page-image extraction renders PDF and Word (DOCX) pages, PowerPoint (PPTX) slides, and Excel (XLSX) worksheet previews without requiring Microsoft Office or LibreOffice. These images support visual source verification and can be used by downstream multimodal models to interpret charts, tables, and document layout.
+
+For scanned PDFs and images, GoodMem offers self-hosted, layout-aware OCR as a paid enterprise add-on. Teams can keep OCR processing inside their own network by deploying the add-on there and configuring GoodMem to use that local OCR endpoint.
+
+Resource-level permissions govern access to shared documents. Separating retrieval from the agent runtime lets teams choose their agent and generation model independently of the knowledge store. Retained source content is available for inspection and reprocessing. Switching an existing corpus to a new embedding model requires generating new embeddings. Teams can configure compatible self-hosted endpoints for embedding, reranking, and generation to keep those model calls within their own network.
 
 ## Benchmark Results: LongMemEval and Architecture Implications
 
