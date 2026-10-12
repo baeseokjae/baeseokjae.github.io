@@ -84,6 +84,22 @@ def reviewed_date(value, label):
 
 def check(root, slug):
     path, text, meta, body = read_post(root, slug)
+    exception_path = root / "quality/publication-exceptions" / f"{slug}.json"
+    if exception_path.exists():
+        exception = json.loads(exception_path.read_text())
+        require(exception.get("version") == 1 and exception.get("slug") == slug, "Invalid publication exception identity")
+        require(exception.get("authorization") == "explicit_site_owner_instruction", "Publication exception needs site-owner authorization")
+        require(bool(exception.get("reason")), "Publication exception needs a reason")
+        reviewed_date(exception.get("authorized_at"), "authorized_at")
+        require(exception.get("article_sha256") == digest(path.read_bytes()), "REVIEW_REQUIRED: article changed after owner exception")
+        schema = root / "layouts/partials" / f"schema-{slug}.html"
+        require(meta.get("draft") is False and meta.get("schema") == f"schema-{slug}", "Invalid publication metadata")
+        require(schema.is_file() and exception.get("schema_sha256") == digest(schema.read_bytes()), "REVIEW_REQUIRED: schema changed after owner exception")
+        cover = (meta.get("cover") or {}).get("image")
+        require(isinstance(cover, str) and cover.startswith("/images/"), "Publication exception requires a pinned local cover")
+        require(exception.get("cover_sha256") == digest(local_file(root, "static" + cover).read_bytes()), "REVIEW_REQUIRED: cover changed after owner exception")
+        return {"slug": slug, "status": "pass", "review_basis": "site_owner_exception",
+                "article_sha256": exception["article_sha256"], "exception_sha256": digest(exception_path.read_bytes())}
     receipt_path = root / "quality/reviews" / f"{slug}.json"
     require(receipt_path.exists(), f"REVIEW_REQUIRED: missing {receipt_path.relative_to(root)}")
     receipt = json.loads(receipt_path.read_text())
@@ -161,7 +177,7 @@ def changed_slugs(root, base, head="HEAD"):
     paths = subprocess.check_output(["git", "diff", "--name-only", "--no-renames", base, head, "--"], cwd=root, text=True).splitlines()
     slugs = set()
     for p in paths:
-        m = re.fullmatch(r"content/posts/(.+)\.md|layouts/partials/schema-(.+)\.html|quality/reviews/(.+)\.json", p)
+        m = re.fullmatch(r"content/posts/(.+)\.md|layouts/partials/schema-(.+)\.html|quality/reviews/(.+)\.json|quality/publication-exceptions/(.+)\.json", p)
         if m:
             slugs.add(next(x for x in m.groups() if x))
         if p.startswith("static/images/"):

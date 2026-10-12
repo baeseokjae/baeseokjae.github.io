@@ -1,7 +1,20 @@
 PUBLICATION EVIDENCE GATE
 
+Explicit site-owner publication exceptions
+An explicit site-owner instruction may authorize publication of an exact
+existing article without a normal review receipt or commercial disclosure
+changes. Record that decision separately in quality/publication-exceptions/
+<slug>.json with version 1, slug, authorization set to
+explicit_site_owner_instruction, authorized_at, reason, and exact SHA256 hashes
+for the article, schema and local cover. This is an owner exception, not a
+factual or commercial review approval. Never create one without an explicit
+owner instruction. Any change to those files invalidates the exception;
+future edits require a normal review or a new explicit owner decision.
+Build validation and verification of the public deployment still apply.
+
 Purpose
-Every new or changed article after the baseline commit needs a review receipt
+Unless covered by an explicit owner exception, every new or changed article
+after the baseline commit needs a review receipt
 in quality/reviews/<slug>.json. The deployment workflow blocks before Hugo and
 GitHub Pages if evidence is absent, stale or incomplete. Existing unchanged
 articles are not declared reviewed. The baseline must not be advanced merely

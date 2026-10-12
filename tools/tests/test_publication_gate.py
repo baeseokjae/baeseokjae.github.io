@@ -54,6 +54,62 @@ class PublicationGateTests(unittest.TestCase):
         with self.assertRaisesRegex(gate.GateError, "missing"):
             self.check()
 
+    def owner_exception(self):
+        self.post.write_text(self.post.read_text().replace("draft: false", "draft: false\ncover:\n  image: /images/cover.png"))
+        self.cover = self.root / "static/images/cover.png"
+        self.cover.write_bytes(b"approved cover")
+        self.review.unlink()
+        target = self.root / "quality/publication-exceptions" / f"{self.slug}.json"
+        target.parent.mkdir()
+        target.write_text(json.dumps({"version": 1, "slug": self.slug,
+            "authorization": "explicit_site_owner_instruction",
+            "authorized_at": datetime.now(timezone.utc).isoformat(),
+            "reason": "Owner explicitly authorized this exact existing-article publication.",
+            "article_sha256": gate.digest(self.post.read_bytes()),
+            "schema_sha256": gate.digest(self.schema.read_bytes()),
+            "cover_sha256": gate.digest(self.cover.read_bytes())}))
+        return target
+
+    def test_owner_exception_is_distinct_from_review_approval(self):
+        self.owner_exception()
+        result = self.check()
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(result["review_basis"], "site_owner_exception")
+
+    def test_owner_exception_rejects_changed_artifacts(self):
+        self.owner_exception()
+        for artifact in (self.post, self.schema, self.cover):
+            with self.subTest(artifact=artifact):
+                original = artifact.read_bytes()
+                artifact.write_bytes(original + b"\nchanged")
+                with self.assertRaisesRegex(gate.GateError, "changed after owner exception"):
+                    self.check()
+                artifact.write_bytes(original)
+
+    def test_owner_exception_requires_explicit_authorization(self):
+        target = self.owner_exception()
+        data = json.loads(target.read_text())
+        data["authorization"] = "assumed"
+        target.write_text(json.dumps(data))
+        with self.assertRaisesRegex(gate.GateError, "site-owner authorization"):
+            self.check()
+
+    def test_owner_exception_cannot_be_reused_for_another_article(self):
+        target = self.owner_exception()
+        data = json.loads(target.read_text())
+        data["slug"] = "another-article"
+        target.write_text(json.dumps(data))
+        with self.assertRaisesRegex(gate.GateError, "exception identity"):
+            self.check()
+
+    def test_owner_exception_does_not_allow_future_authorization(self):
+        target = self.owner_exception()
+        data = json.loads(target.read_text())
+        data["authorized_at"] = "2999-01-01T00:00:00Z"
+        target.write_text(json.dumps(data))
+        with self.assertRaisesRegex(gate.GateError, "future"):
+            self.check()
+
     def test_changed_article_invalidates_approval(self):
         self.post.write_text(self.post.read_text() + "\nA new claim.\n")
         with self.assertRaisesRegex(gate.GateError, "article changed"):
