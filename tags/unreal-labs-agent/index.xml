@@ -1,0 +1,353 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Unreal Labs Agent on RockB</title><link>https://baeseokjae.github.io/tags/unreal-labs-agent/</link><description>Recent content in Unreal Labs Agent on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Mon, 12 Oct 2026 05:45:30 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/unreal-labs-agent/index.xml" rel="self" type="application/rss+xml"/><item><title>Unreal Agent Runtime Review 2026: An Async-First Harness You Deploy, Not Drive</title><link>https://baeseokjae.github.io/posts/unreal-agent-runtime-review-2026/</link><pubDate>Mon, 12 Oct 2026 05:45:30 +0000</pubDate><guid>https://baeseokjae.github.io/posts/unreal-agent-runtime-review-2026/</guid><description>Unreal Agent is Unreal Labs&amp;#39; async-first Go harness: a tool call is logged in-progress, the turn continues, the result reattaches later. The vendor&amp;#39;s cost tables recomputed, and the open bugs on the async path, as rechecked 2026-10-12.</description><content:encoded><![CDATA[<p>Unreal Agent is an async-first agent harness from Unreal Labs: a Go library, a runner binary, and a Harbor-compatible benchmark runner, MIT licensed, first released on 22 September 2026. When the model issues a tool call, the harness immediately appends an event-log record in the <code>in-progress</code> state, lets the model keep working, and appends the real result when the tool finishes. It is not Epic&rsquo;s Unreal Engine. It is also not Inworld&rsquo;s Unreal Engine AI toolkit, which Inworld launched as the <a href="https://inworld.ai/blog/introducing-unreal-ai-runtime-sdk">&ldquo;Unreal AI Runtime&rdquo;</a> — two unrelated products already occupy that name.</p>
+<p>This article is a source-verification review, not a hands-on trial. The harness was not installed and no benchmark was re-run for it. Every figure below was re-read from the vendor&rsquo;s own published artifacts on 12 October 2026, and the pass/fail arithmetic was recomputed from the vendor&rsquo;s published totals rather than quoted from a headline. The re-checks were a private local author verification pass, not a published dataset: no downloadable log, fixture or bundle ships with this article or is linked as a reader resource. The exact URLs and their read times are listed in the sources section at the end so that any reader can open the same pages and reproduce each comparison. The only claim this article makes about behaviour is the claim the vendor and its issue tracker make.</p>
+<h2 id="what-unreal-agent-is-and-what-it-is-not">What Unreal Agent Is, and What It Is Not</h2>
+<p>A harness is everything around the model: the prompt, the tool loop, the context assembly, the session state, the sandbox — the <a href="https://baeseokjae.github.io/posts/ai-harness-engineering-guide-2026/">AI harness engineering guide</a> covers that boundary in more detail. The model is the same in every harness; the harness decides how many turns a task takes, how many input tokens each turn re-sends, and what survives a crash.</p>
+<p>The project ships three things, per its own <a href="https://github.com/unreallabsai/unreal-agent">repository</a> and <a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/README.md">README</a>:</p>
+<ul>
+<li>A <strong>Go library</strong> (<code>harness/</code>) that you embed in your own service. The module path is <code>github.com/unreallabsai/unreal-agent</code> and <a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/go.mod">go.mod</a> declares <code>go 1.27.0</code> with four direct requires (oapi-codegen/runtime v1.6.0, go.yaml.in/yaml/v3 v3.0.5, golang.org/x/image v0.46.0, golang.org/x/sys v0.48.0) — a small dependency tree for a runtime, which the vendor lists as a design goal.</li>
+<li>A <strong>runner executable</strong> (<code>unreal-agent-runner</code>), plus a TUI (<code>unreal-agent-tui</code>). It writes event JSONL to stdout and exits when the task finishes, which makes it scriptable with <code>jq</code> in the same way as <code>codex exec</code> or <code>claude -p</code>.</li>
+<li>A <strong>Harbor benchmark adapter</strong> under <code>benchmarks/harbor</code>, so the same harness can be scored on the suites Harbor hosts.</li>
+</ul>
+<p>What it is not: it is not a hosted product with a sandbox and an IDE extension, and it is not a model. The provider is selected at runtime — the <a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/cmd/unreal-agent-runner/README.md">runner README</a> documents <code>UNREAL_HARNESS_LLM_PROVIDER</code> as <code>openai</code>, <code>openai-codex</code>, <code>openrouter</code>, <code>fireworks</code>, or <code>ollama</code>, with the model chosen by <code>UNREAL_HARNESS_LLM_MODEL</code>.</p>
+<p>Repository velocity, read from the <a href="https://api.github.com/repos/unreallabsai/unreal-agent">GitHub repository API</a> on 12 October 2026: 2,190 stars, 127 forks, 8 open issues, language Go, MIT licence, last push 2026-10-06T17:28:03Z, repository created 2026-09-21T23:14:02Z. The same counters read on 1 October 2026 were 2,049 stars, 118 forks and 8 open issues, so the project gained 141 stars and nine forks in eleven days while its open-issue count stayed at eight — new bugs arrived at roughly the rate the old ones were closed. The <a href="https://api.github.com/repos/unreallabsai/unreal-agent/commits?per_page=1">commits API</a> reports 189 commits on <code>main</code> at this read, against roughly 135 on 1 October. The <a href="https://api.github.com/repos/unreallabsai/unreal-agent/contributors">contributors API</a> returns six entries as of this read: g-logunov, maxim092001, sashabaranov, artyom-ivanov, discobot and dependabot[bot]. That is a small team, and it is worth saying plainly rather than describing the project as a community.</p>
+<h2 id="the-cost-claim-recomputed-from-the-vendors-own-tables">The Cost Claim, Recomputed From the Vendor&rsquo;s Own Tables</h2>
+<p>The <a href="https://unreallabs.ai/blog/unreal-agent/">launch post</a> claims the harness &ldquo;delivers up to 40% cost savings compared to Codex on production workloads and coding/science benchmarks, without any negative performance impact&rdquo;, and &ldquo;up to 20% compared to Pi&rdquo;. The post then publishes four per-benchmark tables. All four were run on GPT-6 Astra with <code>xhigh</code> reasoning effort, and three of them carry Harbor job IDs that a reader can look up.</p>
+<p>Terminal-Bench 4.0, vendor-run through Harbor:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Agent</th>
+					<th>Pass rate</th>
+					<th>Total $</th>
+					<th>In tokens/trial</th>
+					<th>Turns</th>
+					<th>Tool calls</th>
+					<th>Harbor job</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>unreal-agent</td>
+					<td>57.9%</td>
+					<td>1,428</td>
+					<td>1.73M</td>
+					<td>28</td>
+					<td>37</td>
+					<td>27133053</td>
+			</tr>
+			<tr>
+					<td>Codex (leaderboard)</td>
+					<td>57.9%</td>
+					<td>2,350</td>
+					<td>—</td>
+					<td>—</td>
+					<td>—</td>
+					<td>—</td>
+			</tr>
+			<tr>
+					<td>Pi</td>
+					<td>55.0%</td>
+					<td>1,827</td>
+					<td>2.83M</td>
+					<td>44</td>
+					<td>57</td>
+					<td>6ccd097a</td>
+			</tr>
+	</tbody>
+</table>
+<p>At an identical published pass rate of 57.9%, that is a straightforward recomputation: <code>1 − 1428/2350 = 39.23%</code> cheaper than the Codex leaderboard row, and <code>1 − 1428/1827 = 21.84%</code> cheaper than the vendor&rsquo;s own Pi run. Per benchmark point, 1,428 ÷ 57.9 is <strong>$24.66</strong> for Unreal Agent against 2,350 ÷ 57.9, or <strong>$40.59</strong>, for Codex.</p>
+<p>The same arithmetic across the other three suites, using the totals published in the launch post:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Benchmark</th>
+					<th>Unreal Agent $</th>
+					<th>Codex $</th>
+					<th>Saved vs Codex</th>
+					<th>Pi $</th>
+					<th>Saved vs Pi</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Terminal-Bench 4.0</td>
+					<td>1,428</td>
+					<td>2,350</td>
+					<td>39.2%</td>
+					<td>1,827</td>
+					<td>21.8%</td>
+			</tr>
+			<tr>
+					<td>SWE-Atlas Codebase QnA</td>
+					<td>936</td>
+					<td>1,303</td>
+					<td>28.2%</td>
+					<td>1,033</td>
+					<td>9.4%</td>
+			</tr>
+			<tr>
+					<td>DeepSWE 1.1</td>
+					<td>1,367</td>
+					<td>1,633</td>
+					<td>16.3%</td>
+					<td>1,584</td>
+					<td>13.7%</td>
+			</tr>
+			<tr>
+					<td>Agents&rsquo; Last Exam (ALE-CLI)</td>
+					<td>217</td>
+					<td>292</td>
+					<td>25.7%</td>
+					<td>262</td>
+					<td>17.2%</td>
+			</tr>
+	</tbody>
+</table>
+<p>The direction is consistent, which is the part that makes the claim interesting: the harness does not win on one lucky suite. But the spread is the story, not the 40 in the headline. Against Codex the four rows run 39.2%, 28.2%, 16.3% and 25.7%; against the vendor&rsquo;s own Pi configuration they collapse to 21.8%, 9.4%, 13.7% and 17.2%. A &ldquo;40% cheaper&rdquo; sentence is true only of the Terminal-Bench row and only against the Codex leaderboard baseline, which has no published job ID and no token columns at all — you cannot inspect how that number was produced, only compare against it.</p>
+<h2 id="where-the-headline-is-weaker-than-it-looks">Where the Headline Is Weaker Than It Looks</h2>
+<p>Four qualifications belong on those tables, and the vendor supplies most of them itself.</p>
+<p><strong>The runs are self-run.</strong> Harbor is a real comparison framework and the job IDs are published, but the party being measured chose the configuration, the benchmark version and the model. The launch post is candid about the pass-rate differences — &ldquo;marginal differences in pass rate, which we attribute to benchmark variance&rdquo; — which is honest but also means the cost comparison rests on roughly equal scores rather than on matched runs.</p>
+<p><strong>One model, one effort level.</strong> GPT-6 Astra at <code>xhigh</code> throughout. Nothing is published about how the harness behaves on a cheaper or weaker model, which is exactly where harness efficiency matters most per dollar. There is a second trap here for anyone attempting a re-run: the <a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/benchmarks/harbor/README.md">Harbor adapter README</a> documents <code>thinking_level</code> as <code>low</code>, <code>medium</code>, <code>high</code> (<strong>default</strong>), <code>xhigh</code>, or <code>max</code>, while the published tables were run at <code>xhigh</code> — and the README&rsquo;s own Terminal-Bench on Modal example passes <code>thinking_level=max</code>. Copy the README&rsquo;s example verbatim and you have changed the controlled variable twice.</p>
+<p><strong>The fourth row is not on Harbor.</strong> The ALE-CLI table states it directly: &ldquo;These runs are not on Harbor.&rdquo; No job IDs, the smallest sample, and therefore directional evidence only. It should not carry the cost argument.</p>
+<p><strong>The headline chart shipped wrong.</strong> Within hours of the launch, a commenter on the <a href="https://news.ycombinator.com/item?id=49805748">Hacker News thread</a> asked whether the comparison was effort-matched, writing that it looked like the vendor was comparing its harness on Astra <code>xhigh</code> against Codex on Astra <code>max</code>. An Unreal Labs account acknowledged it in the same thread: &ldquo;the headline chart was lazy on our part, thanks for the flag and I&rsquo;ll update it.&rdquo; The per-benchmark tables were run at matched <code>xhigh</code>; the summary chart was not. The right response from a reader is to ignore the chart and read the rows — and to treat any vendor summary number as unverified until the row underneath it can be found.</p>
+<h2 id="why-async-dispatch-could-save-tokens--and-what-the-vendor-actually-claims">Why Async Dispatch Could Save Tokens — and What the Vendor Actually Claims</h2>
+<p>Traditional harnesses are synchronous: the model emits a tool call, the harness runs it, and only when it finishes does the loop issue the next model turn. Unreal Agent inverts the order. The vendor&rsquo;s own description: every tool call &ldquo;immediately append[s] an event-log record that the tool has returned in the &lsquo;in-progress&rsquo; state, while continuing its execution in the background&rdquo;, with the real result appended when the tool finishes. The post adds a line that is more revealing than anything in the benchmark tables: &ldquo;Making this work without breaking cache was an interesting engineering challenge in itself.&rdquo;</p>
+<p>That cache line is the real mechanism, and it is worth separating from the marketing version of it, because a sharp commenter in the launch thread did not accept the simple story. Asked to explain &ldquo;how async tool calls translate to token savings&rdquo;, the skeptical reading is that a synchronous harness is not burning any tokens while it waits: the turn is already complete. That is correct. The saving is not the wait. It is that a harness which blocks on a long tool call and then re-sends a large conversation can fall out of the provider&rsquo;s prompt cache, while a harness that never blocks keeps the growing context inside the warm window. The vendor frames its whole cost argument this way — &ldquo;fewer model turns and fewer input tokens&rdquo; — and the token columns are where that shows up.</p>
+<p>Recomputing the input-token rows from the published tables gives a tighter range than the vendor&rsquo;s own headline — &ldquo;up to 40% cost savings compared to Codex and up to 20% compared to Pi&rdquo; — because that headline is a claim about total spend across all four suites, not about input tokens on any one of them (the mechanics of which turns get re-charged are set out in the <a href="https://baeseokjae.github.io/posts/agent-token-cost-attribution-2026/">agent token cost attribution guide</a>):</p>
+<ul>
+<li>Terminal-Bench 4.0: 1.73M against Pi&rsquo;s 2.83M is <strong>38.9% fewer</strong> input tokens per trial. Codex has no token column on this table, so no Codex token comparison exists there.</li>
+<li>SWE-Atlas Codebase QnA: 898k against Codex&rsquo;s 1.69M is <strong>46.9% fewer</strong>, and against Pi&rsquo;s 1.29M it is 30.4% fewer.</li>
+<li>DeepSWE 1.1: 1.60M against Codex&rsquo;s 2.19M is <strong>26.9% fewer</strong>, and against Pi&rsquo;s 2.21M it is 27.6% fewer.</li>
+<li>ALE-CLI: 0.76M against Codex&rsquo;s 1.59M is <strong>52.2% fewer</strong>, and against Pi&rsquo;s 1.19M it is 36.1% fewer.</li>
+</ul>
+<p>So the honest statement is: 26.9% to 46.9% fewer input tokens per trial across the three Harbor rows, with the ALE-CLI row at 52.2%, and 27.6% to 38.9% against the vendor&rsquo;s own Pi configuration. Turns follow the same curve on Terminal-Bench — 28 against 44, or 36% fewer — and tool calls 37 against 57, or 35% fewer.</p>
+<h2 id="what-is-actually-inside-eight-components-and-a-deployable-unit-called-an-operation">What Is Actually Inside: Eight Components and a Deployable Unit Called an Operation</h2>
+<p>The README names exactly eight replaceable components. That list is more informative than any benchmark table, because it is what you would be adopting.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Component</th>
+					<th>Responsibility (README wording)</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Session inbox</td>
+					<td>Volatile, session-scoped input idempotency</td>
+			</tr>
+			<tr>
+					<td>Coordinator</td>
+					<td>Persist accepted inputs, run LLM turns, resolve translators, dispatch committed operations</td>
+			</tr>
+			<tr>
+					<td>Session store</td>
+					<td>Persist history and operation state; recovery and forks; atomically record tool-call status with operations</td>
+			</tr>
+			<tr>
+					<td>Context builder</td>
+					<td>Assemble model input in memory; report what was omitted, truncated or compacted; no I/O</td>
+			</tr>
+			<tr>
+					<td>LLM adapter</td>
+					<td>Provider communication; owns authentication, cancellation, provider errors</td>
+			</tr>
+			<tr>
+					<td>Tool registry</td>
+					<td>The fixed Bash, ViewImage and skill-use definitions</td>
+			</tr>
+			<tr>
+					<td>Tool translator</td>
+					<td>Validate a tool call and produce its status and operations; no I/O, must not suspend the loop</td>
+			</tr>
+			<tr>
+					<td>Operation manager</td>
+					<td>Actor runtime for durable operations; the local implementation is swappable</td>
+			</tr>
+	</tbody>
+</table>
+<p>The load-bearing word is <strong>operation</strong>: &ldquo;a serializable description of work produced by a tool translator for asynchronous execution&rdquo;. An operation is not a function call — it is a document. You could write it to a queue, ship it across a process boundary, or replay it after a crash, and the README states that this is the intent: &ldquo;a proxy operations manager can send serialized operations to a local operations manager running in a process inside a remote sandbox, allowing tools to execute there.&rdquo;</p>
+<p>The versioning invariants are the part nobody normally ships in month one, and they are stated explicitly: session-store items are serializable with a versioned storage format; operations are versioned and always serializable; and &ldquo;an unsupported session version will always cause an explicit error on resume&rdquo; rather than silently mis-parsing. Combined with append-only storage, explicit forking and recovery, that is the property set you need if an agent turn is infrastructure rather than a chat session. The vendor does publish tests for exactly those paths: <code>TestCompactionCrashContinuation</code> in <a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/harness/coordinator/compaction_scheduling_test.go">harness/coordinator/compaction_scheduling_test.go</a> reconstructs the session after a simulated crash, <code>TestRunResumesAfterOutputFailure</code> and <code>TestRunMainResumesInterruptedDeliveryWithDuplicateInput</code> in <a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/cmd/internal/agentrunner/resume_test.go">cmd/internal/agentrunner/resume_test.go</a> cover resume after output failure and duplicate delivery, and <code>TestCoordinatorStopCancelsShellProcess</code> with the surrounding cancellation tests in <a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/harness/coordinator/stop_integration_test.go">harness/coordinator/stop_integration_test.go</a> and <a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/harness/coordinator/stop_test.go">stop_test.go</a> cover the kill path. The repository&rsquo;s <a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/Makefile">Makefile</a> defines <code>test</code> as <code>go test -race ./...</code>, and its <a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/.github/workflows/ci.yml">ci.yml</a> runs <code>make test check build</code> on every push to <code>main</code> and on pull requests targeting it. What is <em>not</em> published is a durability <strong>measurement</strong>: no crash-recovery benchmark, and no kill-path or disk-growth outcome numbers. So the durability story is verified by tests and a versioned store, not by published results. Two of the open issues below sit exactly there.</p>
+<h2 id="the-system-prompt-is-doing-part-of-the-work">The System Prompt Is Doing Part of the Work</h2>
+<p>The harness ships a system preamble at <code>harness/contextbuilder/prompts/preamble.md</code> (<a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/harness/contextbuilder/prompts/preamble.md">raw file</a>), and two of its lines are load-bearing for the cost claim:</p>
+<ul>
+<li>&ldquo;Each turn re-sends the whole conversation, so prefer to go wider with tool calls — they are cheap — rather than chaining them across a longer sequence of turns.&rdquo;</li>
+<li>&ldquo;Tool calls are asynchronous: each starts the moment you issue it and runs in the background, so issuing one never blocks you and many run at once.&rdquo;</li>
+</ul>
+<p>There is also a background heartbeat: &ldquo;if calls are active and nothing has happened for ten minutes, a heartbeat wakes you&rdquo;. The vendor&rsquo;s own summary of the cost mechanism names this directly — &ldquo;simple prompts, token-optimized tool results, and no sub-agents or workflows&rdquo; and &ldquo;a straightforward asynchronous tool-calling model that is clearly explained to an LLM&rdquo;.</p>
+<p>Read those two halves together and the honest conclusion is that the published saving is a bundle: an async runtime plus a prompt that tells the model to batch tool calls and not to poll. No ablated run exists that isolates them — the closest work in this corpus, the <a href="https://baeseokjae.github.io/posts/harness-design-coding-agent-performance-2026/">Coding Agent Harness Design and Performance</a> ablation study, measures harness components on SWE-Bench Verified rather than on this product — so the split between &ldquo;the runtime is cheaper&rdquo; and &ldquo;the prompt is cheaper&rdquo; is unmeasured. That is not a debunk — it is the experiment anyone adopting this should run first, because the prompt half is free to copy into any harness.</p>
+<h2 id="what-changed-between-1-october-and-12-october-2026">What Changed Between 1 October and 12 October 2026</h2>
+<p>This review supersedes an earlier draft written on 1 October 2026, and the project moved in eleven days. The deltas, all read on 12 October:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Field</th>
+					<th>1 October read</th>
+					<th>12 October read</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Stars / forks</td>
+					<td>2,049 / 118</td>
+					<td>2,190 / 127</td>
+			</tr>
+			<tr>
+					<td>Open issues</td>
+					<td>8</td>
+					<td>8 (16 issues+PRs then, 23 now)</td>
+			</tr>
+			<tr>
+					<td>Releases</td>
+					<td>three, latest v0.2.0</td>
+					<td>four, latest <a href="https://api.github.com/repos/unreallabsai/unreal-agent/releases">v0.3.1</a>, published 2026-10-06T16:47:03Z</td>
+			</tr>
+			<tr>
+					<td>Commits on main</td>
+					<td>~135</td>
+					<td>189</td>
+			</tr>
+			<tr>
+					<td>Install path</td>
+					<td><code>go install ...@v0.2.0</code></td>
+					<td>Homebrew tap, or <code>go install ...@latest</code></td>
+			</tr>
+			<tr>
+					<td>Latest push</td>
+					<td>2026-09-23</td>
+					<td>2026-10-06T17:28:03Z</td>
+			</tr>
+	</tbody>
+</table>
+<p>Two issue-state corrections matter for anyone who read the first draft. Issue #16, &ldquo;SIGTERM bypasses runner cancellation&rdquo;, and issue #15, on skill metadata parsing, were both <strong>closed on 2026-10-06</strong>; the earlier draft listed them as open risks. In their place the tracker gained #22 (a feature request for MCP client support over stdio and HTTP with OAuth, opened 2026-10-07) and #23 (a community example of a sandboxed pull-request review workflow in GitHub Actions, opened 2026-10-12). The Homebrew tap is new, and it arrives with the release automation that shipped on 6 October.</p>
+<p>The packaging surface at v0.3.x is unchanged in shape: the runner writes JSONL events to stdout, sessions live under <code>${XDG_STATE_HOME:-$HOME/.local/state}/unreal-agent/sessions</code> and are overridable with <code>-session-directory</code>, and the <a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/Dockerfile">Dockerfile</a> is a multi-stage build from a digest-pinned <code>golang:1.27.1-trixie</code> to <code>debian:trixie-slim</code>, with tini as PID 1 and <code>USER 10001:10001</code>. The runner README&rsquo;s Docker example publishes the image as <code>unrea1labs/unreal-agent:latest</code> — the organisation is <code>unreallabsai</code>, so that image string swaps the <code>l</code> for a <code>1</code> and drops the trailing <code>ai</code> — in the vendor&rsquo;s own README. Small, but it is the kind of detail a v0.3 product ships with.</p>
+<h2 id="production-risk-inventory-rechecked-against-the-tracker">Production Risk Inventory, Rechecked Against the Tracker</h2>
+<p>This is the section that matters most if you are considering adoption, because every one of these items is open in the vendor&rsquo;s own tracker as of 12 October 2026 and several sit on the async dispatch path the product is sold on. The full list was read from the <a href="https://api.github.com/repos/unreallabsai/unreal-agent/issues?state=all&amp;per_page=100">issues API</a>.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Issue</th>
+					<th>State</th>
+					<th>Failure mode</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><a href="https://github.com/unreallabsai/unreal-agent/issues/3">#3</a></td>
+					<td>open, 2026-09-22</td>
+					<td>A background Bash operation reads its own output file: unbounded disk growth — the reporter says the file reached 61.8 GB in about ten minutes before the process was killed — and the runner never exits</td>
+			</tr>
+			<tr>
+					<td><a href="https://github.com/unreallabsai/unreal-agent/issues/5">#5</a></td>
+					<td>open, 2026-09-23</td>
+					<td>A repository <code>.env</code> can exfiltrate the API key or allow arbitrary tool calls; found while reviewing an untrusted repository in a sandbox</td>
+			</tr>
+			<tr>
+					<td><a href="https://github.com/unreallabsai/unreal-agent/issues/11">#11</a></td>
+					<td>open, 2026-09-23</td>
+					<td>Duplicate <code>function_call_output</code> for the same <code>call_id</code> returns a provider 400 when parallel Bash fan-out overlaps across turns, and every session resume replays the duplicate</td>
+			</tr>
+			<tr>
+					<td><a href="https://github.com/unreallabsai/unreal-agent/issues/13">#13</a></td>
+					<td>open, 2026-09-23</td>
+					<td>The runner exits successfully after a failed model response; a provider 200 with <code>response.failed</code> is recorded as <code>insufficient_quota</code> and the process still exits 0</td>
+			</tr>
+			<tr>
+					<td><a href="https://github.com/unreallabsai/unreal-agent/issues/16">#16</a></td>
+					<td><strong>closed</strong> 2026-10-06</td>
+					<td>SIGTERM bypassed runner cancellation</td>
+			</tr>
+			<tr>
+					<td><a href="https://github.com/unreallabsai/unreal-agent/issues/15">#15</a></td>
+					<td><strong>closed</strong> 2026-10-06</td>
+					<td>Skill metadata parser treated YAML syntax as literal text</td>
+			</tr>
+			<tr>
+					<td><a href="https://github.com/unreallabsai/unreal-agent/issues/14">#14</a></td>
+					<td>open, 2026-09-23</td>
+					<td>Two runs using the same <code>-log-directory</code> in the same second share a log file; explicit logging only, stdout mode unaffected</td>
+			</tr>
+			<tr>
+					<td><a href="https://github.com/unreallabsai/unreal-agent/issues/10">#10</a></td>
+					<td>open, 2026-09-23</td>
+					<td><code>include_partial_messages</code> is accepted and ignored, so a driving tool cannot render partial output</td>
+			</tr>
+	</tbody>
+</table>
+<p>The pattern is not &ldquo;a v0.x project has bugs&rdquo; — every one does. It is that async execution amplifies them. #3 is a runaway feedback loop inside a durable background process. #11 is a race between two branches of the same parallel fan-out, and it poisons the session permanently rather than failing one call. #13 is a silent failure that only matters because the runner is meant to be driven by automation. A harness that blocks on one tool at a time cannot easily reach those states. The async design is simultaneously the reason to adopt this project and the reason to cap output size, set a disk quota and define a kill path before running it unattended in CI.</p>
+<h2 id="how-hard-is-the-async-idea-now-that-openai-documents-it">How Hard Is the Async Idea Now That OpenAI Documents It?</h2>
+<p>OpenAI&rsquo;s Responses API now supports async tool calling: set <code>async: true</code> on a function or custom tool definition and the model can continue working while your application runs the tool, with the result delivered later through a <code>function_call_output</code> item carrying the original <code>call_id</code>. The <a href="https://developers.openai.com/api/docs/guides/async-tool-calling">primary documentation</a> draws the boundary explicitly: &ldquo;Your application still executes the tool. Async tools don&rsquo;t move execution to OpenAI or manage your background jobs.&rdquo;</p>
+<p>Two consequences follow, and they point in opposite directions.</p>
+<p>It weakens the novelty claim. If the model provider will let a tool call run in the background, a harness whose headline feature is asynchronous dispatch is partly replicating a platform primitive — and commenters in the launch thread made exactly this point, noting that other harnesses have had async tools for a while and that in practice &ldquo;the agent will often simply call <code>wait()</code> immediately after, and also do it with a longer timeout&rdquo;, which turns the async call back into a blocking one with extra failure modes.</p>
+<p>It also explains why the architecture, not the async trick, is the durable claim. The API boundary stops at &ldquo;your application still runs the job&rdquo;: the process lifecycle, the sandbox, the recovery, the queue and the durable record stay with you. That is the gap a runtime fills and the gap a model provider will not close, because closing it means running arbitrary code. And the surface is genuinely underspecified today: the vendor&rsquo;s own footnote records that &ldquo;the use of two tool-call result items (one in progress, one final) in a single context is underspecified in the Responses API documentation&rdquo;, and that during testing they &ldquo;encountered rejections with some models on some inference providers (not OpenAI)&rdquo;. Anyone building cross-provider async dispatch is building on a partially documented contract, and the workaround — two result items for one call — is exactly what issue #11 shows failing under load.</p>
+<h2 id="what-it-does-not-solve">What It Does Not Solve</h2>
+<p>Three deliberate omissions in the design are worth stating as limitations rather than as bugs.</p>
+<p><strong>No sub-agents and no workflow layer.</strong> The vendor&rsquo;s argument is that sub-agents multiply context; the payoff shows up in the turn counts. The counter-argument is the open one: a reviewer in the launch thread wanted to see behaviour &ldquo;on long-horizon tasks where the &rsquo;no sub-agents&rsquo; constraint starts to bite&rdquo;. Delegation exists because a single context loses the thread on tasks that outrun the window. A harness that refuses delegation deserves measurement on tasks longer than a benchmark trial, and none is published.</p>
+<p><strong>The workspace is not a sandbox and approvals are out of scope by design.</strong> The vendor&rsquo;s stated position is that deterministic constraints — allowed hosts, granular tokens, approval-gating proxies — beat hook-based approvals, which is defensible and also means the constraints are yours to configure around the tool. Issue #5 is the reminder that loading a repository&rsquo;s own environment file into a process that can run tools is a trust decision, not a supported feature.</p>
+<p><strong>There is no outside contribution path.</strong> <a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/CONTRIBUTING.md">CONTRIBUTING.md</a> states that the repository &ldquo;contains selected components from a larger internal codebase&rdquo; and that &ldquo;we don&rsquo;t currently have the capacity to review and merge pull requests&rdquo; — issues are welcomed, patches are not. To be fair to the project, the same tracker shows ten pull requests, all closed, and all authored by the vendor&rsquo;s own maintainers or Dependabot (release automation, README updates and dependency bumps). So this is not a repository that never merges anything; it is one that does not merge outside work. If your organisation needs to patch its agent runtime, you are forking.</p>
+<h2 id="who-should-use-it-in-2026">Who Should Use It in 2026</h2>
+<p><strong>Embed the library</strong> if agent execution lives inside a product you ship and your stack is Go. The eight interfaces are the deliverable: you will replace the LLM adapter and probably the operation manager, keep the session store and the translator contract, and inherit crash-oriented session handling and idempotent inputs rather than writing them. Versioned sessions that error explicitly on resume and append-only storage with forking are genuinely rare in a three-week-old repository.</p>
+<p><strong>Shell out to the runner</strong> if you are evaluating the harness on your own tasks — that is the <code>unreal-agent-runner</code> path, and it is the fastest way to learn whether the turn-count advantage holds on your workload rather than on Terminal-Bench. It is also the honest way to find your own copy of issue #3 before it finds you.</p>
+<p><strong>Skip it</strong> if you pay a flat subscription and your only question is the monthly bill — token efficiency is then your provider&rsquo;s problem, and the arithmetic above moves nothing — or if you need multi-agent delegation, a hosted sandbox or an IDE integration today.</p>
+<p>The verdict is narrow and defensible: the architecture is more interesting than the headline statistic, and the headline statistic is more fragile than the architecture. Same model, same benchmark, same published pass rate, 39% less spend on the flagship row, with the direction repeated across three more suites — all of it self-run, on one model, with a summary chart the vendor itself called lazy and an open-issue list sitting on the async path. Evaluate it now; adopt it for Go-based agent infrastructure if you can cap, quota and kill what it starts; do not adopt it yet for anything that has to be boring.</p>
+<h2 id="how-this-review-was-checked">How This Review Was Checked</h2>
+<p>The verification behind this article is source re-reading and arithmetic, and it is reproducible from a browser without any tooling:</p>
+<ol>
+<li>The launch post was re-fetched on 12 October 2026 and every figure quoted here was matched against the live tables — the four totals rows, the token and turn columns, the Harbor job IDs, the <code>xhigh</code> effort label and the &ldquo;These runs are not on Harbor&rdquo; line on the ALE-CLI table.</li>
+<li>The four relative-saving figures and the per-point costs were recomputed from those published totals in-session; the computations are shown inline above so any reader can check the division.</li>
+<li>Repository metadata, the release list and the full issue list were read from the GitHub API on 12 October 2026; issue states in the risk table are taken from that response, not from an earlier draft.</li>
+<li>The Hacker News thread was read through the Algolia item API: item 49805748, &ldquo;Unreal Agent&rdquo;, posted 2026-09-22T18:15:53Z, standing at 247 points with 125 comments on this read. Quotes attributed to commenters and to the vendor&rsquo;s account in that thread come from that response.</li>
+<li>The thinking-level mismatch, the Homebrew install path, the Docker invocation and the <code>unrea1labs</code> image spelling were read from the raw repository files listed below.</li>
+</ol>
+<p>Not done, and not claimed: the harness was never installed, built or executed; no benchmark was re-run; no crash, cancellation or disk-growth behaviour was reproduced; and no search volume, traffic or revenue figure is asserted anywhere in this article. The demand picture for this topic was not measured here either. The fetch log for the checks above is an author-side private record and is not offered as a downloadable dataset; what is offered is the list of pages to open, below.</p>
+<p>Source URLs checked on 12 October 2026:</p>
+<ul>
+<li><a href="https://unreallabs.ai/blog/unreal-agent/">https://unreallabs.ai/blog/unreal-agent/</a></li>
+<li><a href="https://github.com/unreallabsai/unreal-agent">https://github.com/unreallabsai/unreal-agent</a></li>
+<li><a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/README.md">https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/README.md</a></li>
+<li><a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/harness/contextbuilder/prompts/preamble.md">https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/harness/contextbuilder/prompts/preamble.md</a></li>
+<li><a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/cmd/unreal-agent-runner/README.md">https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/cmd/unreal-agent-runner/README.md</a></li>
+<li><a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/benchmarks/harbor/README.md">https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/benchmarks/harbor/README.md</a></li>
+<li><a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/CONTRIBUTING.md">https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/CONTRIBUTING.md</a></li>
+<li><a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/Dockerfile">https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/Dockerfile</a></li>
+<li><a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/go.mod">https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/go.mod</a></li>
+<li><a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/Makefile">https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/Makefile</a></li>
+<li><a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/.github/workflows/ci.yml">https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/.github/workflows/ci.yml</a></li>
+<li><a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/internal/openaiapi/generate.py">https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/internal/openaiapi/generate.py</a></li>
+<li><a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/internal/anthropicapi/generate.py">https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/internal/anthropicapi/generate.py</a></li>
+<li><a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/harness/coordinator/compaction_scheduling_test.go">https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/harness/coordinator/compaction_scheduling_test.go</a></li>
+<li><a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/cmd/internal/agentrunner/resume_test.go">https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/cmd/internal/agentrunner/resume_test.go</a></li>
+<li><a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/harness/coordinator/stop_integration_test.go">https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/harness/coordinator/stop_integration_test.go</a></li>
+<li><a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/harness/coordinator/stop_test.go">https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/harness/coordinator/stop_test.go</a></li>
+<li><a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/benchmarks/harbor/pyproject.toml">https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/benchmarks/harbor/pyproject.toml</a></li>
+<li><a href="https://api.github.com/repos/unreallabsai/unreal-agent">https://api.github.com/repos/unreallabsai/unreal-agent</a></li>
+<li><a href="https://api.github.com/repos/unreallabsai/unreal-agent/releases">https://api.github.com/repos/unreallabsai/unreal-agent/releases</a></li>
+<li><a href="https://api.github.com/repos/unreallabsai/unreal-agent/contributors">https://api.github.com/repos/unreallabsai/unreal-agent/contributors</a></li>
+<li><a href="https://api.github.com/repos/unreallabsai/unreal-agent/commits?per_page=1">https://api.github.com/repos/unreallabsai/unreal-agent/commits?per_page=1</a></li>
+<li><a href="https://api.github.com/repos/unreallabsai/unreal-agent/issues?state=all&amp;per_page=100">https://api.github.com/repos/unreallabsai/unreal-agent/issues?state=all&amp;per_page=100</a></li>
+<li><a href="https://github.com/unreallabsai/unreal-agent/issues/3">https://github.com/unreallabsai/unreal-agent/issues/3</a></li>
+<li><a href="https://github.com/unreallabsai/unreal-agent/issues/5">https://github.com/unreallabsai/unreal-agent/issues/5</a></li>
+<li><a href="https://github.com/unreallabsai/unreal-agent/issues/10">https://github.com/unreallabsai/unreal-agent/issues/10</a></li>
+<li><a href="https://github.com/unreallabsai/unreal-agent/issues/11">https://github.com/unreallabsai/unreal-agent/issues/11</a></li>
+<li><a href="https://github.com/unreallabsai/unreal-agent/issues/13">https://github.com/unreallabsai/unreal-agent/issues/13</a></li>
+<li><a href="https://github.com/unreallabsai/unreal-agent/issues/14">https://github.com/unreallabsai/unreal-agent/issues/14</a></li>
+<li><a href="https://github.com/unreallabsai/unreal-agent/issues/15">https://github.com/unreallabsai/unreal-agent/issues/15</a></li>
+<li><a href="https://github.com/unreallabsai/unreal-agent/issues/16">https://github.com/unreallabsai/unreal-agent/issues/16</a></li>
+<li><a href="https://github.com/unreallabsai/unreal-agent/issues/22">https://github.com/unreallabsai/unreal-agent/issues/22</a></li>
+<li><a href="https://github.com/unreallabsai/unreal-agent/issues/23">https://github.com/unreallabsai/unreal-agent/issues/23</a></li>
+<li><a href="https://hn.algolia.com/api/v1/items/49805748">https://hn.algolia.com/api/v1/items/49805748</a></li>
+<li><a href="https://news.ycombinator.com/item?id=49805748">https://news.ycombinator.com/item?id=49805748</a></li>
+<li><a href="https://developers.openai.com/api/docs/guides/async-tool-calling">https://developers.openai.com/api/docs/guides/async-tool-calling</a></li>
+<li><a href="https://inworld.ai/blog/introducing-unreal-ai-runtime-sdk">https://inworld.ai/blog/introducing-unreal-ai-runtime-sdk</a></li>
+</ul>
+<h2 id="faq">FAQ</h2>
+<p><strong>Is Unreal Agent related to Epic&rsquo;s Unreal Engine?</strong>
+No. Unreal Agent is an agent harness written in Go by Unreal Labs. Epic&rsquo;s Unreal Engine is a C++ game engine from an unrelated vendor, and a third product, Inworld&rsquo;s &ldquo;Unreal AI Runtime&rdquo;, is an Unreal Engine toolkit for AI characters. The name overlap is the project&rsquo;s own discoverability problem: readers arriving from engine intent will bounce, and the project has to disambiguate in its first sentence, which is why this review does.</p>
+<p><strong>How much cheaper is Unreal Agent than Codex?</strong>
+On the vendor&rsquo;s own Harbor runs at GPT-6 Astra <code>xhigh</code>, Terminal-Bench 4.0 came in at $1,428 against the Codex leaderboard row&rsquo;s $2,350 for an identical published 57.9% pass rate — <code>1 − 1428/2350 = 39.2%</code>. SWE-Atlas Codebase QnA was 28.2%, DeepSWE 1.1 was 16.3% and Agents&rsquo; Last Exam was 25.7%. Against the vendor&rsquo;s own Pi runs the same rows are 21.8%, 9.4%, 13.7% and 17.2%. All of it is vendor-published and independently unreproduced.</p>
+<p><strong>Do async tool calls actually save tokens, or is that marketing?</strong>
+Partly structural, partly prompt-driven. A synchronous harness is not charged for the time it spends waiting, so &ldquo;async saves the wait tokens&rdquo; is not the mechanism. The measurable part is fewer model turns — 28 against Pi&rsquo;s 44 per Terminal-Bench trial — and fewer input tokens per trial: 26.9% to 46.9% below Codex across the three Harbor rows, and 52.2% on the ALE-CLI row. The vendor&rsquo;s own framing is &ldquo;fewer model turns and fewer input tokens&rdquo;, and the prompt tells the model to batch tool calls, so a like-for-like split between runtime and prompt is still unpublished.</p>
+<p><strong>Is Unreal Agent production-ready?</strong>
+Not on the evidence. It is at v0.3.1 with 2,190 stars, a six-entry contributor list, and eight open issues as of 12 October 2026 — including the unbounded disk-growth background-Bash loop (#3), the <code>.env</code> trust boundary (#5), and a 400 error that poisons a session when parallel fan-out overlaps (#11). Two async-adjacent issues (#15, #16) were closed on 6 October, so the direction is right. It is a serious runtime to evaluate and embed, not a platform to build policy on today.</p>
+<p><strong>Which providers and languages does it support?</strong>
+Go 1.27.0, MIT licensed. The provider is chosen at runtime from <code>openai</code> (default), <code>openai-codex</code>, <code>openrouter</code>, <code>fireworks</code> and <code>ollama</code>, and alternative implementations of the eight component interfaces are explicitly encouraged; the Harbor adapter additionally supports <code>anthropic/&lt;model&gt;</code> and <code>fireworks_ai/&lt;model&gt;</code>. No Python or TypeScript library binding is shipped, so non-Go stacks integrate through the runner executable or over the component interfaces; the Python in the tree is development tooling, not a client library — OpenAPI-to-Go generator scripts under <a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/internal/openaiapi/generate.py">internal/openaiapi/</a> and <a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/internal/anthropicapi/generate.py">internal/anthropicapi/</a>, PEP 723 inline scripts that shell out to <code>oapi-codegen</code> — plus the Harbor benchmark adapter under <code>benchmarks/harbor/</code> with its own <a href="https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/benchmarks/harbor/pyproject.toml">pyproject.toml</a>, which is a benchmark integration rather than a client library.</p>
+]]></content:encoded></item></channel></rss>
