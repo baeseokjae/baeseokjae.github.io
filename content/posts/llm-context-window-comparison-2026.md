@@ -1,125 +1,86 @@
 ---
 cover:
-  alt: 'LLM Context Window Comparison 2026: GPT-4o vs Claude vs Gemini'
+  alt: 'LLM Context Window Comparison 2026 cover graphic: the article title on a dark green background'
   image: /images/llm-context-window-comparison-2026.png
   relative: false
 date: 2026-04-22 16:04:57+00:00
-description: GPT-4.1, Claude Opus 4.6, and Gemini 2.5 Pro compared on context window
-  size, effective performance, pricing cliffs, and real-world use cases.
+lastmod: 2026-10-15 00:00:00+00:00
+description: 'Which LLM has the largest usable context window in 2026? A dated, first-party comparison of GPT-4.1, Claude Opus 4.6, Gemini 2.5 Pro and Llama 4 that separates advertised windows from billed and usable context.'
 draft: false
 schema: schema-llm-context-window-comparison-2026
 tags:
 - LLM
 - context window
-- GPT-4o
-- Claude
-- Gemini
+- GPT-4.1
+- Claude Opus 4.6
+- Gemini 2.5 Pro
+- Llama 4
 - AI comparison
-title: 'LLM Context Window Comparison 2026: GPT-4o vs Claude vs Gemini'
+title: 'LLM Context Window Comparison 2026 (refreshed): Ranked by Largest Usable Context, Not Advertised Maximum'
 ---
 
-Context windows have grown 2,500x in three years — from GPT-3's 4K tokens in 2023 to Qwen Long's 10M tokens in 2026. That growth is real, but advertised token counts and actual usable context are very different things. If you're choosing a model for long-document analysis, agentic workflows, or codebase Q&A, the headline number will mislead you. This guide cuts through the marketing to compare GPT-4.1, Claude Opus 4.6, and Gemini 2.5 Pro on what actually matters: real retrieval performance across context lengths, cost at scale, and hidden pricing traps you'll only discover on your first big invoice.
+The 2026 version of "which model has the largest context window" no longer has a single winner among the hosted APIs developers actually call, because those models now advertise the same ~1M-token class: OpenAI's GPT-4.1 is documented at 1,047,576 tokens, Google's Gemini 2.5 Pro at 1,048,576 tokens, and Anthropic's Claude Opus 4.6 at 1M tokens. What still separates them is whether the long window is the default or a beta, how many tokens one response can generate inside that window, and how much of the window your document keeps once system prompts, tool definitions, tool results and the model's own output are counted against it. Every figure below was read from the vendors' own documentation on 2026-10-15, and the numbers this refresh could not confirm were withdrawn rather than restated.
 
-## The 2026 Context Window Landscape: From 4K to 10M Tokens
+One documented figure sits outside that hosted group. Meta's Llama 4 model card lists a "Context length" of 10M tokens for Llama 4 Scout (17Bx16E) and 1M tokens for Llama 4 Maverick (17Bx128E) - the largest advertised context figure in this comparison - but the same card states no API, price or maximum-output figure for either variant, so those numbers are checkpoint statements rather than hosted request limits, and they are listed separately below instead of being ranked against the APIs.
 
-LLM context windows have undergone a fundamental transformation between 2023 and 2026. In early 2023, GPT-3.5 and GPT-4 shipped with 4K–8K token limits — enough for a short document, not a codebase. By 2026, every major flagship now supports at least 1M tokens, and Qwen Long Latest offers 10M tokens at $0.07/M input — the largest context available commercially. Gemini 2.5 Pro supports 1M tokens with a 2M beta, GPT-4.1 ships with 1M tokens and no surcharges at any length, while Claude Opus 4.6 offers 200K standard with a 1M beta (more on the pricing implications of that later). This landscape shift was driven by architectural improvements in attention mechanisms, more efficient KV-cache management, and commercial pressure to support enterprise use cases like full-codebase analysis, legal document review, and multi-session agentic workflows. But raw size alone tells you nothing about retrieval quality at those lengths — and that gap between "supports" and "performs" is where real decisions get made.
+## Ranked: largest usable context window in 2026
 
-| Model | Context Window | Pricing (Input/M) | Long-Context Surcharge |
+The ranking below is by what a single API request can realistically spend on your content: the advertised window, whether long context is the default rather than a beta header, and the maximum output the same request can produce.
+
+| # | Model | Advertised context window | Max output tokens | Published price | How the long window is documented | Source (checked 2026-10-15) |
+|---|---|---|---|---|---|---|
+| 1 | Claude Opus 4.6 | 1M tokens | up to 128k output tokens | $5 / MTok input, $25 / MTok output; the full window at standard pricing | Default: "1M is the default: you don't need a beta header" | [Anthropic context windows](https://platform.claude.com/docs/en/build-with-claude/context-windows) |
+| 2 | Gemini 2.5 Pro | 1,048,576 tokens | 65,536 tokens | not restated in this refresh | Documented model limit on the Vertex AI model page (thinking supported) | [Google Cloud Vertex AI model page](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-pro) |
+| 3 | GPT-4.1 | 1,047,576 tokens | 32,768 tokens | $2 / 1M input, $8 / 1M output | One flat published token price, plus a separate "Long Context" rate-limit tier starting at 128k input tokens | [OpenAI gpt-4.1 model page](https://platform.openai.com/docs/models/gpt-4.1) |
+
+Reading the ranking honestly: the three hosted windows differ by at most 48,576 tokens out of roughly one million (1,048,576 versus 1,047,576 versus 1M) - under 5% of a million, which is not a meaningful difference in advertised size but noise in how each vendor states the number. They are ordered here by output headroom and by whether the long window is the default, because those are the differences that change a design.
+
+### The largest documented figure is not in that ranking
+
+| Model variant (as named on the card) | Documented context length | Max output tokens | Source (checked 2026-10-15) |
 |---|---|---|---|
-| GPT-4.1 | 1M tokens | $2.00 | None |
-| Gemini 2.5 Pro | 1M tokens (2M beta) | $1.25–$2.50 | 2x above 200K (all tokens) |
-| Claude Opus 4.6 | 200K (1M beta) | $5.00 | 2x above 200K (all tokens) |
-| Gemini 2.5 Flash | 1M tokens | $0.30 | 2x above 200K |
-| DeepSeek V3 | 128K tokens | $0.14 | None |
-| Qwen Long | 10M tokens | $0.07 | None |
+| Llama 4 Scout (17Bx16E) | 10M tokens | not stated on the model card | [Meta Llama 4 model card](https://raw.githubusercontent.com/meta-llama/llama-models/main/models/llama4/MODEL_CARD.md) |
+| Llama 4 Maverick (17Bx128E) | 1M tokens | not stated on the model card | [Meta Llama 4 model card](https://raw.githubusercontent.com/meta-llama/llama-models/main/models/llama4/MODEL_CARD.md) |
 
-## Head-to-Head: GPT-4.1 vs Claude Opus 4.6 vs Gemini 2.5 Pro
+Both rows come from the "Context length" column of the card's own model table. The card publishes no maximum-output figure for either variant, which is why there is no output column to compare against the hosted APIs above. It also contains exactly one mention of 128K: the label on its Long Context / MTOB evaluation row ("Context window is 128K"), which is the context setting used for that long-context evaluation rather than the context length the model table advertises. The card publishes no measured usable-context figure at any length, so neither row supports a claim about how much of the window is usable in practice.
 
-These three models represent the current frontier for long-context tasks in 2026. GPT-4.1 from OpenAI ships with 1M context and a clean pricing model — $2.00/M input with no surcharges at any length, making it the most predictable at scale. It scores 54.6% on SWE-Bench, significantly above GPT-4o's 33%, and handles multi-file coding and agentic tool use well. Claude Opus 4.6 from Anthropic achieves 72.5–74.5% SWE-Bench — the highest coding accuracy among publicly benchmarked models — and is considered best-in-class for agentic workflows, state tracking, and safe-response rates (98.76%). Gemini 2.5 Pro from Google tops LMArena human preference rankings, scores 63.8% on SWE-Bench, and is the strongest option for multimodal long-context tasks involving video, audio, and images processed natively within the context window. Claude remains text-first and relies on external tool integrations for non-text modalities. The right choice depends heavily on whether your workload is coding-heavy, multimodal, or cost-sensitive at scale.
+## Advertised, billed and usable are three different numbers
 
-### Effective Context vs. Advertised Context
+**Advertised** is the maximum the API accepts. OpenAI's model page documents a 1,047,576-token context window for GPT-4.1; Google's Vertex AI page documents 1,048,576 tokens for Gemini 2.5 Pro; Anthropic lists Claude Opus 4.6 among the models with a 1M-token context window. None of those pages publishes retrieval accuracy at length, so an advertised maximum is a capacity statement, not a quality statement.
 
-The advertised context window is a maximum, not a guarantee of performance. A 100K-word document loaded into GPT-4o's 128K window leaves only 28K tokens for conversation — roughly 15–20 responses before you hit the limit and need a reset. Reasoning models like GPT-5 and Gemini 3 Pro use internal "thinking tokens" that don't appear in your conversation but consume context budget, further reducing effective conversational capacity. The practical difference is that you're rarely operating at the theoretical maximum, and planning around 50–70% of the advertised context limit is a safer engineering assumption for production systems.
+**Billed** is how the vendor charges for tokens inside that window - and the pricing shape differs by vendor, not by headline size. Anthropic states that Claude 4.6 and later models "include the full 1M token context window at standard pricing. (A 900k-token request is billed at the same per-token rate as a 9k-token request.)" The documented exception is Claude Haiku 5.5, which is priced by prompt length: prompts over 100,000 tokens pay higher prices ([Anthropic long context pricing](https://platform.claude.com/docs/en/about-claude/pricing)). OpenAI's GPT-4.1 page shows one flat text-token row - $2 per 1M input tokens, $8 per 1M output tokens - alongside a separate "Long Context" rate-limit tier labelled "128k input tokens". A rate-limit tier is not a price surcharge, and this refresh does not claim a length-based price multiplier for GPT-4.1 in either direction.
 
-## Context Window Specs Compared: Advertised vs Effective (RULER Benchmarks)
+**Usable** is the smallest of the three, and it is the one most often ignored. Anthropic documents the accounting: "Everything in the request counts toward the context window: the system prompt, every message in `messages` (including tool results, images, and documents), and your tool definitions. The output Claude generates for the turn, including its extended thinking, counts too." That accounting is the practical difference between a 1M-token window and a 1M-token document budget: an agentic session spends window tokens on tool schemas and tool results that the author never wrote, and reasoning tokens are drawn from the same pool as the answer.
 
-Advertised context size and real retrieval accuracy at those lengths are fundamentally different metrics, and the RULER benchmark exists to measure that gap. RULER (Realistic Usefulness for Long-context Evaluation and Retrieval) tests models on tasks like multi-hop reasoning, entity tracking, and needle-in-a-haystack retrieval across increasing context lengths — measuring how much performance degrades as context grows. The results are stark: Gemini 1.5 Pro loses only -2.3 points on RULER from 4K to 128K context, making it the most stable model as context length increases. GPT-4 drops -15.4 points over the same range. Llama 3.1-70B falls -29.9 points and Mixtral-8x22B collapses by -63.9 points. This means a model with a large advertised context window may be practically unreliable at those lengths. For workloads where retrieval accuracy at 100K+ tokens is critical — legal analysis, codebase navigation, long-session agents — RULER scores matter more than the headline number.
+One more conversion trap sits inside the token count. Anthropic notes that 1M tokens is "roughly 555k words or 2.5M Unicode characters on the current tokenizer (introduced with Claude Opus 4.7)", while "models before it fit about 750k words in 1M tokens", and that 200k tokens is roughly 150k words ([Anthropic models overview](https://platform.claude.com/docs/en/models/overview)). The same million tokens is therefore a different amount of text depending on which generation you call, which is why word-count-based capacity planning across model versions silently drifts.
 
-### What RULER Scores Mean in Practice
+## The constraint that actually binds long-document work: max output
 
-A -15.4 point RULER drop from 4K to 128K means that tasks the model completes reliably at short context fail one in six times at long context. That's a production reliability issue, not a benchmark footnote. For retrieval-heavy applications — finding a specific clause in a 200-page contract, tracking a variable across 50 files — the model with the smallest RULER degradation is the right choice regardless of which offers the largest context window. In practice, this means Gemini 1.5 Pro and its successors have a structural advantage in retrieval-heavy long-context tasks, while models with steeper RULER curves are better used with chunked retrieval (RAG) even when their context windows could theoretically fit the whole document.
+For long-document and long-agent work, the output cap is usually what breaks first, and it is the one number the "largest window" framing hides. GPT-4.1 is documented at 32,768 max output tokens, Gemini 2.5 Pro at 65,536, and Anthropic's 1M-token models at up to 128k output tokens per request. Meta's Llama 4 model card states no maximum-output figure for either variant, so the open-weights checkpoint cannot be compared on this axis from the same kind of source. If your task is extraction, restructuring or summarisation - where the answer is itself long - a 1M-token input window paired with a 32K output cap will fail on the response before it ever fails on the input. Practical selection rules that follow from the documented limits:
 
-## The 200K Pricing Cliff: Hidden Surcharges That Double Your Bill
+- Long document, long answer (contract restatement, whole-codebase rewrite): rank by max output first, advertised window second.
+- Long agent session (many turns of tool results, thinking tokens): check whether long context is the default or requires a beta, and budget for tool definitions and tool results inside the window.
+- Cost-sensitive high-volume input: compare the published input price per 1M tokens and whether the vendor publishes a length-tiered price row for the window you intend to use.
 
-One of the most consequential and least-advertised details in long-context pricing is the surcharge structure applied by Anthropic and Google. Both charge 2x the standard input rate when a request exceeds 200K tokens — but the surcharge applies to all tokens in the request, not just the tokens above the threshold. This means a 201K-token request costs exactly twice what a 199K-token request costs. That's not a gradual increase — it's a pricing cliff that can double your bill the moment you cross it. OpenAI, by contrast, applies no surcharge at any context length with GPT-4.1. For applications that regularly process documents approaching 200K tokens — long legal contracts, large codebases, extended agent sessions — the difference between OpenAI's flat pricing and Anthropic/Google's cliff pricing can be enormous at scale. A system running 10,000 requests/day at 210K tokens pays twice the per-token cost on every single request compared to using GPT-4.1 at the same length.
+## Why "largest" is the wrong criterion on its own
 
-### Calculating the Real Cost Difference
+Anthropic states plainly that a bigger window is not automatically better: "A larger context window allows the model to handle more complex and lengthy prompts, but more context isn't automatically better. As token count grows, accuracy and recall degrade, a phenomenon known as *context rot*. This makes curating what's in context just as important as how much space is available." That is a qualitative vendor statement, and none of the documentation pages checked for this refresh publishes an accuracy-at-length curve - so the honest engineering takeaway is that capacity must be validated against your own task rather than assumed. If you are deciding between loading everything into a 1M-token window and retrieving smaller slices, the retrieval-side trade-off is covered separately in [Bigger context windows don't make RAG smarter](https://baeseokjae.github.io/posts/bigger-context-windows-rag-smarter-2026/).
 
-At 1 billion tokens per month input, costs range from $100 (Gemini Flash-Lite) to $5,000 (Claude Opus 4.6) — a 35x spread. But that comparison assumes sub-200K context. Once you cross the 200K threshold with Anthropic or Google, effective input pricing doubles. A Claude Opus 4.6 workload at 201K tokens costs $10.00/M input, not $5.00/M, making it 5x more expensive than GPT-4.1 at the same context length. Budget accordingly: if your documents regularly push past 200K tokens, GPT-4.1's flat $2.00/M is materially cheaper than either Anthropic or Google alternatives, regardless of quality differences.
+## What this refresh corrected, withdrew or could not verify
 
-## Context Rot: Why More Tokens Can Mean Worse Output
+This page previously carried several figures that no longer resolve against first-party documentation. They are listed here instead of being quietly deleted:
 
-Context rot is the empirically documented phenomenon where LLM output quality degrades as context length increases — and every model tested shows it. Chroma's study of 18 models found universal performance degradation with longer inputs. The mechanisms vary: attention diffusion across long sequences reduces the model's ability to distinguish signal from noise; recency bias causes models to over-weight recent content; and positional encoding limitations in some architectures create retrieval dead zones in the middle of long contexts. One counterintuitive finding from the research: models actually perform better on shuffled text than coherent text in long-context settings. The explanation is that coherent text amplifies recency bias — the model treats the most recently read section as most relevant — while shuffled text disrupts that pattern and forces more distributed attention. For practical prompt engineering, this suggests that placing critical instructions at both the beginning and end of your context (the "sandwich" method) is more effective than placing them only at the start.
+- The Claude row read "200K (1M beta)" with a 2x surcharge above 200K. Anthropic's current documentation lists Claude Opus 4.6 among the 1M-token models, states that "1M is the default: you don't need a beta header", and prices the full window at standard rates. The 200K-with-beta framing is stale for Opus 4.6.
+- The GPT-4.1 claim "no surcharges at any length" has been narrowed to what the vendor page actually shows: one flat published token price row plus a Long Context rate-limit tier. Rate limits are not surcharges, and the page does not document a length-tiered price for GPT-4.1 either way.
+- Qwen Long Latest's "10M tokens at $0.07/M input - the largest context available commercially" has been removed. The Alibaba Cloud Model Studio long-context page was fetched on 2026-10-15 but did not yield a quotable primary statement of a 10M-token window at that price, so the figure is marked unconfirmed rather than repeated.
+- Gemini 2.5 Pro's published "1M tokens (2M beta)" has been narrowed to the documented 1,048,576-token figure on the Vertex AI model page. The ai.google.dev models page was fetched on 2026-10-15 and its body contained no quotable statement of a 2M-token window (the model table is client-rendered), so the 2M beta claim is withdrawn pending a quotable source.
+- All inherited benchmark percentages (SWE-Bench shares, RULER deltas between 4K and 128K context, a safe-response rate, an LMArena rank) and the previous "200K pricing cliff doubles your bill" cost tables have been removed: none of them was re-verified against a dated first-party artifact for this refresh.
 
-### Strategies to Mitigate Context Rot
+## Evidence dates and limitations
 
-Three strategies consistently reduce context rot in production: first, chunk documents and retrieve relevant sections (RAG) rather than loading entire documents into context — this eliminates most degradation because the model only ever sees 2K–8K tokens of retrieved content; second, use structured prompting that explicitly flags high-priority content ("IMPORTANT:") to counteract attention diffusion; third, compress conversation history aggressively in long agentic sessions — compression of 50%+ is achievable without meaningful quality loss and can halve context window consumption per session. The agentic context problem is particularly acute: coding agents burn through 150K+ tokens per session without compression, which becomes prohibitive at Claude Opus pricing above the 200K cliff.
-
-## Cost at Scale: $100/Month vs $5,000/Month for 1B Tokens
-
-The cost spread across frontier LLMs in 2026 is the widest it has ever been, and the gap is growing. At 1 billion tokens per month of input, you can spend $100 with Gemini Flash-Lite or $5,000 with Claude Opus 4.6 — a 35x difference for inputs that may deliver similar quality on many tasks. This spread exists because providers have deliberately segmented the market: budget models (Gemini Flash, GPT-4o mini, DeepSeek V3) are optimized for throughput and cost; premium models (Claude Opus 4.6, Gemini 2.5 Pro, GPT-4.1) are optimized for quality and capability on hard tasks. DeepSeek V3 offers 128K context at $0.14/M input — the cheapest frontier model — with performance competitive with GPT-4o on many benchmarks. For cost-sensitive applications like document summarization, classification, or first-pass review, the 5–10x cheapness of DeepSeek or Gemini Flash relative to Claude Opus is worth serious evaluation.
-
-| Monthly Volume | Gemini Flash-Lite | GPT-4.1 | Gemini 2.5 Pro | Claude Opus 4.6 |
-|---|---|---|---|---|
-| 100M tokens | $10 | $200 | $125–$250 | $500 |
-| 1B tokens | $100 | $2,000 | $1,250–$2,500 | $5,000 |
-| 10B tokens | $1,000 | $20,000 | $12,500–$25,000 | $50,000 |
-
-Two cost-reduction strategies work across all providers: batch API processing cuts costs ~50% for offline workloads (document processing, overnight analysis pipelines), and prompt caching reduces costs 40–60% for workloads with repeated system prompts (customer support, standardized document review). Both strategies are available on OpenAI, Anthropic, and Google APIs.
-
-## Multimodal Context: Text, Images, Audio, and Video
-
-Multimodal context capability is now a meaningful differentiator in 2026, and the models diverge significantly. Gemini 2.5 Pro processes text, images, audio, and video natively within the same context window — you can pass a 2-hour video alongside a text query and the model reasons over both. This makes Gemini the strongest choice for media analysis, video Q&A, audio transcription with reasoning, and mixed-media document review. GPT-4.1 and GPT-5 support text and vision (images), with GPT-5 adding native audio processing with ~0.32 second voice latency. Claude Opus 4.6 remains primarily text-first — it accepts images via the API but processes audio and video through external tool integrations rather than natively. For developers building applications that process documents with embedded images (PDFs with charts, scanned contracts), all three handle this case. For applications that reason over video or audio streams, Gemini is the only frontier choice that does this natively at scale.
-
-## Agentic Workflows: Context Compression and Memory Management
-
-Agentic AI workflows are the most context-hungry application type in production today. A single coding agent session — navigating a large codebase, reading files, running tests, fixing bugs — consumes 150K+ tokens without active compression. At Claude Opus pricing above the 200K cliff, that's $10.00/M input per request, meaning a single long agent session can cost $1.50 or more in input tokens alone. Context compression — summarizing earlier conversation turns, evicting irrelevant tool outputs, compressing file contents to diffs — reduces this by 50%+ without meaningful quality degradation on most tasks. Claude Opus 4.6 has a 98.76% safe-response rate and best-in-class state tracking for multi-step workflows, which is why it remains the most widely used model for production coding agents despite its premium cost. GPT-4.1's flat pricing and 1M context make it a compelling alternative for cost-sensitive agentic workloads. Gemini 2.5 Flash offers 1M context at $0.30/M input — a middle ground that works well for agents that don't require top-tier coding accuracy.
-
-## RAG vs Long Context: When to Use Which Strategy
-
-The availability of 1M-token context windows doesn't eliminate the need for RAG (Retrieval-Augmented Generation) — it changes when and why you'd use each approach. Long context is better when: document order and full context matters (contract review where clause interdependencies matter); when you need the model to reason across the entire document rather than retrieved chunks; and when your documents are small enough to fit in 100K tokens comfortably. RAG is better when: you're querying across many documents (a 10,000-document knowledge base doesn't fit in any context window); when cost is a constraint (loading a 500-page document into Claude Opus context costs $2.50+ per request — RAG might cost $0.02); when retrieval accuracy is higher than context retention (for factual lookup tasks, chunked RAG consistently outperforms long-context retrieval beyond 50K tokens); and when latency matters (smaller context = faster inference, often 2–5x faster). The practical answer for most production systems in 2026 is a hybrid: use long context for reasoning-heavy tasks on single documents, use RAG for factual retrieval across large corpora, and use context compression in agentic sessions to stay below pricing cliffs.
-
-## Enterprise Considerations: Compliance, Rate Limits, Deprecation
-
-Enterprise procurement of LLM APIs in 2026 involves more than model quality. Three operational factors frequently drive enterprise choices: compliance, rate limits, and deprecation risk. For compliance, Azure OpenAI (HIPAA, SOC 2, FedRAMP) and AWS Bedrock (similar certifications) offer the strongest enterprise compliance posture — both give you OpenAI and Anthropic models respectively through cloud provider contracts rather than direct API agreements, which simplifies data processing agreements for regulated industries. Rate limits are a practical constraint for high-volume applications: GPT-5.3 Instant achieves 77 tokens per second (TPS) with <250ms time-to-first-token; Gemini 2.5 achieves 101 TPS with <180ms TTFT; Claude 4.6 achieves 65 TPS with <300ms TTFT. For real-time user-facing applications, Gemini's throughput advantage matters. Deprecation risk is underrated — production failures more often come from surprise model deprecation than from wrong model choice. OpenAI has a history of aggressive deprecation schedules; Anthropic and Google have been more conservative. Building with version-pinning and automated fallback routing is advisable regardless of provider.
-
-## Decision Framework: Choosing the Right Model
-
-Use this framework to match your workload to the right model:
-
-**Choose GPT-4.1** if: you need 1M+ context without pricing cliffs; you have cost-sensitive agentic workloads; you want predictable billing at scale; your team is already embedded in the OpenAI ecosystem.
-
-**Choose Claude Opus 4.6** if: coding accuracy is your primary requirement (74.5% SWE-Bench); you need best-in-class agentic state tracking and safety; you're doing long agentic sessions where quality matters more than cost; you can stay under the 200K token cliff.
-
-**Choose Gemini 2.5 Pro** if: you need multimodal context (video, audio, images); you want the highest human preference scores (LMArena #1); you need 1M context with lower input cost than OpenAI; your application involves mixed media document analysis.
-
-**Choose Gemini Flash or DeepSeek V3** if: cost is your primary constraint; your tasks are simpler (classification, summarization, first-pass review); you can afford some quality tradeoff for 5–35x cost reduction.
-
-**Choose a RAG + smaller model hybrid** if: your knowledge base exceeds 1M tokens; you're doing factual lookup rather than reasoning; latency and cost both matter.
-
-## FAQ
-
-**What is the largest context window available in 2026?**
-Qwen Long Latest offers 10M tokens at $0.07/M input — the largest commercially available context window. Grok 4 offers 2M tokens; Gemini 2.5 Pro is at 1M (2M beta). GPT-4.1 and most frontier models are at 1M tokens standard.
-
-**Does a larger context window mean better performance?**
-No. Every model tested shows performance degradation (context rot) as context length increases. Gemini 1.5 Pro retains the best accuracy at long context (only -2.3 RULER points from 4K to 128K), while GPT-4 drops -15.4 points and Llama 3.1-70B drops -29.9 points over the same range.
-
-**What is the 200K pricing cliff and how does it affect costs?**
-Anthropic and Google charge 2x their standard input rate when any request exceeds 200K tokens — and the surcharge applies to all tokens in the request, not just the overage. A 201K-token request costs exactly 2x a 199K-token request. OpenAI's GPT-4.1 has no surcharge at any length.
-
-**When should I use RAG instead of a long context window?**
-Use RAG when you're querying across many documents (corpus too large for any context window), when factual lookup accuracy matters more than full-document reasoning, when cost is a constraint (RAG can be 100x cheaper per query), or when latency matters (smaller context = faster responses). Use long context when document order and cross-section reasoning matter.
-
-**Which LLM is best for coding agents in 2026?**
-Claude Opus 4.6 leads on SWE-Bench at 74.5% and has best-in-class state tracking for multi-step agentic workflows. GPT-4.1 is a strong alternative with flat pricing that avoids the 200K cliff — important for long agent sessions. Gemini 2.5 Flash offers a cost-effective middle ground at $0.30/M input with 1M context.
+- Every advertised window, output cap and price above was read from the vendor documentation linked inline on 2026-10-15. This is a documentation review, not a benchmark run: no needle-in-a-haystack, RULER or long-context accuracy test was executed for this refresh, and no usable-context percentage is claimed or implied. The record of that reading is a private author-side verification, not a downloadable resource - the public primary sources for every figure are the vendor pages linked inline above.
+- The two Llama 4 rows are checkpoint figures taken from the model card's "Context length" column, not hosted API limits, which is why they are listed outside the ranking. That card lives on the main branch of the meta-llama/llama-models repository and can change without notice, so both figures are bound to the 2026-10-15 fetch rather than stated as permanent.
+- Prices are USD list prices per 1M tokens as published on those pages; no currency conversion, tax or enterprise agreement term is considered.
+- Google figures come from the Vertex AI model documentation, Meta figures from the Llama 4 model card, Anthropic figures from the Claude context-windows, models overview and pricing pages, and OpenAI figures from the gpt-4.1 model page. Vendor documentation changes without notice, so each figure carries its check date rather than being stated as permanent.
+- The existing cover graphic was preserved unchanged, as required for a refresh of this URL; its subtitle still reads "GPT-4o vs Claude vs Gemini", which is the framing this revision replaces.
+- Model naming is as published: "Claude Opus 4.6", "Gemini 2.5 Pro", "GPT-4.1" and the two named Llama 4 variants refer to the models named on those pages, and Anthropic notes that other Claude models - including a deprecated Sonnet release - remain at 200k tokens, so "Claude" is not one window size.
