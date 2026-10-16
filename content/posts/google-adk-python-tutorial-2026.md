@@ -4,8 +4,8 @@ cover:
   image: /images/google-adk-python-tutorial-2026.png
   relative: false
 date: 2026-05-09 18:04:05+00:00
-description: 'Step-by-step Google ADK tutorial: install google-adk, build LlmAgent
-  pipelines, run parallel agents, and deploy to Vertex AI in 2026.'
+lastmod: 2026-10-15 00:00:00+00:00
+description: 'Google ADK Python tutorial refreshed against google-adk 2.12.0: the install command that resolves, verified import paths, working sequential and parallel agent pipelines, the Workflow deprecation, and A2A exposure with to_a2a().'
 draft: false
 schema: schema-google-adk-python-tutorial-2026
 tags:
@@ -15,160 +15,177 @@ tags:
 - AI agents
 - Gemini
 - Vertex AI
-title: 'Google ADK Tutorial: Build Multi-Agent Systems with Python (2026)'
+title: 'Google ADK Python Tutorial 2026 (refreshed): Install, Sequential and Parallel Agents With Verified Package Names'
 ---
 
-Google ADK (Agent Development Kit) lets you build a working multi-agent Python system in under 30 minutes — with LlmAgent for reasoning, SequentialAgent and ParallelAgent for orchestration, and a built-in dev UI for debugging. This tutorial walks you from zero to a deployed multi-agent pipeline.
+Google ADK (Agent Development Kit) is Google's open-source, code-first Python framework for building, evaluating and deploying agents, and installing it is still a single command. The problem is not the command — it is that a tutorial written in July 2026 tells you to install a package that has moved on, and its copy-paste surface stops working silently rather than loudly. This edition was re-verified end to end on 2026-10-15 against the release that `pip install google-adk` actually resolves today, and every instruction below either runs on that release or is labelled as something this pass could not check.
 
-## What Is Google ADK and Why It Matters in 2026
+Google's repository describes the framework as "an open-source, code-first Python framework for building, evaluating, and deploying sophisticated AI agents with flexibility and control" ([google/adk-python README](https://raw.githubusercontent.com/google/adk-python/main/README.md)), and the same README states the requirement plainly: **Requirements:** Python 3.11+.
 
-Google ADK (Agent Development Kit) is an open-source, code-first Python framework released by Google at Cloud Next 2025 for building, orchestrating, and deploying AI agents. Unlike drag-and-drop tools, ADK is built for developers who want full control over agent logic, tool integration, and multi-agent coordination. ADK is optimized for Gemini models but is genuinely model-agnostic through LiteLLM integration, meaning you can run the same agent code against GPT-4, Claude, or any OpenAI-compatible endpoint. The framework reached stable v1.0.0 in May 2025, and ADK Python 2.0 Beta with agent teams and advanced workflows shipped in early 2026. With 13 million developers already building on Google's generative models and Gemini API active developers up 118% year-over-year as of Q3 2025, ADK has become the default path for Google Cloud-native agent development. The AI agents market itself hit USD 7.63 billion in 2025 and is projected to grow at 49.6% CAGR through 2033 — choosing the right framework now has long-term career implications.
+## What this revision changes, and what it refuses to claim
 
-The three reasons to pick ADK over LangGraph or CrewAI in 2026: first, native Vertex AI Agent Engine deployment with one command; second, the A2A (Agent-to-Agent) protocol for cross-framework orchestration; third, a built-in dev web UI that shows you exactly what each agent said, which tools it called, and what the session state looks like at every step.
+- **Python floor corrected to 3.11+.** The package metadata declares `Requires-Python: >=3.11` while the documentation page still says "Python 3.10 or later"; see [Install Google ADK the way that actually resolves](#install-google-adk-the-way-that-actually-resolves-python-311).
+- **`pip install google-adk[vertexai]` removed.** No `vertexai` extra exists in google-adk 2.12.0. The real extras are listed below, read from the installed distribution's own metadata.
+- **The A2A section was rewritten.** `from google.adk.a2a import A2AServer` and `A2AClient` raise `ImportError` on 2.12.0. The current documented entry point is `to_a2a()`, and it needs the `a2a` extra.
+- **SequentialAgent and ParallelAgent are now documented as deprecated** in favour of the Workflow runtime, even though both still import and construct. The page says so instead of presenting them as the framework's primary orchestration primitives.
+- **Hard-coded model ids were replaced.** The old `gemini-2.0-flash` strings are gone. No model call was made in this pass, so the page shows the ids Google's own docs and repository currently print and tells you to confirm the one you pay for.
+- **The `vertexai.preview.reasoning_engines` deployment snippet was dropped** as unverified, and replaced with the deployment commands the current README documents.
+- **Unattributed statistics from the May 2026 version were removed, not restated.** This page previously carried market-size and vendor-adoption figures that neither this pass nor the earlier one could tie to a dated first-party source. Unverifiable numbers are not refreshed; they are withdrawn.
 
-## Prerequisites and Installation (pip install google-adk)
+## What Google ADK is in October 2026
 
-Google ADK requires Python 3.10 or higher and a Google API key or Vertex AI credentials. For local development, a free Gemini API key from Google AI Studio is sufficient — no billing account required. For production Vertex AI deployment, you'll need a Google Cloud project with the Vertex AI API enabled. Install ADK with a single pip command:
+The framework's own feature list leads with the **Workflow Runtime**, "a graph-based execution engine for composing deterministic execution flows for agentic apps, with support for routing, fan-out/fan-in, loops, retry, state management, dynamic nodes, human-in-the-loop, and nested workflows", followed by a Task API for agent-to-agent delegation, modular multi-agent composition, the tool ecosystem (custom functions, OpenAPI specs, MCP tools) and "Deploy Anywhere" containers on Cloud Run or Vertex AI Agent Engine ([google/adk-python README](https://raw.githubusercontent.com/google/adk-python/main/README.md)). That ordering matters for anyone following an older tutorial: the tree-of-agents story this page used to lead with is now the compatibility layer, not the headline.
+
+Version and cadence: the release that `pip install google-adk` resolved on 2026-10-15 is **google-adk 2.12.0**, uploaded 2026-10-13T16:42:55Z, and the README describes the release cadence as "roughly bi-weekly" ([PyPI JSON API for google-adk](https://pypi.org/pypi/google-adk/json)). The same metadata document lists 97 releases for this package, so a tutorial that pins nothing is guaranteed to drift.
+
+Documentation host: the canonical docs now live at **adk.dev**. The index still served from the old host lists every page under the new one — the line `- [Installation](https://adk.dev/get-started/installation/index.md)` is a literal entry in [google.github.io/adk-docs/llms.txt](https://google.github.io/adk-docs/llms.txt) — so treat any `google.github.io/adk-docs` link you have bookmarked as stale.
+
+**This page is the install-and-run Python tutorial, and it does not replace these pages on the same site.** For the conceptual walkthrough see [Google ADK Tutorial 2026](https://baeseokjae.github.io/posts/google-adk-tutorial-2026/); for orchestration patterns at scale see [the multi-agent guide](https://baeseokjae.github.io/posts/google-adk-multi-agent-guide-2026/); for the protocol itself see [the A2A protocol guide](https://baeseokjae.github.io/posts/google-adk-a2a-protocol-guide-2026/); for the JavaScript/TypeScript bindings see [the TypeScript guide](https://baeseokjae.github.io/posts/google-adk-typescript-guide-2026/); for framework selection see [ADK vs LangGraph vs Mastra](https://baeseokjae.github.io/posts/google-adk-vs-langgraph-vs-mastra-2026/) and [ADK vs LangGraph vs CrewAI](https://baeseokjae.github.io/posts/google-adk-vs-langgraph-vs-crewai-2026/).
+
+## Install Google ADK the way that actually resolves (Python 3.11+)
+
+Google's [Python quickstart](https://adk.dev/get-started/python/index.md) opens with a prerequisites list that still reads `- Python 3.10 or later`, and the [installation page](https://adk.dev/get-started/installation/index.md) gives the two commands below. The package disagrees with the first of those statements: the installed distribution reports `Requires-Python: >=3.11`, the repository's `pyproject.toml` contains `requires-python = ">=3.11"` ([pyproject.toml](https://raw.githubusercontent.com/google/adk-python/main/pyproject.toml)), and the README says Python 3.11+. Use 3.11 or newer — on 3.10 the install you are told to run is not the install you will get.
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install google-adk
+pip show google-adk
+adk --version
 ```
 
-For the full tutorial, also install optional dependencies:
+On the recorded check for this refresh, that sequence resolved **google-adk 2.12.0** alongside **google-genai 2.31.0** on Python 3.12.3 (Linux aarch64), `pip show google-adk` printed `Version: 2.12.0`, and `adk --version` printed `adk, version 2.12.0`. The raw output is kept at [local-run-verify-output.json](https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/google-adk-python-tutorial-2026/write-check/local-run-verify-output.json); a later resolution of a newer release is expected, which is exactly why `pip show` is in the sequence.
 
-```bash
-pip install google-adk[vertexai] litellm python-dotenv
+For a reproducible install, the README recommends the companion constraint files rather than a bare unpinned install: `pip install google-adk -c constraints-3.11.txt`, with a per-version file published for Python 3.11 through 3.15 ([google/adk-python README](https://raw.githubusercontent.com/google/adk-python/main/README.md)).
+
+### The extras that exist in 2.12.0 (there is no `vertexai` extra)
+
+`pip install google-adk[vertexai]` was in this tutorial's earlier editions. It does not resolve to anything: the distribution declares 28 extras and `vertexai` is not one of them. Read verbatim from the installed package metadata:
+
+```text
+a2a, agent-identity, all, antigravity, benchmark, bigquery-analytics, community,
+daytona, db, dev, docs, e2b, elevenlabs, eval, extensions, gcp, livekit, mcp,
+mongodb, oci, openai, opensandbox, otel-gcp, redis, slack, test, toolbox, tools
 ```
 
-Create a project directory and set up your environment:
+The ones a Python tutorial reader is likely to want are `a2a` for Agent-to-Agent exposure, `gcp` for Google Cloud integrations and Agent Engine deployment, `mcp` for MCP servers, `openai` for non-Gemini model providers, and `extensions` — the README's own example is `pip install "google-adk[extensions]"`. Note the honest caveat: this pass installed only the base package, so the dependency resolution of these extras is **unverified**; the names and their declared contents come from the package's metadata and `pyproject.toml`, not from an install.
 
-```bash
-mkdir my-adk-project && cd my-adk-project
-echo "GOOGLE_API_KEY=your_key_here" > .env
-echo "GOOGLE_GENAI_USE_VERTEXAI=FALSE" >> .env
-```
+### Create the project skeleton
 
-ADK projects follow a package convention: each agent lives in its own Python package directory with an `__init__.py` that exports a root `agent` variable. This structure is not optional — the `adk run` and `adk web` CLI commands discover agents by looking for this pattern. A minimal project looks like:
+The current quickstart scaffolds a project instead of asking you to create files by hand: `adk create my_agent` produces `my_agent/agent.py` (the agent definition), `my_agent/.env` for keys and project ids, and `my_agent/__init__.py` ([Python quickstart](https://adk.dev/get-started/python/index.md)). `agent.py` must expose a `root_agent`. The CLI discovers agents relative to the directory you run it from, so run `adk run my_agent` and `adk web --port 8000` from the **parent** directory that contains `my_agent/`.
 
-```
-my-adk-project/
-  .env
-  my_agent/
-    __init__.py
-    agent.py
-    tools.py
-```
+## Your first LlmAgent
 
-Verify installation with `adk --version`. If you see `google-adk 1.x.x` or later, you're ready.
-
-## Core Concepts: LlmAgent, SequentialAgent, ParallelAgent, and Custom Agents
-
-Google ADK organizes agent logic into four primitive types that compose into hierarchical agent trees. The LlmAgent (also aliased as `Agent`) is the reasoning primitive — it receives a system prompt, a set of tools, and a Gemini model name, then autonomously decides which tools to call and what to return. The SequentialAgent is a workflow primitive: it runs a list of child agents one after another, passing session state between them. The ParallelAgent runs child agents concurrently, collecting results via separate output keys to avoid write conflicts. Custom agents extend `BaseAgent` directly and let you implement arbitrary logic — database lookups, if/else branching, loops — without an LLM in the loop.
-
-The key architectural insight is that these types compose freely. A SequentialAgent can contain LlmAgents and ParallelAgents. A ParallelAgent's children can themselves be mini-pipelines with their own SequentialAgent structure. This hierarchical tree is how ADK scales from a single-agent chatbot to a 20-agent enterprise pipeline without changing the core pattern.
-
-All state flows through `session.state`, a dictionary attached to each conversation session. An agent writes to `session.state["key"]` via the `output_key` field or tool return values; downstream agents read from it. This shared-whiteboard design means agents don't need direct references to each other — they communicate through state, which is inspectable, serializable, and debuggable.
-
-## Building Your First Agent: A Simple LlmAgent with Custom Tools
-
-An LlmAgent with custom tools is the starting point for every ADK project. Below is a complete working example of a code analysis agent that uses two Python functions as tools:
+An `LlmAgent` takes a name, a model, an instruction, and tools. Plain Python functions become tools: ADK reads the docstring as the tool description and the type annotations as the parameter schema, so no decorator boilerplate is needed.
 
 ```python
 # my_agent/tools.py
-import subprocess
-
-def run_pylint(file_path: str) -> str:
-    """Run pylint on a Python file and return the output."""
-    result = subprocess.run(
-        ["python", "-m", "pylint", file_path, "--output-format=text"],
-        capture_output=True, text=True, timeout=30
-    )
-    return result.stdout or result.stderr
-
-def read_file(file_path: str) -> str:
+def read_file(file_path: str) -> dict:
     """Read a file and return its contents."""
     try:
         with open(file_path) as f:
-            return f.read()
+            return {"status": "success", "content": f.read()}
     except FileNotFoundError:
-        return f"File not found: {file_path}"
+        return {"status": "error", "error": f"File not found: {file_path}"}
 ```
 
 ```python
 # my_agent/agent.py
-from google.adk.agents import LlmAgent
-from .tools import run_pylint, read_file
+from google.adk.agents.llm_agent import Agent
+from .tools import read_file
 
-root_agent = LlmAgent(
+root_agent = Agent(
     name="code_reviewer",
-    model="gemini-2.0-flash",
+    model="gemini-flash-latest",
     description="Reviews Python code for quality and style issues",
-    instruction="""You are a senior Python developer doing code review.
-    When given a file path, read the file and run pylint on it.
-    Summarize the issues found, grouping them by severity.
-    Always end with an overall quality score from 1-10.""",
-    tools=[read_file, run_pylint],
+    instruction=(
+        "You are a senior Python developer doing code review. When given a file "
+        "path, read the file and summarize the issues you find, grouped by severity."
+    ),
+    tools=[read_file],
 )
 ```
 
-```python
-# my_agent/__init__.py
-from .agent import root_agent
-```
+**About that model id.** `gemini-flash-latest` is the value printed in Google's own Python quickstart ([adk.dev Python quickstart](https://adk.dev/get-started/python/index.md)); the sequential and parallel agent pages use `GEMINI_MODEL = "gemini-2.5-flash"` ([parallel agents](https://adk.dev/agents/workflow-agents/parallel-agents/index.md)) and the repository README uses `model="gemini-3.5-flash"` ([google/adk-python README](https://raw.githubusercontent.com/google/adk-python/main/README.md)). Three first-party pages, three values. No model call was executed in this refresh — there was no API credential in the run — so this page does not assert which id is current for your project. Confirm it against the docs' model configuration page that the quickstart links, and prefer the `-latest` alias if you do not want to chase version bumps.
 
-ADK automatically converts plain Python functions into tools — it reads the docstring as the tool description and the type annotations as parameter schemas. This means no decorator boilerplate. Run the agent interactively with `adk run my_agent` or open the dev UI with `adk web` to test it visually.
+## Sequential agents: ordered pipelines (and the Workflow deprecation)
 
-## Building a Multi-Agent Pipeline: Sequential Workflow Example
+The docs describe `SequentialAgent` as a template workflow agent "that executes its sub-agents in the order they are specified in a list", with execution that "is not controlled by an AI model, and is deterministic", and note that the children share the same `InvocationContext` and therefore the same session state ([sequential agents](https://adk.dev/agents/workflow-agents/sequential-agents/index.md)). The same page carries a banner that changes how you should read this section:
 
-A SequentialAgent chains multiple specialized agents into a pipeline where each agent's output becomes the next agent's input. This pattern is ideal for code review → test generation → documentation workflows. Here's a three-agent code review pipeline:
+> Starting in ADK 2.0 for Python and Go, templated workflows have been superseded by more flexible workflow structures, including graph-based workflows and dynamic workflows.
+
+Both classes still work in 2.12.0 and the interpreter tells you they are on the way out. Constructing a `SequentialAgent` emits, verbatim, `DeprecationWarning: SequentialAgent is deprecated in favor of Workflow and will be removed in a future version. Workflow cannot yet be used as an LlmAgent sub-agent.` The second sentence is the practically important part: if you are building an `LlmAgent` that delegates to a sub-agent, you cannot simply swap `SequentialAgent` for `Workflow` yet. The full warning text, captured from the recorded run, is in [local-run-stderr.txt](https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/google-adk-python-tutorial-2026/write-check/local-run-stderr.txt).
+
+A minimal ordered pipeline therefore stays useful: each `LlmAgent` writes its reply into session state under `output_key`, and the next stage reads that key inside its instruction.
 
 ```python
 # pipeline/agent.py
 from google.adk.agents import LlmAgent, SequentialAgent
 
-# Agent 1: reads and analyzes code quality
 analyzer = LlmAgent(
     name="code_analyzer",
-    model="gemini-2.0-flash",
-    description="Analyzes Python code and extracts quality metrics",
-    instruction="""Read the file at the path in session state key 'file_path'.
-    Analyze it for: complexity, naming, documentation, error handling.
-    Store your structured analysis in output_key='analysis'.""",
+    model="gemini-flash-latest",
+    instruction="Analyze the file at the path in state key 'file_path'. Report complexity, naming and error handling.",
     output_key="analysis",
 )
-
-# Agent 2: generates improvement suggestions based on analysis
 suggester = LlmAgent(
     name="improvement_suggester",
-    model="gemini-2.0-flash",
-    description="Generates specific improvement suggestions from code analysis",
-    instruction="""Read the code analysis from session state key 'analysis'.
-    Generate 5 specific, actionable improvement suggestions with code examples.
-    Store suggestions in output_key='suggestions'.""",
+    model="gemini-flash-latest",
+    instruction="Read 'analysis' from state and give five actionable improvements.",
     output_key="suggestions",
 )
-
-# Agent 3: writes the final review report
 reporter = LlmAgent(
     name="report_writer",
-    model="gemini-2.0-flash",
-    description="Writes a structured code review report",
-    instruction="""Using 'analysis' and 'suggestions' from session state,
-    write a professional code review report in Markdown format.
-    Include: executive summary, detailed findings, and action items.""",
+    model="gemini-flash-latest",
+    instruction="Using 'analysis' and 'suggestions' from state, write a Markdown review report.",
     output_key="final_report",
 )
 
 root_agent = SequentialAgent(
     name="code_review_pipeline",
-    description="Complete code review pipeline: analyze, suggest, report",
+    description="Analyze, suggest, report",
     sub_agents=[analyzer, suggester, reporter],
 )
 ```
 
-The `output_key` field is the key mechanism here: each LlmAgent writes its response text into `session.state[output_key]` automatically. Downstream agents reference these keys in their instruction prompts. The SequentialAgent guarantees execution order — analyzer finishes before suggester starts, suggester finishes before reporter starts.
+Constructing exactly that shape — two-child sequential, two-child parallel, and a nested parallel-inside-sequential tree — succeeded in the recorded run, and the resulting child lists were read back and matched the definitions ([local-run-verify-output.json](https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/google-adk-python-tutorial-2026/write-check/local-run-verify-output.json)). What was **not** verified is execution order or state passing, because that needs a model call. Construction, imports and the deprecation surface are what this refresh checked.
 
-To trigger the pipeline, pass the initial state when starting a session:
+## Parallel agents: concurrent subtasks without key collisions
+
+`ParallelAgent` "executes its sub-agents concurrently" and is documented for independent, resource-intensive work such as multi-source retrieval ([parallel agents](https://adk.dev/agents/workflow-agents/parallel-agents/index.md)). Two constraints from that page drive the code you write:
+
+1. Each sub-agent must be able to run without depending on its siblings: "it is important that each sub-agent can operate without depending on the other sub-agents", because the branches do not automatically share conversation history or state.
+2. Result order is not guaranteed, so anything that needs a deterministic merge must be done downstream.
+
+```python
+from google.adk.agents import LlmAgent, ParallelAgent
+from google.adk.agents.sequential_agent import SequentialAgent
+from google.adk.tools import google_search
+
+docs = LlmAgent(name="docs_researcher", model="gemini-flash-latest",
+                instruction="Research {topic} in the official docs.",
+                tools=[google_search], output_key="docs_findings")
+issues = LlmAgent(name="issues_researcher", model="gemini-flash-latest",
+                  instruction="Research {topic} in issue trackers.",
+                  tools=[google_search], output_key="issues_findings")
+
+fan_out = ParallelAgent(name="parallel_researcher", sub_agents=[docs, issues])
+synth = LlmAgent(name="synthesizer", model="gemini-flash-latest",
+                 instruction="Merge 'docs_findings' and 'issues_findings' into one answer.",
+                 output_key="final_answer")
+
+root_agent = SequentialAgent(name="research_pipeline", sub_agents=[fan_out, synth])
+```
+
+`from google.adk.tools import google_search` and `from google.adk.agents.sequential_agent import SequentialAgent` both imported cleanly in the recorded check, alongside the package-level forms `from google.adk.agents import LlmAgent, ParallelAgent, SequentialAgent` ([extra-imports.txt](https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/google-adk-python-tutorial-2026/write-check/extra-imports.txt)).
+
+**A correction to the usual advice about `output_key`.** Earlier editions of this page said two parallel children sharing an `output_key` "causes a race condition". They collide, but the framework does not stop you: a `ParallelAgent` whose two children both declare `output_key="result"` constructed without an error in the recorded run ([local-run-verify-output.json](https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/google-adk-python-tutorial-2026/write-check/local-run-verify-output.json)). The hazard is therefore a silent data overwrite at run time, not a validation error at import time — which is precisely why unique keys matter more than the old wording implied. Use distinct keys (`docs_findings`, `issues_findings`) and merge downstream, as in the example above.
+
+## Running agents: Runner, sessions and the dev UI
+
+`adk run my_agent` gives an interactive terminal session and `adk web --port 8000` starts a browser UI at `http://localhost:8000`. Google is explicit about the boundary: "ADK Web is ***not meant for use in production deployments***. You should use ADK Web for development and debugging purposes only." ([Python quickstart](https://adk.dev/get-started/python/index.md)).
+
+In code, a session service and a runner drive the agent, and `Runner` plus `InMemorySessionService` are the two imports the tutorial's own examples need; both imported successfully in the recorded check, as did `from google.genai.types import Content, Part` ([local-run-verify-output.json](https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/google-adk-python-tutorial-2026/write-check/local-run-verify-output.json)).
 
 ```python
 from google.adk.runners import Runner
@@ -177,272 +194,65 @@ from google.genai.types import Content, Part
 
 session_service = InMemorySessionService()
 runner = Runner(agent=root_agent, app_name="code_review", session_service=session_service)
-
-session = session_service.create_session(
-    app_name="code_review",
-    user_id="dev_user",
-    state={"file_path": "my_module.py"}
-)
-
-for event in runner.run(
-    user_id="dev_user",
-    session_id=session.id,
-    new_message=Content(parts=[Part(text="Review the file.")])
-):
+session = session_service.create_session(app_name="code_review", user_id="dev_user",
+                                         state={"file_path": "my_module.py"})
+for event in runner.run(user_id="dev_user", session_id=session.id,
+                        new_message=Content(parts=[Part(text="Review the file.")])):
     if event.is_final_response():
         print(event.content.parts[0].text)
 ```
 
-## Running Agents in Parallel: Speeding Up Complex Workflows
+## Exposing agents over A2A (updated entry point)
 
-ParallelAgent runs multiple child agents concurrently, which dramatically reduces latency for independent subtasks. The canonical use case is a research pipeline where you want to gather information from multiple sources simultaneously rather than waiting for each one sequentially. The critical constraint: each parallel child agent must write to a unique `output_key` — writing to the same key causes a race condition where the last-finishing agent overwrites earlier results.
+The A2A section of this tutorial used to wrap an agent in `A2AServer` and call remote agents with `A2AClient`. Neither name survives in 2.12.0: `from google.adk.a2a import A2AServer` fails with `ImportError: cannot import name 'A2AServer' from 'google.adk.a2a'`, and `A2AClient` fails the same way ([local-run-verify-output.json](https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/google-adk-python-tutorial-2026/write-check/local-run-verify-output.json)).
 
-Here's a parallel research agent that simultaneously searches documentation, checks GitHub issues, and scans blog posts:
-
-```python
-from google.adk.agents import LlmAgent, ParallelAgent, SequentialAgent
-
-# These three agents run concurrently
-docs_researcher = LlmAgent(
-    name="docs_researcher",
-    model="gemini-2.0-flash",
-    description="Searches official documentation",
-    instruction="Search the official ADK documentation for information about: {topic}. "
-                "Return key facts and code examples. Store in output_key='docs_findings'.",
-    output_key="docs_findings",
-    tools=[search_docs_tool],  # your search tool
-)
-
-issues_researcher = LlmAgent(
-    name="issues_researcher",
-    model="gemini-2.0-flash",
-    description="Searches GitHub issues for known problems and solutions",
-    instruction="Search GitHub issues for: {topic}. "
-                "Return relevant issues and their solutions. Store in output_key='issues_findings'.",
-    output_key="issues_findings",
-    tools=[search_github_tool],
-)
-
-blog_researcher = LlmAgent(
-    name="blog_researcher",
-    model="gemini-2.0-flash",
-    description="Searches developer blog posts and tutorials",
-    instruction="Find blog posts and tutorials about: {topic}. "
-                "Summarize key insights. Store in output_key='blog_findings'.",
-    output_key="blog_findings",
-    tools=[search_web_tool],
-)
-
-# ParallelAgent runs all three simultaneously
-parallel_research = ParallelAgent(
-    name="parallel_researcher",
-    description="Gathers information from multiple sources concurrently",
-    sub_agents=[docs_researcher, issues_researcher, blog_researcher],
-)
-
-# SequentialAgent wraps the parallel step, then synthesizes
-synthesizer = LlmAgent(
-    name="synthesizer",
-    model="gemini-2.0-flash",
-    description="Synthesizes research from all sources into a final answer",
-    instruction="""Synthesize the research from these session state keys:
-    - docs_findings: official documentation results
-    - issues_findings: GitHub issues findings
-    - blog_findings: blog post findings
-    Write a comprehensive, well-sourced answer.""",
-    output_key="final_answer",
-)
-
-root_agent = SequentialAgent(
-    name="research_pipeline",
-    sub_agents=[parallel_research, synthesizer],
-)
-```
-
-In practice, parallel ADK agents reduce latency by the time of the slowest subtask rather than the sum of all subtasks. A three-way parallel research step taking 8 seconds total beats a sequential 24-second equivalent.
-
-## Agent Communication: Session State and the Shared Whiteboard Pattern
-
-Session state is the backbone of multi-agent communication in ADK. It functions as a shared whiteboard: any agent can read from or write to it, it persists for the lifetime of a session, and the ADK web UI shows you its full contents at every step. Understanding how state flows prevents the most common multi-agent bugs — race conditions, overwritten keys, and agents that reference state keys that haven't been populated yet.
-
-The three ways agents interact with session state are: automatic output key writing (when you set `output_key="key"`, the agent's final response text is stored there automatically); tool return values (tools can return dictionaries that get merged into state); and explicit state manipulation in custom agents (by accessing `ctx.session.state` directly in `BaseAgent` implementations).
-
-A common mistake is having two ParallelAgent children write to the same key. The fix is to always use distinct output keys, then have a downstream agent merge them:
+The documented replacement is a function, not a server class: "You can take an existing agent built using ADK and make it A2A-compatible by simply wrapping it using the `to_a2a()` function" ([A2A quickstart: exposing](https://adk.dev/a2a/quickstart-exposing/index.md)).
 
 ```python
-# WRONG: race condition
-agent_a = LlmAgent(name="a", output_key="result", ...)
-agent_b = LlmAgent(name="b", output_key="result", ...)  # overwrites agent_a!
+from google.adk.a2a.utils.agent_to_a2a import to_a2a
 
-# CORRECT: unique keys, merged downstream
-agent_a = LlmAgent(name="a", output_key="result_a", ...)
-agent_b = LlmAgent(name="b", output_key="result_b", ...)
-
-merger = LlmAgent(
-    name="merger",
-    instruction="Combine 'result_a' and 'result_b' from session state into a unified output.",
-    output_key="result",
-)
+a2a_app = to_a2a(root_agent, port=8001)   # serves the agent card for you
 ```
 
-For complex pipelines, prefix output keys with the agent name: `"analyzer_summary"`, `"validator_report"`, `"formatter_output"`. This makes state inspection in the dev UI immediately readable and prevents accidental collisions across pipeline stages.
+Two operational details from the same page: `to_a2a()` auto-generates the agent card in memory, and the alternative path is to host your own `agent.json` card with `adk api_server --a2a`, which keeps `adk web` usable for debugging. The page also states that ADK's A2A integration works with both `a2a-sdk` 0.3.x and 1.x.x, detecting the installed SDK version automatically, while recommending that new integrations target 1.x.x ([A2A quickstart: exposing](https://adk.dev/a2a/quickstart-exposing/index.md)).
 
-## Integrating A2A Protocol for Cross-Framework Agent Communication
+**The import requires an extra, and the base install does not have it.** On the recorded check's base install, `from google.adk.a2a.utils.agent_to_a2a import to_a2a` raised `ModuleNotFoundError: No module named 'a2a'`; `pyproject.toml` declares the SDK only inside the extra — `optional-dependencies.a2a = ["a2a-sdk[http-server]>=0.3.4,<2"]` ([extra-imports.txt](https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/google-adk-python-tutorial-2026/write-check/extra-imports.txt), [pyproject.toml](https://raw.githubusercontent.com/google/adk-python/main/pyproject.toml)). Install it with `pip install "google-adk[a2a]"` before copying any A2A snippet. That extra was not installed in this pass, so the end-to-end serving path is unverified here; [the A2A protocol guide](https://baeseokjae.github.io/posts/google-adk-a2a-protocol-guide-2026/) covers the protocol itself.
 
-The Agent-to-Agent (A2A) protocol is ADK's answer to framework fragmentation: a standard HTTP-based protocol for agents built in different frameworks — ADK, LangGraph, CrewAI, AutoGen — to delegate tasks to each other. An ADK agent can call a LangGraph agent as if it were a local tool, and vice versa. A2A was introduced alongside ADK at Google Cloud Next 2025 and is now supported by over 50 enterprise software vendors including Salesforce, SAP, and Atlassian.
+## Deployment: where to go after the tutorial
 
-To expose an ADK agent as an A2A server, wrap it in an `A2AServer`:
-
-```python
-from google.adk.a2a import A2AServer
-
-server = A2AServer(agent=root_agent, port=8080)
-server.start()
-```
-
-To call a remote A2A agent from within another ADK agent, use the `A2AClient` as a tool:
-
-```python
-from google.adk.a2a import A2AClient
-
-remote_agent_tool = A2AClient(
-    name="remote_validator",
-    description="Validates code against company style guidelines using the remote validator agent",
-    url="http://validator-service:8080",
-)
-
-orchestrator = LlmAgent(
-    name="orchestrator",
-    model="gemini-2.0-flash",
-    instruction="Analyze the code, then use the remote_validator tool to check style compliance.",
-    tools=[remote_agent_tool],
-)
-```
-
-The A2A protocol handles authentication, streaming, and error propagation transparently. From the orchestrator's perspective, the remote agent looks identical to a local Python function tool. This is the key architectural benefit: you can start with all agents local, then split specific high-load agents into microservices without changing any orchestration code.
-
-## Testing and Debugging with ADK's Built-in Dev UI
-
-ADK ships with a local web UI that is the fastest way to test and debug multi-agent systems. Run `adk web` in your project directory and open `http://localhost:8000` in a browser. The UI shows real-time agent execution: which agent is active, what messages it sent to the model, which tools were called with what arguments, and the complete session state at every step.
-
-The dev UI is far more useful than print statements for multi-agent debugging because it shows the agent tree visually. When a SequentialAgent runs, you see each child agent activate in sequence. When a ParallelAgent runs, you see all children fire simultaneously. Session state appears as a live JSON panel that updates after each agent writes its output key.
-
-For automated testing, ADK provides `InMemorySessionService` and a synchronous `Runner` that makes unit testing individual agents straightforward:
-
-```python
-import pytest
-from google.adk.runners import Runner
-from google.adk.sessions import InMemorySessionService
-from google.genai.types import Content, Part
-from my_agent import root_agent
-
-def test_code_reviewer_returns_score():
-    session_service = InMemorySessionService()
-    runner = Runner(
-        agent=root_agent,
-        app_name="test_app",
-        session_service=session_service
-    )
-    session = session_service.create_session(
-        app_name="test_app", user_id="test_user"
-    )
-    
-    events = list(runner.run(
-        user_id="test_user",
-        session_id=session.id,
-        new_message=Content(parts=[Part(text="Review my_module.py")])
-    ))
-    
-    final = next(e for e in events if e.is_final_response())
-    assert "score" in final.content.parts[0].text.lower()
-```
-
-For integration testing multi-agent pipelines, assert on `session.state` after the run completes — this validates that each agent wrote its expected output key correctly.
-
-## Deploying Your Multi-Agent System to Vertex AI Agent Engine
-
-Vertex AI Agent Engine is the managed runtime for ADK agents in Google Cloud. It handles auto-scaling, session persistence, monitoring, and IAM integration — you ship the agent code; Google manages the infrastructure. The deployment path is a single CLI command after authenticating with Google Cloud:
+The earlier deployment section on this page called `pip install google-cloud-aiplatform[adk,reasoningengine]` and `vertexai.preview.reasoning_engines.AdkApp`. That path could not be checked here — the base install does not contain a `vertexai` module at all (`ModuleNotFoundError: No module named 'vertexai'`) — and the package metadata now says the Google Cloud extra pulls a different distribution: the `gcp` extra declares `google-cloud-agentplatform[agent_engines]>=2.2,<3`, with an inline note that the standalone package "carries no GAPIC stack, so `pip install google-adk[gcp]` no longer drags in ~1000 generated aiplatform_v1 modules" ([pyproject.toml](https://raw.githubusercontent.com/google/adk-python/main/pyproject.toml)). Rather than restate an unverified snippet, this page points at the deployment commands the repository documents today ([google/adk-python README](https://raw.githubusercontent.com/google/adk-python/main/README.md)):
 
 ```bash
-gcloud auth application-default login
-pip install google-cloud-aiplatform[adk,reasoningengine]
+adk deploy docker --with_ui <agent-folder>
+adk deploy cloud_run --with_ui <agent-folder>
 ```
 
-```python
-# deploy.py
-import vertexai
-from vertexai.preview import reasoning_engines
+`adk --help` in the recorded environment lists a `deploy` subcommand described as "Deploys agent to hosted environments", so the CLI surface for this exists locally; the actual deploy was not run, because that needs a Google Cloud project and credentials ([local-run-verify-output.json](https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/google-adk-python-tutorial-2026/write-check/local-run-verify-output.json)). For the framework-selection question — whether ADK, LangGraph or Mastra is the right runtime for your workload — this page deliberately does not duplicate the site's comparison pages linked at the top.
 
-vertexai.init(project="your-project-id", location="us-central1")
+## How the local check was run, and what it does not cover
 
-app = reasoning_engines.AdkApp(
-    agent=root_agent,
-    enable_tracing=True,
-)
+Everything labelled as verified above comes from one bounded, reproducible check, run in an isolated virtual environment under a private per-run scratch directory (Python 3.12.3, Linux aarch64), with the exact command list and timestamps recorded in [write-check-record.json](https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/google-adk-python-tutorial-2026/write-check/write-check-record.json). The sequence was `python3 -m venv venv`, `pip install --upgrade pip`, then the unpinned `pip install google-adk` that this tutorial shows, followed by a script that (a) reads the resolved version, `Requires-Python` and every declared extra from the installed metadata, (b) executes each import statement the tutorial prints, one at a time, recording the exception text when it fails, (c) constructs the sequential, parallel and nested agent shapes and reads the child lists back, and (d) runs `adk --version` and `adk --help`. The script is published as [local-run-script-verify_tutorial_commands.py](https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/google-adk-python-tutorial-2026/local-run-script-verify_tutorial_commands.py) and can be re-run against any later release; the pip resolution log is [local-run-pip-resolve.log](https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/google-adk-python-tutorial-2026/write-check/local-run-pip-resolve.log).
 
-remote_app = reasoning_engines.ReasoningEngine.create(
-    app,
-    requirements=["google-adk>=1.0.0", "google-cloud-aiplatform"],
-    display_name="Code Review Multi-Agent System",
-    description="Multi-agent pipeline for automated code review",
-)
-
-print(f"Deployed: {remote_app.resource_name}")
-```
-
-Running `python deploy.py` packages your agent code, uploads it to Vertex AI, and returns a resource name you use for all future invocations. The deployed agent gets a REST endpoint that accepts the same message format as the local runner — no code changes between local dev and production.
-
-For production deployments, enable Cloud Trace integration by setting `enable_tracing=True` (as above). This gives you Gemini model latency breakdowns, tool call timing, and agent step traces in the Google Cloud Console — critical for diagnosing where pipeline latency comes from at scale.
-
-## Google ADK vs LangGraph vs CrewAI: When to Choose Each
-
-Google ADK, LangGraph, and CrewAI serve overlapping but distinct use cases. ADK is the right choice when you're building on Google Cloud, need Vertex AI deployment, or want the A2A protocol for cross-framework orchestration. LangGraph is the right choice when you need fine-grained control over agent execution graphs with custom branching, loops, and human-in-the-loop checkpoints — its graph-based model is more flexible than ADK's tree model for complex conditional workflows. CrewAI is the right choice for rapid prototyping with a role-based team metaphor — its higher-level abstractions are faster to write but less controllable.
-
-| Dimension | Google ADK | LangGraph | CrewAI |
-|---|---|---|---|
-| **Primary abstraction** | Agent tree (hierarchical) | Directed graph | Role-based crew |
-| **Gemini optimization** | Native | Via LangChain | Via LangChain |
-| **Vertex AI deployment** | One command | Manual | Manual |
-| **Dev UI built-in** | Yes (`adk web`) | No | No |
-| **A2A protocol** | Native | Via adapter | Via adapter |
-| **State management** | `session.state` dict | State schema + reducers | Context passing |
-| **Learning curve** | Low (Python functions) | Medium (graph concepts) | Low (role prompts) |
-| **Best for** | GCP-native, Gemini, enterprise | Complex branching, stateful loops | Quick prototypes, team simulation |
-
-The practical decision rule: if your agents need to call each other across frameworks or you're deploying to GCP, use ADK. If your workflow has complex conditional branching or cycles, use LangGraph. If you want something running in a weekend, use CrewAI.
-
-## Real-World Use Cases: Code Review, Customer Support, and Research Pipelines
-
-Three production patterns demonstrate where multi-agent ADK systems deliver the most value.
-
-**Code Review Pipeline** — The most natural fit for a SequentialAgent: analyzer reads code and extracts metrics, security scanner checks for OWASP vulnerabilities, style checker validates against company conventions, and a report writer synthesizes all findings. Companies like Sourcegraph have reported 40% reduction in human code review time when AI pre-review runs on every PR. The ADK implementation handles this with four LlmAgents in a SequentialAgent, each writing to a distinct output key, with the final report agent reading all three upstream keys.
-
-**Customer Support Escalation** — A router LlmAgent classifies incoming tickets by type (billing, technical, account), then routes to a specialized agent for that category. Technical tickets can spawn a ParallelAgent that simultaneously searches the knowledge base, checks system status, and retrieves the customer's history. The specialized agents resolve or escalate based on their findings. ADK's session state persists conversation history, so escalated tickets carry full context to the human agent who picks them up.
-
-**Research Summarization Workflow** — A parallel research step fetches from arXiv, GitHub, and blog sources simultaneously. A deduplication agent removes redundant findings. A synthesis agent writes the final summary. This pattern compresses 45 minutes of manual research into under 3 minutes when combined with Gemini's 1M-token context window and web search tools. The A2A protocol enables adding specialized external agents — a statistics analyzer, a domain-specific validator — without refactoring the core pipeline.
-
----
+The limits, stated so you can judge the claims: **no model call was made** (no API credential in this run), so nothing here is a claim about agent behaviour, latency, output quality, or the correctness of the model ids; the extra packages (`a2a`, `gcp`, `all`) were **not** installed, so their dependency resolution is unverified; and the install was unpinned, so a later `pip install google-adk` may resolve a different version with different import results. This is an author-side check of installation, imports and construction — not a benchmark, and not a vendor claim.
 
 ## FAQ
 
-The questions below address the most common sticking points developers hit when starting with Google ADK in 2026. Google ADK (Agent Development Kit) is a production-ready, open-source Python framework for building multi-agent AI systems that reached stable v1.0.0 in May 2025. It is optimized for Gemini models and Google Cloud infrastructure, but works with any OpenAI-compatible model via LiteLLM. The framework uses a hierarchical agent tree model where LlmAgents handle reasoning, SequentialAgents and ParallelAgents orchestrate workflows, and session state acts as the shared communication layer. Deployment to Vertex AI Agent Engine requires minimal configuration and provides enterprise-grade scaling, monitoring, and IAM integration. With 13 million developers already on Google's generative model platform and the AI agents market growing at 49.6% CAGR, understanding ADK's core patterns — installation, agent composition, state management, and A2A cross-framework communication — is increasingly a baseline skill for Python developers building AI-powered applications in 2026.
+### How do I install Google ADK in Python?
 
-### How do I install Google ADK?
+On Python 3.11 or newer, run `pip install google-adk`, then confirm with `pip show google-adk` and `adk --version`. The docs' installation page gives the same command with a virtual environment ([installation](https://adk.dev/get-started/installation/index.md)); the recorded run resolved google-adk 2.12.0 and printed `adk, version 2.12.0` ([local-run-verify-output.json](https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/google-adk-python-tutorial-2026/write-check/local-run-verify-output.json)).
 
-Run `pip install google-adk` in a Python 3.10+ environment. For production Vertex AI deployment, use `pip install google-adk[vertexai]`. Set your `GOOGLE_API_KEY` environment variable or configure Application Default Credentials for Google Cloud. Verify with `adk --version`.
+### Does Google ADK need Python 3.10 or 3.11?
 
-### What is the difference between LlmAgent and SequentialAgent in Google ADK?
+Use 3.11+: the installed distribution declares `Requires-Python: >=3.11` and the repository README states "Python 3.11+" ([PyPI JSON for google-adk](https://pypi.org/pypi/google-adk/json), [google/adk-python README](https://raw.githubusercontent.com/google/adk-python/main/README.md)). The [Python quickstart](https://adk.dev/get-started/python/index.md) still lists 3.10 or later, so the docs page and the package currently disagree.
 
-LlmAgent is a reasoning primitive — it calls a Gemini model to decide what to do, which tools to invoke, and what to return. SequentialAgent is a workflow primitive — it has no model of its own, it just runs a list of child agents one after another in order. You compose them: a SequentialAgent contains LlmAgents as children.
+### What is the difference between LlmAgent and SequentialAgent?
 
-### How does session state work in Google ADK multi-agent systems?
+An `LlmAgent` is the reasoning primitive: it calls a model and decides which tools to use. A `SequentialAgent` is a template workflow agent with no model of its own — it runs its children in the order given and is deterministic, sharing one invocation context and session state between them ([sequential agents](https://adk.dev/agents/workflow-agents/sequential-agents/index.md)).
 
-Session state (`session.state`) is a Python dictionary that persists for the lifetime of a conversation session. Agents write to it via `output_key` (the agent's response is automatically stored at that key) or by returning dictionaries from tool functions. All agents in the same pipeline share the same state object, so downstream agents read what upstream agents wrote.
+### Are SequentialAgent and ParallelAgent deprecated in Google ADK?
 
-### Can Google ADK work with models other than Gemini?
+They are documented as superseded starting in ADK 2.0 for Python and Go, in favour of graph-based and dynamic workflows ([sequential agents](https://adk.dev/agents/workflow-agents/sequential-agents/index.md), [parallel agents](https://adk.dev/agents/workflow-agents/parallel-agents/index.md)), and constructing either one emits `DeprecationWarning: ... is deprecated in favor of Workflow and will be removed in a future version. Workflow cannot yet be used as an LlmAgent sub-agent.` Both still import and construct in 2.12.0 ([local-run-stderr.txt](https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/google-adk-python-tutorial-2026/write-check/local-run-stderr.txt)).
 
-Yes. ADK supports non-Gemini models through LiteLLM integration. Install `litellm` and configure the model string as `"litellm/gpt-4o"` or `"litellm/claude-opus-4-7"` instead of a Gemini model name. This lets you run the same ADK agent code against any OpenAI-compatible model endpoint.
+### Why does `from google.adk.a2a import A2AServer` fail?
 
-### How do I deploy a Google ADK agent to production?
-
-For Vertex AI deployment, use `reasoning_engines.AdkApp` with `reasoning_engines.ReasoningEngine.create()`. This packages your agent code and deploys it to Google Cloud with auto-scaling and session management. Alternatively, export ADK agents as FastAPI apps using `adk api_server` for deployment to Cloud Run or any container infrastructure.
+Because that name no longer exists: the import raises `ImportError: cannot import name 'A2AServer' from 'google.adk.a2a'`. Expose an agent with `to_a2a()` from `google.adk.a2a.utils.agent_to_a2a` and install the `a2a` extra first — without it the import fails with `ModuleNotFoundError: No module named 'a2a'` ([A2A quickstart: exposing](https://adk.dev/a2a/quickstart-exposing/index.md), [local-run-verify-output.json](https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/google-adk-python-tutorial-2026/write-check/local-run-verify-output.json)).
