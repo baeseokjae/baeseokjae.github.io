@@ -13,6 +13,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from publication_watch import verify as verify_publication, ALERTS as PUBLICATION_ALERTS
 
 ALERTS = {
     'controller_stale', 'storage_reserve_below_warning', 'storage_emergency',
@@ -27,6 +28,7 @@ ALERTS = {
     'unclassified_internal_alert', 'internal_alert_delivery_failed',
 }
 EXTERNAL = {'heartbeat_missing', 'heartbeat_stale', 'heartbeat_invalid', 'public_site_unavailable'}
+EXTERNAL |= PUBLICATION_ALERTS
 SHA = re.compile(r'[0-9a-f]{40}')
 
 
@@ -178,6 +180,8 @@ def main():
         heartbeat = {'version': 1, 'at': (at - timedelta(minutes=30) if drill == 'stale' else at).isoformat(), 'alerts': []}
         site_ok = True  # A separate synthetic incident; never alters the live heartbeat.
     alerts = conditions(heartbeat, site_ok, at)
+    publication=verify_publication(heartbeat.get('publication') if heartbeat and drill=='none' else None,repo,at,github)
+    alerts=sorted(set(alerts+publication['alerts']))
     name = 'rockb-ops-delivery-test' if drill != 'none' else 'rockb-ops-delivery'
     previous = read_ledger(repo, name)
     exists = previous is not None
@@ -186,7 +190,7 @@ def main():
         write_ledger(repo, name, os.environ['GITHUB_SHA'], value, exists)
         exists = True
     result = deliver(previous, alerts, at, repo, save, telegram, drill=drill != 'none')
-    Path('operations-receipt.json').write_text(json.dumps({'observed_at': at.isoformat(), **result}, indent=2) + '\n')
+    Path('operations-receipt.json').write_text(json.dumps({'observed_at': at.isoformat(), 'publication':publication, **result}, indent=2) + '\n')
     print(json.dumps({'status': result['status'], 'changed': result['changed'], 'alerts': alerts}))
     if result['status'] == 'delivery_unknown':
         raise SystemExit('Delivery remains uncertain; no automatic resend')
