@@ -1,101 +1,81 @@
 ---
-title: 'SonarQube MCP Server for GitHub Copilot'
+title: 'SonarQube MCP Server for GitHub Copilot: Correct Setup and Verification'
 date: 2026-07-05
-lastmod: 2026-07-05
-description: "Overview of SonarQube MCP Server setup and code-quality workflows for AI coding assistants."
+lastmod: '2026-10-20T07:02:10.628622+00:00'
+description: Configure SonarQube MCP over stdio in VS Code, distinguish Cloud and Server settings, and verify that analysis results match the code you changed.
 draft: false
-schema: "schema-sonarqube-mcp-server-copilot-guide-2026"
+schema: schema-sonarqube-mcp-server-copilot-guide-2026
 cover:
-  alt: 'SonarQube MCP Server for GitHub Copilot'
+  alt: 'SonarQube MCP Server for GitHub Copilot: Correct Setup and Verification'
   image: /images/sonarqube-mcp-server-copilot-guide-2026.png
   relative: false
 ---
 
-# SonarQube MCP Server for GitHub Copilot 2026: Code Quality Inside Agent Workflows
+SonarQube MCP gives an assistant a way to work with SonarQube information. The most useful setup check is whether the assistant can identify the correct project and analysis revision. A connected process alone does not prove that the current working tree passed a quality gate.
 
-## Overview
-This guide covers SonarQube MCP Server v1.19.0, focusing on its integration with AI agent workflows in 2026. It includes deployment instructions, usage patterns, and comparisons with competitors.
+This guide uses the documented container and a VS Code configuration. The configuration was checked as JSON and against the official setup instructions; no authenticated SonarQube deployment was exercised for this review.
 
----
+## Use the MCP transport the client expects
 
-## What is SonarQube MCP Server?
-SonarQube MCP Server is a middleware platform that enables AI agents to interact with SonarQube for code quality analysis, security checks, and compliance monitoring.
+The [official server README](https://raw.githubusercontent.com/SonarSource/sonarqube-mcp-server/master/README.md) identifies `sonarsource/sonarqube-mcp` as the container image and shows `1.19.0.2785` as a pinned-version example. In the stdio setup, the editor launches Docker with `-i` and communicates through its input/output streams. This is not an HTTP service exposed at `/analyze` on a published port.
 
-### Key Features
-- Docker-based deployment
-- Client configuration for Copilot, Claude Code, Cursor, and Codex CLI
-- Support for 20+ MCP tools
-- Deep integration with GitHub Copilot
-- Comparison between SonarQube Cloud and self-hosted options
+[VS Code's MCP documentation](https://code.visualstudio.com/docs/agent-customization/mcp-servers) uses a `servers` object in `.vscode/mcp.json`. Keep token entry separate from the checked-in configuration.
 
----
+## A Server configuration to adapt
 
-## Installation and Setup
-### Docker Deployment
-1. Pull the SonarQube MCP Server image:
-   ```bash
-   docker pull sonarqube/mcp-server:1.19.0
-   ```
+Download the [Server configuration](/research/content-quality-2026-10/sonarqube-vscode.json), inspect it, and place its contents in `.vscode/mcp.json` in a repository you trust:
 
-2. Run the container:
-   ```bash
-   docker run -d --name sonarqube-mcp-server -p 9000:9000 sonarqube/mcp-server:1.19.0
-   ```
-
-### Client Configuration
-Configure your AI agent to use the MCP server endpoint:
 ```json
 {
-  "mcp": {
-    "server": "http://localhost:9000",
-    "apiKey": "your-api-key"
+  "inputs": [
+    {"type": "promptString", "id": "sonar-token", "description": "SonarQube user token", "password": true},
+    {"type": "promptString", "id": "sonar-url", "description": "SonarQube Server URL"}
+  ],
+  "servers": {
+    "sonarqube": {
+      "type": "stdio",
+      "command": "docker",
+      "args": ["run", "--init", "--pull=always", "-i", "--rm", "-e", "SONARQUBE_TOKEN", "-e", "SONARQUBE_URL", "sonarsource/sonarqube-mcp:1.19.0.2785"],
+      "env": {
+        "SONARQUBE_TOKEN": "${input:sonar-token}",
+        "SONARQUBE_URL": "${input:sonar-url}"
+      }
+    }
   }
 }
 ```
 
----
+The tag is a documented reproducible example, not a claim that it is the latest release. Check its compatibility with your SonarQube deployment before adopting it. Docker must be available to the editor process, and the URL must be reachable from the container.
 
-## Usage Patterns
-### Code Quality Analysis
-Use the MCP server to analyze code quality:
-```bash
-curl -X POST http://localhost:9000/analyze -H "Content-Type: application/json" -d '{"filePath": "src/main.py"}'
-```
+Use a user token with access limited to the projects you need. Do not paste the real value into a repository file or an assistant conversation. Review the available tools and their permissions before enabling automatic approval.
 
-### Security Checks
-Run security scans:
-```bash
-curl -X POST http://localhost:9000/security-scan -H "Content-Type: application/json" -d '{"filePath": "src/main.py"}'
-```
+## Cloud and Server are different configurations
 
----
+For SonarQube Cloud, the documented setup passes `SONARQUBE_TOKEN` and `SONARQUBE_ORG`; the US region also needs `SONARQUBE_URL=https://sonarqube.us`. Self-hosted Server uses the user token and its Server URL. Update both the environment mapping and the Docker `-e` arguments when changing these settings.
 
-## Competitor Comparison
-| Tool          | SonarQube MCP Server | CodeRabbit | Snyk          | ESLint MCP     |
-|---------------|----------------------|------------|---------------|---------------|
-| Code Quality  | High                 | Medium      | Medium        | Low           |
-| Security      | High                 | Low         | High          | Low           |
-| Compliance    | High                 | Low         | Medium        | Low           |
+Do not copy a Cloud organization setting into a Server configuration and assume it is harmless. Select the setup for the service you actually use, then verify project access.
 
----
+## Verify the whole quality workflow
 
-## Real Workflow Example
-1. **Quality Gate**: Run a quality gate check on the codebase.
-2. **Fix**: Address any issues identified.
-3. **Verify**: Re-run the quality gate to confirm fixes.
+Start with a read-only task: identify a known project and retrieve its current findings using the tools exposed by your installed server. Consult the [tool reference](https://docs.sonarsource.com/sonarqube-mcp-server/reference/tools) rather than inventing an endpoint or assuming every tool is available in every setup.
 
----
+| Check | Evidence to keep | What a failure means |
+|---|---|---|
+| MCP server starts | Client connection log without tokens | Docker, image, transport, or environment issue |
+| Intended project is visible | Project key and organization | Wrong service, token scope, or project selection |
+| Findings match expected analysis | Branch and analyzed revision | Results may describe older or different code |
+| Proposed patch is valid | Local tests and reviewed diff | A suggested fix can introduce a regression |
+| New analysis finishes | Scanner/CI result for the changed revision | An edited file alone does not refresh project analysis |
+| Quality gate is evaluated | Gate result tied to that analysis | Avoid treating stale success as approval of the patch |
 
-## Honest Trade-offs
-- **Java 21+**: Requires Java 21 or higher.
-- **Docker Startup**: May take a few minutes to start.
-- **Rate Limits**: Be aware of rate limits for API calls.
+If the editor connects but no project appears, investigate permissions before changing prompts. If analysis is stale, run the appropriate scanner or CI workflow. If Docker cannot reach a service on the host, inspect container networking; publishing a new MCP port does not solve a stdio configuration error.
 
----
+This sequence provides an auditable outcome: the reviewed change, its actual analysis, and the resulting gate decision belong to the same revision.
 
-## References
-- [Best MCP Servers for Developers 2026](https://baeseokjae.github.io/posts/best-mcp-servers-developers-2026/)
-- [Claude Code Tutorial 2026](https://baeseokjae.github.io/posts/claude-code-tutorial-2026/)
-- [Cursor 3.9 Customize Page Guide](https://baeseokjae.github.io/posts/cursor-3-9-customize-page-guide-2026/)
-- [OpenAI Codex Skills Guide](https://baeseokjae.github.io/posts/openai-codex-skills-guide-2026/)
-- [CodeRabbit Review 2026](https://baeseokjae.github.io/posts/coderabbit-review-2026/)
+## Revision note
+
+**Updated October 20, 2026.** Replaced the incorrect container name, detached-port setup, and invented REST endpoints with documented stdio configuration. Removed unsupported competitor quality rankings. Retained the original publication date.
+
+## Primary sources
+
+Checked October 20, 2026: [sonar readme](https://raw.githubusercontent.com/SonarSource/sonarqube-mcp-server/master/README.md); [vscode mcp](https://code.visualstudio.com/docs/agent-customization/mcp-servers); [sonar tools](https://docs.sonarsource.com/sonarqube-mcp-server/reference/tools).

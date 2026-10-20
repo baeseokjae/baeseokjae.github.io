@@ -18,14 +18,24 @@ RockB is an independent AI tools review and comparison site. We provide honest, 
 
 ## What We Cover
 
-- **AI Tool Reviews** — Hands-on evaluations of the latest AI products and services
+- **AI Tool Reviews** — Documentation-based assessments and explicitly identified hands-on evaluations
 - **Head-to-Head Comparisons** — Side-by-side breakdowns so you can pick the right tool for your workflow
 - **Beginner-Friendly Guides** — Step-by-step tutorials to get started with AI tools
 - **Industry Trends** — Analysis of where AI is heading and what it means for everyday users
 
 ## Our Approach
 
-Every guide on RockB is based on actual usage and research. We test tools ourselves, reference publicly available benchmarks and reports, and focus on practical value rather than hype. If a tool isn't worth your time, we'll say so.
+RockB uses primary-source research, comparison, and practical examples to explain AI tools. A documentation review, a supplier's benchmark, an offline code check, and a hands-on product trial provide different kinds of evidence. They should be read with their stated methods and limitations.
+
+Some articles are prepared with AI assistance. AI-generated drafts and summaries can contain errors, so the current editorial review focuses on checking material claims against original documentation, model cards, and research. Older articles are being reviewed progressively; the archive has not all received the same depth of verification.
+
+## Evidence and Corrections
+
+Substantive revisions identify the sources checked and distinguish measured results from proposed experiments. Published calculators expose their assumptions. Test records identify what ran and what was outside the test's scope. A vendor-reported result is not presented as an independent RockB benchmark.
+
+The original publication date is retained when an article is revised. A revision note explains material corrections, and the updated date records the new review. If you find an error, please send the article URL, the disputed statement, and a source or reproducible example to **baeseokjae@gmail.com**.
+
+Start with the [practical guides directory](/guides/) for recently reviewed tutorials, evaluation worksheets, and cost calculations.
 
 ## Who's Behind RockB
 
