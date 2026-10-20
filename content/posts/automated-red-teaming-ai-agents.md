@@ -1,5 +1,10 @@
 ---
 title: 'Automated Red Teaming for AI Agents'
+date: 2026-07-14
+lastmod: 2026-07-14
+description: "Overview of automated red teaming methods, tools, and review practices for AI agents."
+draft: false
+schema: "schema-automated-red-teaming-ai-agents"
 cover:
   alt: 'Automated Red Teaming for AI Agents'
   image: /images/automated-red-teaming-ai-agents.png

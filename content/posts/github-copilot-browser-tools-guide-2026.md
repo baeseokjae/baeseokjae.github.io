@@ -23,7 +23,7 @@ Browser tools close that gap. Copilot can open a real browser session, navigate 
 
 The important mental model is not "Copilot can browse the web." The useful model is "Copilot can observe the running application." That distinction keeps the workflow grounded.
 
-If you are already using agent workflows, this fits naturally beside the patterns I use in [GitHub Copilot agent mode workflows](/posts/github-copilot-agent-mode-workflows/) and [VS Code MCP server setup](/posts/vscode-mcp-server-setup/). Browser tools give the agent eyes on the app. MCP gives the agent connections to outside systems. They solve different parts of the loop.
+If you are already using agent workflows, this fits naturally beside the patterns I use in [GitHub Copilot agent mode workflows](/posts/github-copilot-agent-mode-2026/) and [VS Code agent mode and MCP setup](/posts/github-copilot-agent-mode-2026/). Browser tools give the agent eyes on the app. MCP gives the agent connections to outside systems. They solve different parts of the loop.
 
 ## What can browser tools actually do?
 
@@ -67,7 +67,7 @@ The new loop removes a lot of translation:
 
 That last step matters. Browser tools are fast feedback, not a test artifact. When building a checkout prototype, I ran into this distinction constantly. The agent could discover that a shipping form failed after changing country because a stale postal-code validator was still running. That was valuable. But the fix only became durable after I added a Playwright test for the country-switching case.
 
-I use browser tools as the scouting pass and Playwright as the permanent record. For a deeper testing comparison, see [Playwright MCP test generation](/posts/playwright-mcp-test-generation/).
+I use browser tools as the scouting pass and Playwright as the permanent record. For a deeper testing comparison, see [AI test-generation tools comparison](/posts/ai-test-generation-tools-2026/).
 
 ## How should you set up browser tools safely?
 

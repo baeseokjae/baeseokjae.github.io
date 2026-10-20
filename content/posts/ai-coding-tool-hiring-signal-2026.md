@@ -1,4 +1,6 @@
 ---
+aliases:
+  - /posts/the-ai-coding-tool-you-use-is-now-a-hiring-signal-developer-career-guide-2026/
 cover:
   alt: 'AI Coding Tool Hiring Signal 2026: Developer Career Guide'
   image: /images/ai-coding-tool-hiring-signal-2026.png

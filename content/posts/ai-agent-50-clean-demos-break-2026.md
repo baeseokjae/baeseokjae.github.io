@@ -1,4 +1,6 @@
 ---
+aliases:
+  - /posts/what-breaks-an-ai-agent-after-50-clean-demos-production-reliability-guide/
 title: "What Breaks an AI Agent After 50 Clean Demos: Production Reliability Guide (2026)"
 date: 2026-07-14T12:00:00+00:00
 tags: ["ai agent reliability", "production agents", "agent testing", "llm variance", "agent observability", "durable execution", "agent infrastructure", "prompt injection", "chaos engineering"]

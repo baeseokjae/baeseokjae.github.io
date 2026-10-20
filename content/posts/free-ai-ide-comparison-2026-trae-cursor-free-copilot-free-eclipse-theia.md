@@ -21,7 +21,7 @@ GitHub Copilot Free is a hosted assistant with a quota: 2,000 completions per mo
 
 That distinction matters. When building with these tools, the thing that usually hurts is not whether the first install costs $0. It is whether the tool stops halfway through a refactor, silently routes you to a weaker model, burns credits on an agent loop, or requires enough setup that nobody on the team actually uses it.
 
-If you are also comparing model quality behind these assistants, read the [Claude Sonnet 5 review](/posts/claude-sonnet-5-review-2026/) and the [Opus 4.8 vs GPT-5.5 vs Gemini 3.5 Flash comparison](/posts/opus-48-vs-gpt-55-vs-gemini-35-flash-best-available-model-june-2026/). The IDE choice and the model choice overlap, but they are not the same decision.
+If you are also comparing model quality behind these assistants, read the [Claude Sonnet 5 review](/posts/claude-sonnet-5-review-2026/). The IDE choice and the model choice overlap, but they are not the same decision.
 
 ## What Is the Quick Verdict by Use Case?
 

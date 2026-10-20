@@ -211,6 +211,95 @@ class PublicationGateTests(unittest.TestCase):
             with self.assertRaisesRegex(gate.GateError,"LIVE_MISMATCH"):
                 gate.verify_live(self.root,self.slug,rendered,"a"*40)
 
+    def migration_fixture(self, kind="exact_duplicate", different=False):
+        exception = self.owner_exception()
+        old = self.root / "content/posts/old-model.md"
+        original = self.post.read_bytes()
+        if kind == "unfinished_placeholder":
+            old.write_text("---\ntitle: Unfinished\n---\nThis is a placeholder post.\n")
+        else:
+            old.write_bytes(original + (b"\nDifferent material.\n" if different else b""))
+        source = old.read_bytes()
+        def git(*args):
+            return subprocess.check_output(["git", *args], cwd=self.root, text=True, stderr=subprocess.DEVNULL).strip()
+        git("init");git("config","user.email","fixture@example.invalid");git("config","user.name","Fixture")
+        git("add",".");git("commit","-m","historical articles");base=git("rev-parse","HEAD")
+        old.unlink()
+        self.post.write_text(self.post.read_text().replace("draft: false", "draft: false\naliases: ['/posts/old-model/']"))
+        data=json.loads(exception.read_text());data['article_sha256']=gate.digest(self.post.read_bytes());exception.write_text(json.dumps(data))
+        migration=self.root/'quality/url-migrations/old-model.json';migration.parent.mkdir()
+        record={'version':1,'slug':'old-model','destination_slug':self.slug,'kind':kind,
+                'authorization':'explicit_site_owner_instruction','authorized_at':datetime.now(timezone.utc).isoformat(),
+                'reason':'Owner requested consolidation preserving the old entry URL.',
+                'source_commit':base,'source_article_sha256':gate.digest(source),'destination_before_sha256':gate.digest(original)}
+        migration.write_text(json.dumps(record))
+        return migration,exception,git,base
+
+    def test_duplicate_migration_preserves_verified_destination_and_old_url(self):
+        _,_,git,base=self.migration_fixture()
+        result=gate.check(self.root,'old-model')
+        self.assertEqual(result['destination_slug'],self.slug)
+        self.assertEqual(result['review_basis'],'site_owner_url_migration')
+        git('add','.');git('commit','-m','consolidate')
+        self.assertIn('old-model',gate.changed_slugs(self.root,base))
+
+    def test_unreviewed_deletion_still_blocks(self):
+        migration,_,_,_=self.migration_fixture();migration.unlink()
+        with self.assertRaisesRegex(gate.GateError,'separate migration review'):
+            gate.check(self.root,'old-model')
+
+    def test_placeholder_migration_requires_an_actual_short_placeholder(self):
+        self.migration_fixture(kind='unfinished_placeholder')
+        self.assertEqual(gate.check(self.root,'old-model')['status'],'pass')
+        migration=self.root/'quality/url-migrations/old-model.json';data=json.loads(migration.read_text())
+        data['kind']='exact_duplicate';migration.write_text(json.dumps(data))
+        with self.assertRaisesRegex(gate.GateError,'not an exact duplicate'):
+            gate.check(self.root,'old-model')
+
+    def test_nonduplicate_cannot_use_duplicate_migration(self):
+        self.migration_fixture(different=True)
+        with self.assertRaisesRegex(gate.GateError,'not an exact duplicate'):
+            gate.check(self.root,'old-model')
+
+    def test_migration_rejects_missing_authority_and_tampered_history(self):
+        migration,_,_,_=self.migration_fixture();original=json.loads(migration.read_text())
+        for key,value,expected in [('authorization','assumed','site-owner'),('source_article_sha256','wrong','source hash'),('destination_before_sha256','wrong','history hash'),('source_commit','HEAD','source commit'),('authorized_at','2999-01-01T00:00:00Z','future')]:
+            with self.subTest(key=key):
+                data=dict(original);data[key]=value;migration.write_text(json.dumps(data))
+                with self.assertRaisesRegex(gate.GateError,expected):gate.check(self.root,'old-model')
+        migration.write_text(json.dumps(original))
+
+    def test_migration_cannot_drop_alias_or_bypass_destination_review(self):
+        self.migration_fixture();original=self.post.read_text()
+        self.post.write_text(original.replace("aliases: ['/posts/old-model/']",'aliases: []'))
+        with self.assertRaisesRegex(gate.GateError,'alias is missing'):gate.check(self.root,'old-model')
+        self.post.write_text(original+'\nAn unreviewed new claim.\n')
+        with self.assertRaisesRegex(gate.GateError,'changed after owner exception'):gate.check(self.root,'old-model')
+        self.post.unlink()
+        with self.assertRaisesRegex(gate.GateError,'surviving article'):gate.check(self.root,'old-model')
+
+    def test_redirect_verification_rejects_wrong_destination_old_body_and_ads(self):
+        self.migration_fixture();target=gate.SITE+'/posts/'+self.slug+'/'
+        html=f'<html><head><link rel="canonical" href="{target}"><meta http-equiv="refresh" content="0; url={target}"></head><body><a href="{target}">Continue</a></body></html>'
+        self.assertEqual(gate.page_fingerprint(self.root,'old-model',html)['kind'],'redirect')
+        for bad,expected in [(html.replace(target,gate.SITE+'/posts/wrong/'),'canonical'),(html.replace('0; url=','3; url='),'immediately'),(html.replace('</body>','<div class="post-content">Old duplicate</div></body>'),'duplicate'),(html.replace('</body>','<script src="ads.js"></script></body>'),'scripts'),(html.replace('<a href=', '<span data-href=').replace('</a>','</span>'),'fallback')]:
+            with self.subTest(expected=expected):
+                with self.assertRaisesRegex(gate.GateError,expected):gate.page_fingerprint(self.root,'old-model',bad)
+
+    def test_http_200_old_duplicate_fails_live_migration_verification(self):
+        _,_,git,_=self.migration_fixture();git('add','.');git('commit','-m','consolidate');commit=git('rev-parse','HEAD')
+        target=gate.SITE+'/posts/'+self.slug+'/'
+        rendered=self.root/'public';p=rendered/'posts/old-model/index.html';p.parent.mkdir(parents=True)
+        p.write_text(f'<link rel="canonical" href="{target}"><meta http-equiv="refresh" content="0; url={target}"><a href="{target}">Continue</a>')
+        class Response:
+            status=200
+            def __enter__(self):return self
+            def __exit__(self,*args):return False
+            def read(self):return b'<link rel="canonical" href="https://baeseokjae.github.io/posts/old-model/"><div class="post-content">Old article</div>'
+        with patch.object(gate.urllib.request,'urlopen',return_value=Response()):
+            with self.assertRaisesRegex(gate.GateError,'Redirect canonical'):
+                gate.verify_live(self.root,'old-model',rendered,commit)
+
 
 if __name__ == "__main__":
     unittest.main()

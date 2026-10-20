@@ -1,5 +1,10 @@
 ---
 title: 'SonarQube MCP Server for GitHub Copilot'
+date: 2026-07-05
+lastmod: 2026-07-05
+description: "Overview of SonarQube MCP Server setup and code-quality workflows for AI coding assistants."
+draft: false
+schema: "schema-sonarqube-mcp-server-copilot-guide-2026"
 cover:
   alt: 'SonarQube MCP Server for GitHub Copilot'
   image: /images/sonarqube-mcp-server-copilot-guide-2026.png

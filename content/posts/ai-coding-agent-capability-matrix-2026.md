@@ -15,7 +15,7 @@ The best AI coding agent in 2026 is no longer the one with the flashiest model d
 
 I've found that teams get into trouble when they compare Codex, Claude Code, Cursor, Copilot, Windsurf, Gemini CLI, Cline, Continue, and Aider as if they are just chat UIs wrapped around frontier models. They are not. They are developer runtimes. They read files, run commands, call tools, open browsers, use secrets, and sometimes push pull requests. That makes the agent harness the thing you should evaluate first.
 
-This AI coding agent capability matrix 2026 focuses on the pieces I would check before giving an agent serious repository access: MCP support, Streamable HTTP or other remote transports, authentication, instruction files, deterministic hooks, sandbox boundaries, and enterprise controls. For broader background, I would pair this with an MCP primer like [Model Context Protocol explained](/posts/model-context-protocol-explained/) and a hands-on workflow post such as [OpenAI Codex CLI guide](/posts/openai-codex-cli-guide/).
+This AI coding agent capability matrix 2026 focuses on the pieces I would check before giving an agent serious repository access: MCP support, Streamable HTTP or other remote transports, authentication, instruction files, deterministic hooks, sandbox boundaries, and enterprise controls. For broader background, I would pair this with an MCP primer like [Model Context Protocol architecture](/posts/mcp-server-tutorial-2026/) and a hands-on workflow post such as [OpenAI Codex CLI guide](/posts/openai-codex-cli-guide-2026/).
 
 ## Why did AI coding agent comparisons change in 2026?
 
@@ -244,7 +244,7 @@ Here is the checklist I would run before giving an agent write access to importa
 11. Review sandbox escape advisories by product and version.
 12. Give agents narrow tasks with observable success criteria.
 
-This is also where internal documentation helps. If your team already has posts or runbooks like [AI code review checklist](/posts/ai-code-review-checklist/) or [Secure developer automation with MCP](/posts/secure-developer-automation-mcp/), link them from the repo instruction file so the agent and humans share the same operating model.
+This is also where internal documentation helps. If your team already has posts or runbooks like an AI code review checklist or secure developer automation with MCP, link them from the repo instruction file so the agent and humans share the same operating model.
 
 ## What are the final recommendations?
 

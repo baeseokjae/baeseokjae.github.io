@@ -23,7 +23,7 @@ But I would still use it as a strong hallucination case study. When building int
 
 In other words, the risk is not just "the model invented something." The risk is "the model invented something so well that the surrounding workflow treated it as verified."
 
-If you are working on similar reliability problems, the same source-bound discipline applies to broader LLM workflows like [RAG evaluation checklists](/posts/rag-evaluation-checklist/) and [AI agent progress reporting](/posts/ai-agent-progress-reporting/). The common failure mode is weak provenance, not weak prose.
+The same source-bound discipline applies to RAG evaluation and AI agent progress reporting. The common failure mode is weak provenance, not weak prose.
 
 ## What actually happened in the Nordlys Air demo?
 
@@ -182,7 +182,7 @@ When reporting progress:
 
 This sounds pedantic until you have an autonomous run that says "implemented and verified" after editing the wrong file. Fabricated progress is a hallucination too. It may not look like a fake airline, but it creates the same downstream risk: people make decisions based on unsupported claims.
 
-For more on that workflow discipline, see my notes on [source-grounded AI coding reviews](/posts/source-grounded-ai-code-review/) and [LLM hallucination benchmarks in practice](/posts/llm-hallucination-benchmarks-2026/).
+For more on that workflow discipline, see my notes on [verification in AI code review](/posts/augment-verification-bottleneck-ai-code-review-guide-2026/) and [LLM benchmark selection and limitations](/posts/llm-benchmarks-guide-2026/).
 
 ## How should teams classify the Nordlys Air case?
 

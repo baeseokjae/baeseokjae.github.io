@@ -158,7 +158,7 @@ The Microsoft Playwright CLI README makes a blunt point that I agree with: CLI p
 
 Browserbase's Browse CLI and Stagehand point in the same direction. Start with search and fetch. Use a browser when you need interaction. Cache repeated actions. Record deterministic routines for the workflows that happen every day.
 
-For teams building developer workflows, this connects directly to reusable agent behavior. I covered that from a different angle in [OpenAI Codex Skills Guide](/posts/openai-codex-skills-guide/): when a repeated procedure becomes a skill or script, the model stops rediscovering the same steps on every run.
+For teams building developer workflows, this connects directly to reusable agent behavior. I covered that from a different angle in [OpenAI Codex Skills Guide](/posts/openai-codex-skills-guide-2026/): when a repeated procedure becomes a skill or script, the model stops rediscovering the same steps on every run.
 
 ## What hidden multipliers make snapshot costs worse?
 

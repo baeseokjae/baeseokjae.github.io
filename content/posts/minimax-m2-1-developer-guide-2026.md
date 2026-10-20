@@ -23,7 +23,7 @@ MiniMax positions M2.1 for code generation, refactoring, polyglot code, precisio
 
 That combination is the main reason M2.1 is interesting: it sits between closed hosted coding models and smaller open models. You can use it through an API when speed matters, or run it yourself when privacy, cost control, or environment isolation matters more.
 
-For broader context on agent workflows, I would pair this guide with my notes on [building AI coding agents](/posts/ai-coding-agents/) and [LLM evaluation for developers](/posts/llm-evaluation-for-developers/). M2.1 only pays off if the surrounding agent harness is designed well.
+For broader context on agent workflows, I would pair this guide with my notes on [building AI agents from scratch](/posts/build-ai-agent-from-scratch-2026/) and [LLM evaluation for developers](/posts/llm-benchmarks-guide-2026/). M2.1 only pays off if the surrounding agent harness is designed well.
 
 ## Why Does The 2026 Reality Check Matter?
 
@@ -174,7 +174,7 @@ The main thing to test is not whether the tool can send a prompt. Test tool-call
 4. Interpret the failure.
 5. Apply a second patch without touching unrelated files.
 
-That loop catches more integration problems than a simple "write a function" prompt. For more on this pattern, see [practical prompt engineering for coding tools](/posts/prompt-engineering-for-coding-tools/).
+That loop catches more integration problems than a simple "write a function" prompt. For more on this pattern, see [prompt engineering techniques for developers](/posts/prompt-engineering-techniques-2026/).
 
 ## How Do You Run MiniMax M2.1 Locally?
 

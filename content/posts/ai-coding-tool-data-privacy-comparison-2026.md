@@ -29,7 +29,7 @@ In practice, I split AI coding tools into three privacy models:
 
 That split is more useful than arguing whether a tool is "private" in the abstract. Open source is not automatically private. Enterprise is not automatically offline. A local model is not automatically compliant. You have to trace the data.
 
-For related architecture decisions, I use the same mental model I described in [Multi-Model Fallback Architecture Guide](/posts/multi-model-fallback-architecture-guide-surviving-ai-model-outages-in-production/) and [AI Agent Deployment Infrastructure Guide 2026](/posts/ai-agent-deployment-infrastructure-guide-2026-ampere-sh-e2b-northflank-and-modal-compared/): the important boundary is where execution, storage, and vendor control actually happen.
+For related architecture decisions, I use the same mental model I described in [LLM Gateway Comparison](/posts/llm-gateway-comparison-2026/) and [AI Agent Deployment Infrastructure Guide 2026](/posts/ai-agent-deployment-infrastructure-guide-2026/): the important boundary is where execution, storage, and vendor control actually happen.
 
 ## What Does Trae's 2026 Privacy Policy Actually Say?
 

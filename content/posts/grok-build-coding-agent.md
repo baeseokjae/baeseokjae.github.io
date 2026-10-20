@@ -29,7 +29,7 @@ The catch is maturity. Codex CLI and Claude Code already have broad adoption sig
 
 Those are not perfect quality metrics. GitHub stars do not prove reliability, and npm downloads can include automation. But I have found they are useful signals for one practical question: if something breaks at 5:30 p.m. on a release day, how likely is it that another engineer has hit the same issue, documented it, and found a workaround?
 
-For related context, I would read this alongside the earlier posts on [Claude Code vs Codex CLI](/posts/claude-code-vs-codex-cli/), [OpenAI Codex CLI workflows](/posts/openai-codex-cli-review/), and [MCP server design for coding agents](/posts/model-context-protocol-server-guide/).
+For related context, I would read this alongside the earlier posts on [Claude Code, Codex CLI, and Gemini CLI](/posts/claude-code-codex-cli-gemini-cli-2026/), [OpenAI Codex CLI workflows](/posts/openai-codex-cli-guide-2026/), and [MCP server implementation](/posts/mcp-server-tutorial-2026/).
 
 ## How do the three agents differ architecturally?
 

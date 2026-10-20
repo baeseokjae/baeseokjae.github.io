@@ -29,7 +29,7 @@ Shared service accounts blur the evidence chain. If three agents and two cron jo
 
 Cloudflare cited GitGuardian data that more than 28 million secrets were published to public GitHub repositories in 2025, with AI making leaks happen faster. That matches what I see in practice: LLM-assisted workflows increase the amount of generated glue code, config, and copied examples. If your agent security model depends on developers never pasting a token into the wrong place, the model is already fragile.
 
-For related background on tool boundaries, see [MCP security for production AI agents](/posts/mcp-security-for-production-ai-agents/) and [LLM gateway patterns for platform teams](/posts/llm-gateway-patterns-for-platform-teams/). The identity layer sits underneath both.
+For related background on tool boundaries, see [MCP security for production AI agents](/posts/mcp-security-guide-2026/) and [LLM gateways for platform teams](/posts/llm-gateway-comparison-2026/). The identity layer sits underneath both.
 
 ## What is Teleport's core claim about agent identity?
 
@@ -203,7 +203,7 @@ For every meaningful action, I want to answer:
 
 This is where Teleport's infrastructure background matters. Audit logs are already central to SSH, Kubernetes, database, and cloud access. Extending that pattern to agents is more convincing than treating agent telemetry as a separate observability stream that security teams have to stitch together later.
 
-For more on the workload identity side of this problem, see [SPIFFE and workload identity for platform engineers](/posts/spiffe-workload-identity-platform-engineers/).
+For more on the workload identity side of this problem, see the [SPIFFE overview](https://spiffe.io/docs/latest/spiffe-about/overview/).
 
 ## How does Teleport compare with Cloudflare, Microsoft, Google, and Red Hat?
 

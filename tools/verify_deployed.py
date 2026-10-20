@@ -5,7 +5,7 @@ import subprocess
 import time
 import urllib.request
 from pathlib import Path
-from publication_gate import html_fingerprint, GateError, SITE
+from publication_gate import page_fingerprint, GateError, SITE
 
 PROTECTED = ['best-ai-agent-memory-frameworks-2026','agent-memory-architecture-guide-2026',
              'vibe-coding-tools-comparison-2026']
@@ -26,14 +26,13 @@ def verify_once(repo, commit, rendered, slugs):
     if commit not in message:raise GateError('Pages belongs to another source commit')
     verified=[]
     for slug in slugs:
-        expected=html_fingerprint((rendered/'posts'/slug/'index.html').read_text())
+        expected=page_fingerprint(rendered.parent,slug,(rendered/'posts'/slug/'index.html').read_text())
         url=SITE+'/posts/'+slug+'/'
         request=urllib.request.Request(url+'?verify='+commit[:12],headers={'Cache-Control':'no-cache','User-Agent':'RockB-publication-verification/2.0'})
         with urllib.request.urlopen(request,timeout=20) as response:
             if response.status!=200:raise GateError('Article unavailable')
-            actual=html_fingerprint(response.read().decode())
+            actual=page_fingerprint(rendered.parent,slug,response.read().decode())
         if actual!=expected:raise GateError('Public content differs: '+slug)
-        if actual['canonical']!=url:raise GateError('Canonical differs: '+slug)
         verified.append(slug)
     return {'status':'verified','source_commit':commit,'pages_commit':current,'slugs':verified}
 
@@ -47,6 +46,7 @@ if __name__=='__main__':
     for path in changes:
         if path.startswith('content/posts/') and path.endswith('.md'):slugs.add(Path(path).stem)
         if path.startswith('layouts/partials/schema-') and path.endswith('.html'):slugs.add(Path(path).stem.removeprefix('schema-'))
+        if path.startswith('quality/url-migrations/') and path.endswith('.json'):slugs.add(Path(path).stem)
     if set(changes)&{'.hugo-build.json','.github/workflows/deploy.yml','hugo.toml','assets/css/extended/code-blocks.css'}:
         slugs.add('toolreplay-agent-tool-call-audit-2026')
     deadline=time.monotonic()+600

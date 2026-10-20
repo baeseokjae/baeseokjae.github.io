@@ -32,7 +32,7 @@ The browser-use macOS Harness is an MIT-licensed Python package that hands an LL
 
 That last sentence is the review. This is a genuinely clever, genuinely thin control surface published on 2026-08-17 and then left alone, and the most useful thing you can do before installing it is understand exactly which parts are load-bearing and which parts are a demo.
 
-If you want the launch-day feature tour, our earlier piece, [Browser-Use macOS Harness: Full LLM Control of a Mac](/posts/browser-use-macos-harness-llm/), covers the pitch and the six primitives. This review does not repeat it. It covers what accumulated in the six weeks afterward: a silent-failure bug in one of those six primitives, an unmerged fix, a fork that has already overtaken upstream, and the measured computer-use attack numbers that make the permission dialog the real product decision.
+This review covers what accumulated in the six weeks after launch: a silent-failure bug in one of those six primitives, an unmerged fix, a fork that has already overtaken upstream, and the measured computer-use attack numbers that make the permission dialog the real product decision.
 
 ## What is the browser-use macOS Harness, and what does it refuse to build?
 

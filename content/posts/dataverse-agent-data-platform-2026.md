@@ -1,4 +1,6 @@
 ---
+aliases:
+  - /posts/dataverse-plugin-coding-agents-guide-2026/
 title: "Dataverse Agent Data Platform 2026: What Developers Need to Know"
 date: 2026-07-03T12:00:00+00:00
 tags: ["Dataverse", "MCP", "AI agents"]
@@ -31,7 +33,7 @@ Dataverse is trying to sit in that middle layer between raw systems of record an
 | Power Apps MCP Server | Human supervision and agent feed workflows | Review loops, task creation, data entry |
 | SDKs and CLIs | Deterministic automation and app lifecycle work | CI/CD, testing, bulk operations |
 
-If you are already designing agent systems, this is similar to the architecture trade-offs I discussed in [MCP Server Architecture for Production Agents](/posts/mcp-server-architecture/): the tool boundary becomes part of your application design, not just an integration detail. The Dataverse difference is that Microsoft is bundling that boundary with enterprise identity, RBAC, metadata, and Power Platform governance.
+If you are already designing agent systems, this is similar to the architecture trade-offs I discussed in [MCP server architecture and implementation](/posts/mcp-server-tutorial-2026/): the tool boundary becomes part of your application design, not just an integration detail. The Dataverse difference is that Microsoft is bundling that boundary with enterprise identity, RBAC, metadata, and Power Platform governance.
 
 ## Why does Dataverse matter for developers building enterprise agents in 2026?
 
@@ -116,7 +118,7 @@ Dataverse semantic model uses signals already present in the platform: relations
 
 I would use it for domains where vocabulary matters. Sales forecasting, case triage, partner management, field service scheduling, and regulated intake workflows all benefit from consistent terms. For example, if "high value customer" maps to a combination of annual revenue, account tier, open escalations, and region, that meaning should not live only in a prompt file.
 
-The preview limitations are not small. Microsoft documents that there is no support for creating a completely new semantic model and no ALM support for environment copy or move operations. For production teams, that means you need a deployment story that acknowledges manual or environment-specific semantic configuration. This is the same kind of operational caveat I called out in [AI Agent Observability: What to Log Before Production](/posts/ai-agent-observability/): the parts outside code still need ownership, monitoring, and change control.
+The preview limitations are not small. Microsoft documents that there is no support for creating a completely new semantic model and no ALM support for environment copy or move operations. For production teams, that means you need a deployment story that acknowledges manual or environment-specific semantic configuration. This is the same kind of operational caveat I called out in [AI agent observability with OpenTelemetry](/posts/ai-agent-observability-opentelemetry-2026/): the parts outside code still need ownership, monitoring, and change control.
 
 ## What are Dataverse Business Skills?
 
@@ -206,7 +208,7 @@ Billing is easy to miss during prototypes. Microsoft documents that starting Dec
 
 That changes how I would design agent retrieval. Repeated broad discovery calls can become both slow and expensive. Cache metadata where policy allows. Prefer `read_query` when the agent has a precise query. Use `search_data` intentionally for discovery, not as the default path for every turn.
 
-This is similar to retrieval cost control in RAG systems, which I covered in [RAG Architecture Patterns for Production Apps](/posts/rag-architecture-patterns/). The pattern is the same even though the platform is different: make retrieval explicit, measure it, and put budgets around the expensive path.
+This is similar to retrieval cost control in RAG systems. The pattern is the same even though the platform is different: make retrieval explicit, measure it, and put budgets around the expensive path.
 
 ## What does a governed Dataverse agent architecture look like?
 

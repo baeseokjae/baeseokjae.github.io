@@ -1,4 +1,6 @@
 ---
+aliases:
+  - /posts/moltworker-review-2026-self-hosted-ai-agents-on-cloudflare-without-the-maintenance-burden/
 title: "Moltworker Review 2026: Self-Hosted AI Agents on Cloudflare Without the Maintenance Burden"
 date: 2026-07-03T12:00:00+00:00
 tags: ["AI Agents", "Cloudflare", "Self Hosted AI"]

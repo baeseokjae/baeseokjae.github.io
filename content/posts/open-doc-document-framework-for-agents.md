@@ -253,4 +253,4 @@ Very early: created 2026-08-17, 78 stars, 7 forks, one human contributor, roughl
 - npm registry and downloads API: `@open-document/core`, `@open-document/mcp`, `@open-document/cli`
 - MCP specification `2026-07-28` changelog (SEP-2567, SEP-2575, SEP-2322, SEP-2243, SEP-2549)
 - Comparators: `react-pdf`, `typst/typst`, `jgm/pandoc`, `quarto-dev/quarto-cli`, `Kozea/WeasyPrint`, `microsoft/markitdown`, `open-slide/open-slide`
-- Related reading on this site: [MCP, A2A and ACP in 2026](/posts/ai-agent-protocols-mcp-a2a-acp-2026/), [AI documentation generator tools](/posts/ai-documentation-generator-tools-2026/), [AI code documentation tools](/posts/ai-code-documentation-tools-2026/), [cross-agent context over MCP](/posts/agents-memory-cross-agent-context-mcp/)
+- Related reading on this site: [MCP, A2A and ACP in 2026](/posts/ai-agent-protocols-mcp-a2a-acp-2026/), [AI documentation generator tools](/posts/ai-documentation-generator-tools-2026/), [AI code documentation tools](/posts/ai-code-documentation-tools-2026/), [cross-repository context over MCP](/posts/wctx-cross-repo-context-mcp/)

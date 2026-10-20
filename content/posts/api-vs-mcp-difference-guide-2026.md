@@ -25,7 +25,7 @@ The adoption numbers explain the debate. Postman's 2025 State of the API report 
 
 For teams already doing OpenAI function calling, the question is usually more concrete: should we keep passing explicit tool schemas into model calls, or should we package our tools behind MCP servers? I have found that the answer depends less on model preference and more on ownership boundaries, tool count, security review, and how many agent surfaces you expect to support.
 
-If you are still designing the underlying tool contract, start with a good API. If you are trying to make many tools available across Claude Desktop, Cursor-like IDEs, internal agents, and service bots, MCP starts to earn its place. I covered related trade-offs in [agent-ready API design](/posts/agent-ready-api-design/) and [OpenAI function calling patterns](/posts/openai-function-calling-patterns/), and the same rule applies here: the model integration should not hide poor service design.
+If you are still designing the underlying tool contract, start with a good API. If you are trying to make many tools available across Claude Desktop, Cursor-like IDEs, internal agents, and service bots, MCP starts to earn its place. I covered related trade-offs in [LLM function calling and tool-use patterns](/posts/llm-function-calling-tool-use-guide-2026/), and the same rule applies here: the model integration should not hide poor service design.
 
 ## What problem does a normal API solve?
 
@@ -187,7 +187,7 @@ For production, I would want at least these controls before exposing sensitive t
 
 I've found that "read-only first" is a good rollout rule. Start with search, retrieval, summaries, and metadata inspection. Move to write operations only when the audit trail and confirmation flow are boring. Boring is the goal here.
 
-This is also where existing API governance helps. If your internal API already has clear scopes, object-level permissions, and audit IDs, the MCP layer can inherit that discipline. If your API is a privileged admin shortcut, MCP will amplify the risk. I wrote more about this pattern in [API governance for AI agents](/posts/api-governance-for-ai-agents/).
+This is also where existing API governance helps. If your internal API already has clear scopes, object-level permissions, and audit IDs, the MCP layer can inherit that discipline. If your API is a privileged admin shortcut, MCP will amplify the risk. I wrote more about this pattern in [AI agent governance](/posts/ai-agent-governance-guide-2026/).
 
 ## What should platform teams measure before choosing?
 

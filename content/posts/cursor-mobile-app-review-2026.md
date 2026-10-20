@@ -107,7 +107,7 @@ Several YC-backed startups are targeting the same space:
 
 The common thread: everyone agrees that mobile agent management is the next frontier. The question is which approach wins — Cursor's integrated ecosystem, Anthropic's model-agnostic Claude Code, or the startup play of being a universal mobile agent frontend.
 
-I covered the broader shift toward agent management platforms in my [Devin Desktop review](/posts/devin-desktop-review-2026-cascade-eol/), which covers how Cognition Labs rebranded Windsurf into an Agent Command Center. The pattern is the same: desktop IDEs are becoming agent orchestrators, and mobile is the natural remote control.
+The broader pattern is the same: desktop IDEs are becoming agent orchestrators, and mobile is the natural remote control.
 
 ## Real-World Use Cases and Workflows
 

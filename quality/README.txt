@@ -12,6 +12,22 @@ owner instruction. Any change to those files invalidates the exception;
 future edits require a normal review or a new explicit owner decision.
 Build validation and verification of the public deployment still apply.
 
+Explicit site-owner URL consolidation
+An owner-authorized exact duplicate or unfinished placeholder may be removed
+only with a version 1 record in quality/url-migrations/<old-slug>.json.
+Record the source and destination slugs, authorization, authorized_at, reason,
+kind (exact_duplicate or unfinished_placeholder), source_commit, and hashes of
+both historical articles (source_article_sha256, destination_before_sha256).
+The source commit must be an ancestor of HEAD. Exact duplicate bodies must
+match in that commit; a placeholder must actually be the short unfinished
+document. Keep the original URL as an alias on a surviving, published,
+indexable article. The destination still needs its own publication review or
+explicit owner exception. Redirect chains and unreviewed deletions are blocked.
+The old URL must render an immediate meta refresh, matching canonical and
+fallback link, without article body, scripts or advertising. Build and live
+verification cover both the destination and old URL. GitHub Pages serves
+these static alias pages as HTTP 200; they are not HTTP 301 responses.
+
 Purpose
 Unless covered by an explicit owner exception, every new or changed article
 after the baseline commit needs a review receipt

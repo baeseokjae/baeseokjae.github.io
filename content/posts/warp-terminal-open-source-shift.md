@@ -35,7 +35,7 @@ Second, it turns contribution into a public product loop. A terminal company can
 
 Third, it makes Warp's bigger thesis easier to understand: the terminal is not just a place to type commands. It can become a control plane for local agents, external CLI agents, model providers, MCP tools, cloud jobs, and codebase context.
 
-If you are already comparing AI coding tools, this shift sits close to the same questions I covered in [Cursor vs Claude Code](/posts/cursor-vs-claude-code/) and [MCP server workflows](/posts/mcp-server-workflows/): where does context live, who approves changes, and how much of the workflow can be observed after the fact?
+If you are already comparing AI coding tools, this shift sits close to the same questions I covered in [Cursor vs Claude Code](/posts/cursor-vs-claude-code-which-to-choose-2026/) and [MCP server architecture and deployment](/posts/mcp-server-tutorial-2026/): where does context live, who approves changes, and how much of the workflow can be observed after the fact?
 
 ## How is Warp different from a normal terminal now?
 
@@ -186,7 +186,7 @@ Here is the way I would frame the comparison for a team discussion.
 
 The decision is less about picking one winner and more about choosing the workbench. Some teams will live in Cursor and drop into a terminal only for scripts. Some will keep iTerm2 or Ghostty and run CLI agents directly. Some will want Warp because it combines command execution, AI, sharing, MCP, and cloud agent supervision in one place.
 
-For a related terminal baseline, see [Ghostty terminal review](/posts/ghostty-terminal-review/). The useful comparison is not "which app has more AI?" It is "which app interrupts my real work less while making risky work easier to review?"
+The useful comparison is not "which app has more AI?" It is "which app interrupts my real work less while making risky work easier to review?"
 
 ## Is the open-source shift a turning point or just a strategy?
 

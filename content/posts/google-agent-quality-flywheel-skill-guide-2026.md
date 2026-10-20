@@ -48,7 +48,7 @@ In practice, I split tests into two layers. Repository tests prove the product s
 
 For a coding agent, "right way" does not mean an exact sequence for every task. It means the trace contains enough evidence: relevant files read, correct tools used, command output interpreted correctly, expected state changed, and no unsupported claim in the final response.
 
-I use the same distinction when designing [AI agent CI/CD evaluation](/posts/ai-agent-ci-cd-evaluation/): product correctness and agent behavior need separate gates because they fail in different ways.
+I use the same distinction when designing [AI agent CI/CD evaluation](/posts/ai-agent-testing-guide-2026/): product correctness and agent behavior need separate gates because they fail in different ways.
 
 ## How does the quality flywheel work?
 
@@ -248,7 +248,7 @@ My calibration process is:
 
 For coding agents, the best judge prompt includes the task, relevant trace excerpts, expected side effects, and the final response. Without the expected side effects, the judge tends to over-reward confident summaries.
 
-This is the same failure pattern I covered in [LLM as judge agent evaluation](/posts/llm-as-judge-agent-evaluation/): a judge can grade writing quality while missing whether the system actually changed.
+This is the same failure pattern I covered in [LLM-as-judge and human evaluation](/posts/ai-agent-testing-guide-2026/): a judge can grade writing quality while missing whether the system actually changed.
 
 ## What failure taxonomy should the skill include?
 
@@ -327,7 +327,7 @@ The fourth mistake is using an LLM judge for objective checks. A judge should no
 
 The fifth mistake is ignoring latency and cost. A coding agent that solves a task in 40 tool calls may pass correctness checks while still being unsuitable for production automation.
 
-I saw this with [Google ADK agent evaluation](/posts/google-adk-agent-evaluation/): once teams add trace scoring, they often discover the agent was technically correct but operationally wasteful.
+I saw this with [Google ADK evaluation workflows](/posts/google-adk-python-tutorial-2026/): once teams add trace scoring, they often discover the agent was technically correct but operationally wasteful.
 
 ## What metric panel should production teams watch?
 
