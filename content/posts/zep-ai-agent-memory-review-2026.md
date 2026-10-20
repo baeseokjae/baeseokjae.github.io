@@ -15,7 +15,7 @@ tags:
 - Zep AI
 - Graphiti
 title: 'Zep AI Review 2026: Temporal Knowledge Graphs for Agent Memory'
-lastmod: 2026-10-07 00:00:00+00:00
+lastmod: 2026-10-20 15:35:00+00:00
 ---
 
 Zep provides a managed context layer for AI applications, using temporal graph artifacts derived with Graphiti. Graphiti is its open-source temporal knowledge graph framework. This review explains the architecture and its evaluation limits; it does not report an independently reproduced product benchmark. [Source: Zep documentation](https://help.getzep.com/graphiti/getting-started/overview).
@@ -63,6 +63,8 @@ Use a fixed dataset and question set, including updates, contradictions, deletio
 
 Measure ingestion cost and latency as well as retrieval and answer generation. Include failure recovery and document what happens when a write succeeds but extraction is delayed or fails. For multi-tenant applications, test whether one user's data can be retrieved by another. A benchmark accuracy score does not establish that access controls work.
 
+Update, contradiction and delete behaviour is the part of that evaluation teams usually improvise. The [agent memory write-path reliability protocol](/posts/agent-memory-write-path-reliability-2026/) turns it into a runnable check: a fixed write dataset, an adapter contract you implement against the system under test, and scored measures for stale values, flagged contradictions and deletes that actually remove a fact. Treat it as a method to run on your own data, not as a result about any vendor.
+
 ## Zep Cloud and Graphiti Are Different Deployment Choices
 
 The [current documentation](https://help.getzep.com/graphiti/getting-started/overview) distinguishes the Graphiti framework from Zep's managed context service. Self-hosting the framework requires operating the selected graph storage and model/embedding dependencies. It is not a turnkey duplicate of every managed-service capability.
@@ -75,7 +77,7 @@ The earlier article included guessed wrapper classes and an unsupported `memory_
 
 If integrating with an agent framework, separate storing context from checkpointing execution state. Decide what is written, which namespace is searched, how errors are handled and what the agent is allowed to reveal. Similar names in an older integration package do not guarantee compatibility with a current SDK.
 
-## Pricing: Checked October 7, 2026
+## Pricing: Checked October 20, 2026
 
 Zep's [pricing page](https://www.getzep.com/pricing/) currently lists the following monthly self-serve plans:
 
