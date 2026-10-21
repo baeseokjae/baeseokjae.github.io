@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "slug": "foremerge-parallel-coding-agent-intent-conflicts-2026",
+  "kind": "first_party_test",
+  "label": "Author-run bounded local reproduction of the Foremerge documented quickstart scenario",
+  "run_at_utc": "2026-10-16T00:14:35Z",
+  "recorded_at_utc": "2026-10-16T00:15:00Z",
+  "tool": {
+    "name": "foremerge",
+    "version_reported": "0.5.1",
+    "install_path_used": "curl -fsSL https://foremerge.com/install.sh | sh (installer resolved GitHub releases/latest, downloaded the x86_64-unknown-linux-gnu archive and verified its published SHA-256)",
+    "binary_sha256": "1301cf96a54e5d5f03182e7a5d3ef2633e9234d400879ea05d6da8b0e76b55ef",
+    "binary_bytes": 11361296,
+    "installed_to": "$TMPDIR/fmbin/foremerge (per-run scratch directory)"
+  },
+  "environment": {
+    "host_os": "Linux (6.17.0-1019-oracle)",
+    "git_version": "git version 2.43.0",
+    "shell": "/bin/sh",
+    "jq": "available",
+    "scratch": "$TMPDIR (the wrapper's per-run scratch directory; no shared or hard-coded /tmp path was created or touched)"
+  },
+  "methodology": "Inside a freshly created git repository in the per-run scratch directory, the project's own installer was used to install the released binary, then the documented quickstart scenario from README.md was executed with two real linked worktrees created by the documented wrapper (`foremerge worktree create`). Two agents were registered from inside their own worktrees, each published one intent declaring an operation on an explicit semantic scope, and the JSON payloads the CLI returned were captured verbatim. Six bounded cases were exercised in the same run: (1) destructive operation published first; (2) additive operation on the same scope published second; (3) a read of the conflict from the *other* worktree via `foremerge status`; (4) a control pair on disjoint scopes; (5) two additive operations on the same scope plus a third agent; (6) an intent whose prose contains a destructive keyword while its declared operation is additive. A claim on the overlapping scope and one ephemeral `conflicts check` preflight were run afterwards against the same store. Nothing outside the scratch directory was modified, and no agent, model or code-writing step was involved: this is CLI-level state, not an end-to-end LLM agent run. This record is the published evidence for the reproduction. A normalized transcript of the same run is retained privately beside it as repro-session.log and is not part of the published set; the case-by-case observations above are the complete published summary, and the article states the reproduction as a private local author verification without promising a downloadable dataset.",
+  "observed_results": [
+    {
+      "case": "init: store location",
+      "command": "foremerge init",
+      "observed": "database=<git-common-dir>/foremerge/state.sqlite3, runtime_dir=<git-common-dir>/foremerge, shared_across_worktrees=true, exit 0"
+    },
+    {
+      "case": "doctor before any check was registered",
+      "command": "foremerge doctor",
+      "observed": "database_ok=true, event_chain_ok=true, git_common_dir resolved, acceptance_ready=false with checks.acceptance_policy=strict, checks.registered=0 and a warning that no ChangeSet can be accepted until a check is registered, exit 0"
+    },
+    {
+      "case": "two linked worktrees",
+      "command": "foremerge worktree create --branch agent/stripe|agent/paypal --path ... --base HEAD",
+      "observed": "both created=true; `git worktree list` shows the main checkout plus the two agent worktrees at the same commit"
+    },
+    {
+      "case": "destructive intent first",
+      "command": "foremerge --json --cwd <stripe worktree> intent publish --agent <stripe> --task modernize-payments --summary \"Replace PaymentService with StripePaymentService\" --scope symbol:PaymentService=replace",
+      "observed": "ok=true, conflicts=[] (nothing to compare against yet)"
+    },
+    {
+      "case": "additive intent on the same scope",
+      "command": "foremerge --json --cwd <paypal worktree> intent publish --agent <paypal> --task add-paypal --summary \"Add PayPal support to PaymentService\" --scope symbol:PaymentService=extend",
+      "observed": "ok=true with exactly one conflict: kind=destructive_vs_additive, severity=HIGH, rule=FM-C001, scope=symbol:PaymentService, score=0.97, status=OPEN, evidence.asserted=true, evidence.source_operation=replace, evidence.target_operation=extend, evidence.source_operation_inferred=false, evidence.detected_before_code=true; explanation \"One intent will replace `PaymentService` while the other will extend it; both declare the same semantic scope.\"; related_work lists the stripe agent's intent, status INTENT, with the same overlap"
+    },
+    {
+      "case": "the finding is visible from the other worktree",
+      "command": "foremerge --cwd <stripe worktree> status",
+      "observed": "Agents (2 active) lists both agent ids and their worktree paths; Conflicts (1 open or coordinating) shows destructive_vs_additive HIGH OPEN on symbol:PaymentService with both intents; exit 0"
+    },
+    {
+      "case": "control pair on disjoint scopes",
+      "command": "intent publish --scope file:docs/billing.md=add (third agent, from the stripe worktree)",
+      "observed": "conflicts=[]"
+    },
+    {
+      "case": "two additive operations on one scope",
+      "command": "intent publish --scope symbol:PaymentService=modify (fourth agent)",
+      "observed": "two conflicts: FM-C001 destructive_vs_additive HIGH (replace vs modify) and FM-C003 shared_contract MEDIUM (extend vs modify), both score 0.97"
+    },
+    {
+      "case": "destructive keyword in prose, additive declared operation",
+      "command": "intent publish --summary \"delete the flaky ThumbnailCache benchmark test\" --scope test:ThumbnailCache=extend",
+      "observed": "conflicts=[] - the declared operation governed the comparison, and the word \"delete\" in the summary raised no finding"
+    },
+    {
+      "case": "claiming an overlapping scope",
+      "command": "foremerge --json work claim --agent <paypal> --intent <paypal intent> --scope symbol:PaymentService  (then the same for <stripe>)",
+      "observed": "both claims returned ok=true and advisory_only=true; the second claim returned one warning: kind=overlapping_claim, severity=MEDIUM, rule=FM-C005, score=0.88, suggestion \"Coordinate ownership or split the semantic scope. This warning is advisory; Foremerge does not hard-lock work.\"; no command was refused and no exit code was non-zero"
+    },
+    {
+      "case": "ephemeral preflight",
+      "command": "foremerge --json conflicts check --intent \"Remove PaymentService in favour of a new provider layer\" --scope symbol:PaymentService=remove",
+      "observed": "three ephemeral findings (id prefix eph_): FM-C002 divergent_rewrite HIGH (remove vs replace) and two FM-C001 destructive_vs_additive HIGH findings (remove vs extend, remove vs modify); nothing was written to the store (the published intents and the earlier cfl_ conflict ids were unchanged afterwards)"
+    }
+  ],
+  "limits_of_this_run": [
+    "One scenario in one synthetic repository: no real coding agent, no model calls, no code was written, committed or merged. The reproduction exercises the coordination state machine, not end-to-end agent behaviour.",
+    "No detection-accuracy measurement: the run observed that four specific pairs were and were not flagged. It did not measure a false-negative or false-positive rate, because no labelled corpus of conflict/no-conflict pairs was run.",
+    "The 1-of-10 / 9-of-9 paraphrase-probe figure quoted in the article is the maintainer's own documented measurement of a superseded pre-0.4.0 code path. It was not reproduced here and tests/paraphrase_probe.rs was not opened or executed.",
+    "Single machine, single SQLite file. No multi-machine or network-mounted-database behaviour was exercised.",
+    "Version-pinned: every observation is from the released 0.5.1 binary with the recorded SHA-256. A later release may change rule names, scores or severities."
+  ]
+}
