@@ -14,7 +14,7 @@ tags:
 - production AI
 - agent design patterns
 title: 'Multi-Agent System Design: Boundaries, State, and Failure Recovery'
-lastmod: '2026-10-20T07:02:10.628622+00:00'
+lastmod: '2026-10-21T01:03:24+00:00'
 ---
 
 A multi-agent design is useful when work can be separated into tasks with clear inputs and reviewable outputs. It becomes harder to justify when every participant needs the same changing context or can modify the same resource.
@@ -65,6 +65,8 @@ The reviewer should be able to reject a claim without inventing a replacement. A
 
 Persist task identity, input revision, state transition, and result references. On resume, check whether the input changed and whether an external operation already happened. A saved checkpoint alone cannot undo an email, payment, or third-party API call.
 
+For a concrete implementation of that requirement, the [Unreal Agent runtime review](/posts/unreal-agent-runtime-review-2026/) documents a Go harness whose [session store](https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/README.md) keeps append-only history that can be forked, records tool-call status together with operations, and raises an explicit error on resume when the stored session version is unsupported; the vendor's [async execution description](https://unreallabs.ai/blog/unreal-agent/) explains why a turn can continue while a tool is still running. Both are documented design, not a crash-recovery measurement.
+
 Use the [failure-injection worksheet](/research/content-quality-2026-10/framework-recovery.csv) to plan interruptions before an operation, after the operation but before the checkpoint, and after the checkpoint. Record the final business state as well as the workflow status. Duplicate submissions should not create duplicate effects.
 
 For the support example, the retrieval and drafting steps can be repeated. Sending the answer needs a durable operation identifier and a check of the approved draft revision. If the content changes after approval, that approval no longer describes the same action.
@@ -83,8 +85,8 @@ Evaluate a single-worker baseline with the same tasks before adding parallel wor
 
 ## Revision note
 
-**Updated October 20, 2026.** Removed unsupported adoption, recovery, savings, and regulatory generalizations. Added an original handoff contract, topology arithmetic with consistent node counts, and an explicit recovery worksheet.
+**Updated October 21, 2026.** Added one worked example of the persisted-state requirement — a session store with append-only forkable history and versioned resumption — with its primary sources; the example is documented design, not a durability measurement. **Updated October 20, 2026.** Removed unsupported adoption, recovery, savings, and regulatory generalizations. Added an original handoff contract, topology arithmetic with consistent node counts, and an explicit recovery worksheet.
 
 ## Primary sources
 
-Checked October 20, 2026: [anthropic patterns](https://www.anthropic.com/engineering/building-effective-agents); [anthropic multiagent](https://www.anthropic.com/engineering/multi-agent-research-system).
+Checked October 21, 2026: [anthropic patterns](https://www.anthropic.com/engineering/building-effective-agents); [anthropic multiagent](https://www.anthropic.com/engineering/multi-agent-research-system); [unreal agent async execution](https://unreallabs.ai/blog/unreal-agent/); [unreal agent session-store README](https://raw.githubusercontent.com/unreallabsai/unreal-agent/main/README.md).
