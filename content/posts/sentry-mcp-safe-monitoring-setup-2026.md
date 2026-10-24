@@ -1,9 +1,11 @@
 ---
 title: "Sentry MCP Safe Error Monitoring Setup 2026: Secure Configuration Guide for AI Coding Agents"
 date: 2026-07-04T14:00:00+00:00
+lastmod: 2026-10-21 00:00:00+00:00
 tags: ["sentry", "mcp", "ai-security", "error-monitoring", "claude-code", "cursor", "codex-cli", "oauth", "ssrf"]
-description: "A practical 2026 guide to safely configuring Sentry MCP for AI coding agents — OAuth setup, SSRF protection, prompt injection defenses, tool exposure narrowing, and production monitoring best practices."
+description: "A practical 2026 guide to configuring Sentry MCP for AI coding agents: token modes, self-hosted overrides, tool-exposure narrowing, embedded-agent provider pinning, telemetry-based monitoring, and what the project still flags as unfinished."
 draft: false
+schema: schema-sentry-mcp-safe-monitoring-setup-2026
 cover:
   image: "/images/sentry-mcp-safe-monitoring-setup-2026.png"
   alt: "Sentry MCP Safe Monitoring Setup 2026"
@@ -12,89 +14,75 @@ cover:
 
 ## Why This Guide Exists
 
-Sentry MCP hit 751 stars on GitHub in July 2026, and for good reason — it's the most polished error-monitoring MCP server I've seen. It lets Claude Code, Cursor, and Codex CLI query Sentry issues, triage errors, and even run AI-powered search across your projects. But after the [agentjacking disclosure](/posts/agentjacking-sentry-mcp-attack-guide-2026/) in June 2026, I've had a lot of teams ask me: "Is Sentry MCP safe to use?"
+[getsentry/sentry-mcp](https://github.com/getsentry/sentry-mcp) is the URL most people still have, and it no longer names the project: the repository now returns HTTP 301 to [getsentry/toolkit](https://github.com/getsentry/toolkit). The record is active rather than dormant — as of 2026-10-21T00:31Z the resolved `getsentry/toolkit` record reported 936 stars, 165 forks, `archived: false`, and a last push at 2026-10-21T00:02:35Z, with [cli@0.47.0](https://github.com/getsentry/toolkit/releases) published on 2026-10-05. Those counts belong to the resolved `toolkit` record, not to a separate server repository. Sentry describes it as "agentic tooling for Sentry."
 
-The answer is yes — **if you configure it correctly**. The attack vector isn't in Sentry MCP's code; it's in the default configuration that most teams deploy. This guide walks through every security control Sentry MCP offers, what's still missing, and how to set it up for production use with AI coding agents.
+The security question that follows the [agentjacking disclosure](/posts/agentjacking-sentry-mcp-attack-guide-2026/) is narrower than "is this safe": it is "which defaults do I have to change before an untrusted event payload reaches a coding agent?" This guide answers that from the project's own documentation, states plainly which controls are not finished, and ends with a checklist you can apply to a deployment.
 
-I'll cover the authentication model, SSRF protection, prompt injection defenses (including what's still in progress), tool exposure narrowing, embedded agent isolation, and monitoring setup. By the end, you'll have a checklist you can apply to your own deployment.
+One boundary up front. Everything below is read from the current `main` README, the operations docs and the telemetry reference in `getsentry/toolkit` on 2026-10-21. I did not run a Sentry MCP deployment or an attack against one for this revision, so nothing here is a benchmark or a penetration-test result.
 
-## Authentication: The Two-Layer Model
+## What Sentry MCP Actually Is
 
-Sentry MCP's authentication architecture is its strongest security feature — if you use it correctly.
+The [README](https://raw.githubusercontent.com/getsentry/toolkit/main/README.md) is explicit that this is not a general-purpose Sentry API wrapper: "Sentry's MCP service is primarily designed for human-in-the-loop coding agents," focused on "developer workflows and debugging use cases." The remote server "acts as middleware to the upstream Sentry API, optimized for coding assistants like Cursor, Claude Code, and similar development tools."
 
-### OAuth Remote Mode (Production Default)
+That sentence is the frame for every control below. You are not hardening a read-only dashboard proxy; you are deciding how much of a live error-tracking tenant an automated agent can see and how it may act on what it reads.
 
-In remote mode, Sentry MCP runs on Cloudflare Workers and implements a two-layer OAuth flow:
+## Authentication: Two Token Paths, One Difference That Matters
 
-1. **MCP OAuth** (Cloudflare layer) — the client authenticates with an MCP-level token
-2. **Upstream Sentry OAuth** — the MCP server authenticates with Sentry on your behalf
+Remote deployments expose two distinct paths, and the README keeps them deliberately separate. `Bearer` is "reserved for MCP OAuth access tokens." `Sentry-Bearer` is a passthrough: "the worker does not store, validate, exchange, or refresh the upstream token. It forwards the token through the same Sentry API calls used by OAuth-backed sessions, and the client or upstream provider remains responsible for token lifetime and refresh."
 
-The critical property: **the client never sees the raw Sentry token**. The MCP server acts as a secure proxy. Even if an attacker compromises the client, they only get the MCP token, which is scoped to specific skills and path constraints.
+That is the whole security delta, and it is easy to misread as "OAuth is safer, passthrough is unsafe." The real difference is where the upstream Sentry credential lives and who owns its lifetime. [docs/operations/security.md](https://raw.githubusercontent.com/getsentry/toolkit/main/docs/operations/security.md) splits the OAuth path into two distinct tokens: an upstream Sentry token that is "Stored inside the MCP grant props" and "Never sent directly to the MCP client," and a downstream MCP token issued by the MCP OAuth provider, whose encrypted props carry the upstream token, granted skills and optional org/project constraints.
 
-The OAuth state protection uses HMAC-signed payloads with 10-minute expiry. Cookies are HttpOnly, Secure, SameSite=Lax, with a 30-day max age. Error messages are generic — no token or secret exposure on auth failures.
+| | `Bearer` (MCP OAuth) | `Sentry-Bearer` (passthrough) |
+|---|---|---|
+| Who holds the Sentry credential | server side, inside the encrypted MCP grant props | the client or its provider |
+| Renewal | worker reuses the stored upstream token while it stays valid; a rejected token forces re-authorization | client/provider responsibility |
+| Worker storage of upstream token | stored inside the MCP grant props (encrypted), never sent to the MCP client | explicitly not stored, validated, exchanged or refreshed |
+| Good fit | shared or multi-user deployments | sandboxed, single-tenant clients |
 
-```bash
-# Required environment variables for OAuth mode
-export SENTRY_CLIENT_ID="your-oauth-client-id"
-export SENTRY_CLIENT_SECRET="your-oauth-client-secret"
-export COOKIE_SECRET="$(openssl rand -base64 32)"  # 32+ random characters
-```
+Only the second row of that last line is a gap. If you choose passthrough, you inherit the refresh problem: a token that expires mid-session fails as an authentication error inside a tool call, which is harder to diagnose than a login prompt.
 
-### Direct Token Mode (Trusted Clients)
-
-For trusted clients in controlled environments, you can pass a Sentry bearer token directly via the `Sentry-Bearer` header. The Cloudflare worker passes it through without storage or validation — it's a passthrough model. Use this only when:
-
-- The client runs in a sandboxed environment
-- The network path between client and MCP server is isolated
-- You've scoped the token to the minimum required orgs and projects
-
-### STDIO Mode (Local Development)
-
-For local CLI usage with Claude Code or Codex CLI, you set `SENTRY_ACCESS_TOKEN` as an environment variable or pass `--access-token` on the command line. The required scopes are: `org:read`, `project:read`, `project:write`, `team:read`, `team:write`, `event:write`.
+For local CLI use the project ships a stdio transport and calls it "still a work in progress," while noting it "is the easiest way to adapt run the MCP against a self-hosted Sentry install." Stdio needs a Sentry User Auth Token with the scopes the README lists — `org:read`, `project:read`, `project:write`, `team:read`, `team:write`, `event:write` — passed as `--access-token` or `SENTRY_ACCESS_TOKEN`:
 
 ```bash
-# STDIO mode — never hardcode in config files
 export SENTRY_ACCESS_TOKEN="sntrys_..."
-npx @sentry/mcp --access-token "$SENTRY_ACCESS_TOKEN"
+npx @sentry/mcp-server@latest --access-token "$SENTRY_ACCESS_TOKEN"
 ```
 
-**Never** put the token in `claude.json`, `mcp.json`, or any checked-in config file. Environment variables or a secrets manager are the only safe options.
+Never place that token in a checked-in `mcp.json` or `claude.json`. Environment variables or a secrets manager are the only sane options, because the token is the entire authority boundary.
 
-## SSRF Protection: The validateRegionUrl() Guard
+## Self-Hosted Deployments: What The README Actually Promises
 
-Server-Side Request Forgery (SSRF) is a classic MCP risk — if an attacker can make the server fetch arbitrary URLs, they can probe internal networks. Sentry MCP's `validateRegionUrl()` function is well-implemented:
+Earlier revisions of this article withdrew an SSRF claim because a code search under the old repository name returned nothing. That withdrawal was wrong, and it is worth showing why: the search was run against the stale name and re-runs as `total_count=0, incomplete_results=true`, while the current name returns 4 hits for `validateRegionUrl` and 3 for `SENTRY_ALLOWED_REGION_DOMAINS`.
 
-- **Default**: only the base host is allowed as `regionUrl`
-- **Allowlist**: additional domains must be in `SENTRY_ALLOWED_REGION_DOMAINS`
-- **Protocol enforcement**: HTTPS only
-- **Fallback**: empty or undefined `regionUrl` defaults to the base host
+The guard is real and documented twice. [packages/mcp-core/src/internal/tool-helpers/validate-region-url.ts](https://raw.githubusercontent.com/getsentry/toolkit/main/packages/mcp-core/src/internal/tool-helpers/validate-region-url.ts) implements `validateRegionUrl(regionUrl, baseHost)` with four rules, three of them numbered in its doc comment: the base host is allowed by default; any other host must be in `SENTRY_ALLOWED_REGION_DOMAINS` and also pass `isSaaSTrustOrigin(regionUrl)`; the protocol must be HTTPS; and URL credentials (`user:pass@`) are rejected by an un-commented body check. [docs/operations/security.md](https://raw.githubusercontent.com/getsentry/toolkit/main/docs/operations/security.md), under "SSRF Protection," states the same rules and lists `sentry.io`, `us.sentry.io` and `de.sentry.io` as the allowlist examples, with `https://eu.sentry.io` and `https://sub.mycompany.com` rejected. Note that the doc's implementation path still says `packages/mcp-server/...` while the code now lives under `packages/mcp-core/...`; read `main` rather than trusting a path in prose.
 
-The allowlist defaults to `sentry.io`, `us.sentry.io`, and `de.sentry.io`. If you're self-hosting Sentry, you need to explicitly add your domain:
+What the [README](https://raw.githubusercontent.com/getsentry/toolkit/main/README.md) documents for self-hosted installs is configuration:
+
+- `--host` (or `SENTRY_HOST`) points the server at a self-hosted install; leaving it unset targets Sentry SaaS.
+- `--insecure-http` exists for self-hosted instances without TLS.
+- Setting `SENTRY_HOST` "also drops the `seer` skill from the default set, since Seer is not available on self-hosted Sentry," and you can opt back in with `MCP_SKILLS`.
 
 ```bash
-export SENTRY_ALLOWED_REGION_DOMAINS="sentry.yourcompany.com,eu.sentry.yourcompany.com"
+npx @sentry/mcp-server@latest --access-token=TOKEN --host=sentry.example.com
 ```
 
-For self-hosted deployments, the `--insecure-http` flag exists but I'd only use it in isolated internal networks with no external exposure. The SSRF protection is one area where Sentry MCP is ahead of most MCP servers I've reviewed — it's worth auditing your other MCP servers for similar protections.
+The practical reading: the self-hosted path is a host-override story. Any SSRF-style control you depend on should be verified in the source at the version you deploy, and `--insecure-http` should be confined to an isolated internal network — plaintext transport hands the token to anything on the path.
 
-## Prompt Injection: The Work-in-Progress
+## Prompt Injection: Still An Open Merge Request
 
-This is where things get uncomfortable. Sentry MCP's prompt injection defenses are **partial and in progress**. Two open PRs address the core problem:
+Error payloads are attacker-influenced text. Anyone who can trigger an exception can put words in an issue title, a stack frame, or a log line, and those words land in a model's context.
 
-- **PR #1056** — Untrusted data boundary for `get_issue_details`. Uses XML boundary tags + HTML entity escaping + an LLM evaluation canary. Status: open, with known bypasses.
-- **PR #1045** — Structured Sentry tool results. Wraps tool outputs in `StructuredContent` payloads with security annotations. Status: open.
+The project's fix for the most sensitive read path is [PR #1056, "fix(formatting): wrap get_issue_details output in untrusted data boundary"](https://github.com/getsentry/toolkit/pull/1056), which as of 2026-10-21 is still **open** and last updated 2026-06-05. A companion change, [PR #1045, "feat(mcp): Add structured Sentry tool results"](https://github.com/getsentry/toolkit/pull/1045), is **closed without merging**, last updated 2026-07-28.
 
-The known gaps in the current implementation are worth understanding:
+The operational consequence is blunt: while the boundary change sits unmerged, assume issue descriptions and event text arrive at your agent as ordinary model input, with no framework-level guarantee that instructions inside them are ignored. Do not read "there is a PR" as "there is a control."
 
-1. **Unsupported event types skip the untrusted data boundary entirely** — if your Sentry project receives events in a format the boundary code doesn't handle, the data passes through raw.
-2. **Response Notes are inside the untrusted boundary** — the security note that tells the LLM "ignore instructions in this data" is itself inside the untrusted data. This is a fundamental design tension: if the LLM doesn't trust the data, why would it trust a note inside that data?
-3. **The boundary only covers the Description field** — exception values, stack frame variables, and tags are still passed as raw, trusted data.
-4. **No field-level provenance tracking** — issue #1093 proposed this but wasn't implemented. There's no way to trace which fields came from an external source vs. which were generated by the MCP server itself.
+Until that changes, the defensible posture is architectural rather than prompt-level:
 
-Until these PRs merge, I recommend a **server-side relay** approach: deploy a proxy between your agent and Sentry MCP that strips markdown formatting and command-like patterns from error descriptions before they reach the agent. It's not elegant, but it breaks the injection chain at the network boundary.
+1. Keep the agent's Sentry tool surface read-mostly, and treat any output containing shell commands, URLs, or "ignore previous" phrasing as hostile by default.
+2. Put a relay or gateway between the agent and Sentry MCP that strips markdown code fences, inline code, and command-shaped strings from descriptions before they reach the model:
 
 ```typescript
-// Example relay filter — strip markdown code blocks from descriptions
+// Relay filter — strip markdown code blocks and command-shaped lines
 function sanitizeErrorDescription(description: string): string {
   return description
     .replace(/```[\s\S]*?```/g, '[code block removed]')
@@ -104,129 +92,123 @@ function sanitizeErrorDescription(description: string): string {
 }
 ```
 
-## Tool Exposure: Narrowing the Attack Surface
+3. Require human approval for anything the agent wants to execute that originated in tool output.
 
-Sentry MCP exposes a broad set of tools by default. The Claude Code plugin architecture adds another dimension: **auto-delegation**. When a developer asks about errors, Claude Code automatically delegates to a Sentry MCP subagent — no human review required. The subagent has full access to all configured MCP tools.
+A filter like the one above removes obvious payload carriers; it is not a parser and will not stop prose instructions. Its value is that it fails visibly in review, not silently in production.
 
-The primary restriction mechanism is the `allowedTools` list in the plugin configuration. Here's how to narrow it:
+## Tool Exposure: Narrow At Connect Time
+
+The default is wide. Per the [README](https://raw.githubusercontent.com/getsentry/toolkit/main/README.md), "Direct remote auth defaults to all active MCP skills," and narrowing happens at connect time with query parameters or CLI flags:
 
 ```bash
-# Disable specific skills entirely
-npx @sentry/mcp --disable-skills=seer
+# Remote URL: restrict to the tools you actually need
+# https://your-deployment.example/mcp/your-org?skills=inspect,triage
 
-# Narrow to only inspect and triage tools
-npx @sentry/mcp --skills=inspect,triage
-
-# In remote mode, use query parameters
-# https://sentry-mcp.example.com/mcp/your-org?skills=inspect,triage
+# CLI equivalent
+npx @sentry/mcp-server@latest --access-token=TOKEN --skills=inspect,triage
+npx @sentry/mcp-server@latest --access-token=TOKEN --disable-skills=project-management
 ```
 
-The experimental variant (`?experimental=1`) exposes additional tools without additional consent. Don't use it in production.
+The Claude Code plugin adds a second layer that is easy to overlook: installing it registers a `sentry-mcp` subagent that "Claude automatically delegates to when you ask about Sentry errors, issues, traces, or performance." An agent that delegates without a human in the loop inherits whatever skill set you exposed, so the exposure decision is the delegation decision. Review the plugin's subagent configuration against the skills you granted rather than assuming the two agree.
 
-For the Claude Code plugin specifically, review the `toolDefinitions.json` that auto-generates the `allowedTools` list. Remove any tools your team doesn't need. The default list is permissive — it's your responsibility to trim it.
+There is also an experimental channel — `claude plugin install sentry-mcp@sentry-mcp-experimental` in the plugin flow, and `?experimental=1` on the remote URL. The project instruments that flag with a dedicated metric, `app.server.mode.experimental`, described in [TELEMETRY.md](https://raw.githubusercontent.com/getsentry/toolkit/main/TELEMETRY.md) as tracking "`?experimental=1` or stdio `--experimental` adoption." Being able to count adoption is not a safety argument; keep it out of production.
 
-## Embedded Agent Security: The AI-Powered Search Risk
+## Embedded Agent: Pin The Provider
 
-Sentry MCP includes AI-powered search tools (`search_events`, `search_issues`, `search_issue_events`, `use_sentry`) that use an embedded LLM agent. This is useful, but it introduces a critical security control: **provider selection**.
+The AI-powered search tools require an LLM provider — "OpenAI, Azure OpenAI, Anthropic, or OpenRouter" — and without one "these specific tools will be unavailable, but all other tools will function normally." Provider choice is `EMBEDDED_AGENT_PROVIDER`, and the README's instruction is unusually direct: "Always set `EMBEDDED_AGENT_PROVIDER` to explicitly specify your LLM provider. Auto-detection based on API keys alone is deprecated and will be removed in a future release."
 
-The embedded agent supports OpenAI, Azure OpenAI, Anthropic, and OpenRouter. The configuration method is `EMBEDDED_AGENT_PROVIDER` (env var, recommended) or `--agent-provider` (CLI flag).
-
-Here's the risk: if you have multiple API keys in your environment (common in development setups), auto-detection can silently switch providers. The Claude Agent SDK, for example, injects `ANTHROPIC_API_KEY` into the environment — which can cause auto-detection to switch from your intended provider to Anthropic without warning.
+Both halves of that instruction live in [docs/operations/embedded-agents.md](https://raw.githubusercontent.com/getsentry/toolkit/main/docs/operations/embedded-agents.md), and the README's environment block states the shorter version: `EMBEDDED_AGENT_PROVIDER` is "Required when multiple provider keys are set." The doc adds the resolution order — explicit configuration first (`EMBEDDED_AGENT_PROVIDER` or `--agent-provider`), then conflict detection, then key-based auto-detection as the lowest priority and marked **deprecated**, with a deprecation warning logged when that fallback is used. Conflict detection is the part worth knowing: if several provider keys are set without an explicit provider, the server throws an error rather than picking one, and the doc's stated rationale is "This prevents silent bugs when external tools inject API keys." So the failure mode in a shell with several keys is a startup error, not a silently different provider.
 
 ```bash
-# Always set explicitly when multiple API keys are present
+# Pin explicitly whenever more than one provider key can be present
 export EMBEDDED_AGENT_PROVIDER="openai"
 export OPENAI_API_KEY="sk-..."
-
-# Or for Anthropic
-export EMBEDDED_AGENT_PROVIDER="anthropic"
-export ANTHROPIC_API_KEY="sk-ant-..."
 ```
 
-Auto-detection is deprecated. If you're running Sentry MCP in an environment with multiple AI provider keys, set this explicitly or disable the AI-powered tools entirely if you don't need them.
+Use a dedicated key for Sentry MCP rather than a shared production key, so that revoking the agent's access does not take down something else, and so that the agent's spend is attributable.
 
 ## Monitoring the Monitor: Observability Setup
 
-Sentry MCP eats its own dog food — it uses Sentry SDKs for its own monitoring. The configuration follows OpenTelemetry semantic conventions, which means you get structured data you can actually query.
+Sentry MCP instruments itself, and the repository publishes the attribute contract in [TELEMETRY.md](https://raw.githubusercontent.com/getsentry/toolkit/main/TELEMETRY.md). The parts worth knowing when you audit an agent:
 
-```typescript
-// Cloudflare Worker SDK config
-Sentry.init({
-  dsn: process.env.SENTRY_DSN,
-  environment: 'production',
-  beforeSend(event) {
-    // Redact auth headers from captured data
-    if (event.request?.headers) {
-      delete event.request.headers['authorization'];
-      delete event.request.headers['cookie'];
-    }
-    return event;
-  }
-});
+- `gen_ai.tool.name` — which MCP tool was called, carried on spans and issues.
+- `mcp.session.id` — MCP session identity, for reconstructing a session timeline.
+- `gen_ai.provider.name` and `gen_ai.request.model` — which provider and model handled a request.
+- `app.transport` — transport in use (stdio, SSE, or HTTP).
+- `app.server.response` — the response-rate metric, queryable by `http.route` and paired with `app.response.reason` and `app.rate_limit.scope` for local rate-limit diagnosis.
+
+The documented query recipes are the useful part, because they turn "look at the dashboard" into something reproducible. [TELEMETRY.md](https://raw.githubusercontent.com/getsentry/toolkit/main/TELEMETRY.md) carries a recipe for MCP mode adoption by client family, and this is the exact line as written there:
+
+```text
+dataset=tracemetrics query='metric:app.server.response http.route:"/mcp/:organizationSlug?/:projectSlug?"'
 ```
 
-The tracing setup wraps every tool handler with OpenTelemetry spans via `createTracedToolHandler`. Key attributes captured:
+The companion recipe for response rates by route and status swaps in a concrete route and adds an aggregation, which is the form you want in a runbook:
 
-- `gen_ai.tool.name` — which tool was called
-- `mcp.session.id` — session identifier
-- `gen_ai.provider.name` — AI provider in use
-- `gen_ai.request.model` — model name
-- `network.transport` — pipe (stdio) or tcp (SSE)
-- `app.transport` — stdio, sse, or http
+```text
+dataset=tracemetrics query='metric:app.server.response http.route:"<route>"'
+aggregate=sum(value) by http.route,http.response.status_code
+```
 
-The production sample rate is 10%. Error classification is sensible:
+A tool timeline is read from spans filtered on `gen_ai.tool.name`.
 
-| Skip Logging | Always Log |
-|---|---|
-| UserInputError | 5xx errors |
-| 4xx (except 429) | Network failures |
-| Validation errors | Unexpected exceptions |
-| | Rate limit errors (429) |
+That gives you the what. It does not give you the why, and this is the honest limit of alert-driven monitoring: a Sentry alert tells you that a tool failed and roughly when, but the ordered sequence of calls, arguments and results that produced the failure is a different artifact, and reconstructing it from span attributes is manual work. The target page puts the distinction well: "Dashboards show you totals; the transcript shows you the sequence."
 
-The `app.server.response` counter with `http.route` and `http.response.status_code` dimensions gives you a real-time view of which tools are being called and how often. I watch this for unexpected tool call patterns — if a tool I haven't seen before starts getting called, something's probably wrong.
+When an alert points at an unexpected tool call and you need that sequence, the practical next step is to audit the recorded transcript rather than to keep querying aggregates. [ToolReplay: auditing an agent session for non-determinism and scope overreach](/posts/toolreplay-agent-tool-call-audit-2026/) walks through a bounded method for exactly that: ToolReplay v0.6.0 is a dependency-free Python CLI that replays one recorded tool-call transcript and reports non-determinism, redundant calls and permission overreach, with the reproduced run, the three detector rules and its own documented blind spots on the page. It reads a local transcript file — it is not a Sentry integration, it does not replace Sentry alerting, and it cannot see calls your agent did not record.
+
+The pairing is the point: Sentry tells you a session went wrong, the transcript audit tells you what the session did. Neither one covers the other's blind spot.
 
 ## Production Checklist
 
-Here's the condensed checklist I use when setting up Sentry MCP for a team:
-
 **Authentication**
-- [ ] Use OAuth remote mode for production (client never sees raw Sentry token)
-- [ ] For stdio: use `SENTRY_ACCESS_TOKEN` env var, never hardcoded in config files
-- [ ] Scope tokens to minimum required orgs/projects
-- [ ] Use `/mcp/:org` or `/mcp/:org/:project` URL constraints
+- [ ] Choose `Bearer` (MCP OAuth) for shared deployments; reserve `Sentry-Bearer` for sandboxed single-tenant clients and own the refresh problem
+- [ ] For stdio: pass `SENTRY_ACCESS_TOKEN` or `--access-token`, never a checked-in config file
+- [ ] Scope the Sentry token to the minimum orgs and projects the agent needs
 
 **Tool Exposure**
-- [ ] Disable unnecessary skills with `--disable-skills=seer`
-- [ ] Narrow to only needed tools with `--skills=inspect,triage`
-- [ ] Review `allowedTools` in Claude Code plugin config
-- [ ] Avoid `?experimental=1` in production
+- [ ] Narrow with `?skills=inspect,triage` or `--skills=` / `--disable-skills=`
+- [ ] Review what the Claude Code plugin's delegated subagent can reach, not just the server flags
+- [ ] Keep the experimental plugin or `?experimental=1` out of production
 
-**Prompt Injection Defense**
-- [ ] Monitor PR #1056 and PR #1045 for merge status
-- [ ] Deploy server-side relay that strips markdown/commands from descriptions
-- [ ] Configure agent to require human approval for MCP-sourced commands
-- [ ] Run [MCP-Scan](https://github.com/invariantlabs/mcp-scan) against your MCP server configuration
+**Prompt Injection**
+- [ ] Track whether PR #1056 has merged; until then treat issue and event text as untrusted model input
+- [ ] Deploy a relay that strips code fences and command-shaped strings from descriptions
+- [ ] Require human approval for commands that originated in tool output
+- [ ] Run a scanner such as [MCP-Scan, now Snyk Agent Scan](https://github.com/snyk/agent-scan) against your MCP configuration
 
 **Embedded Agent**
-- [ ] Set `EMBEDDED_AGENT_PROVIDER` explicitly when multiple API keys present
-- [ ] Use dedicated API keys for Sentry MCP — don't share with other tools
-- [ ] Disable AI-powered search tools if not needed
+- [ ] Set `EMBEDDED_AGENT_PROVIDER` explicitly whenever more than one provider key can be present
+- [ ] Use a dedicated API key and not a shared production one
+- [ ] Leave the AI-powered search tools off if you do not need them
 
-**Network**
-- [ ] HTTPS for all connections (enforced by SSRF protection)
-- [ ] Configure `SENTRY_ALLOWED_REGION_DOMAINS` for custom regions
-- [ ] Validate region URLs are restricted to known Sentry domains
+**Self-Hosted**
+- [ ] Point at your install with `--host` / `SENTRY_HOST`; confirm which skills that drops
+- [ ] Avoid `--insecure-http` outside an isolated internal network
+- [ ] Verify `validateRegionUrl` and the `SENTRY_ALLOWED_REGION_DOMAINS` allowlist still match the version you deploy
 
 **Monitoring**
-- [ ] Configure `beforeSend` to redact auth headers and tokens
-- [ ] Set `tracesSampleRate: 0.1` for production
-- [ ] Monitor `app.server.response` metrics for unexpected tool calls
-- [ ] Watch for 5xx errors, network failures, and rate limit errors
+- [ ] Confirm `gen_ai.tool.name`, `mcp.session.id` and `app.server.response` are queryable in your Sentry project before you rely on them
+- [ ] Build the metrics query for `app.server.response` by route once, and keep it in your runbook
+- [ ] Decide in advance which alerts escalate to a transcript audit, and where the transcript is retained
 
 ## The Bottom Line
 
-Sentry MCP is a well-architected MCP server with security controls that most MCP servers don't have — OAuth wrapping, SSRF protection, and tool hint annotations. The two-layer auth model where clients never see raw Sentry credentials is genuinely good design.
+Sentry MCP's token separation, connect-time skill narrowing and published telemetry attributes are real, documented controls, and they cover most of what a team needs to run an agent against production errors. Two things are not covered: the untrusted-data boundary for issue text is still an open pull request, and the embedded agent's provider should be pinned rather than inferred. Configure those two deliberately and the remaining risk is the ordinary one — the agent can see whatever your Sentry token can see.
 
-But it's not a set-and-forget tool. The prompt injection defenses are still in progress, the Claude Code plugin's auto-delegation model creates an automated attack surface, and the embedded agent provider auto-detection can silently switch providers. Every team using Sentry MCP needs to work through the checklist above.
+For the wider picture, see the [Agent Skills Supply Chain Security Guide](/posts/agent-skills-supply-chain-security-guide-2026/) and the [AI Agent Identity Framework](/posts/ai-agent-identity-framework-guide-2026/) for zero-trust patterns, and start with the [agentjacking deep dive](/posts/agentjacking-sentry-mcp-attack-guide-2026/) if you have not read it — understanding the attack is the first step to configuring the defense.
 
-For more on the broader security landscape, check out my [Agent Skills Supply Chain Security Guide](/posts/agent-skills-supply-chain-security-guide-2026/) and the [AI Agent Identity Framework](/posts/ai-agent-identity-framework-guide-2026/) for production zero-trust patterns. And if you haven't read the [agentjacking deep dive](/posts/agentjacking-sentry-mcp-attack-guide-2026/), start there — understanding the attack is the first step to configuring the defense.
+## Sources Checked For This Revision
+
+Primary material read on 2026-10-21 for the claims above, listed so you can re-check them at the same revision:
+
+- Sentry MCP README (fetched from `main`): https://raw.githubusercontent.com/getsentry/toolkit/main/README.md
+- Telemetry attribute and query reference: https://raw.githubusercontent.com/getsentry/toolkit/main/TELEMETRY.md
+- Security model and SSRF protection: https://raw.githubusercontent.com/getsentry/toolkit/main/docs/operations/security.md
+- Region-URL validation source: https://raw.githubusercontent.com/getsentry/toolkit/main/packages/mcp-core/src/internal/tool-helpers/validate-region-url.ts
+- Embedded-agent provider resolution: https://raw.githubusercontent.com/getsentry/toolkit/main/docs/operations/embedded-agents.md
+- Resolved repository record (stars, forks, `archived`, last push; the old `sentry-mcp` URL 301s here): https://github.com/getsentry/toolkit
+- Published releases: https://github.com/getsentry/toolkit/releases
+- Untrusted-data boundary pull request: https://github.com/getsentry/toolkit/pull/1056
+- Structured tool results pull request: https://github.com/getsentry/toolkit/pull/1045
+- ToolReplay transcript-audit article, checked live (HTTP 200, self-canonical, `index, follow`): https://baeseokjae.github.io/posts/toolreplay-agent-tool-call-audit-2026/
+- This article's live page, checked live (HTTP 200, self-canonical, `index, follow`): https://baeseokjae.github.io/posts/sentry-mcp-safe-monitoring-setup-2026/
