@@ -6,6 +6,7 @@ import time
 import urllib.request
 from pathlib import Path
 from publication_gate import page_fingerprint, GateError, SITE
+from seo_verification import selected_paths, verify_paths
 
 PROTECTED = ['best-ai-agent-memory-frameworks-2026','agent-memory-architecture-guide-2026',
              'vibe-coding-tools-comparison-2026']
@@ -15,7 +16,7 @@ def gh(path):
     return json.loads(subprocess.check_output(['gh','api',path],text=True,stderr=subprocess.PIPE,timeout=30))
 
 
-def verify_once(repo, commit, rendered, slugs):
+def verify_once(repo, commit, rendered, slugs, paths=()):
     main=gh('repos/'+repo+'/git/ref/heads/main')['object']['sha']
     if main != commit: raise RuntimeError('Superseded source; do not verify or notify')
     pages=gh('repos/'+repo+'/pages/builds/latest')
@@ -34,7 +35,8 @@ def verify_once(repo, commit, rendered, slugs):
             actual=page_fingerprint(rendered.parent,slug,response.read().decode())
         if actual!=expected:raise GateError('Public content differs: '+slug)
         verified.append(slug)
-    return {'status':'verified','source_commit':commit,'pages_commit':current,'slugs':verified}
+    seo = verify_paths(rendered, paths, commit)
+    return {'status':'verified','source_commit':commit,'pages_commit':current,'slugs':verified,'seo_pages':seo}
 
 
 if __name__=='__main__':
@@ -49,10 +51,11 @@ if __name__=='__main__':
         if path.startswith('quality/url-migrations/') and path.endswith('.json'):slugs.add(Path(path).stem)
     if set(changes)&{'.hugo-build.json','.github/workflows/deploy.yml','hugo.toml','assets/css/extended/code-blocks.css'}:
         slugs.add('toolreplay-agent-tool-call-audit-2026')
+    paths=selected_paths(args.rendered.parent, args.rendered, changes)
     deadline=time.monotonic()+600
     while True:
         try:
-            result=verify_once(args.repo,args.commit,args.rendered,sorted(slugs));break
+            result=verify_once(args.repo,args.commit,args.rendered,sorted(slugs),paths);break
         except (GateError,OSError,subprocess.SubprocessError) as exc:
             if time.monotonic()>deadline:raise SystemExit('Public verification deadline reached: '+str(exc))
             time.sleep(15)
