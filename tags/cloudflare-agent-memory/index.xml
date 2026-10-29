@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Cloudflare Agent Memory on RockB</title><link>https://baeseokjae.github.io/tags/cloudflare-agent-memory/</link><description>Recent content in Cloudflare Agent Memory on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Wed, 28 Oct 2026 11:20:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/cloudflare-agent-memory/index.xml" rel="self" type="application/rss+xml"/><item><title>Agent Memory on Cloudflare Workers: The Documented API, the Compaction Lifecycle, and What to Build in Private Beta</title><link>https://baeseokjae.github.io/posts/agent-memory-cloudflare-workers/</link><pubDate>Wed, 28 Oct 2026 11:20:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-memory-cloudflare-workers/</guid><description>Cloudflare Agent Memory is a managed, namespace- and profile-scoped memory store for agents. What the private-beta documentation actually specifies: the binding, every documented method, ingest and recall limits, supersession, and what to build instead while access is gated.</description><content:encoded><![CDATA[<p>Cloudflare Agent Memory is a managed memory store for AI agents: you bind it to a Worker, address an isolated profile per user or tenant, hand it conversations, and get back extracted facts, events, instructions and tasks that survive context compaction. The documentation is public even though the service is in private beta, so the useful engineering question today is not &ldquo;does it work&rdquo; but &ldquo;what exactly is specified, and what is left unspecified&rdquo;.</p>
+<p>This page answers that second question for developers choosing a memory substrate for a Workers-based agent. It walks the documented isolation model, the binding configuration, every documented method with its real signature, the compaction integration pattern, the vendor-described ingestion and retrieval internals, the published limits, and the gaps the documentation does not close. It deliberately does not rank the service against mem0, Zep or any other memory system — the vendor publishes no measured result to rank it with.</p>
+<h2 id="the-short-answer">The short answer</h2>
+<p>If you are building on Workers and want durable per-entity memory without operating an extraction pipeline, Agent Memory is the substrate that matches your runtime: memory lives next to the compute, scoping is a platform concept rather than your schema, and the write path (chunking, extracting, deduplicating, verifying, superseding) is the vendor&rsquo;s problem. Three qualifications come with that.</p>
+<p>First, the service is in private beta, so availability is gated and the API can change or be withdrawn. Second, no accuracy, latency, throughput or price figure is published anywhere in the material read for this page, so any comparison table that ranks it numerically against another memory system is unsupported. Third, the integration path the documentation points at for compaction is an experimental import path, not stable API. Plan for the shape of the service, not for its stability.</p>
+<h2 id="what-is-specified-and-what-is-not">What is specified, and what is not</h2>
+<p>Cloudflare frames the product as memory that removes the need to build your own extraction, storage, search and summarization pipeline, with isolated profiles for users, agents, tenants, teams or application entities (<a href="https://developers.cloudflare.com/agent-memory/">docs index</a>). That framing is the honest scope statement: the thing you are buying is the pipeline, not the storage.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Question</th>
+					<th>Documented answer</th>
+					<th>Status</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Isolation unit</td>
+					<td>namespace &gt; profile &gt; memory, plus sessions scoped to a profile</td>
+					<td>Specified</td>
+			</tr>
+			<tr>
+					<td>Write API</td>
+					<td><code>ingest()</code> for conversations, <code>remember()</code> for single memories</td>
+					<td>Specified</td>
+			</tr>
+			<tr>
+					<td>Read API</td>
+					<td><code>recall()</code> returns a synthesized answer, <code>list()</code> and <code>get()</code> return rows</td>
+					<td>Specified</td>
+			</tr>
+			<tr>
+					<td>Deletion</td>
+					<td><code>delete(memoryId)</code>, <code>deleteSession()</code>, <code>deleteProfile()</code></td>
+					<td>Specified</td>
+			</tr>
+			<tr>
+					<td>Hard limits</td>
+					<td>500 messages per ingest, 32 KB per message, 1 KB recall query</td>
+					<td>Specified</td>
+			</tr>
+			<tr>
+					<td>Extraction pipeline</td>
+					<td>Content-addressed IDs, two-pass extraction, eight-check verifier</td>
+					<td>Vendor-described</td>
+			</tr>
+			<tr>
+					<td>Retrieval</td>
+					<td>Five channels fused with Reciprocal Rank Fusion</td>
+					<td>Vendor-described, weights unpublished</td>
+			</tr>
+			<tr>
+					<td>Accuracy or latency figure</td>
+					<td>None published</td>
+					<td>Not specified</td>
+			</tr>
+			<tr>
+					<td>Price</td>
+					<td>Not billed during beta, no unit price published</td>
+					<td>Not specified</td>
+			</tr>
+			<tr>
+					<td>Export endpoint</td>
+					<td>A stated commitment to exportability, no endpoint documented</td>
+					<td>Not specified</td>
+			</tr>
+	</tbody>
+</table>
+<p>The distinction between &ldquo;specified&rdquo; and &ldquo;vendor-described&rdquo; matters when you are deciding whether to depend on a behaviour. Method names and limits you can build against. Pipeline internals you can only treat as a description of intent, because a private-beta implementation is free to change them without a changelog entry.</p>
+<h2 id="the-isolation-model-namespace-profile-memory">The isolation model: namespace, profile, memory</h2>
+<p>The service uses a two-level isolation model. A namespace is a top-level container that scopes a set of profiles, and you use it to separate applications, environments, tenants, or memory layers such as user, team and organization memory. A profile is an isolated store for a single entity, with its own memories and its own retrieval indexes. Memories then sit inside a profile, and sessions group the memories that came from one conversation (<a href="https://developers.cloudflare.com/agent-memory/concepts/namespaces-profiles/">namespaces and profiles</a>).</p>
+<p>Two properties of that model are worth designing around. Sessions are scoped to a profile, so the same session identifier can exist in two profiles without conflict — you do not need globally unique session IDs, only per-profile ones. And a recall issued on one profile never returns another profile&rsquo;s memories, which is what makes a multi-tenant deployment tractable without an application-level tenant filter in every query.</p>
+<p>The namespace is a binding-level concept, not a runtime argument. A binding entry names exactly one namespace, so separating production from staging means two binding entries and two environment variable names, not one binding plus a namespace parameter at call time. That is a small detail with a large consequence: namespace selection happens at deploy time, in configuration, which is also why a mis-pointed binding is a deployment problem rather than a code path you can unit-test easily.</p>
+<h2 id="the-binding-exactly-as-documented">The binding, exactly as documented</h2>
+<p>Agent Memory is reached through an <code>agent_memory</code> array in the Wrangler configuration. Each entry carries <code>binding</code>, the variable name used in Worker code, and <code>namespace</code>, the Agent Memory namespace to bind to. Binding several namespaces means adding several entries (<a href="https://developers.cloudflare.com/agent-memory/api/workers-api/">Workers API</a>).</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-jsonc" data-lang="jsonc"><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;$schema&#34;</span>: <span style="color:#e6db74">&#34;./node_modules/wrangler/config-schema.json&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">&#34;agent_memory&#34;</span>: [
+</span></span><span style="display:flex;"><span>    { <span style="color:#f92672">&#34;binding&#34;</span>: <span style="color:#e6db74">&#34;MEMORY&#34;</span>, <span style="color:#f92672">&#34;namespace&#34;</span>: <span style="color:#e6db74">&#34;assistant-prod&#34;</span> },
+</span></span><span style="display:flex;"><span>    { <span style="color:#f92672">&#34;binding&#34;</span>: <span style="color:#e6db74">&#34;MEMORY_STAGING&#34;</span>, <span style="color:#f92672">&#34;namespace&#34;</span>: <span style="color:#e6db74">&#34;assistant-staging&#34;</span> }
+</span></span><span style="display:flex;"><span>  ]
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-toml" data-lang="toml"><span style="display:flex;"><span>[[<span style="color:#a6e22e">agent_memory</span>]]
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">binding</span> = <span style="color:#e6db74">&#34;MEMORY&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">namespace</span> = <span style="color:#e6db74">&#34;assistant-prod&#34;</span>
+</span></span></code></pre></div><p><code>npx wrangler types</code> generates the corresponding <code>AgentMemoryNamespace</code> type on <code>Env</code>, so the binding is typed end to end. Note what is not in that configuration: no region, no capacity, no retention policy, and no vector index name. Those are either platform decisions or undocumented, and neither case gives you a knob to set today.</p>
+<h2 id="the-full-method-surface">The full method surface</h2>
+<p>The reference page documents ten methods across two levels. The namespace level gives you <code>getProfile(profileName)</code>, which returns a profile and creates it if it does not exist, and <code>deleteProfile(profileName)</code>, which marks a profile and all its memories and messages for deletion. Both take names up to 100 characters, and the documentation warns that the first <code>getProfile()</code> call for a new profile may take longer while the profile is created — a first-request cost you should not put on a user-facing latency path without a warm-up.</p>
+<p>The profile level is where the work happens.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-ts" data-lang="ts"><span style="display:flex;"><span><span style="color:#75715e">// Namespace level
+</span></span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">profile</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">env</span>.<span style="color:#a6e22e">MEMORY</span>.<span style="color:#a6e22e">getProfile</span>(<span style="color:#e6db74">`user:</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">userId</span><span style="color:#e6db74">}</span><span style="color:#e6db74">`</span>);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Bulk path: a whole conversation segment, one call
+</span></span></span><span style="display:flex;"><span><span style="color:#66d9ef">await</span> <span style="color:#a6e22e">profile</span>.<span style="color:#a6e22e">ingest</span>(
+</span></span><span style="display:flex;"><span>  [
+</span></span><span style="display:flex;"><span>    { <span style="color:#a6e22e">role</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#a6e22e">content</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;I prefer concise answers.&#34;</span> },
+</span></span><span style="display:flex;"><span>    { <span style="color:#a6e22e">role</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;assistant&#34;</span>, <span style="color:#a6e22e">content</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;Noted.&#34;</span> },
+</span></span><span style="display:flex;"><span>    { <span style="color:#a6e22e">role</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#a6e22e">content</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;Deploy to the EU region, not the US.&#34;</span> }
+</span></span><span style="display:flex;"><span>  ],
+</span></span><span style="display:flex;"><span>  { <span style="color:#a6e22e">sessionId</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;conv-8891&#34;</span> }
+</span></span><span style="display:flex;"><span>);
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Explicit path: your application already knows the fact
+</span></span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">memory</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">profile</span>.<span style="color:#a6e22e">remember</span>({
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">content</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;Deploys target the EU region.&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">sessionId</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;conv-8891&#34;</span>
+</span></span><span style="display:flex;"><span>});
+</span></span></code></pre></div><p>Three details of <code>remember()</code> are load-bearing for anyone migrating from a self-managed store. It accepts only <code>content</code> and an optional <code>sessionId</code>; the service classifies the memory type and writes the summary itself. There is no caller-assigned type field and no embedding parameter at write time. The type comes back on the stored object as one of <code>fact</code>, <code>event</code>, <code>instruction</code> or <code>task</code>, so you can filter on it after the fact through <code>list()</code> but you cannot decide it at write time. And the return value is the stored memory, which makes it the right place to capture an ID for later deletion.</p>
+<p>Reads come in two distinct shapes, and confusing them is the most common integration error.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-ts" data-lang="ts"><span style="display:flex;"><span><span style="color:#75715e">// Synthesized answer for the model
+</span></span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">recall</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">profile</span>.<span style="color:#a6e22e">recall</span>(<span style="color:#e6db74">&#34;which region do deployments target?&#34;</span>, {
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">thinkingLevel</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;low&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">responseLength</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;short&#34;</span>
+</span></span><span style="display:flex;"><span>});
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// recall = { count, answer, candidates: [{ id, summary, sessionId, score }] }
+</span></span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Rows for your own UI, audit or export logic
+</span></span></span><span style="display:flex;"><span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">page</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">profile</span>.<span style="color:#a6e22e">list</span>({ <span style="color:#a6e22e">limit</span>: <span style="color:#66d9ef">50</span>, <span style="color:#66d9ef">type</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;instruction&#34;</span> });
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">entry</span> <span style="color:#66d9ef">of</span> <span style="color:#a6e22e">page</span>.<span style="color:#a6e22e">memories</span>) {
+</span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">full</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">await</span> <span style="color:#a6e22e">profile</span>.<span style="color:#66d9ef">get</span>(<span style="color:#a6e22e">entry</span>.<span style="color:#a6e22e">id</span>); <span style="color:#75715e">// list() entries omit content
+</span></span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p><code>recall()</code> returns a grounded synthesized answer plus a candidate count and scored candidates, not raw memory rows. <code>thinkingLevel</code> accepts <code>low</code>, <code>medium</code> or <code>high</code> with a default of <code>low</code> and trades retrieval breadth against time; <code>responseLength</code> accepts <code>short</code>, <code>medium</code> or <code>long</code> with a default of <code>medium</code>; <code>referenceDate</code> anchors date-relative queries. If nothing matches, the answer is empty rather than invented. <code>list()</code> paginates by an opaque cursor, filters by session and type, and deliberately omits <code>content</code> — the documentation is explicit that you must call <code>get(memoryId)</code> for the full memory.</p>
+<p>Deletion is a three-granularity model, which is more than most memory APIs offer and is the part that makes the service answerable to data-deletion requests: <code>delete(memoryId)</code> removes one memory and its linked source messages, <code>deleteSession(sessionId)</code> marks every memory and message tagged with that session in the profile, and <code>deleteProfile(profileName)</code> marks the whole profile. Session deletion is idempotent — deleting a session with no rows is a no-op — which means you can call it on every logout without a pre-check.</p>
+<p>Finally, <code>getSummary()</code> returns a structured Markdown summary of everything stored in a profile, optionally scoped to one session. Treat it as the debugging surface: it is how you inspect what the agent actually remembers about an entity without writing your own aggregation.</p>
+<h2 id="the-compaction-lifecycle">The compaction lifecycle</h2>
+<p>Context compaction is the moment a harness decides what to do with a conversation that no longer fits. The pattern the documentation describes is to make compaction a write, not a discard: the harness bulk-ingests the conversation into the profile at a natural checkpoint — typically when it compacts context, or after the user goes idle — instead of calling the write path on every model turn (<a href="https://developers.cloudflare.com/agent-memory/get-started/">get started</a>).</p>
+<p>Read that as an architecture instruction rather than a performance tip. The write path runs extraction, verifier checks and background vectorization, so per-turn writes put that work on the critical path of every response. A batch at compaction puts it once, on a boundary the harness already treats as expensive. The documentation also points at the Cloudflare Agents SDK session API as the reference implementation for handling compaction, remembering and searching — but the import in that example is from <code>agents/experimental/memory/session</code>, an experimental namespace. If you depend on that wiring, pin the version you tested and expect the path to move.</p>
+<p>The retrieval side of the lifecycle is where most implementations get it wrong in a way that no amount of storage quality fixes. A memory that is written but never recalled costs money and buys nothing. The read that matters is the one at session start, where the agent asks a small number of targeted questions — what does this entity prefer, what is the current state of the object in question, what rules apply — and rebuilds context from answers rather than from a re-read of the transcript.</p>
+<h2 id="ingestion-as-the-vendor-describes-it">Ingestion, as the vendor describes it</h2>
+<p>The pipeline description comes from Cloudflare&rsquo;s launch post on Agent Memory (<a href="https://blog.cloudflare.com/introducing-agent-memory/">launch post</a>), not from an independent audit, and the exact hash construction is described rather than published as code.</p>
+<p>Each message receives a deterministic ID: a SHA-256 hash of the session ID, role and content, truncated to 128 bits. Because the ID is derived from content, re-ingesting the same conversation resolves to the same IDs and creates no duplicates. That is the mechanism behind the documented idempotency of <code>ingest()</code>, and it is the reason a retry after a timeout is safe.</p>
+<p>Extraction runs in two passes. A full pass handles the conversation in chunks of roughly 10,000 characters with a two-message overlap and processes up to four chunks concurrently. When a conversation is long enough — the post gives 9 or more messages as the threshold — a detail pass re-reads overlapping windows looking for concrete values such as names, prices and version numbers that a full pass tends to blur. Extracted items then pass an eight-check verifier covering entity identity, object identity, location context, temporal accuracy, organizational context, completeness, relational context and fact support. Each extracted item is classified as a fact, an event, an instruction or a task.</p>
+<p>Supersession is the property to read carefully, because it is easy to describe in a way that is simply wrong. Facts and instructions are keyed by a normalized topic key. When a new memory shares a topic key with an existing one, the older memory is marked superseded rather than deleted: the latest version surfaces in recall results while the full history is preserved, producing a version chain with a forward pointer (<a href="https://developers.cloudflare.com/agent-memory/concepts/how-agent-memory-works/">how Agent Memory works</a>). Tasks are session-scoped and deprioritized after the session ends. Events accumulate and do not conflict with each other.</p>
+<p>A preserved supersession chain is a different product from a delete-on-update store. It means an agent can be asked why a fact changed and answer from stored history, and it means a bad extraction can be traced rather than silently overwritten. It also means deletion semantics deserve a second look before you promise anyone that a fact is gone: <code>delete(memoryId)</code> removes that memory and its linked source messages, and the chain around it is what you have to reason about afterwards.</p>
+<h2 id="retrieval-as-the-vendor-describes-it">Retrieval, as the vendor describes it</h2>
+<p>A recall runs five channels in parallel: full-text search with Porter stemming, exact fact-key lookup, raw message full-text search, direct vector search, and HyDE vector search, in which a hypothetical document is embedded to improve matching against paraphrased queries. The five result lists are fused with Reciprocal Rank Fusion using per-channel weights, with fact-key matches weighted highest.</p>
+<p>RRF is a sensible choice here for the same reason it is popular elsewhere: it combines ranked lists without requiring the scores from different channels to be commensurable. What the documentation does not publish is the weight values, so there is no way to reproduce the ranking from outside, and no way to claim a specific scoring behaviour.</p>
+<p>Two consequences follow. Raw conversation messages are stored verbatim alongside extracted memories so that the transcript remains searchable, but the content of a recall candidate is a summary. Verbatim storage is not verbatim retrieval: <code>recall()</code> synthesizes, and <code>list()</code> omits content. If you need exact quotes, store them yourself as an explicit memory and fetch them with <code>get()</code>, rather than relying on the synthesizer to preserve them.</p>
+<p>The benchmarks section is where a fair reading matters most. The launch post names LongMemEval, LoCoMo and BEAM as the industry benchmarks used to compare memory systems, and warns that tuning to a single benchmark produces systems that break in production. It publishes no result for Agent Memory on any of them. The correct statement is therefore that no accuracy figure exists, not that the service performs well or poorly on those benchmarks.</p>
+<h2 id="limits-and-one-documentation-inconsistency">Limits, and one documentation inconsistency</h2>
+<table>
+	<thead>
+			<tr>
+					<th>Feature</th>
+					<th>Documented limit</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Messages per <code>ingest()</code> call</td>
+					<td>500</td>
+			</tr>
+			<tr>
+					<td>Message content size</td>
+					<td>32 KB (32,768 bytes UTF-8)</td>
+			</tr>
+			<tr>
+					<td>Recall query size</td>
+					<td>1 KB (1,024 bytes UTF-8)</td>
+			</tr>
+			<tr>
+					<td>Session ID length</td>
+					<td>64 characters</td>
+			</tr>
+			<tr>
+					<td>Profile name length</td>
+					<td>100 characters</td>
+			</tr>
+			<tr>
+					<td>Namespace name length</td>
+					<td>32 characters</td>
+			</tr>
+			<tr>
+					<td>List page size</td>
+					<td>1 to 1,000, default 20</td>
+			</tr>
+	</tbody>
+</table>
+<p>The table comes from the <a href="https://developers.cloudflare.com/agent-memory/platform/limits/">limits page</a>. One row does not agree with the <a href="https://developers.cloudflare.com/agent-memory/api/workers-api/">Workers API reference</a>, which states a default of 20 and a maximum of 500 for the list limit while the limits page allows up to 1,000. Build to the lower bound until the two pages agree: page at 500 or fewer, and handle a response shorter than the limit as the end of the data rather than assuming your requested size was honoured.</p>
+<p>The practical reading of these numbers is that the 500-message cap and the 32 KB message cap are both reachable by a real compaction event. A long agent session will exceed 500 messages, so the compaction path needs to shard by message count and check byte length per message before calling <code>ingest()</code>. A single oversized tool result will exceed 32 KB, so truncation or summarization of the oversized message belongs in your harness, before ingest, not in the memory layer.</p>
+<h2 id="the-beta-boundary-three-claims-not-to-make">The beta boundary: three claims not to make</h2>
+<p>The service is not billed during private beta, and Cloudflare commits to at least 30 days of notice before making changes or starting to charge (<a href="https://developers.cloudflare.com/agent-memory/platform/pricing/">pricing</a>). No unit price, quota or usage measure is published, so real usage and monetary cost are unknown rather than zero. Any cost model you build now is a guess with an expiry date.</p>
+<p>Three claims circulate in write-ups of this service and none of them survives a check against the primary material. Single-digit-millisecond same-region read latency: no latency figure appears in the documentation or the launch post. A caller-controlled memory type or an embedding toggle at write time: <code>remember()</code> takes content and a session ID, and the service assigns the type. Cross-region replication with defined consistency: no replication model is documented. If a number or a behaviour is not in the reference pages, it is somebody&rsquo;s inference, and the honest way to use it is to say so or leave it out.</p>
+<p>Exportability sits in a different category: Cloudflare states that a customer&rsquo;s memories are exportable and that accumulated knowledge can leave the platform, while the launch post describes R2 snapshots and exports as future work and no export endpoint appears in the reference pages. That is a stated commitment, useful for procurement, and not an API you can call today. Plan your exit path against the endpoints that exist, which are <code>list()</code> plus <code>get()</code>.</p>
+<h2 id="what-to-build-while-access-is-gated">What to build while access is gated</h2>
+<p>The productive move during a private beta is to own the seam. Define the memory operations your agent needs as an interface with the same shape as the documented surface, implement it twice — once against Agent Memory, once against a local store — and let the article-level behaviour (what gets written, when compaction fires, what questions are asked at session start) live above the seam. Then a change in the beta API costs you one adapter, not a rewrite.</p>
+<p>The skeleton below is an implementation guide for the local adapter, not a benchmark: it implements the documented scoping semantics — namespace, profile, session — over SQLite with an FTS5 index, including supersession as a preserved chain rather than a delete. It is short on purpose; the parts that matter are the scoping keys and the supersession pointer.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> sqlite3<span style="color:#f92672">,</span> hashlib<span style="color:#f92672">,</span> json<span style="color:#f92672">,</span> time
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>SCHEMA <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;&#34;&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">CREATE TABLE IF NOT EXISTS memory (
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  id TEXT PRIMARY KEY, namespace TEXT, profile TEXT, session TEXT,
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  type TEXT, content TEXT, topic_key TEXT, created_at REAL,
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  superseded_by TEXT, deleted INTEGER DEFAULT 0
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">);
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">  USING fts5(content, content=&#39;memory&#39;, content_rowid=&#39;rowid&#39;, tokenize=&#39;porter&#39;);
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">&#34;&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">message_id</span>(session, role, content):
+</span></span><span style="display:flex;"><span>    raw <span style="color:#f92672">=</span> <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">{</span>session<span style="color:#e6db74">}</span><span style="color:#ae81ff">\\</span><span style="color:#e6db74">x00</span><span style="color:#e6db74">{</span>role<span style="color:#e6db74">}</span><span style="color:#ae81ff">\\</span><span style="color:#e6db74">x00</span><span style="color:#e6db74">{</span>content<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span><span style="color:#f92672">.</span>encode()
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> hashlib<span style="color:#f92672">.</span>sha256(raw)<span style="color:#f92672">.</span>hexdigest()[:<span style="color:#ae81ff">32</span>]   <span style="color:#75715e"># 128-bit truncation, as documented</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">remember</span>(db, ns, profile, content, session<span style="color:#f92672">=</span><span style="color:#66d9ef">None</span>, topic_key<span style="color:#f92672">=</span><span style="color:#66d9ef">None</span>, mtype<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;fact&#34;</span>):
+</span></span><span style="display:flex;"><span>    row_id <span style="color:#f92672">=</span> hashlib<span style="color:#f92672">.</span>sha256(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">{</span>ns<span style="color:#e6db74">}</span><span style="color:#e6db74">|</span><span style="color:#e6db74">{</span>profile<span style="color:#e6db74">}</span><span style="color:#e6db74">|</span><span style="color:#e6db74">{</span>content<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span><span style="color:#f92672">.</span>encode())<span style="color:#f92672">.</span>hexdigest()[:<span style="color:#ae81ff">32</span>]
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">with</span> db:
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> topic_key:                            <span style="color:#75715e"># supersede, never delete</span>
+</span></span><span style="display:flex;"><span>            db<span style="color:#f92672">.</span>execute(
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;UPDATE memory SET superseded_by=? &#34;</span>
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;WHERE namespace=? AND profile=? AND topic_key=? AND superseded_by IS NULL&#34;</span>,
+</span></span><span style="display:flex;"><span>                (row_id, ns, profile, topic_key))
+</span></span><span style="display:flex;"><span>        db<span style="color:#f92672">.</span>execute(
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;INSERT OR IGNORE INTO memory (id, namespace, profile, session, type, content,&#34;</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34; topic_key, created_at) VALUES (?,?,?,?,?,?,?,?)&#34;</span>,
+</span></span><span style="display:flex;"><span>            (row_id, ns, profile, session, mtype, content, topic_key, time<span style="color:#f92672">.</span>time()))
+</span></span><span style="display:flex;"><span>        db<span style="color:#f92672">.</span>execute(<span style="color:#e6db74">&#34;INSERT INTO memory_fts (rowid, content) &#34;</span>
+</span></span><span style="display:flex;"><span>                   <span style="color:#e6db74">&#34;SELECT rowid, content FROM memory WHERE id=?&#34;</span>, (row_id,))
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> row_id
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">recall</span>(db, ns, profile, query, limit<span style="color:#f92672">=</span><span style="color:#ae81ff">10</span>):
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># lexical channel only; a real adapter adds an embedding channel and fuses ranks</span>
+</span></span><span style="display:flex;"><span>    rows <span style="color:#f92672">=</span> db<span style="color:#f92672">.</span>execute(
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;SELECT m.id, m.content, m.type FROM memory_fts f &#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;JOIN memory m ON m.rowid = f.rowid &#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;WHERE memory_fts MATCH ? AND m.namespace=? AND m.profile=? &#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;AND m.deleted=0 AND m.superseded_by IS NULL LIMIT ?&#34;</span>,
+</span></span><span style="display:flex;"><span>        (query, ns, profile, limit))<span style="color:#f92672">.</span>fetchall()
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> [{<span style="color:#e6db74">&#34;id&#34;</span>: r[<span style="color:#ae81ff">0</span>], <span style="color:#e6db74">&#34;summary&#34;</span>: r[<span style="color:#ae81ff">1</span>][:<span style="color:#ae81ff">200</span>], <span style="color:#e6db74">&#34;type&#34;</span>: r[<span style="color:#ae81ff">2</span>]} <span style="color:#66d9ef">for</span> r <span style="color:#f92672">in</span> rows]
+</span></span></code></pre></div><p>The scoping predicates in <code>recall()</code> are the whole point of the exercise: <code>namespace</code> and <code>profile</code> are mandatory filters in every statement, so an accidental cross-tenant read is a query you had to write deliberately. <code>superseded_by IS NULL</code> is what makes the current fact win while the chain stays on disk. What the skeleton does not do is the part you are buying from the vendor: extraction, the verifier, the vector channels, HyDE and the synthesis step — which is exactly the work that a managed substrate removes, and the reason the build-versus-buy decision here is a decision about pipeline ownership rather than about SQLite.</p>
+<h2 id="a-community-implementation-with-a-thin-track-record">A community implementation with a thin track record</h2>
+<p>One MIT-licensed project implements the same idea directly on Cloudflare primitives: <a href="https://github.com/thisuxhq/agent-memory">thisuxhq/agent-memory</a> puts one SQLite Durable Object per profile behind Hono, uses FTS5 as the source of truth, Workers AI <code>bge-m3</code> with Vectorize for semantic recall including HyDE, and an OpenRouter model for extraction, classification, query analysis and synthesis. Its routes mirror the managed service — <code>remember</code> synchronous, a queue for idle-batch extraction, <code>ingest</code> to write and extract immediately, <code>recall</code> for hybrid search plus a synthesized answer, plus <code>summary</code> and <code>memories</code> — and its ingest and queue routes are idempotent on session, role and content.</p>
+<p>The repository&rsquo;s own README carries a section headed &ldquo;Cost (1k users, 20 chats)&rdquo; whose entire text is &ldquo;Luna ~$40. Cloudflare floor $5. DOs $0. Embeddings + Vectorize ~cents.&rdquo; Neither figure carries a time unit, a method or a date, so read the $40 as the author&rsquo;s rough estimate rather than a monthly bill, and not as a measurement of this project or of the managed service. The repository metadata is the more useful signal — created 2026-08-16, last push the same day, a handful of stars at the time of checking. It is a readable reference implementation of the pattern, not a maintained dependency.</p>
+<h2 id="when-the-managed-substrate-fits">When the managed substrate fits</h2>
+<p>Use Agent Memory when you are on Workers and want memory pinned to the runtime; when your isolation unit is a user, tenant or agent and you would otherwise hand-roll tenant filters into every query; when deletion at profile, session and memory granularity needs to be a platform primitive because someone will eventually ask you to prove it; and when the history of a changed fact matters more than the storage cost of keeping it.</p>
+<p>Do not use it as a general-purpose database, as a vector index you control and tune, or as a verbatim transcript retrieval system — recall synthesizes, list omits content, and summary compresses. And do not adopt it as a hard dependency while it is in private beta without an adapter boundary and an exit path through <code>list()</code> and <code>get()</code>.</p>
+<p>The architecture decision underneath all of this is unchanged from before the service existed: agent memory is a substrate choice, not a feature. What Cloudflare has added to the option set is a version where the extraction pipeline, the scoping model and the compaction integration are configured in Wrangler rather than written in your repository — and where the price of that convenience is a beta boundary you should be able to describe precisely to your team before you ship on it.</p>
+<h2 id="related-reading">Related reading</h2>
+<ul>
+<li><a href="https://baeseokjae.github.io/posts/agent-memory-architecture-guide-2026/">AI Agent Memory Architecture Guide 2026</a> — the architecture-level view this page assumes.</li>
+<li><a href="https://baeseokjae.github.io/posts/best-ai-agent-memory-frameworks-2026/">Best AI Agent Memory Frameworks in 2026</a> — the framework comparison this page deliberately does not repeat.</li>
+<li><a href="https://baeseokjae.github.io/posts/agent-memory-comparison-2026/">Agent Memory Layer Comparison 2026</a> — product-level comparison of Mem0, Zep, Déjà Vu and Agent Memory MCP.</li>
+<li><a href="https://baeseokjae.github.io/posts/agent-memory-write-path-reliability-2026/">Agent Memory Write-Path Reliability</a> — how to test whether a write path records, updates, contradicts and deletes correctly.</li>
+</ul>
+<h2 id="how-this-page-was-checked">How this page was checked</h2>
+<p>Every API statement here was compared against saved copies of the public Agent Memory documentation and the launch post, fetched on 2026-10-28, by asserting each quoted sentence as an exact substring of the saved text. The saved pages are not all the same age. The index, <code>concepts/namespaces-profiles</code>, <code>concepts/how-agent-memory-works</code> and <code>platform/pricing</code> pages carry &ldquo;Last updated Jun 2, 2026&rdquo;; <code>api/workers-api</code> and <code>platform/limits</code> carry Jun 3, 2026; and <code>get-started</code>, which is the source for the compaction lifecycle and the experimental import, carries &ldquo;Last updated Oct 21, 2026&rdquo;, a week before this check. The launch post carries datePublished 2026-04-17 and dateModified 2026-07-15. The June reference pages are therefore several months old and undocumented changes in them cannot be ruled out, while the get-started page that carries the lifecycle material is current to within a week. That comparison was a private, local author verification: the saved copies are third-party page captures and are not redistributed with this article, which is why every claim above links to the live page instead. No managed-service test was run — no latency, cost, accuracy or isolation measurement — because private-beta access was not available, and no such figure appears in the text.</p>
+]]></content:encoded></item></channel></rss>
