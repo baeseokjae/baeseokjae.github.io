@@ -1,11 +1,11 @@
 ---
 cover:
-  alt: 'Vercel AI SDK Guide 2026: Build Streaming AI Apps in TypeScript With One SDK'
+  alt: 'Vercel AI SDK Guide 2026: which major your snippet targets'
   image: /images/vercel-ai-sdk-guide-2026.png
   relative: false
 date: 2026-04-22 05:37:21+00:00
-description: Complete guide to Vercel AI SDK in 2026 — streaming, tool calling, structured
-  output, agents, and production deployment with code examples.
+lastmod: 2026-10-26 16:25:00+00:00
+description: Version-pinned Vercel AI SDK guide for 2026 — a local TypeScript compile matrix for ai@5, ai@6 and ai@7, plus the import, useChat and step-control changes that break the April snippets.
 draft: false
 schema: schema-vercel-ai-sdk-guide-2026
 tags:
@@ -16,340 +16,163 @@ tags:
 - streaming
 - tool calling
 - agents
-title: 'Vercel AI SDK Guide 2026: Build Streaming AI Apps in TypeScript With One SDK'
+title: 'Vercel AI SDK Guide 2026: Verified Against ai@7 — Which Major Your Snippet Targets'
 ---
 
-The Vercel AI SDK is a unified TypeScript library that lets you build streaming AI applications across OpenAI, Anthropic, Google, and 13+ other providers without rewriting your core logic when you switch models. Install it once, pick your provider, and ship production-ready AI features in hours instead of days.
+This guide is a compatibility page, not another first-run tutorial. The npm package `ai` now ships three maintained lines — `latest` 7.0.153, `ai-v6` 6.0.315 and `ai-v5` 5.0.281, read from the registry's [dist-tags document](https://registry.npmjs.org/-/package/ai/dist-tags) on 2026-10-26 — and the code surface changed between each of them. The original April 2026 version of this page printed snippets from the 4.x era without naming a major, so a reader who follows the install line today gets major 7 and code that no longer type-checks.
 
-## What Is the Vercel AI SDK and Why It Matters in 2026
+Everything below was re-checked against the packages themselves. Where this page says a snippet fails, a local `tsc --noEmit` run failed; where it says a snippet type-checks, that same run exited 0. The run's exact scripts, pinned versions and raw error logs are published in the evidence directory linked with the compile matrix below.
 
-The Vercel AI SDK is an open-source TypeScript toolkit for building AI-powered web applications with a provider-agnostic API, first-class streaming support, and framework-native UI hooks. As of April 2026, it has 11.5 million weekly npm downloads, 23.7K GitHub stars, and 614+ contributors — making it the most widely adopted TypeScript AI library for web developers. The SDK is organized into three layers: AI SDK Core handles server-side text generation, object generation, and tool calling; AI SDK UI provides React/Vue/Svelte hooks like `useChat` and `useCompletion` for building chat interfaces without managing stream state; and AI SDK RSC integrates with React Server Components for edge-compatible generative UI. The SDK supports 100+ LLM models across 16+ providers via the Vercel AI Gateway, including OpenAI GPT-4o, Anthropic Claude, Google Gemini, and open models on Together/Groq. In 2026 Vercel added three major features on top: Workflows (long-running durable agents), Sandbox (secure agent code execution), and AI Elements (prebuilt UI components). OpenCode — one of the most popular open-source coding agents — is built entirely on AI SDK, which validates its production-grade viability.
+## Which major is my snippet? The 30-second check
 
-### The Three-Layer Architecture
+A snippet's major is decided by three markers, and you only need the first one to know which migration you are facing. Run `npm ls ai` in the project, or read the import path in the file.
 
-The SDK cleanly separates concerns: Core runs on the server or edge, UI runs on the client, and RSC bridges the two with streaming server components. This separation means you can adopt incrementally — start with Core for a simple API route, add UI hooks when you need chat state management, and layer in RSC if you need server-driven generative UI.
+| Marker | 3.x / 4.x (legacy) | 5.x | 6.x | 7.x |
+|---|---|---|---|---|
+| `useChat` import | `ai/react` | `@ai-sdk/react` | `@ai-sdk/react` | `@ai-sdk/react` |
+| Step control | `maxSteps: n` | `stopWhen: stepCountIs(n)` | `stopWhen: stepCountIs(n)` | `stopWhen: isStepCount(n)` |
+| System prompt | `system` | `system` | `system` | `instructions` (alias `system` still typed) |
+| Module format | CJS or ESM | dual: CJS `main` + ESM `module` | dual: CJS `main` + ESM `module` | ESM only (`"type": "module"`, no `require` export) |
+| Node.js floor | 18+ | 18+ | 18+ | 22+ |
 
-### How It Fits the Vercel Ecosystem
+Two columns deserve a warning. The 7.x column is not a blanket rename: `stepCountIs` and `system` both still type-check on 7.0.153, so a mixed codebase compiles while the migration guide tells you the new names. And the Node.js floor is an install-time fact, not a style preference — AI SDK 7.0 states that it requires Node.js 22 or later, tests on 22, 24 and 26, and no longer supports 18 or 20 ([7.0 migration guide](https://ai-sdk.dev/docs/migration-guides/migration-guide-7-0)).
 
-AI Gateway gives you one API key to access 100+ models with automatic fallbacks and rate limit management. Sandbox provides a secure Node.js environment for agents that need to execute code. Workflows lets agents suspend and resume across function invocations, solving the serverless timeout problem for long-running tasks.
+## The compile matrix: what actually type-checks
 
-## Getting Started: Installing and Configuring AI SDK
+Four small programs, three pinned majors, one command per file. The v5 and v6 columns used `stepCountIs`; the v7 column used `isStepCount`. Exit code 0 means `tsc --noEmit` accepted the file.
 
-Getting started with the Vercel AI SDK requires installing the `ai` core package plus one or more provider adapters. The setup takes under five minutes for a Next.js project and works equally well in any Node.js or edge runtime environment. The provider adapter pattern is the key architectural decision: you import a model from its provider package and pass it to AI SDK functions, meaning you can swap from OpenAI to Anthropic by changing a single import and model string — your business logic stays untouched. This design was explicitly chosen to prevent vendor lock-in, and in practice it means you can A/B test models in production, build fallback chains, or migrate providers without refactoring your entire codebase. The package size is small — `ai` is under 200KB minified — and it is designed to run on Vercel Edge Functions, Cloudflare Workers, and standard Node.js without adaptation. For new projects, the recommended starting point is a Next.js App Router app with the `edge` runtime on API routes, which gives you global distribution and sub-100ms cold starts.
+| Program | ai@5.0.281 | ai@6.0.315 | ai@7.0.153 |
+|---|---|---|---|
+| `streamText` + `result.textStream` | 0 | 0 | 0 |
+| one tool + step-count stop condition | 0 | 0 | 0 |
+| `useChat` from `@ai-sdk/react` | 0 | 0 | 0 |
+| the April 2026 page's surface | 2 | 2 | 2 |
+
+The last row is the finding. The old snippets do not partially work — they fail identically on all three maintained lines with exactly two errors, so the page you are reading could not have been salvaged by pinning to 5 or 6.
+
+```text
+legacy.tsx(2,25): error TS2307: Cannot find module 'ai/react' or its corresponding type declarations.
+legacy.tsx(25,5): error TS2353: Object literal may only specify known properties,
+  and 'maxSteps' does not exist in type 'CallSettings & { system?: string | undefined; ... }'
+```
+
+That second message is from the ai@5.0.281 run; on 7.0.153 the type name is `LanguageModelCallOptions` instead of `CallSettings`. The claim being checked is the same: `maxSteps` is gone, and the React hook is not reachable through `ai/react`.
+
+Method, versions and every raw `tsc` log: [matrix.json](https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/vercel-ai-sdk-guide-2026/results/matrix.json) and the [run README](https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/vercel-ai-sdk-guide-2026/README.md). Node.js v24.21.0, TypeScript 5.9.3, strict mode, `skipLibCheck`, no bundler. No provider call was made — these are compile results, not model responses. The [rerun script](https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/vercel-ai-sdk-guide-2026/run_matrix.sh) is self-contained: it creates its own projects under `$TMPDIR`, installs the pinned dependency sets and repeats all twelve checks in about 70 seconds, while the versions npm actually resolved — not just the ranges requested — are recorded in `results/npm-ls-v5.json`, `results/npm-ls-v6.json` and `results/npm-ls-v7.json`.
+
+## Install that pins your major
+
+`npm install ai` is the line that silently moves you between majors, because `latest` currently means 7.0.153. Pin the exact version and the provider adapter that matches it; the adapters moved in lockstep with the core package.
 
 ```bash
-npm install ai @ai-sdk/openai @ai-sdk/anthropic @ai-sdk/google
+# major 7 — needs Node.js 22+
+npm install ai@7.0.153 @ai-sdk/openai@4.0.102 @ai-sdk/react@4.0.157
+
+# major 6 — ai 6.x pairs with @ai-sdk/* 3.x
+npm install ai@6.0.315 @ai-sdk/openai@3.0.131 @ai-sdk/react@3.0.318
+
+# major 5 — ai 5.x pairs with @ai-sdk/* 2.x
+npm install ai@5.0.281 @ai-sdk/openai@2.0.136 @ai-sdk/react@2.0.284
 ```
 
-```typescript
-// .env.local
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
-GOOGLE_GENERATIVE_AI_API_KEY=...
-```
+The major-6 pairing is documented rather than guessed: the 6.0 migration guide lists `ai` at `^6.0.0`, `@ai-sdk/provider` at `^3.0.0`, `@ai-sdk/provider-utils` at `^4.0.0` and `@ai-sdk/*` at `^3.0.0` ([6.0 migration guide](https://ai-sdk.dev/docs/migration-guides/migration-guide-6-0)). The `@ai-sdk/react` versions above are the registry's matching dist-tags for those lines.
+
+One more install-time constraint, and it is narrower than "the AI SDK is ESM now": on major 7, `ai@7.0.153` alone is ESM-only. Its package metadata declares `"type": "module"` and its `exports` map offers only `import`/`default` conditions, so a CommonJS app needs `"type": "module"` or `.mjs` files before the first import works, and the 7.0 migration guide confirms `require()` is no longer supported ([7.0 migration guide](https://ai-sdk.dev/docs/migration-guides/migration-guide-7-0), [registry metadata for ai@7.0.153](https://registry.npmjs.org/ai/7.0.153)). The same metadata, read on 2026-10-26, shows 5.x and 6.x were never ESM-only: `ai@5.0.281` and `ai@6.0.315` both declare `"main": "./dist/index.js"` alongside `"module": "./dist/index.mjs"` and an `exports` map with separate `import` and `require` conditions, so `require('ai')` resolves to the CommonJS build on those lines ([registry metadata for ai@6.0.315](https://registry.npmjs.org/ai/6.0.315)). If a CommonJS service is stuck on 6.x, that dual build is why nothing breaks until the upgrade crosses into 7.
+
+## Streaming a response on each major
+
+The streaming call itself is the most stable surface in the matrix — `streamText` with a model and a prompt type-checks on 5, 6 and 7 — but the option names around it are not. This is the v7 form:
 
 ```typescript
-// app/api/chat/route.ts
-import { streamText } from 'ai'
-import { openai } from '@ai-sdk/openai'
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
 
-export const runtime = 'edge'
-
-export async function POST(req: Request) {
-  const { messages } = await req.json()
-  
-  const result = streamText({
-    model: openai('gpt-4o'),
-    messages,
-  })
-  
-  return result.toDataStreamResponse()
-}
-```
-
-### AI Gateway: One Key for 100+ Models
-
-Vercel AI Gateway lets you use a single `VERCEL_API_KEY` to access models from OpenAI, Anthropic, Google, Mistral, and more. It handles rate limit rotation, cost tracking, and automatic retry logic. For teams that need to experiment with multiple providers without managing individual API key billing, Gateway is the fastest path to a multi-model setup.
-
-## AI SDK Core: Text Generation and Streaming
-
-AI SDK Core is the server-side engine that converts provider-specific APIs into a consistent interface for generating text, streaming responses, and calling tools. The two primary functions are `generateText` and `streamText`. `generateText` is for synchronous operations — you send a prompt and wait for the full response, which is ideal for batch jobs, summarization pipelines, and any context where the user is not watching a UI render in real time. `streamText` is the streaming counterpart: it returns a `ReadableStream` that you can pipe directly to a `Response` object, and it integrates with UI hooks via the `toDataStreamResponse()` method. Both functions accept the same options object — `model`, `messages`, `system`, `tools`, `maxSteps`, `temperature`, and more — so switching between them is a one-word change. Provider switching is similarly simple: swapping `openai('gpt-4o')` for `anthropic('claude-opus-4-7')` is the only change needed. Retry logic and fallbacks are handled with the `wrapLanguageModel` utility and the `fallback` provider, which tries a list of models in order if the primary returns an error. The consistency across providers is the single biggest productivity gain AI SDK offers compared to using provider SDKs directly.
-
-```typescript
-import { generateText, streamText } from 'ai'
-import { anthropic } from '@ai-sdk/anthropic'
-
-// One-shot generation
-const { text } = await generateText({
-  model: anthropic('claude-sonnet-4-6'),
-  prompt: 'Summarize the key features of React 19 in 3 bullet points.',
-})
-
-// Streaming
 const result = streamText({
-  model: anthropic('claude-sonnet-4-6'),
-  prompt: 'Write a guide on async/await in TypeScript.',
-})
+  model: openai('gpt-4o-mini'),
+  instructions: 'Answer in one sentence.',   // 7.x name; 'system' still compiles
+  prompt: 'Why is the sky blue?',
+  onEnd: ({ text }) => {                     // 7.x name for onFinish
+    console.log('done', text.length);
+  },
+});
 
-for await (const chunk of result.textStream) {
-  process.stdout.write(chunk)
+for await (const delta of result.textStream) {
+  process.stdout.write(delta);
 }
 ```
 
-### Built-In Fallbacks and Retry Logic
+On 5.x and 6.x the same file compiles after swapping `instructions` back to `system` and `onEnd` back to `onFinish`. The rename set is listed in the 7.0 migration guide's codemod table, which pairs each old name with its replacement: `rename-system-to-instructions`, `rename-on-finish-to-on-end`, `rename-on-step-finish-to-on-step-end`, `rename-experimental-on-start-to-on-start` ([7.0 migration guide](https://ai-sdk.dev/docs/migration-guides/migration-guide-7-0)). The codemod table proves a rename exists; it does not prove the old name throws, and on 7.0.153 it does not: the probe `streamText({ system: 'terse' })` exits 0.
+
+## Tool loops: `maxSteps` → `stopWhen` → `isStepCount`
+
+Multi-step tool calling is where the April snippets fail hardest, because `maxSteps` was removed in 5.0 and never came back. From AI SDK 5.0, the core functions take `stopWhen`, a condition evaluated after a step that produced tool results, and an array of conditions stops on any match ([5.0 migration guide](https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0)).
 
 ```typescript
-import { createFallback } from '@ai-sdk/provider-utils'
-import { openai } from '@ai-sdk/openai'
-import { anthropic } from '@ai-sdk/anthropic'
+// 5.x and 6.x
+import { generateText, stepCountIs, tool } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
 
-const resilientModel = createFallback([
-  openai('gpt-4o'),
-  anthropic('claude-sonnet-4-6'),
-])
+const result = await generateText({
+  model: openai('gpt-4o-mini'),
+  prompt: 'What is the temperature in Seoul?',
+  tools: {
+    weather: tool({
+      description: 'Return the current temperature for a city',
+      inputSchema: z.object({ city: z.string() }),
+      execute: async ({ city }) => ({ city, tempC: 21 }),
+    }),
+  },
+  stopWhen: stepCountIs(3),
+});
 ```
 
-## Structured Output with Zod Schemas
-
-`generateObject` and `streamObject` are AI SDK's solution to one of the biggest pain points in production AI: getting reliable, type-safe structured data from LLMs instead of freeform text that you then parse with fragile regexes. These functions accept a Zod schema and use the model's native structured output mode — JSON mode for OpenAI, tool-use-based extraction for Anthropic — to guarantee the response matches the schema shape. If the model returns malformed output, AI SDK retries automatically. This is not just a developer convenience: structured output is essential for any AI pipeline where the response feeds into downstream logic, databases, or APIs. Teams using `generateObject` in production report near-zero JSON parsing errors compared to prompt-based extraction, and the Zod types flow through the entire TypeScript type system so you get autocomplete on the AI response object. The `streamObject` variant lets you stream partial structured objects, enabling progressive UI rendering as the AI fills in fields — useful for forms, dashboards, or any interface where showing partial data is better than a blank loading state. For data extraction tasks — pulling product specs from HTML, extracting entities from documents, or parsing unstructured API responses — structured output with Zod is the recommended production approach.
-
 ```typescript
-import { generateObject, streamObject } from 'ai'
-import { openai } from '@ai-sdk/openai'
-import { z } from 'zod'
-
-const BlogPostSchema = z.object({
-  title: z.string(),
-  summary: z.string().max(200),
-  tags: z.array(z.string()).max(5),
-  seoScore: z.number().min(0).max(100),
-  sections: z.array(z.object({
-    heading: z.string(),
-    keyPoints: z.array(z.string()),
-  })),
-})
-
-const { object } = await generateObject({
-  model: openai('gpt-4o'),
-  schema: BlogPostSchema,
-  prompt: 'Analyze this article and return structured metadata: ...',
-})
-
-console.log(object.title) // TypeScript knows the full type
+// 7.x — same file, one import name and one option value change
+import { generateText, isStepCount, tool } from 'ai';
+// ...
+  stopWhen: isStepCount(3),
 ```
 
-### Streaming Structured Objects
+That pair is verified in both directions rather than copied from a table: `stepCountIs` compiles on 6.0.315 and on 7.0.153, while `isStepCount` compiles on 7.0.153 and fails on 6.0.315 with `TS2724: '"ai"' has no exported member named 'isStepCount'. Did you mean 'stepCountIs'?`. So if you are writing new code for a codebase you cannot upgrade yet, `stepCountIs` is the portable spelling and `isStepCount` is the 7-only one.
 
-```typescript
-const { partialObjectStream } = streamObject({
-  model: openai('gpt-4o'),
-  schema: BlogPostSchema,
-  prompt: 'Generate a blog post outline for: "AI agents in 2026"',
-})
+## Chat UI: the hook moved packages, then changed shape
 
-for await (const partial of partialObjectStream) {
-  // partial.title appears as soon as the model generates it
-  updateUI(partial)
-}
-```
+The `useChat` hook moved out of `ai/react` and, in the same 5.0 release, stopped managing input state for you: it is transport-based, with a default `DefaultChatTransport` pointed at `/api/chat`, and you send messages explicitly instead of wiring `input` and `handleSubmit` ([useChat reference](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat)).
 
-## Building Chat UIs with AI SDK UI Hooks
-
-AI SDK UI is the client-side complement to Core, providing React hooks that manage chat state, streaming responses, and optimistic updates without requiring a single `useState` or `useEffect` for stream handling. The primary hook is `useChat`, which gives you `messages`, `input`, `handleInputChange`, `handleSubmit`, and `isLoading` — everything needed to build a ChatGPT-like interface in under 50 lines of React. Under the hood it connects to your AI route, handles stream parsing, and appends message chunks to state as they arrive. The `useCompletion` hook handles text completion use cases — autocomplete, writing suggestions, or any single-prompt UX. `useObject` streams structured objects from a `streamObject` route and exposes the partial object as it builds, enabling progressive form filling or AI-driven dashboard updates. All three hooks work with React, Vue, Svelte, and SolidJS — the framework-agnostic design means you can share backend patterns between projects built on different frontend stacks. The hooks integrate with React Suspense and Error Boundaries for graceful loading and error states without extra wiring.
-
-```typescript
-// app/components/Chat.tsx
-'use client'
-import { useChat } from 'ai/react'
+```tsx
+'use client';
+import { useChat } from '@ai-sdk/react';
 
 export function Chat() {
-  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
-    api: '/api/chat',
-  })
+  const { messages, sendMessage, status } = useChat();
 
   return (
     <div>
-      {messages.map(m => (
-        <div key={m.id} className={m.role === 'user' ? 'user' : 'assistant'}>
-          {m.content}
-        </div>
-      ))}
-      <form onSubmit={handleSubmit}>
-        <input value={input} onChange={handleInputChange} disabled={isLoading} />
-        <button type="submit" disabled={isLoading}>Send</button>
-      </form>
+      {messages.map((m) => <p key={m.id}>{m.id}</p>)}
+      <span>{status}</span>
+      <button onClick={() => sendMessage({ text: 'Hello' })}>Send</button>
     </div>
-  )
+  );
 }
 ```
 
-### Framework Support Comparison
+This exact file type-checks against all three majors in the matrix — `@ai-sdk/react` 2.0.284, 3.0.318 and 4.0.157 — which makes it the safest starting point when you do not yet know which major a project is on. The import paths per framework are documented alongside it: `@ai-sdk/react`, `@ai-sdk/svelte`, `@ai-sdk/vue` and `@ai-sdk/angular`, with `Chat` rather than `useChat` on Svelte and Angular.
 
-| Hook | React | Vue | Svelte | SolidJS |
-|------|-------|-----|--------|---------|
-| `useChat` | ✅ | ✅ | ✅ | ✅ |
-| `useCompletion` | ✅ | ✅ | ✅ | ✅ |
-| `useObject` | ✅ | ✅ | ✅ | ✅ |
-| `useAssistant` | ✅ | ❌ | ❌ | ❌ |
+## Migrating one major at a time
 
-## Tool Calling: Giving Your AI Agent Superpowers
+Do not jump 4.x to 7.x in one edit. The vendor ships codemods per major, and the 6.0 guide is explicit about the scope of each: `npx @ai-sdk/codemod v6` runs the v5 → v6 set, while `npx @ai-sdk/codemod upgrade` runs every codemod from v4, v5 and v6 — the difference matters because the broad command will rewrite code you have not reviewed yet ([6.0 migration guide](https://ai-sdk.dev/docs/migration-guides/migration-guide-6-0)). One major per commit, with `npm ls ai` and the two failing markers above as the check after each step.
 
-Tool calling in AI SDK is the mechanism that transforms a passive text generator into an active agent — the model describes which tools it wants to invoke, AI SDK executes them server-side, and the results feed back into the next model turn automatically. Tools are defined with the `tool` helper, which takes a `description` (natural language explanation for the model), `parameters` (a Zod schema for typed inputs), and an `execute` function (the actual implementation). The SDK handles the full tool-call cycle: formatting the tool description for the provider, parsing the model's structured tool-call output, executing the function with validated arguments, and appending the result to the conversation context. `maxSteps` controls how many tool-call cycles the agent can run before stopping, preventing infinite loops while allowing multi-step reasoning chains of 5–10 steps. Tool results stream to the client via `toDataStreamResponse()`, so users see intermediate tool outputs in real time rather than waiting for the final answer. In production applications, tool sets commonly include database query tools, web search, calculator functions, external API calls, and file operations — anything your server-side code can do, the agent can orchestrate. The Zod parameter schemas provide input validation at zero extra cost, catching malformed tool calls before they reach your database or external services.
+The 6.0 guide also records a behavioural change that no compiler will catch for you: `convertToModelMessages` became async in 6.0 (the codemod is `add-await-converttomodelmessages`), so a v5 call site needs `await` even where the type inference happens to stay quiet.
 
-```typescript
-import { streamText, tool } from 'ai'
-import { openai } from '@ai-sdk/openai'
-import { z } from 'zod'
+## Dated adoption numbers, not undated ones
 
-const result = streamText({
-  model: openai('gpt-4o'),
-  maxSteps: 5,
-  tools: {
-    getWeather: tool({
-      description: 'Get current weather for a city',
-      parameters: z.object({ city: z.string() }),
-      execute: async ({ city }) => {
-        const res = await fetch(`https://api.weather.com/${city}`)
-        return res.json()
-      },
-    }),
-    searchDatabase: tool({
-      description: 'Search the product database',
-      parameters: z.object({ query: z.string(), limit: z.number().default(5) }),
-      execute: async ({ query, limit }) => {
-        return db.products.search(query, { limit })
-      },
-    }),
-  },
-  messages: [{ role: 'user', content: 'What is the weather in Tokyo and do we sell umbrellas?' }],
-})
+The previous version of this page cited 11.5 million weekly npm downloads and 23.7K GitHub stars "as of April 2026". The star figure has a verifiable replacement: the [GitHub REST API for vercel/ai](https://api.github.com/repos/vercel/ai) returned 27,523 stars on 2026-10-26. The weekly-download figure is not repeated here because it was not re-read from the npm downloads API in this refresh, and a number a reader cannot check is worse than no number. Stars are a point-in-time counter, not an adoption claim.
 
-return result.toDataStreamResponse()
-```
+For the same reason there is no benchmark section: nothing in this refresh measured latency, token throughput or cost per request, so nothing here should be read as a performance comparison.
 
-### Multi-Step Agent Loop
+## What to read next
 
-With `maxSteps: 5`, the model can: call `getWeather` → get Tokyo weather → call `searchDatabase` for umbrellas → combine results → return final answer. Each step is visible to the user via streaming tool call indicators rendered automatically by `useChat`.
+This page owns one question — which major a snippet targets and what changed between majors. For choosing between SDKs rather than versions, the site's existing comparisons cover that ground: [AI Agents SDK Comparison 2026](https://baeseokjae.github.io/posts/ai-agents-sdk-comparison-2026/), the [OpenAI Agents SDK v2 guide](https://baeseokjae.github.io/posts/openai-agents-sdk-v2-guide-2026/) and [Mastra AI Guide 2026](https://baeseokjae.github.io/posts/mastra-ai-guide-2026/). If you only need function-calling mechanics without the version history, the [LLM function calling guide](https://baeseokjae.github.io/posts/llm-function-calling-tool-use-guide-2026/) is the shorter path.
 
-## Building AI Agents with Multi-Step Reasoning
-
-An AI agent in the Vercel AI SDK context is a `streamText` or `generateText` call with tools enabled and `maxSteps` set above 1 — the model reasons, calls tools, observes results, and reasons again until it reaches a conclusion or exhausts its step budget. This loop pattern is what separates agents from chatbots: rather than answering from static training knowledge, the agent actively queries databases, fetches URLs, or calls APIs to gather real-time information before formulating a response. The key to a production-grade agent is memory and context management: you control what goes in `messages`, so you can implement sliding window context, summarization, or retrieval-augmented generation by fetching relevant documents before calling the model. For RAG integration, the standard pattern is to embed the user query, retrieve top-k chunks from a vector store (Pinecone, Supabase pgvector, or Upstash), and prepend them as a system message. The agent then has access to both retrieved context and its tool-calling ability, so it can fetch additional information if the retrieved chunks are insufficient. OpenCode's architecture demonstrates this at scale: it uses AI SDK with file system tools, runs multi-step reasoning loops to understand a codebase, and streams results back to a terminal UI — all without custom streaming infrastructure because AI SDK handles it.
-
-```typescript
-// Research agent with RAG
-async function researchAgent(query: string) {
-  const relevantDocs = await vectorStore.search(query, { topK: 5 })
-  
-  const result = streamText({
-    model: openai('gpt-4o'),
-    maxSteps: 8,
-    system: `You are a research agent. Use context and tools to answer thoroughly.
-    
-Context from knowledge base:
-${relevantDocs.map(d => d.content).join('\n\n')}`,
-    messages: [{ role: 'user', content: query }],
-    tools: {
-      searchWeb: tool({ /* web search implementation */ }),
-      fetchUrl: tool({ /* URL fetching implementation */ }),
-      saveNote: tool({ /* note saving implementation */ }),
-    },
-  })
-  
-  return result.toDataStreamResponse()
-}
-```
-
-## Vercel Workflows: Long-Running Agents That Survive
-
-Vercel Workflows is a 2026 addition to the AI SDK ecosystem that solves the most critical limitation of serverless AI agents: function timeout. Standard serverless functions on Vercel time out after 30 seconds (Pro plan) or 5 minutes (Enterprise), which is insufficient for agents that need to search the web, process large documents, run multi-stage pipelines, or wait for human approval. Workflows introduces durable execution — agent tasks are broken into named steps that can suspend (persist state to managed storage), wait for external events, and resume exactly where they left off across multiple function invocations without losing context. This makes genuinely complex agentic pipelines feasible on serverless infrastructure: a content generation pipeline can run for 20+ minutes as it researches, drafts, and revises content, with the agent suspending between phases. The `@vercel/workflows` package integrates directly with AI SDK's `generateText` and `streamText` — you wrap agent logic in a `workflow` function and use `step.run()` to define resumable checkpoints. Human-in-the-loop approval is supported via `step.waitForEvent()`, which suspends the workflow until a webhook fires. In 2026, Workflows is the recommended architecture for any AI task that may exceed 30 seconds or requires coordination between multiple agents.
-
-```typescript
-import { workflow, step } from '@vercel/workflows'
-import { generateText } from 'ai'
-import { anthropic } from '@ai-sdk/anthropic'
-
-export const contentPipeline = workflow(async ({ input }: { input: { topic: string } }) => {
-  // Each step is resumable — survives function timeout
-  const research = await step.run('research', async () => {
-    const { text } = await generateText({
-      model: anthropic('claude-opus-4-7'),
-      prompt: `Research: ${input.topic}. Return key facts and sources.`,
-    })
-    return text
-  })
-
-  const draft = await step.run('draft', async () => {
-    const { text } = await generateText({
-      model: anthropic('claude-sonnet-4-6'),
-      prompt: `Using this research: ${research}\n\nWrite a 1000-word article about ${input.topic}.`,
-    })
-    return text
-  })
-
-  return { research, draft }
-})
-```
-
-## Production Deployment and Scaling
-
-Deploying a Vercel AI SDK application to production requires careful attention to runtime selection, cost management, and observability. For runtime selection, Edge Functions are the right choice for streaming chat routes because they have lower cold-start latency and are globally distributed across 30+ regions — users in Tokyo get a fast response without routing to a US datacenter. Node.js runtime is better for heavy tool execution, large file processing, or anything requiring Node-specific APIs. Cost management starts with the `maxTokens` parameter to cap spending per request, and AI Gateway adds team-level spend limits and per-model cost tracking with dashboards. For rate limiting on API routes, `@vercel/kv` with a sliding window counter is the standard pattern: each user or IP gets N requests per minute, excess requests return 429 with a `retry-after` header. Observability is critical for catching silent model failures: the `onFinish` callback in `streamText` and `generateText` lets you log token usage, model name, latency, and finish reason to your analytics pipeline, enabling cost attribution per feature and alerting on abnormal token consumption. Vercel's built-in function logs surface AI SDK error events automatically for debugging.
-
-```typescript
-export async function POST(req: Request) {
-  const { messages } = await req.json()
-  
-  // Rate limiting check
-  const ip = req.headers.get('x-forwarded-for') ?? 'anonymous'
-  const { success } = await ratelimit.limit(ip)
-  if (!success) return new Response('Rate limit exceeded', { status: 429 })
-
-  const result = streamText({
-    model: openai('gpt-4o'),
-    messages,
-    maxTokens: 2000,
-    temperature: 0.7,
-    onFinish: ({ usage, finishReason }) => {
-      analytics.track('ai_completion', {
-        tokens: usage.totalTokens,
-        finishReason,
-        model: 'gpt-4o',
-      })
-    },
-  })
-  
-  return result.toDataStreamResponse()
-}
-```
-
-## AI SDK vs LangChain vs Mastra: Framework Comparison
-
-Choosing between Vercel AI SDK, LangChain.js, and Mastra in 2026 depends primarily on your stack, agent complexity, and how important streaming and bundle size are to your application. Vercel AI SDK is the right choice for TypeScript web developers building streaming-first applications — it is the lightest of the three (under 200KB), has the best Next.js and Edge Function integration, and provides the most seamless streaming API with minimal boilerplate. LangChain.js has the broadest ecosystem: pre-built chains, 50+ vector store integrations, document loaders, memory modules, and a large community cookbook — making it better for teams needing to quickly assemble complex RAG pipelines from components rather than writing integration code themselves. Mastra, which emerged in late 2025, sits between the two: TypeScript-native like AI SDK but with an opinionated agent framework including built-in memory, durable workflow primitives, and multi-agent coordination, targeting developers who need more structure than AI SDK provides without LangChain's abstraction overhead. The bundle size difference is meaningful for edge and browser deployments where LangChain.js's 2MB+ footprint can impact cold start times. For most Next.js applications in 2026, AI SDK is the practical default and LangChain or Mastra are reached for only when specific missing features justify the additional complexity.
-
-| Feature | Vercel AI SDK | LangChain.js | Mastra |
-|---------|--------------|-------------|--------|
-| Bundle size | ~200KB | ~2MB+ | ~500KB |
-| Streaming | First-class | Good | Good |
-| Tool calling | Native | Via chains | Native |
-| Structured output | Zod-native | Manual | Zod-native |
-| Long-running agents | Via Workflows | Partial | Built-in |
-| Next.js/Edge | Excellent | Moderate | Good |
-| Pre-built integrations | 16+ providers | 50+ | 20+ |
-| TypeScript types | Excellent | Good | Excellent |
-| Learning curve | Low | High | Medium |
-
-## FAQ
-
-**What is the difference between AI SDK Core and AI SDK UI?**
-AI SDK Core (`generateText`, `streamText`, `generateObject`) runs on the server and handles model calls. AI SDK UI (`useChat`, `useCompletion`, `useObject`) runs on the client and manages stream state, message history, and UI updates. In a Next.js app, Core lives in `app/api/` routes and UI hooks live in client components. You can use Core without UI (for backend pipelines) but UI requires a Core-powered API endpoint.
-
-**Can I use Vercel AI SDK without Vercel hosting?**
-Yes. The AI SDK is a pure npm package with no dependency on Vercel's infrastructure. You can use it in any Node.js server, AWS Lambda, Cloudflare Workers, or on-premise environment. Vercel-specific features like Workflows and AI Gateway require Vercel hosting, but AI SDK Core and UI work on any JavaScript runtime.
-
-**How do I switch between AI providers in Vercel AI SDK?**
-Change one line: swap the model import and the model string. Replace `openai('gpt-4o')` with `anthropic('claude-sonnet-4-6')`. The rest of your code — messages, tools, streaming — stays identical. This is the main design goal: provider portability without refactoring business logic.
-
-**What is the recommended way to add memory to an AI SDK agent?**
-The SDK does not manage memory itself — you control `messages`. Store conversation history in a database (KV, Postgres, or Upstash), retrieve the last N turns before each request, and pass them as `messages`. For long-term memory across sessions, embed user facts and retrieve them via vector search, prepending relevant memories to the system prompt before each request.
-
-**Does Vercel AI SDK support multi-modal inputs like images and PDFs?**
-Yes. Models that support vision (GPT-4o, Claude Opus 4, Gemini Pro Vision) accept `content` arrays with `{ type: 'image', image: url }` or `{ type: 'file', data: base64, mimeType: 'application/pdf' }` parts alongside text. AI SDK normalizes these into the provider's expected format automatically, so you write the same code regardless of which vision model you use.
+The version table above will go stale on its own schedule. The cheapest maintenance check is the one this refresh used: read the registry dist-tags, install the new patch of each maintained line into a scratch directory, and re-run the four-program matrix. If two consecutive releases leave the table wrong, the page should be treated as a compatibility reference rather than a tutorial to keep extending.
