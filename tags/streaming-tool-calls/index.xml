@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Streaming Tool Calls on RockB</title><link>https://baeseokjae.github.io/tags/streaming-tool-calls/</link><description>Recent content in Streaming Tool Calls on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Wed, 28 Oct 2026 00:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/streaming-tool-calls/index.xml" rel="self" type="application/rss+xml"/><item><title>vLLM Streaming Tool-Call Corruption: Detecting Merged, Truncated and Retyped Arguments Before Your Agent Executes Them</title><link>https://baeseokjae.github.io/posts/vllm-streaming-tool-call-parser-corruption-2026/</link><pubDate>Wed, 28 Oct 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/vllm-streaming-tool-call-parser-corruption-2026/</guid><description>Three open vLLM reports show merged, truncated and dropped tool-call arguments at different version scopes. Here is how to localize the fault and gate execution.</description><content:encoded><![CDATA[<p>A streaming tool call can reach your agent corrupted while every SSE frame on the wire is valid JSON. The damage shows up after reassembly: two calls fused into one, an argument string cut mid-token, or a number that became the string <code>&quot;3&quot;</code>. The request returns HTTP 200, <code>finish_reason</code> says <code>tool_calls</code>, and an agent that trusts the payload executes the wrong thing. The practical question is not whether vLLM is &ldquo;broken&rdquo; in general; it is whether the corruption is in the server&rsquo;s parser or in your client&rsquo;s reassembly, and how to stop execution until that is settled. This article separates what the current primary reports actually establish, shows how to localize the fault with a raw SSE capture, and ships a small gate that refuses any call whose arguments do not round-trip against your declared schema.</p>
+<h2 id="what-the-three-open-reports-actually-establish">What the three open reports actually establish</h2>
+<p>The first report is <a href="https://github.com/vllm-project/vllm/issues/64012">vllm-project/vllm#64012</a>, filed 2026-10-27 and still open. It is explicitly a legacy-version report: the reporter confirms the failure on <strong>vLLM 0.19.0</strong> with <code>vllm/tool_parsers/qwen3xml_tool_parser.py</code> at SHA256 <code>7c2ba229b0b6dcd061b9f581390a5fb892a2fc20023b20656d91706522f311bd</code>, states that the v0.19.1 source is byte-identical, and says the reproduction needs no GPU, weights, tokenizer or network. Two independent <code>&lt;tool_call&gt;</code> blocks parse correctly when they arrive in one chunk or when the split falls between the calls. When a chunk holds the first call&rsquo;s closing tags plus the opening of the second, the same concatenated text produces malformed JSON and can truncate a string value. The reporter adds that #45003 removed the old XML parser and #45413 introduced newer engine routing, and calls this &ldquo;the legacy v0.19.0 implementation, not an asserted regression on current main.&rdquo; That boundary matters: reading this thread as evidence about v0.32.x is a version error.</p>
+<p>The second report, <a href="https://github.com/vllm-project/vllm/issues/63983">vllm-project/vllm#63983</a>, is a different failure and a different scope. Against <strong>main at commit 5d35ce3</strong>, with parser code only and no GPU, the <code>functiongemma</code> parser extracts arguments written as <code>key:&lt;escape&gt;value&lt;escape&gt;</code>. FunctionGemma&rsquo;s own chat template wraps only strings that way; numbers, booleans, arrays and objects are emitted bare, never match the parser&rsquo;s regex, and are silently dropped. The issue&rsquo;s printed output makes the consequence concrete: a <code>set_alarm</code> call carrying <code>hour:7</code>, <code>enabled:true</code>, <code>days:[mon,tue]</code> and <code>snooze:{minutes:5}</code> comes back as <code>{&quot;label&quot;: &quot;Wake up&quot;}</code>. The call &ldquo;succeeds&rdquo; with four of its five arguments missing.</p>
+<p>The third, <a href="https://github.com/vllm-project/vllm/issues/63941">vllm-project/vllm#63941</a>, concerns Kimi K3 at <strong>main commit cd9aa5b5ee</strong> (2026-10-26), also parser-level and CPU-only. When a generation is cut inside an XTML control marker by <code>max_tokens</code>, the non-streaming path returns the raw partial marker text as user-visible <code>content</code>, while the streaming path withholds the same fragment. The two paths disagree about the same tokens. The reporter notes that current main tip <code>6fe3d447ac</code> does not touch <code>kimi_k3_tool_parser.py</code>.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Report</th>
+					<th>Version scope</th>
+					<th>Symptom</th>
+					<th>What the report does not show</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>#64012</td>
+					<td>v0.19.0 legacy <code>qwen3_xml</code></td>
+					<td>Merged/truncated arguments when a chunk straddles two calls</td>
+					<td>Any regression on current releases; v0.19.1 was never executed</td>
+			</tr>
+			<tr>
+					<td>#63983</td>
+					<td>main @ 5d35ce3, <code>functiongemma</code></td>
+					<td>Non-string arguments silently dropped</td>
+					<td>Chunk-boundary behaviour; other parser families</td>
+			</tr>
+			<tr>
+					<td>#63941</td>
+					<td>main @ cd9aa5b5ee, Kimi K3</td>
+					<td>Non-streaming leaks a partial XTML marker that streaming withholds</td>
+					<td>That the leak affects schema-valid calls or other parsers</td>
+			</tr>
+	</tbody>
+</table>
+<p>Read together, the three reports support a failure class, not one release-wide defect: chunk-boundary merge and truncation in a legacy parser, silent argument loss in one current parser, and stream/non-stream divergence in another. No single tag is shown to carry all three symptoms, and none of the reports is a measurement of your deployment. The adjacent <a href="https://www.ubicloud.com/blog/fixing-tool-call-accuracy-in-vllm">Ubicloud write-up</a> is often cited alongside them and should not be: it measured schema accuracy, not chunk boundaries. It reports 92% schema accuracy serving Kimi K2.6 on vLLM 0.28 against the 2,000-request K2VV ToolCall workload, 100% after constrained decoding was enabled as a vLLM 0.31 server flag, and a drop to 91% when a later release changed the default. That is a constrained-decoding story about argument <em>validity</em>, and it is useful context for why strictness flags exist. It is not evidence that streaming splits corrupt calls.</p>
+<h2 id="the-flag-semantics-that-matter-pinned-to-v0320">The flag semantics that matter, pinned to v0.32.0</h2>
+<p>The current stable release on 2026-10-28 is v0.32.0 (published 2026-10-18), followed by v0.31.0 and v0.30.0, according to the <a href="https://api.github.com/repos/vllm-project/vllm/releases?per_page=6">release list</a>. The <a href="https://docs.vllm.ai/en/v0.32.0/features/tool_calling.html">tool-calling documentation pinned to that tag</a> defines the startup flags plainly: <code>--enable-auto-tool-choice</code> is mandatory for automatic tool choice, <code>--tool-call-parser</code> selects the parser, <code>--tool-parser-plugin</code> optionally registers a custom one, and <code>--chat-template</code> is optional. It also states the division of labour that this article is about: &ldquo;Remember that it&rsquo;s the caller&rsquo;s responsibility to &hellip; Handle the tool calls in your application logic.&rdquo; The server flags choose and drive a parser; they do not certify the arguments your application is about to execute.</p>
+<p>The same page documents the strictness behaviour that changed the risk picture in this release line. Structural tags constrain the tool-call envelope (markup and function name) always for <code>tool_choice=&quot;required&quot;</code> and named calls, and for <code>tool_choice=&quot;auto&quot;</code> only once a tool sets <code>strict: true</code> or the server raises the floor. Argument schemas are pinned only for tools marked <code>strict: true</code>, or under <code>--tool-strict-level parameter</code>. The <code>--tool-strict-level</code> values are <code>auto</code> (default, follow the request), <code>function</code> (constrain envelope for every request with tools), and <code>parameter</code> (pin every tool&rsquo;s argument schema). <code>VLLM_ENFORCE_STRICT_TOOL_CALLING</code> defaults to true and, when false, disables structural tags entirely. The page names the reason a gate is still needed: with <code>tool_choice=&quot;auto&quot;</code> and no strict tools, &ldquo;the model generates tool calls without any grammar and malformed markup can leak into the response.&rdquo;</p>
+<p>Parser coverage is version-specific too. The v0.32.0 page lists FunctionGemma under <code>functiongemma</code> and Kimi-K2 under <code>kimi_k2</code>; the string <code>kimi_k3</code> does not appear on that page at all. So the Kimi K3 defect in #63941 is a main-branch parser report, not a documented v0.32.0 parser you can select by reading this page.</p>
+<h2 id="localize-the-fault-before-you-patch-anything">Localize the fault before you patch anything</h2>
+<p>Three checks separate a server parser defect from a client reassembly defect, and they take minutes rather than a GPU rental.</p>
+<p>First, capture the stream verbatim. <code>curl -N --no-buffer</code> with your normal request body, redirected to a file, preserves event framing, <code>data:</code> lines and chunk order. Second, replay that capture through the exact buffering code your agent uses, splitting the captured bytes at every offset. A client that decodes each TCP read independently will fail inside multi-byte characters; a client that trims whitespace or re-serialises <code>arguments</code> will fail on types. Third, send the same prompt non-streaming and compare the resulting calls. If the raw deltas concatenate to valid JSON and the non-streaming call matches, the fault is client-side reassembly. If the raw deltas themselves are invalid or short, the fault is upstream of your client. If both parse but disagree on types or call count, suspect the parser or the model&rsquo;s chat template rather than transport.</p>
+<p>The gate published with this article includes that boundary replay as a selftest. It builds a five-event stream carrying two parallel calls, serialises it as OpenAI SSE frames, and re-runs reassembly plus validation at all 760 byte offsets. All 760 splits reassembled without a false rejection, which is the property you want before you trust a gate to tell you that a real corruption is real. That number comes from the run record in this article&rsquo;s evidence directory; it is a fixture check, not a vLLM measurement.</p>
+<h2 id="a-gate-that-runs-before-dispatch">A gate that runs before dispatch</h2>
+<p>The gate is deliberately boring: reassemble the stream the way the OpenAI-compatible client does, parse each <code>arguments</code> string as JSON, then compare the parsed object with the schema the model was given. It fails closed on five conditions - unparseable JSON, non-object arguments, missing required fields, a JSON type that does not match the declaration, and a call count that differs from what the request expected. Types are compared exactly, because Python&rsquo;s <code>bool</code> is a subclass of <code>int</code> and because accepting <code>&quot;3&quot;</code> where <code>integer</code> was declared is precisely the silent retyping a coercing client can produce.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">validate</span>(calls, tools, expected_calls):
+</span></span><span style="display:flex;"><span>    issues <span style="color:#f92672">=</span> []
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> expected_calls <span style="color:#f92672">is</span> <span style="color:#f92672">not</span> <span style="color:#66d9ef">None</span> <span style="color:#f92672">and</span> len(calls) <span style="color:#f92672">!=</span> expected_calls:
+</span></span><span style="display:flex;"><span>        issues<span style="color:#f92672">.</span>append((<span style="color:#e6db74">&#34;CALL_COUNT_MISMATCH&#34;</span>, <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">{</span>len(calls)<span style="color:#e6db74">}</span><span style="color:#e6db74"> of </span><span style="color:#e6db74">{</span>expected_calls<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>))
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> call <span style="color:#f92672">in</span> calls:
+</span></span><span style="display:flex;"><span>        spec <span style="color:#f92672">=</span> tools<span style="color:#f92672">.</span>get(call[<span style="color:#e6db74">&#34;name&#34;</span>])
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">try</span>:
+</span></span><span style="display:flex;"><span>            args <span style="color:#f92672">=</span> json<span style="color:#f92672">.</span>loads(call[<span style="color:#e6db74">&#34;arguments&#34;</span>])
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">except</span> <span style="color:#a6e22e">ValueError</span>:
+</span></span><span style="display:flex;"><span>            issues<span style="color:#f92672">.</span>append((<span style="color:#e6db74">&#34;ARGUMENTS_NOT_JSON&#34;</span>, call[<span style="color:#e6db74">&#34;name&#34;</span>])); <span style="color:#66d9ef">continue</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> name <span style="color:#f92672">in</span> spec<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;required&#34;</span>, []):
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> name <span style="color:#f92672">not</span> <span style="color:#f92672">in</span> args:
+</span></span><span style="display:flex;"><span>                issues<span style="color:#f92672">.</span>append((<span style="color:#e6db74">&#34;MISSING_REQUIRED&#34;</span>, name))
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> name, value <span style="color:#f92672">in</span> args<span style="color:#f92672">.</span>items():
+</span></span><span style="display:flex;"><span>            declared <span style="color:#f92672">=</span> spec[<span style="color:#e6db74">&#34;properties&#34;</span>]<span style="color:#f92672">.</span>get(name, {})<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;type&#34;</span>)
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> declared <span style="color:#f92672">and</span> type_name(value) <span style="color:#f92672">not</span> <span style="color:#f92672">in</span> declared:
+</span></span><span style="display:flex;"><span>                issues<span style="color:#f92672">.</span>append((<span style="color:#e6db74">&#34;TYPE_MISMATCH&#34;</span>, <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">{</span>name<span style="color:#e6db74">}</span><span style="color:#e6db74">=</span><span style="color:#e6db74">{</span>value<span style="color:#e6db74">!r}</span><span style="color:#e6db74">&#34;</span>))
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> issues
+</span></span></code></pre></div><p>Call it on the assembled message, before any tool dispatcher or agent loop sees it. On a rejection, log the raw <code>arguments</code> string and the <code>finish_reason</code>, return the errors to the model as a tool result if your loop supports that, and retry. Do not coerce values to make the call pass: coercion converts a detected type error into an undetected wrong argument, which is the failure this gate exists to prevent.</p>
+<p>The published selftest exercises four constructed corruptions derived from the clean fixture, and each is caught by a distinct code rather than by a generic exception:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Constructed corruption</th>
+					<th>Detected as</th>
+					<th>Calls reassembled</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Two calls merged into one delta</td>
+					<td><code>ARGUMENTS_NOT_JSON</code> + <code>CALL_COUNT_MISMATCH</code></td>
+					<td>1 of 2</td>
+			</tr>
+			<tr>
+					<td>Arguments cut mid-string</td>
+					<td><code>ARGUMENTS_NOT_JSON</code></td>
+					<td>2</td>
+			</tr>
+			<tr>
+					<td>Integer, boolean, array re-encoded as strings</td>
+					<td><code>TYPE_MISMATCH</code></td>
+					<td>2</td>
+			</tr>
+			<tr>
+					<td>Non-string arguments dropped</td>
+					<td><code>MISSING_REQUIRED</code></td>
+					<td>2</td>
+			</tr>
+	</tbody>
+</table>
+<p>Two limits follow from the design. A merged call cannot be reconstructed, only rejected, so the correct recovery is a retry with the error surfaced, not a repair heuristic. And a schema-valid but semantically wrong argument - the failure class Ubicloud measured - passes the gate by definition; strict decoding and a stronger schema are the tools for that, not this check.</p>
+<h2 id="what-is-verified-what-is-not">What is verified, what is not</h2>
+<p>Everything about the three reports above was re-read from the GitHub API on 2026-10-28 between 12:01:39 and 12:01:43 UTC, the window recorded in the research fetch log for this article, and the pinned documentation and release list were fetched inside that same window. The gate and its fixtures were executed in the same session, and the run record captures the command, exit code, stdout and input hashes. What was not done matters just as much: vLLM is not installed in this workspace image, so no parser was imported and no claim is made that any listed defect reproduces at v0.32.0. The reports&rsquo; own commits and version labels are quoted as the reporters stated them. There is no throughput, latency, cost or accuracy measurement here, and no claim that all vLLM parsers are affected - the matrix is one legacy parser, one current parser family and one current stream/non-stream divergence.</p>
+<p>If you operate a vLLM endpoint for an agent, the operational order is: pin the tag you actually run, capture one streaming and one non-streaming response with parallel calls, replay the capture at every byte boundary through your client, and enable the gate before the next deploy. If the corruption survives that sequence at a pinned tag, you have a reproducible parser report to file rather than an intermittent symptom to describe.</p>
+<h2 id="sources">Sources</h2>
+<p>Primary sources, all re-fetched on 2026-10-28 UTC:</p>
+<ul>
+<li>#64012, legacy qwen3_xml chunk-boundary report - <a href="https://github.com/vllm-project/vllm/issues/64012">https://github.com/vllm-project/vllm/issues/64012</a></li>
+<li>#63983, FunctionGemma non-string argument drop - <a href="https://github.com/vllm-project/vllm/issues/63983">https://github.com/vllm-project/vllm/issues/63983</a></li>
+<li>#63941, Kimi K3 stream/non-stream marker leak - <a href="https://github.com/vllm-project/vllm/issues/63941">https://github.com/vllm-project/vllm/issues/63941</a></li>
+<li>Published releases and dates (v0.32.0 latest stable in this window) - <a href="https://api.github.com/repos/vllm-project/vllm/releases?per_page=6">https://api.github.com/repos/vllm-project/vllm/releases?per_page=6</a></li>
+<li>Tool-calling flags, strict mode and <code>--tool-strict-level</code>, pinned to v0.32.0 - <a href="https://docs.vllm.ai/en/v0.32.0/features/tool_calling.html">https://docs.vllm.ai/en/v0.32.0/features/tool_calling.html</a></li>
+<li>Adjacent schema-accuracy measurement (different failure class; not chunk boundaries) - <a href="https://www.ubicloud.com/blog/fixing-tool-call-accuracy-in-vllm">https://www.ubicloud.com/blog/fixing-tool-call-accuracy-in-vllm</a></li>
+</ul>
+<p>First-party artifacts published with this article (constructed fixtures, no model output; local fixture check, not vendor measurement):</p>
+<ul>
+<li>Gate and boundary selftest - <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/vllm-streaming-tool-call-parser-corruption-2026/toolcall_gate.py">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/vllm-streaming-tool-call-parser-corruption-2026/toolcall_gate.py</a></li>
+<li>Parallel-call SSE fixture - <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/vllm-streaming-tool-call-parser-corruption-2026/fixtures/sse_parallel_toolcalls.json">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/vllm-streaming-tool-call-parser-corruption-2026/fixtures/sse_parallel_toolcalls.json</a></li>
+<li>Declared tool schema used by the gate - <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/vllm-streaming-tool-call-parser-corruption-2026/fixtures/tool_schema.json">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/vllm-streaming-tool-call-parser-corruption-2026/fixtures/tool_schema.json</a></li>
+<li>Run record: command, exit code, stdout, input hashes - <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/vllm-streaming-tool-call-parser-corruption-2026/first-party-fixture-run-2026-10-28.json">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/vllm-streaming-tool-call-parser-corruption-2026/first-party-fixture-run-2026-10-28.json</a></li>
+</ul>
+<p>For the argument shapes a parser is supposed to produce, see <a href="https://baeseokjae.github.io/posts/llm-function-calling-tool-use-guide-2026/">LLM function calling and tool use</a>; for why this serving stack was chosen before parsing became the concern, see <a href="https://baeseokjae.github.io/posts/vllm-vs-ollama-production-2026/">vLLM vs Ollama in production</a> and <a href="https://baeseokjae.github.io/posts/local-ai-model-serving-frameworks-2026/">local model serving frameworks compared</a>.</p>
+]]></content:encoded></item></channel></rss>
