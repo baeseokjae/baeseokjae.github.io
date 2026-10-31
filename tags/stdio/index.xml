@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Stdio on RockB</title><link>https://baeseokjae.github.io/tags/stdio/</link><description>Recent content in Stdio on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Fri, 30 Oct 2026 02:45:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/stdio/index.xml" rel="self" type="application/rss+xml"/><item><title>MCP stdio Leaks: Why Your Agent's Tool Servers Hang at Shutdown, Die on a Bad Filename and Leave Ghost Tools</title><link>https://baeseokjae.github.io/posts/mcp-stdio-transport-lifecycle-2026/</link><pubDate>Fri, 30 Oct 2026 02:45:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/mcp-stdio-transport-lifecycle-2026/</guid><description>Four stdio lifecycle failures in the MCP Python SDK 2.2.0, measured with a probe that counts processes and tools — plus a shutdown contract your agent host can enforce.</description><content:encoded><![CDATA[<p>A stdio MCP server that never exits is not a mystery: the Python SDK&rsquo;s writer task can be blocked in a pipe write that only the reader can unblock, so cancelling it waits forever. In MCP Python SDK 2.2.0 on Linux, this probe reproduced that hang and three related lifecycle defects — an unencodable string that kills the connection with no JSON-RPC error, a rejected <code>ClientSessionGroup</code> registration that leaves a second server child alive and unreachable, and a disconnected session whose old tool name survives in <code>group.tools</code>. All four have a host-side workaround you can enforce today, and the probe below counts exactly what your host leaks.</p>
+<p>The article is about what happens <em>after</em> the handshake. If you are still writing your first server, start with <a href="/posts/build-mcp-server-python-2026/">building an MCP server in Python</a> or the <a href="/posts/fastmcp-3-python-mcp-server-guide-2026/">FastMCP 3 guide</a> and come back here when your process table starts to fill.</p>
+<h2 id="the-four-symptoms-one-accounting-frame">The four symptoms, one accounting frame</h2>
+<table>
+	<thead>
+			<tr>
+					<th>Symptom in production</th>
+					<th>Where it comes from</th>
+					<th>What the probe recorded on mcp 2.2.0</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Server never exits after the session ends</td>
+					<td>stdout write blocked on a full pipe; cancellation waits on the thread</td>
+					<td>alive 10 s after stdin EOF, SIGTERM needed, exit status −15</td>
+			</tr>
+			<tr>
+					<td>One session dies, no error in the client</td>
+					<td>serialisation inside the writer task is not contained</td>
+					<td><code>PydanticSerializationError</code>, 0 bytes written, connection gone</td>
+			</tr>
+			<tr>
+					<td>Extra server process after a failed connect</td>
+					<td>transport opened before components are validated</td>
+					<td>2 children, 1 session in the group, 0 children only after group close</td>
+			</tr>
+			<tr>
+					<td>Tool the model calls no longer exists</td>
+					<td>reverse index replaced, aggregate dict updated only</td>
+					<td><code>old</code> still in <code>group.tools</code> after disconnect, <code>group.sessions == []</code></td>
+			</tr>
+	</tbody>
+</table>
+<h2 id="l1-the-hang-is-a-full-pipe-not-a-missing-exit">L1: the hang is a full pipe, not a missing exit</h2>
+<p>The mechanism is a Linux pipe: 64 KiB of buffered bytes, then <code>write(2)</code> blocks. The SDK&rsquo;s server writer serialises each outgoing message and writes it with <code>stdout.write</code> plus <code>stdout.flush</code> inside a worker thread (<code>to_thread</code>). If the client stops draining stdout while a response larger than the buffer is still in flight, that thread is stuck in the kernel. When stdin EOF then ends the session, the task group cancels the writer — and cancellation has to wait for a thread that cannot finish until the client reads.</p>
+<p>The probe drives the same sequence twice: one response of 262,144 payload bytes, stdin closed 2 s later, 10 s of <code>/proc</code> sampling, then SIGTERM.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Arm</th>
+					<th>stdout bytes read</th>
+					<th>State 10 s after EOF</th>
+					<th>Signal needed</th>
+					<th>Exit status</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Drain stdout (control)</td>
+					<td>262,190</td>
+					<td>exited</td>
+					<td>none</td>
+					<td>0</td>
+			</tr>
+			<tr>
+					<td>Leave stdout unread</td>
+					<td>0</td>
+					<td><code>S</code> (sleeping)</td>
+					<td>SIGTERM</td>
+					<td>−15</td>
+			</tr>
+	</tbody>
+</table>
+<p>The control arm is what makes this a finding rather than a fixture bug: identical fixture, identical message, only the read side differs. With the reader draining, the process exits 0 by itself. Without a reader, it is still alive after ten seconds and has to be signalled. This is the same sequence reported upstream in <a href="https://github.com/modelcontextprotocol/python-sdk/issues/3674">issue #3674</a>, where the reporter&rsquo;s thread dump shows a worker blocked behind <code>await stdout.flush()</code> in <code>mcp/server/stdio.py</code>.</p>
+<p>Host-side consequence: closing stdin is not a shutdown. Any supervisor that only closes the pipe and waits will accumulate one sleeping child per session.</p>
+<h2 id="l2-one-unencodable-string-takes-the-whole-connection">L2: one unencodable string takes the whole connection</h2>
+<p>A <code>str</code> containing a lone surrogate cannot be encoded as UTF-8 JSON. It is easy to obtain without any malicious input: <code>os.fsdecode()</code> on a filename that is not valid UTF-8 returns one, and so does <code>open(..., errors=&quot;surrogateescape&quot;)</code> or a decoded <code>argv</code>. Validation passes, <code>model_dump(mode=&quot;json&quot;)</code> passes, and the failure lands in <code>model_dump_json()</code> inside the writer task, where only <code>anyio.ClosedResourceError</code> is caught.</p>
+<p>In the probe the server sent one response whose <code>uri</code> field was built from <code>os.fsdecode(b&quot;bad-\xff-name&quot;)</code>, then tried to send a second, valid message:</p>
+<ul>
+<li>stdout bytes delivered to the client: <strong>0</strong> — not even the bad message, because serialisation fails before the write.</li>
+<li>stderr: <code>pydantic_core._pydantic_core.PydanticSerializationError: Error serializing to JSON: UnicodeEncodeError: 'utf-8' codec can't encode character '\udcff' in position 4: surrogates not allowed</code>.</li>
+<li>The writer task ended, the task group tore down the session, and the fixture exited with an <code>ExceptionGroup</code> — the caller learns nothing about which request failed.</li>
+</ul>
+<p>That matches <a href="https://github.com/modelcontextprotocol/python-sdk/issues/3707">issue #3707</a>, where the reporter describes the same class of failure for the server writer and for the client&rsquo;s <code>stdin_writer</code> on every transport. The exception class depends on the resolved pydantic version; this run used pydantic 2.14.2, so treat <code>PydanticSerializationError</code> as the shape, not the contract.</p>
+<p>Host-side consequence: a single path, filename, or environment value that survives <code>surrogateescape</code> can kill a session, and the failure surfaces as a closed connection rather than an error for that request. Sanitise outbound payloads at the boundary (<code>json.dumps(..., ensure_ascii=True)</code> or explicit re-encoding with errors=&ldquo;replace&rdquo;) if any of your tool inputs come from the filesystem.</p>
+<h2 id="l3-who-owns-a-transport-whose-connect-was-rejected">L3: who owns a transport whose connect was rejected</h2>
+<p><code>ClientSessionGroup.connect_to_server</code> starts the transport, initialises the session, and only then aggregates components. The duplicate-name check raises before the session is recorded:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span>matching_tools <span style="color:#f92672">=</span> tools_temp<span style="color:#f92672">.</span>keys() <span style="color:#f92672">&amp;</span> self<span style="color:#f92672">.</span>_tools<span style="color:#f92672">.</span>keys()
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">if</span> matching_tools:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">raise</span> MCPError(code<span style="color:#f92672">=</span>types<span style="color:#f92672">.</span>INVALID_PARAMS, message<span style="color:#f92672">=</span><span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">{</span>matching_tools<span style="color:#e6db74">}</span><span style="color:#e6db74"> already exist in group tools.&#34;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># Aggregate components.</span>
+</span></span><span style="display:flex;"><span>self<span style="color:#f92672">.</span>_sessions[session] <span style="color:#f92672">=</span> component_names
+</span></span></code></pre></div><p>That ordering is visible in the v2.2.0 source of <a href="https://raw.githubusercontent.com/modelcontextprotocol/python-sdk/v2.2.0/src/mcp/client/session_group.py">session_group.py</a>, and the probe confirms the runtime effect: after the rejected second connect, <code>len(group.sessions)</code> is still 1 while the process table shows 2 children. The caller has no session object, so <code>disconnect_from_server()</code> cannot reach the transport; only closing the whole group reclaimed it (0 children after close).</p>
+<p>This is <a href="https://github.com/modelcontextprotocol/python-sdk/issues/3490">issue #3490</a>. The caveat matters for your fix: it is a lifetime-scope mismatch, not an unbounded orphan. The second child lives until the group closes. In a long-lived host that keeps one group open for hours and re-registers servers per reconnect, that is still one leaked process per rejection.</p>
+<h2 id="l4-ghost-tools-survive-disconnect">L4: ghost tools survive disconnect</h2>
+<p>The same aggregation path keeps an older catalogue. The probe registered one caller-owned session whose server advertised <code>old</code>, changed the server&rsquo;s catalogue to <code>new</code>, registered the same session again, then disconnected:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Step</th>
+					<th><code>group.tools</code></th>
+					<th><code>group.sessions</code></th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>First registration</td>
+					<td><code>['old']</code></td>
+					<td>1</td>
+			</tr>
+			<tr>
+					<td>Second registration</td>
+					<td><code>['new', 'old']</code></td>
+					<td>1</td>
+			</tr>
+			<tr>
+					<td>After <code>disconnect_from_server</code></td>
+					<td><code>['old']</code></td>
+					<td>0</td>
+			</tr>
+	</tbody>
+</table>
+<p>Disconnect removes only the names in the current reverse index for that session, while the aggregate dictionaries were merged on both registrations. That is <a href="https://github.com/modelcontextprotocol/python-sdk/issues/3713">issue #3713</a>, reported with exactly this shape. The model keeps a tool in its prompt that the host can no longer route.</p>
+<h2 id="a-shutdown-contract-your-host-can-enforce">A shutdown contract your host can enforce</h2>
+<p>None of these need a fork of the SDK. They need four rules in the code that owns the child process:</p>
+<ol>
+<li><strong>Close stdin, then drain stdout, then wait.</strong> Never expect EOF alone to end a server whose response is still in a pipe. Read until EOF before you join the process, and put a wall-clock bound on the join.</li>
+<li><strong>Escalate on a bound, and record which signal worked.</strong> A server that ignores EOF is normal in this class; a server that survives SIGTERM is a different bug. Log both transitions with the pid so the next leak is countable.</li>
+<li><strong>Close the transport on a failed connect, not just on a returned session.</strong> Wrap <code>connect_to_server</code> yourself: on exception, close the group (or the transport you opened) before retrying, because the handle you would need was never returned.</li>
+<li><strong>Verify the tool table after every disconnect.</strong> <code>assert not group.tools</code> (or compare against the set you expect) is a one-line test that catches the ghost-tool class before a model tries to call a tool that is gone.</li>
+</ol>
+<p>If you want the accounting view alongside this, the OpenTelemetry trace setup in <a href="/posts/ai-agent-observability-opentelemetry-2026/">agent observability with OpenTelemetry</a> shows the span side, and <a href="/posts/agent-doctor-local-observability/">agent doctor</a> covers local runtime health checks that can host the process-count assertion above.</p>
+<h2 id="the-probe-what-it-counts-and-what-it-does-not">The probe: what it counts and what it does not</h2>
+<p><code>probe_stdio_lifecycle.py</code> spawns real stdio children against <code>mcp==2.2.0</code>, samples <code>/proc/&lt;pid&gt;/stat</code> for state, walks <code>/proc</code> for children of the test process, and records stdout byte counts plus stderr text per scenario. It is not a harness for your own servers; it is a small reproducible check of the SDK paths above.</p>
+<p>Files from this run, published with the article (origin: first-party run on 2026-10-30, Linux, CPython 3.12.3, no personal data):</p>
+<ul>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/mcp-stdio-transport-lifecycle-2026/probe-r1/probe_stdio_lifecycle.py">probe_stdio_lifecycle.py</a></li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/mcp-stdio-transport-lifecycle-2026/probe-r1/fixtures/fixture_server.py">fixture_server.py</a></li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/mcp-stdio-transport-lifecycle-2026/probe-r1/fixtures/fixture_stdio_writer.py">fixture_stdio_writer.py</a></li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/mcp-stdio-transport-lifecycle-2026/probe-r1/results.json">results.json (raw records)</a></li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/mcp-stdio-transport-lifecycle-2026/probe-r1/method.md">method.md</a></li>
+</ul>
+<p>Limits, stated plainly: one Linux host, one run per arm, one pinned version (2.2.0), fixture servers written for this article rather than third-party servers. L3 and L4 were executed in a second invocation of the same probe (<code>--only L3,L4</code>) and merged into <code>results.json</code>; timestamps in the record show both windows. The 64 KiB pipe buffer is a Linux default — macOS and Windows pipe sizes differ, and none of the timing or signal behaviour here should be transferred to them without re-running. v2.3.0 ships different bytes for <code>session_group.py</code> and <code>client/stdio.py</code>, so &ldquo;still broken in 2.3.0&rdquo; is not established by this run; the server writer path was byte-identical between the two tags when the sources were fetched.</p>
+<p>If you do not run the probe, the four rules above still hold: they are derived from the source paths quoted here, not from a benchmark score.</p>
+<h2 id="sources">Sources</h2>
+<ul>
+<li><a href="https://github.com/modelcontextprotocol/python-sdk/issues/3674">modelcontextprotocol/python-sdk#3674</a> — stdio server never exits on stdin EOF while the client leaves stdout unread.</li>
+<li><a href="https://github.com/modelcontextprotocol/python-sdk/issues/3707">modelcontextprotocol/python-sdk#3707</a> — a lone surrogate in an outgoing message kills the writer or the session.</li>
+<li><a href="https://github.com/modelcontextprotocol/python-sdk/issues/3490">modelcontextprotocol/python-sdk#3490</a> — a rejected <code>connect_to_server</code> leaves its transport running.</li>
+<li><a href="https://github.com/modelcontextprotocol/python-sdk/issues/3713">modelcontextprotocol/python-sdk#3713</a> — old tools survive after disconnecting a re-registered session.</li>
+<li><a href="https://github.com/modelcontextprotocol/python-sdk/issues/3714">modelcontextprotocol/python-sdk#3714</a> — strict decoding withholds fatal read errors until peer stdout EOF.</li>
+<li><a href="https://raw.githubusercontent.com/modelcontextprotocol/python-sdk/v2.2.0/src/mcp/server/stdio.py">mcp/server/stdio.py at v2.2.0</a> — the writer task and its single <code>except</code> clause.</li>
+<li><a href="https://raw.githubusercontent.com/modelcontextprotocol/python-sdk/v2.2.0/src/mcp/client/stdio.py">mcp/client/stdio.py at v2.2.0</a> — the shielded <code>_drain_stdout</code> in <code>finally</code>, and the process-stop escalation order.</li>
+<li><a href="https://raw.githubusercontent.com/modelcontextprotocol/python-sdk/v2.2.0/src/mcp/client/session_group.py">mcp/client/session_group.py at v2.2.0</a> — the raise-before-record ordering and the disconnect loop over the current index.</li>
+</ul>
+]]></content:encoded></item></channel></rss>
