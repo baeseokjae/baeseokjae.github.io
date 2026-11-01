@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Ollama Context Window Truncation on RockB</title><link>https://baeseokjae.github.io/tags/ollama-context-window-truncation/</link><description>Recent content in Ollama Context Window Truncation on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sat, 31 Oct 2026 15:28:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/ollama-context-window-truncation/index.xml" rel="self" type="application/rss+xml"/><item><title>Ollama's Silent Context Truncation: What num_ctx Overflow Actually Drops</title><link>https://baeseokjae.github.io/posts/ollama-silent-context-truncation-2026/</link><pubDate>Sat, 31 Oct 2026 15:28:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/ollama-silent-context-truncation-2026/</guid><description>When a rendered conversation exceeds num_ctx, Ollama 0.20.3 drops whole messages from the front of /api/chat history and answers without an error, while prompt_eval_count reports only what was evaluated. Source reading plus a five-request probe.</description><content:encoded><![CDATA[<p>An agent on a local Ollama server stops acting on its own conversation mid-session: a tool result it received ten turns ago is treated as never having existed, and nothing in the API response says why. The usual suspects are the model, the sampler and the prompt wording. In Ollama 0.20.3 the likelier cause is the server. When the rendered conversation does not fit <code>num_ctx</code>, <code>/api/chat</code> removes whole messages from the front of the history, keeps the tail, and answers with a normal 200 response. <code>prompt_eval_count</code> then reports the size of the shortened prompt, not the size of the prompt you sent, so a dashboard built on that number shows a healthy, small request.</p>
+<p>The part that is easy to get wrong — and that the earlier version of this article got wrong — is what survives. The <code>/api/chat</code> truncation loop re-collects every <code>role: &quot;system&quot;</code> message out of the prefix it is about to discard, so the system prompt and the tool definitions normally survive a clamp. What disappears is the middle and the front of the conversation. On <code>/api/generate</code> the client supplies one already-rendered string with no message structure to protect, and that is the path where the head of the prompt can be lost outright; the source reading says so, and the probe below does not settle it.</p>
+<h2 id="what-num_ctx-caps-and-where-the-cap-is-applied">What <code>num_ctx</code> caps, and where the cap is applied</h2>
+<p><code>num_ctx</code> is documented as a plain integer option — &ldquo;Context length size (number of tokens)&rdquo; — with no stated overflow behaviour (<a href="https://docs.ollama.com/api/generate.md">generate reference</a>, <a href="https://docs.ollama.com/api/chat.md">chat reference</a>). The FAQ gives a default of 4096 tokens, overridable with <code>OLLAMA_CONTEXT_LENGTH</code> (<a href="https://docs.ollama.com/faq.md">FAQ</a>). That single number is only the floor: in v0.20.3 the server picks the default from total VRAM — 262,144 tokens at 47 GiB or more, 32,768 at 23 GiB or more, otherwise 4,096 (<a href="https://raw.githubusercontent.com/ollama/ollama/v0.20.3/server/routes.go">routes.go, v0.20.3</a>). Guides that still repeat &ldquo;defaults to 2048&rdquo; are describing an older build; do not size a production cap from them.</p>
+<p>The option travels from the HTTP request into <code>chatPrompt</code>, which renders the conversation into a single string and then decides whether it fits. The cap is applied to that rendered string, not to each message, which is why the failure is message-shaped: a message is either rendered or it is not.</p>
+<h2 id="reading-the-truncation-loop">Reading the truncation loop</h2>
+<p>The v0.20.3 source is explicit about intent. The function comment reads: &ldquo;chatPrompt truncates any messages that exceed the context window of the model, making sure to always include 1) the latest message and 2) system messages&rdquo; (<a href="https://raw.githubusercontent.com/ollama/ollama/v0.20.3/server/prompt.go">prompt.go, v0.20.3</a>). The loop itself walks an index from the first message forward, and on each iteration it re-collects system messages from the portion it is about to skip before rendering the remaining slice:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">for</span> <span style="color:#a6e22e">i</span> <span style="color:#f92672">:=</span> <span style="color:#ae81ff">0</span>; <span style="color:#a6e22e">i</span> <span style="color:#f92672">&lt;=</span> <span style="color:#a6e22e">lastMsgIdx</span>; <span style="color:#a6e22e">i</span><span style="color:#f92672">++</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">// Collect system messages from the portion we&#39;re about to skip</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">system</span> = make([]<span style="color:#a6e22e">api</span>.<span style="color:#a6e22e">Message</span>, <span style="color:#ae81ff">0</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> <span style="color:#a6e22e">j</span> <span style="color:#f92672">:=</span> <span style="color:#66d9ef">range</span> <span style="color:#a6e22e">i</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">msgs</span>[<span style="color:#a6e22e">j</span>].<span style="color:#a6e22e">Role</span> <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;system&#34;</span> {
+</span></span><span style="display:flex;"><span>            <span style="color:#a6e22e">system</span> = append(<span style="color:#a6e22e">system</span>, <span style="color:#a6e22e">msgs</span>[<span style="color:#a6e22e">j</span>])
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">p</span>, <span style="color:#a6e22e">err</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">renderPrompt</span>(<span style="color:#a6e22e">m</span>, append(<span style="color:#a6e22e">system</span>, <span style="color:#a6e22e">msgs</span>[<span style="color:#a6e22e">i</span>:]<span style="color:#f92672">...</span>), <span style="color:#a6e22e">tools</span>, <span style="color:#a6e22e">think</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">...</span>
+</span></span></code></pre></div><p>Two consequences follow directly from that loop, and both contradict the most common diagnosis. First, the system prompt is not what disappears on <code>/api/chat</code>, so a long tool list is not discarded by the same mechanism that discards an early turn. Second, tool definitions are passed to <code>renderPrompt</code> on every candidate slice, so they are re-rendered rather than dropped between iterations. The current <code>main</code> branch keeps the same loop and the same stated intent, though the return value was renamed: where v0.20.3 returns <code>images []llm.ImageData</code> and describes &ldquo;the prompt and images&rdquo;, <code>main</code> returns <code>media []llm.MediaData</code> and describes &ldquo;the prompt and media&rdquo; (<a href="https://raw.githubusercontent.com/ollama/ollama/main/server/prompt.go">prompt.go, main</a>).</p>
+<p>What does disappear is the front of the history: earlier user turns, earlier tool results, earlier assistant messages. An agent that &ldquo;forgets&rdquo; a tool result it received ten turns ago is often not hallucinating — that message was never rendered. The same code also explains why a system prompt that is itself larger than <code>num_ctx</code> cannot be rescued by this loop: when no slice fits, the loop exits at the last message and renders anyway, and whatever the runner does next is a layer this reading did not trace.</p>
+<h2 id="the-silent-part">The silent part</h2>
+<p>There is no status code, no warning field, and no error object. The only trace is a debug-level server log line, which is invisible at default verbosity. <code>prompt_eval_count</code> is documented as &ldquo;Number of tokens in the prompt&rdquo; (<a href="https://docs.ollama.com/api/chat.md">chat reference</a>) — an accurate description of the prompt that was evaluated, and a misleading description of the prompt that was sent.</p>
+<p>This is a documented, intentional clamp, not a bug. The defect is the absence of feedback: a client cannot distinguish &ldquo;your 1,032-token prompt was evaluated&rdquo; from &ldquo;your 1,032-token prompt was cut to 465 tokens and then evaluated&rdquo;. Anything that derives prefill throughput, cache behaviour, or context headroom from that number inherits the error. The <a href="/posts/ollama-llmwatch-live-prefill-progress-monitoring/">prefill-monitoring walkthrough</a> on this site uses <code>prompt_eval_count</code> as the prompt size, which holds only while the prompt fits — a boundary worth stating next to that formula.</p>
+<h2 id="what-a-five-request-probe-shows">What a five-request probe shows</h2>
+<p>I ran five requests against a local Ollama 0.20.3 daemon with <code>qwen2.5:0.5b</code> (Q4_K_M, 494M params), <code>temperature: 0</code>, <code>num_predict: 32</code>, on a 2-vCPU Neoverse-N1 host with 11 GB RAM and no GPU. The chat fixture is a system message plus twelve numbered messages <code>MSG-01</code> … <code>MSG-12</code> and a final instruction to list the labels in order; the generate fixture is one prompt with a head sentinel and a tail sentinel. Every request completed; nothing timed out.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Fixture</th>
+					<th>Endpoint</th>
+					<th>num_ctx</th>
+					<th>prompt_eval_count</th>
+					<th>eval_count</th>
+					<th>wall</th>
+					<th>Model echoed</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>chat-fits-2048</td>
+					<td>/api/chat</td>
+					<td>2048</td>
+					<td>1032</td>
+					<td>32</td>
+					<td>52.9 s</td>
+					<td>MSG-01, MSG-02, MSG-03, … in order</td>
+			</tr>
+			<tr>
+					<td>chat-clamp-512 (rep 1)</td>
+					<td>/api/chat</td>
+					<td>512</td>
+					<td>465</td>
+					<td>15</td>
+					<td>19.5 s</td>
+					<td>MSG-08, MSG-10, MSG-12</td>
+			</tr>
+			<tr>
+					<td>chat-clamp-512 (rep 2)</td>
+					<td>/api/chat</td>
+					<td>512</td>
+					<td>465</td>
+					<td>15</td>
+					<td>1.1 s</td>
+					<td>MSG-08, MSG-10, MSG-12</td>
+			</tr>
+			<tr>
+					<td>gen-sentinel-1024</td>
+					<td>/api/generate</td>
+					<td>1024</td>
+					<td>529</td>
+					<td>11</td>
+					<td>18.2 s</td>
+					<td>head sentinel only</td>
+			</tr>
+			<tr>
+					<td>gen-sentinel-256</td>
+					<td>/api/generate</td>
+					<td>256</td>
+					<td>256</td>
+					<td>11</td>
+					<td>9.2 s</td>
+					<td>garbled tail fragment</td>
+			</tr>
+	</tbody>
+</table>
+<p>Three things are worth reading out of that table. The fitting control reported 1,032 tokens for a prompt that fits in 2,048 — the submitted length, measured by the server itself, which is what makes it a control. The clamped run of the identical conversation reported 465, or 45% of 1,032, and running it a second time reported the same 465. And the clamped count is 465 rather than 512, which is what message-level dropping looks like: the loop removes whole messages until the remainder fits, so it lands below the cap instead of exactly on it.</p>
+<p>The two chat replies are worth quoting in full, because the first run&rsquo;s record kept only their first 120 characters. I repeated those two requests at 15:32–15:35 UTC and kept the complete response objects; both <code>prompt_eval_count</code> values reproduced exactly, 1,032 and 465. The control replied <code>MSG-01 MSG-02 MSG-03 MSG-04 MSG-05 MSG-06 MSG-</code> and was cut off by the 32-token output cap, not by anything the server removed. The clamped run replied <code>MSG-08 MSG-10 MSG-12</code> and stopped by itself after 15 tokens, well under the cap. Read literally, that reply begins seven labels into the conversation and contains no label from <code>MSG-01</code> to <code>MSG-07</code>.</p>
+<p>It is not, however, a transcript of the surviving window. A contiguous front drop that kept <code>MSG-08</code> onward should also have kept <code>MSG-09</code> and <code>MSG-11</code>, and neither appears. Two readings fit: the model stopped listing labels it did have, or something narrower than whole messages survived. This record cannot separate them, so I use the reply as an illustration that the head was gone and the tail was not, and treat the token counts — not the reply — as the measurement. A 494M-parameter model is a weak instrument for enumerating its own context.</p>
+<p>The sentinel cells are weaker still, and I am not going to dress them up. In the fitting 1,024-token cell the model echoed the head sentinel and dropped the tail one, so &ldquo;the tail always survives&rdquo; is not something this fixture can establish — the model fails to echo both sentinels even when nothing is truncated. At <code>num_ctx=256</code> the head sentinel was absent and the reply contained a mangled tail fragment (<code>SENTINEL-009917</code> for <code>SENTINEL-TAIL-9917</code>), which is consistent with the head being cut and the tail surviving in damaged form, but consistent is all it is. Treat the generate-path question as open: the source reading says the head is unprotected there, and this probe does not settle it either way.</p>
+<p>The system-prompt echo check failed for the same reason and is reported as a negative result: the fixture asked the model to open every reply with a codename carried in the system message, and it failed to do so in the fitting control as well as in the clamped cell. An instruction-following failure that reproduces in the control proves nothing about message loss, and nothing in this probe shows a system message being dropped on <code>/api/chat</code> — the source reading says it would not be.</p>
+<p>One timing deserves a warning rather than an explanation. The second clamped request returned in 1.1 s against 19.5 s for the first, which looks like a cache hit; the 0.20.3 response object carries <code>total_duration</code>, <code>load_duration</code>, <code>prompt_eval_count</code>, <code>prompt_eval_duration</code>, <code>eval_count</code> and <code>eval_duration</code>, and no cached-token field, so this article does not claim one.</p>
+<h2 id="detecting-the-clamp-from-the-client">Detecting the clamp from the client</h2>
+<p>The server will not tell you, so measure it yourself. Render the exact string you would send, tokenize it, and compare it to <code>num_ctx</code> before the request goes out; or compare the server&rsquo;s <code>prompt_eval_count</code> against your own count for a prompt you know fits. A <code>prompt_eval_count</code> that is stable across sessions of visibly different length, or that is suspiciously just under <code>num_ctx</code>, is the signature.</p>
+<p>Two more practical checks:</p>
+<ul>
+<li>Log the number of messages you send and the index of the first one. If the model&rsquo;s behaviour looks like it lost the opening of the conversation, you have a message-level drop, and the fix is history trimming you control rather than a bigger window you hope for.</li>
+<li>Put a distinctive marker in the earliest user message and a second one in the system message, then ask for both on a short prompt. On <code>/api/chat</code> a surviving system marker next to a missing user marker is the drop; if both markers vanish on a short request, you have a model that will not follow that instruction and no information.</li>
+</ul>
+<p>Client-side trimming discipline — deciding what to drop before the request leaves your process, as argued in <a href="/posts/local-llm-feels-dumber/">why a local model feels dumber</a> — is the only version of this you can see, and it is the reason to summarise or evict history deliberately rather than fill the window and trust the server.</p>
+<h2 id="fixing-it">Fixing it</h2>
+<p>Raise <code>num_ctx</code> only as far as the host can actually hold: the KV cache grows with the window, and on a machine with no GPU the cost shows up as time, not as an error. Prefer trimming history in the client where the trim is visible and loggable, keep the system message short enough that it fits on its own, and re-check the metric boundary whenever you upgrade — the tiering in <code>routes.go</code> means the default window on a given machine may not be the number in the FAQ.</p>
+<p>None of this makes the clamp a bug, and no &ldquo;best <code>num_ctx</code>&rdquo; number belongs in an article: the useful output is a detection habit, not a table. What remains open is the raw <code>/api/generate</code> path, where the head-versus-tail question needs a fixture the model can echo reliably — a task for a better instrument than a 494M-parameter model.</p>
+<h2 id="reproduce-it">Reproduce it</h2>
+<p>The probe driver, the fixture list, the five result rows and the full chat replies are published with this article: <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-silent-context-truncation-2026/ollama_ctx_probe.py">ollama_ctx_probe.py</a>, <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-silent-context-truncation-2026/prompt-fixtures.jsonl">prompt-fixtures.jsonl</a>, <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-silent-context-truncation-2026/runs.csv">runs.csv</a> and <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-silent-context-truncation-2026/chat-replies.json">chat-replies.json</a>, with the replay script in <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-silent-context-truncation-2026/chat_replay.py">chat_replay.py</a>. All numbers above come from one host with one quantised model; the script reproduces the shape of the result elsewhere, not the timings. If you want the API surface itself, the <a href="/posts/ollama-api-local-llm-integration-developer-guide-2026/">Ollama API integration guide</a> covers the request options, and the <a href="/posts/devstral-small-2-local-setup-guide-2026/">Devstral setup guide</a> covers the neighbouring failure modes.</p>
+]]></content:encoded></item></channel></rss>
