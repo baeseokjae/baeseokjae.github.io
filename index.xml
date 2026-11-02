@@ -1,4 +1,137 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>RockB</title><link>https://baeseokjae.github.io/</link><description>Recent content on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sun, 01 Nov 2026 13:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/index.xml" rel="self" type="application/rss+xml"/><item><title>Your 18GB GGUF Is Not an 18GB Budget: Sizing KV Cache and Context for a Local Coding Model</title><link>https://baeseokjae.github.io/posts/local-llm-vram-kv-cache-budget-2026/</link><pubDate>Sun, 01 Nov 2026 13:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/local-llm-vram-kv-cache-budget-2026/</guid><description>A GGUF file is the weights, not the budget. Run the KV-cache formula before you download, with a measured 0.5B check against it on a 12 GB CPU host and the q8_0 setting that saves nothing without Flash Attention.</description><content:encoded><![CDATA[<p>You download a 4-bit quantised model, the file is roughly 18 GB, you have 24 GB of VRAM, and the arithmetic looks settled. Then the agent session gets long, the server either dies or quietly starts answering with a fraction of the context you asked for, and the model that &ldquo;fit yesterday&rdquo; no longer fits.</p>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>RockB</title><link>https://baeseokjae.github.io/</link><description>Recent content on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sun, 01 Nov 2026 21:47:33 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/index.xml" rel="self" type="application/rss+xml"/><item><title>Delete Returns 200: What Agent-Memory Stores Actually Remove (and the read-back that proves it)</title><link>https://baeseokjae.github.io/posts/agent-memory-delete-semantics-test-2026/</link><pubDate>Sun, 01 Nov 2026 21:40:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-memory-delete-semantics-test-2026/</guid><description>At mem0 commit 753496c, delete() removes the vector entry, returns success, and writes the deleted text into its SQLite history table, where history(memory_id) returns it with no is_deleted filter. A code-level trace plus a read-back probe you can run against your own store.</description><content:encoded><![CDATA[<p>A team tells a customer, or answers a data-protection questionnaire, that a fact can be removed from its agent&rsquo;s memory. The store accepts the delete — by id, by metadata filter, or through a natural-language &ldquo;forget this&rdquo; tool — and returns a success message. Nobody runs a recall afterwards. Weeks later the assistant mentions the fact again, or an auditor asks how you proved it was gone and the honest answer is that you watched a return code.</p>
+<p>This article is about the gap between those two things. It traces, at one pinned commit, what a successful delete actually removes and what it writes instead, and then hands you a small probe that answers the only question that matters: after the delete says OK, can the fact still be read back?</p>
+<p>The short answer for one widely used library: mem0&rsquo;s <code>Memory.delete(memory_id)</code> at commit <code>753496cf1435d76c3a711f3af51303f7fdcb6420</code> removes the vector entry and returns <code>{&quot;message&quot;: &quot;Memory deleted successfully!&quot;}</code>, then writes the deleted memory&rsquo;s full text into the <code>history</code> table. The read API <code>Memory.history(memory_id)</code> selects that text back out with no <code>is_deleted</code> filter. Deletion is real for the vector layer and nominal for the audit layer. Whether normal search returns the fact after deletion is a separate question this article does not answer, because answering it needs a runtime probe that was not run here.</p>
+<p>If the failure you are chasing is writes that never landed, or expiry rewrites that quietly changed a value, those are covered in <a href="https://baeseokjae.github.io/posts/agent-memory-write-path-reliability-2026/">the write-path reliability review</a>. This page is the read-back side of the same lifecycle.</p>
+<h2 id="three-places-a-deleted-fact-can-survive">Three places a deleted fact can survive</h2>
+<p>A memory in an agent stack is not one row. It is at least three, and a delete call usually touches only the first.</p>
+<ol>
+<li><strong>The vector entry.</strong> An embedding plus payload in Chroma, Qdrant, pgvector, or an in-process store. Delete it and similarity search stops finding it — provided the search runs against the same collection and the same filter scope.</li>
+<li><strong>The relational or metadata row.</strong> A <code>memories</code> table, a document in a document store, a metadata payload. Delete-by-filter lands here, and this is where filters quietly stop matching: a row written without <code>user_id</code> in the payload can never be matched by <code>where={&quot;user_id&quot;: ...}</code>.</li>
+<li><strong>The history, audit, or consolidation table.</strong> The layer that records what changed, so a UI can show &ldquo;memory edited from X to Y&rdquo;. It exists to preserve the old value. Any read API over it that does not exclude deleted rows will hand the deleted text back.</li>
+</ol>
+<p>The reader-facing consequence is simple. &ldquo;Deleted&rdquo; is a claim about all three layers, and a status code is evidence about none of them. The only acceptable evidence is a read-back: after the delete returns, query the store the way your agent would, and query the surfaces an operator or auditor would.</p>
+<h2 id="what-mem0s-delete-does-at-commit-753496c">What mem0&rsquo;s delete() does at commit 753496c</h2>
+<p>The sync path starts at <code>delete()</code> in <code>mem0/memory/main.py</code>. The whole method is a lookup, a call, some telemetry, and a success string:</p>
+<pre tabindex="0"><code>1883|    def delete(self, memory_id):
+...
+1892|        existing_memory = self.vector_store.get(vector_id=memory_id)
+1893|        if existing_memory is None:
+1894|            raise ValueError(f&#34;Memory with id {memory_id} not found&#34;)
+1895|
+1896|        self._delete_memory(memory_id, existing_memory)
+...
+1902|        return {&#34;message&#34;: &#34;Memory deleted successfully!&#34;}
+</code></pre><p>The interesting part is <code>_delete_memory</code>, at line 2116 in the same class. It reads the payload text first, deletes the vector, and then writes an audit row that contains the text it just deleted:</p>
+<pre tabindex="0"><code>2116|    def _delete_memory(self, memory_id, existing_memory=None):
+...
+2122|        prev_value = existing_memory.payload.get(&#34;data&#34;, &#34;&#34;)
+...
+2127|        self.vector_store.delete(vector_id=memory_id)
+2128|        self.db.add_history(
+2129|            memory_id,
+2130|            prev_value,
+2131|            None,
+2132|            &#34;DELETE&#34;,
+...
+2137|            is_deleted=1,
+2138|        )
+</code></pre><p>So the vector entry does go. <code>vector_store.delete(vector_id=memory_id)</code> is a real removal request against the backing store, and the payload copy is gone from the collection. If your question was &ldquo;will similarity search still return this vector&rdquo;, the answer for this path is no, assuming the vector store honours delete-by-id — which, for Chroma, its documentation states plainly.</p>
+<p>The same file&rsquo;s async mirror at line 3838 does the identical sequence, so an async caller gets the same audit row.</p>
+<p>Two operational details are easy to miss in that excerpt.</p>
+<p><strong>Batch deletes only remove what <code>list()</code> returns.</strong> <code>delete_all()</code> at line 1904 loops from line 1936 until <code>vector_store.list()</code> comes back empty, and the source comments on why it loops rather than trusting one pass:</p>
+<pre tabindex="0"><code>1936|        while True:
+1937|            memories = self.vector_store.list(
+1938|                filters=filters, top_k=DELETE_ALL_BATCH_SIZE
+1939|            )[0]
+</code></pre><p>The comment just above the loop, at lines 1932-1933, says most vector stores cap <code>list()</code> at 100 results by default, &ldquo;which silently truncates deletes&rdquo;. The loop exists because an unlooped <code>delete_all</code> would have removed a page and reported success. That is the nominal-delete problem in miniature: the caller cannot distinguish &ldquo;removed everything&rdquo; from &ldquo;removed the first page&rdquo;.</p>
+<p><strong>Scope is not enforced by the delete path.</strong> <code>delete(memory_id)</code> never checks that the id belongs to the caller&rsquo;s <code>user_id</code>; it fetches by id and deletes. Tenant scoping in this call path is the caller&rsquo;s responsibility, not the library&rsquo;s. That is a security-adjacent property worth knowing before you expose a delete tool to a model.</p>
+<h2 id="the-read-back-nobody-checks">The read-back nobody checks</h2>
+<p><code>Memory.history(memory_id)</code> is a public method — line 1960 in the same file — and it delegates to the SQLite store:</p>
+<pre tabindex="0"><code>1971|        history = self.db.get_history(memory_id)
+</code></pre><p><code>get_history</code> in <code>mem0/memory/storage.py</code> is the whole story:</p>
+<pre tabindex="0"><code>227|    def get_history(self, memory_id: str) -&gt; List[Dict[str, Any]]:
+228|        with self._lock:
+229|            cur = self.connection.execute(
+230|                &#34;&#34;&#34;
+231|                SELECT id, memory_id, old_memory, new_memory, event,
+232|                       created_at, updated_at, is_deleted, actor_id, role
+233|                FROM history
+234|                WHERE memory_id = ?
+235|                ORDER BY created_at ASC, DATETIME(updated_at) ASC
+236|            &#34;&#34;&#34;,
+237|                (memory_id,),
+238|            )
+</code></pre><p><code>is_deleted</code> is selected and returned as a field. It is not used as a predicate. The <code>WHERE</code> clause has exactly one condition, <code>memory_id = ?</code>, and no event exclusion, so the <code>DELETE</code> row written by <code>_delete_memory</code> — the one carrying <code>old_memory = prev_value</code> — comes back verbatim in the result list. The caller receives the deleted sentence, its timestamps, and <code>&quot;is_deleted&quot;: true</code> next to it.</p>
+<p>I searched both pinned files for any statement that removes rows from <code>history</code>. There is one <code>DELETE FROM</code> in <code>storage.py</code>, at line 284, and it targets <code>messages</code>, the session message cache, with a trimming condition — not the history table. Nothing in the traced code erases history rows for a deleted memory.</p>
+<p>Put the two findings together and the failure mode is precise: the promise &ldquo;we deleted it&rdquo; is true of the vector layer and false of the audit layer, in the same process, with the plaintext one method call away. The deleted text is not merely retained on disk; it is reachable through a shipped, documented read API that a normal caller can invoke without any special privileges. What follows from that depends on your threat model — an operator console, a support tool, or a &ldquo;show me what you remember about me&rdquo; feature built on <code>history()</code> all inherit it.</p>
+<p>What this does <strong>not</strong> establish: that <code>search()</code> returns the fact after deletion. The vector is gone from the collection in this path, so the recall path should not surface it — but &ldquo;should&rdquo; is exactly the word this article is trying to retire. Running that check requires an installed store, and none was installed here. See the limitations at the end.</p>
+<h2 id="what-chromas-delete-actually-covers">What Chroma&rsquo;s delete actually covers</h2>
+<p>Chroma&rsquo;s own documentation for the delete operation, read on 2026-11-01, is unambiguous about matched items:</p>
+<pre tabindex="0"><code>Chroma supports deleting items from a collection by id using .delete. The embeddings,
+documents, and metadata associated with each item will be deleted.
+</code></pre><p>and, for filters:</p>
+<pre tabindex="0"><code>.delete also supports the where filter. It will delete all items in the collection
+that match the where filter.
+</code></pre><p>Read literally, both sentences are about items that <strong>match</strong>. Three consequences follow, none of them a defect in Chroma, all of them ways a deletion looks complete and is not:</p>
+<ul>
+<li><strong>A filter that no longer matches removes nothing.</strong> Delete-by-<code>where</code> against a payload key that was never written, or was written as an int where the filter compares a string, matches zero items and returns without error. The caller sees the same success as a delete that matched.</li>
+<li><strong>Derived copies are out of scope.</strong> A summarised profile, a cached context block, a copy in a second collection, a nightly export — none of these are items in the collection the delete ran against. Chroma&rsquo;s sentence cannot cover them because the API never sees them.</li>
+<li><strong>Deleting the embedding does not delete your audit trail.</strong> Chroma has no opinion about the SQLite file mem0 writes alongside it. That division of labour is precisely how the mem0 finding above arises.</li>
+</ul>
+<h2 id="the-read-back-probe">The read-back probe</h2>
+<p>The protocol below is the deliverable. It is four deletion paths and six recall probes per path, with the fields that decide pass or fail recorded per probe rather than summarised into a single boolean that hides which path leaked.</p>
+<p><strong>Fixture.</strong> Seven synthetic facts — invented company, invented people, invented dates — of which four are deleted, one per path. Each fact carries a sentinel string so a leak is unambiguous rather than a judgment call.</p>
+<p><strong>Paths.</strong> delete by id; delete by metadata filter; a natural-language &ldquo;forget the name of the security questionnaire contact&rdquo; resolved to candidates and then deleted by id; and a TTL sweep that deletes rows past a retention window.</p>
+<p><strong>Probes.</strong> Per deleted fact, one verbatim recall and five paraphrased recalls phrased the way a user would type them.</p>
+<p><strong>Recorded per probe:</strong> <code>api_return</code> (what the delete call returned), <code>vector_present</code>, <code>raw_row_present</code>, <code>recall_ids</code>, <code>recall_hit</code>, <code>returned_text</code>, <code>history_row_returned_after_delete</code>, <code>history_contains_deleted_text</code>, <code>timestamp</code>.</p>
+<p><strong>Pass/fail, per path, not per store:</strong></p>
+<ul>
+<li>fail if any of the six recall probes returns the fact&rsquo;s sentinel;</li>
+<li>fail if any shipped read API returns the deleted plaintext after a success return;</li>
+<li>pass only when both are false for that path.</li>
+</ul>
+<p>Everything is stdlib Python and SQLite: the harness, the fixture, and a reference store of about ninety lines that implements the six methods your own store needs. To point it at your store you implement the same adapter surface — add, search, delete by id, delete by filter, history, presence checks — and run the four paths unchanged.</p>
+<p>Files for this article:</p>
+<ul>
+<li>Probe harness — <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-delete-semantics-test-2026/readback_probe.py">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-delete-semantics-test-2026/readback_probe.py</a></li>
+<li>Synthetic fixture — <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-delete-semantics-test-2026/fixtures/memory_facts.json">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-delete-semantics-test-2026/fixtures/memory_facts.json</a></li>
+<li>Run record (commands, exit codes, hashes, both runs) — <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-delete-semantics-test-2026/first-party-fixture-run-2026-11-01.json">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-delete-semantics-test-2026/first-party-fixture-run-2026-11-01.json</a></li>
+</ul>
+<h2 id="what-the-fixture-run-showed-and-what-it-did-not">What the fixture run showed, and what it did not</h2>
+<p>The harness was run twice against its own reference store on 2026-11-01, in a local fixture check, not against mem0 or Chroma. Both runs wrote 24 records.</p>
+<p>Run 1 keeps an audit table whose read API does not exclude deleted rows — the pattern this article audits. All four paths were flagged: 4 of 4 failed on the history read-back, and 0 of 24 recall probes returned a deleted fact. That split is the point: the recall layer looked clean while the audit layer handed the deleted sentence back on every path.</p>
+<p>Run 2 is the same store with the audit read filtered to exclude deleted rows. All four paths passed, 0 of 4 failed, 0 of 24 recall hits. The instrument responds in both directions, which is the minimum bar for believing a negative result from it.</p>
+<p>Neither run is a measurement of a vendor product. A store written to demonstrate the probe cannot testify about mem0&rsquo;s or Chroma&rsquo;s behaviour, and the numbers above are counts of records in a JSONL file, not a leak rate in anyone&rsquo;s deployment. The vendor claim in this article comes from the pinned source trace, and it is narrower than the numbers: the plaintext survives the delete in <code>history</code>, and <code>history()</code> returns it.</p>
+<h2 id="what-to-assert-in-ci-before-promising-deletion">What to assert in CI before promising deletion</h2>
+<p>If your product tells a customer a fact is gone, the assertion belongs in your test suite, not in a support conversation. In order of how often they catch something:</p>
+<ol>
+<li><strong>Delete, then recall.</strong> Six probes: one verbatim, five paraphrased. Assert zero hits. This is the assertion almost no suite has.</li>
+<li><strong>Delete, then read every surface an operator can reach.</strong> History endpoints, admin consoles, &ldquo;what do you know about me&rdquo; endpoints, exports. Assert the sentinel is absent from all of them. The mem0 finding is invisible to probe 1 alone.</li>
+<li><strong>Delete by filter, then check the row count.</strong> A filter that matches nothing returns success. Assert <code>matched &gt; 0</code> before you assert the deletion.</li>
+<li><strong>Delete, then re-ingest.</strong> Ingest the same source document again and see whether the fact returns through a summary that was never deleted. Deletion that survives one ingest and fails the next is not deletion.</li>
+<li><strong>Batch deletes: assert the count.</strong> <code>delete_all</code> removes what <code>list()</code> pages through. Assert the number of removed ids equals the number stored.</li>
+<li><strong>Record the pin.</strong> Write the library commit, the vector-backend version, and the date into the test&rsquo;s output. A deletion property verified against <code>main</code> is not verified against the release you ship.</li>
+</ol>
+<p>The probe in this article is the shape of assertion 1 and 2, with the fields that make failures diagnosable. Point it at the store you actually deploy, and keep the JSONL.</p>
+<h2 id="sources-for-the-trace">Sources for the trace</h2>
+<p>Every file and line number above was taken from these, fetched on 2026-11-01:</p>
+<ul>
+<li>mem0 memory API (raw file, <code>main</code> as fetched) — <a href="https://raw.githubusercontent.com/mem0ai/mem0/main/mem0/memory/main.py">https://raw.githubusercontent.com/mem0ai/mem0/main/mem0/memory/main.py</a></li>
+<li>mem0 SQLite history store (raw file, <code>main</code> as fetched) — <a href="https://raw.githubusercontent.com/mem0ai/mem0/main/mem0/memory/storage.py">https://raw.githubusercontent.com/mem0ai/mem0/main/mem0/memory/storage.py</a></li>
+<li>Same two files pinned to the traced commit — <a href="https://github.com/mem0ai/mem0/blob/753496cf1435d76c3a711f3af51303f7fdcb6420/mem0/memory/main.py">https://github.com/mem0ai/mem0/blob/753496cf1435d76c3a711f3af51303f7fdcb6420/mem0/memory/main.py</a> and <a href="https://github.com/mem0ai/mem0/blob/753496cf1435d76c3a711f3af51303f7fdcb6420/mem0/memory/storage.py">https://github.com/mem0ai/mem0/blob/753496cf1435d76c3a711f3af51303f7fdcb6420/mem0/memory/storage.py</a></li>
+<li>Chroma delete documentation, read 2026-11-01 — <a href="https://docs.trychroma.com/docs/collections/delete-data">https://docs.trychroma.com/docs/collections/delete-data</a></li>
+</ul>
+<p>A reader re-verifying this needs no install: open the pinned permalink for the commit and the anchors above resolve exactly as printed, because every excerpt was read from those two files at <code>753496c</code> on 2026-11-01. If <code>main</code> has advanced since, the permalinks still resolve and the surrounding function is unchanged in structure.</p>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li><strong>Static trace, one commit, one backend.</strong> The mem0 findings are from reading <code>main.py</code> and <code>storage.py</code> at commit <code>753496cf1435d76c3a711f3af51303f7fdcb6420</code>, fetched on 2026-11-01. Later commits may add the missing filter; non-default history backends and the hosted platform were not examined. Do not generalise this to mem0 Cloud or to other libraries.</li>
+<li><strong>No runtime probe against a vendor store.</strong> mem0, Chroma, Qdrant and pgvector were not installed in the environment this was written in, so no call was executed against them. Every vendor statement above is a reading of pinned source or documentation, not an observation of a running store.</li>
+<li><strong><code>search()</code> after delete is untested.</strong> The trace shows the vector entry is removed; it does not show that recall is clean. Treat that as unmeasured.</li>
+<li><strong>Chroma statements are documentation-level.</strong> &ldquo;Match&rdquo; is the documented unit of deletion. The article does not claim Chroma fails to delete what it matches.</li>
+<li><strong>Compliance framing stops here.</strong> This audit does not prove erasure, and nothing here is legal advice. It shows how to produce evidence that a specific delete removed a specific fact from specific surfaces — which is what a DPO question actually asks for.</li>
+</ul>
+<p>The wider architecture question — where memory belongs, what should be summarised, what should expire — sits in <a href="https://baeseokjae.github.io/posts/agent-memory-architecture-guide-2026/">the memory architecture pillar</a>. If you are choosing a store first, <a href="https://baeseokjae.github.io/posts/mem0-agent-memory-guide-2026/">the mem0 guide</a> covers the product surface this trace cuts into, and <a href="https://baeseokjae.github.io/posts/zep-ai-agent-memory-review-2026/">the Zep review</a> covers a graph-based alternative whose deletion semantics differ. All three assume the delete works. This page is the check that it did.</p>
+]]></content:encoded></item><item><title>Your 18GB GGUF Is Not an 18GB Budget: Sizing KV Cache and Context for a Local Coding Model</title><link>https://baeseokjae.github.io/posts/local-llm-vram-kv-cache-budget-2026/</link><pubDate>Sun, 01 Nov 2026 13:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/local-llm-vram-kv-cache-budget-2026/</guid><description>A GGUF file is the weights, not the budget. Run the KV-cache formula before you download, with a measured 0.5B check against it on a 12 GB CPU host and the q8_0 setting that saves nothing without Flash Attention.</description><content:encoded><![CDATA[<p>You download a 4-bit quantised model, the file is roughly 18 GB, you have 24 GB of VRAM, and the arithmetic looks settled. Then the agent session gets long, the server either dies or quietly starts answering with a fraction of the context you asked for, and the model that &ldquo;fit yesterday&rdquo; no longer fits.</p>
 <p>The missing term is the key/value cache. It is not in the GGUF file, it is not on the model card, and it is allocated by the runtime at load time from the context length you set — not from the number of tokens you happen to send. On the 12 GB CPU box used for the measurements below, the same 0.5B model occupied 417 MB of reported model memory at a 2,048-token context and 794 MB at 32,768, with an identical file on disk.</p>
 <p>This article gives you one formula to run before downloading, one measured check of that formula that you can repeat, and one warning about a setting that looks like it halves memory and does not.</p>
 <h2 id="what-the-cache-is-in-one-paragraph">What the cache is, in one paragraph</h2>
