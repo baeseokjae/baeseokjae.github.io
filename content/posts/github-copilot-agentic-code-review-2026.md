@@ -1,12 +1,12 @@
 ---
 cover:
-  alt: 'GitHub Copilot Agentic Code Review: Automated PR Analysis in 2026'
+  alt: 'GitHub Copilot code review: plans, setup and cost per review'
   image: /images/github-copilot-agentic-code-review-2026.png
   relative: false
 date: 2026-05-23 18:01:19+00:00
-description: GitHub Copilot agentic code review went GA in March 2026. Here's how
-  to enable it, use Fix with Copilot, and decide when human review still wins.
+description: Copilot code review is on every paid Copilot plan, not just Business. What it does, how to enable it, which fix path is preview, and what a review costs.
 draft: false
+lastmod: '2026-10-30T15:25:08+00:00'
 schema: schema-github-copilot-agentic-code-review-2026
 tags:
 - github-copilot
@@ -14,130 +14,104 @@ tags:
 - ai
 - pull-request
 - devtools
-title: 'GitHub Copilot Agentic Code Review: Automated PR Analysis in 2026'
+title: 'GitHub Copilot Code Review: Plans, Setup, and Cost (2026)'
 ---
 
-GitHub Copilot's agentic code review went generally available on March 5, 2026, processing 60 million reviews in its first months. It doesn't just flag problems — it can autonomously implement fixes through the "Fix with Copilot" workflow, fundamentally changing how teams handle PR turnaround.
+GitHub Copilot code review reads the changes in a pull request and posts comments tagged High, Medium, or Low severity. It is supported on GitHub.com, GitHub CLI, GitHub Mobile, VS Code, Visual Studio, Xcode and JetBrains IDEs, with Azure DevOps in public preview. It is included in every paid Copilot plan and excluded from Copilot Free.
 
-## What Is GitHub Copilot Agentic Code Review?
+Two details decide whether you can adopt it as it stands. By default Copilot submits a "Comment" review rather than an approval, so a branch rule that requires an approving review is not satisfied by Copilot until you configure it to approve. And the autonomous fix path is not generally available: passing suggestions to Copilot cloud agent is documented as public preview and subject to change. The [concepts page](https://docs.github.com/en/copilot/concepts/agent-capabilities/agent-powered-workflows-and-operations/code-review) states both facts directly.
 
-GitHub Copilot agentic code review is an AI-powered PR analysis system that examines code diffs, surfaces actionable feedback, and can autonomously apply fixes through a cloud-based agent. Unlike traditional linters or static analysis tools that apply fixed rules, Copilot's review engine understands context: it reads the PR description, the surrounding codebase, and applies judgment about what matters. Since reaching general availability on March 5, 2026, it has processed over 60 million reviews, with 71% surfacing at least one actionable feedback item per PR. The average review generates 5.1 comments, targeting logic errors, security patterns, missing edge cases, and style inconsistencies. The "agentic" part matters: when you click "Fix with Copilot" on a suggestion, control passes to a cloud agent that creates a new commit or branch with the implemented fix — no copy-paste required. This architecture separates Copilot code review from older tools that stopped at commentary and left implementation entirely to humans.
+## What the review does, and what it does not
 
-### How the Agentic Architecture Works
+Copilot reviews code in any language and comments on it from multiple angles. Where it can, it attaches a suggested change you apply with a couple of clicks — one suggestion at a time, or several together in a single commit. Comments behave like human review comments: you can react to them, reply, resolve them and hide them. Anything you write in reply is visible to people but not to Copilot, and Copilot does not answer.
 
-The agentic code review pipeline runs in three phases. First, Copilot analyzes the diff using its language model, generating ranked suggestions with confidence scores. Second, suggestions are surfaced inline on the PR — reviewers see them alongside human comments. Third, when a developer triggers "Fix with Copilot," the suggestion payload is handed off to a cloud agent running in GitHub's infrastructure. That agent has read access to the full repository, checks out the relevant branch, implements the change, and opens a follow-up commit or PR for the developer to approve. The agent shares the same premium request pool as other Copilot features (chat, completions), so heavy review usage on large repos can affect availability for other team members during peak periods.
+The "agentic" label refers to two documented capabilities: full project context gathering, which analyses the whole repository instead of only the diff, and the handoff of suggestions to Copilot cloud agent. Both are switched on automatically for plans that include code review. If GitHub Actions is unavailable, or the workflows Copilot code review uses fail, reviews are still produced — they simply lose the agentic extras. That degradation behaviour comes from the same [concepts page](https://docs.github.com/en/copilot/concepts/agent-capabilities/agent-powered-workflows-and-operations/code-review), and it is the reason a review can look thinner on a repository whose Actions configuration is locked down.
 
-## How to Enable Copilot Code Review on Your Repository
+## Which plan you actually need
 
-Enabling GitHub Copilot agentic code review requires a Copilot Business or Enterprise subscription — it is not available on the individual plan. Once your organization has the right tier, the setup takes under five minutes and involves three configuration points: repository settings, branch protection rules, and optional auto-request policies for your team.
+The most common stale claim about this feature is that it requires Copilot Business or Enterprise. It does not. GitHub's own plan line for the feature reads "Available for all paid Copilot plans", and the [billing documentation](https://docs.github.com/en/billing/concepts/product-billing/github-copilot-licenses) supplies the list prices.
 
-**Step 1 — Enable at the organization level:** Navigate to your GitHub organization settings → Copilot → Policies. Ensure "Copilot code review" is set to "Allowed" (not "Blocked"). This is the master switch; individual repos inherit it unless overridden.
+| Plan | List price | Code review included |
+|---|---|---|
+| Copilot Free | No cost, limited features | No |
+| Copilot Pro | $10 per calendar month | Yes |
+| Copilot Pro+ | $39 per calendar month | Yes |
+| Copilot Max | $100 per calendar month | Yes |
+| Copilot Business | $19 per user per month, billed monthly | Yes |
+| Copilot Enterprise | Two licensing models: no Copilot seat charge through GitHub Enterprise Cloud, or Copilot Standalone at $10 per user per month | Yes |
 
-**Step 2 — Enable per-repository:** In the target repo, go to Settings → Code review and automation → GitHub Copilot. Toggle "Enable Copilot code review" to on. You will see a preview of which file types and languages are supported — as of May 2026, this covers Python, JavaScript/TypeScript, Go, Ruby, Java, C#, C++, and Rust.
+Enterprise is sold under two licensing models, so no single seat price covers both. The Copilot access plan provides Copilot through GitHub Enterprise Cloud with no Copilot seat charge, or as Copilot Standalone for $10 USD per user per month without a GitHub Enterprise Cloud license; it carries no included usage allowance, is rolling out to eligible enterprises, and moving to it is voluntary. Enterprises that stay on Copilot Business or Copilot Enterprise pay a monthly fee per assigned seat, and the billing page points readers to a separate page for enterprise eligibility, pricing and a comparison of the two models. Prices here are list prices in USD as published on the billing page on 30 October 2026; treat them as dated.
 
-**Step 3 — Configure auto-request (optional):** Under branch protection rules for your main or release branches, you can add "Copilot" as a required reviewer. This triggers an automatic Copilot review on every PR targeting that branch, without developers needing to manually request it.
+### Reviews for people who hold no license
 
-**Step 4 — Verify the integration:** Open a test PR and confirm that Copilot appears in the Reviewers sidebar. When it completes, you should see inline comments with the Copilot avatar and a summary comment at the top of the PR timeline.
+Organizations on Business or Enterprise can also let members who have no Copilot license use code review on GitHub.com — not in IDEs. Two policies must be enabled, in order: "AI credits paid usage" first, which allows the organization or enterprise to incur charges, then "Allow members without a Copilot license to use Copilot code review in GitHub.com". The second policy is disabled by default, is the most restrictive setting, and once it is set at enterprise level it is visible but not editable at the organization level. It applies only in repositories under an organization where the policy has been enabled explicitly.
 
-One gotcha: if your repo uses required status checks, Copilot review completion does not count as a passing check unless you have configured it as a required reviewer in branch protection. The two settings are independent.
+Those users get no monthly AI-credit allowance for code review. Their consumption is billed to the organization or enterprise as paid additional usage and is not attributed to any individual's budget.
 
-## Using the "Fix with Copilot" Feature for Automated Fixes
+## Turning it on
 
-The "Fix with Copilot" button — previously labeled "Implement suggestion" in the beta — is the agentic entry point that distinguishes Copilot code review from pure commentary tools. When you click it on a review comment, GitHub hands the suggestion to a background cloud agent with full repository read access. The agent reads the relevant file, applies the change, and either commits directly to the PR branch or opens a child PR for your approval. This typically completes in 30–90 seconds for straightforward fixes. Since general availability in March 2026, this workflow has been the most-cited reason teams upgrade to Copilot Business: reviewers can action a suggestion without leaving the PR page, eliminating the context-switch of opening an editor, locating the line, making the change, staging, and committing. For teams processing dozens of PRs per week, that time savings accumulates quickly. The feature is available on any Copilot Business or Enterprise subscription, requires no additional configuration beyond enabling code review, and works on all supported languages including Python, JavaScript, TypeScript, Go, Java, C#, and Rust.
+1. **Check the organization policy first.** If you receive Copilot through an organization, that organization must enable the Copilot code review option in its policy settings; this gates reviews on GitHub.com and GitHub Mobile.
+2. **Request a review manually.** On a pull request, open the Reviewers sidebar and click Request next to Copilot. GitHub states this usually takes less than 30 seconds. The [how-to page](https://docs.github.com/en/copilot/how-tos/use-copilot-agents/request-a-code-review/use-code-review) also documents requesting `copilot-pull-request-reviewer[bot]` as a reviewer through the REST API.
+3. **Or automate it.** Automatic review is configured in three separate places: a user setting, available on Pro, Pro+, Max and with Business or Enterprise licenses but not for managed user accounts; a repository ruleset; and an organization ruleset. User settings and ruleset configuration are evaluated separately — neither inherits from nor overrides the other.
+4. **Set the effort default.** Repository and organization administrators choose the default review effort level used for automatic reviews.
+5. **Verify on a throwaway pull request.** Confirm the review arrives, that severity labels appear, and whether your ruleset treats a Comment review as satisfying a required approval.
 
-### When "Fix with Copilot" Works Well
+One interaction is easy to miss. In personal repositories only the owner or a direct collaborator can request a review, and automatic reviews from personal settings do not run for people who are not authorized — but automatic reviews configured by repository or organization rulesets still run. If you enable automation before agreeing on budgets, reviews can start spending without any individual opting in.
 
-"Fix with Copilot" works best for self-contained, well-scoped suggestions: adding a null check, replacing a deprecated API call, extracting a constant from a magic number, or adding a missing error return. These are changes where the suggestion fully describes the required transformation and no cross-file refactoring is needed. In practice, these account for roughly 60–70% of Copilot review comments based on the types of issues the model is tuned to surface.
+## The fix path: what is stable and what is preview
 
-### When to Skip the Automated Fix
+"Fix with Copilot" is the button on a review comment. Clicking it creates a draft comment where you describe what to change; you then choose whether Copilot opens a new pull request against your branch or commits to the current pull request. Two features must be enabled first: Copilot code review and Copilot cloud agent.
 
-The automated fix underperforms when the suggestion involves business logic the model doesn't fully understand, or when implementing the fix correctly requires changing multiple files in coordinated ways. For example, if Copilot suggests adding input validation but the validation logic lives in a shared utility module, the agent may add inline validation instead of reusing the existing pattern. Always review the agent's commit before merging — the diff is small enough to audit in 30 seconds, and the risk of an unreviewed agentic commit reaching main is real.
+Treat that handoff as a pilot, not as infrastructure. GitHub labels passing suggestions to Copilot cloud agent as public preview and subject to change, so a workflow that depends on it can change without notice. The step that is stable is the plain suggestion you accept yourself — inline, applied in a click or two, committed singly or as a group.
 
-## Understanding the Billing Model (GitHub Actions Minutes + AI Credits)
+## What a review costs
 
-Starting June 1, 2026, GitHub Copilot code review consumes GitHub Actions minutes billed as AI Credits — a significant pricing change from the previous flat-rate included model. Understanding this billing structure matters for teams running high-volume review workflows or evaluating Copilot against purpose-built alternatives.
+Two meters run, and they are billed separately. AI credits pay for the model interaction; the amount depends on the model used and the number of tokens processed. GitHub Actions minutes pay for the agentic capabilities. A quoted per-review credit figure is therefore not the whole bill.
 
-The AI Credits system works as follows: each Copilot code review consumes a variable number of AI Credits based on PR size (lines changed), number of files, and whether the "Fix with Copilot" agent is invoked. GitHub has not published a fixed per-review rate, instead describing it as "proportional to compute consumed." Early reports from teams with 50+ developer organizations suggest average costs of $0.15–0.40 per PR review, with larger PRs (500+ lines) reaching $1.00+.
+| Review effort level | Typical range per review | Approximate average |
+|---|---|---|
+| Lite | $0.05 to $1.00 | $0.25 |
+| Balanced | $0.25 to $5.00 | $1.50 |
+| Max | $1.50 to $25.00 | $10.00 |
 
-For Copilot Business ($19/user/month) and Enterprise ($39/user/month) subscribers, a baseline allotment of AI Credits is included. Reviews within that allotment are effectively free; overages are billed at the standard GitHub Actions minute rate converted to AI Credits. Organizations should monitor usage under Settings → Billing → Actions and AI Credits to catch unexpected spikes.
+GitHub describes these as estimates only. Consumption generally increases with pull request size and with repository custom instructions, actual costs can fall outside the ranges, and the figures may change as models evolve. The table explicitly excludes GitHub Actions minutes, so read the credit numbers as the first of two line items, not as a per-review price.
 
-**Practical cost management tips:**
-- Set a file size threshold in Copilot settings to skip review on auto-generated files (proto, migrations, lock files)
-- Limit auto-request Copilot review to branches targeting `main`/`release`, not feature branches
-- Configure the "exclude paths" option to skip `vendor/`, `node_modules/`, and generated code directories
+Agentic steps run on standard GitHub-hosted runners by default. Larger GitHub-hosted runners are available and are billed at a higher per-minute rate; self-hosted runners consume no Actions minutes. If an organization has disabled GitHub-hosted runners, the agentic capabilities become unavailable and reviews fall back to the more limited review. The feature degrades rather than failing, and the documentation does not say that a degraded review is labelled as such, so compare a fallback review against a normal one before relying on either.
 
-## Copilot Code Review vs Competitors (CodeRabbit, Greptile, Qodo)
+### A worked range
 
-GitHub Copilot agentic code review competes with a set of specialized tools that have been in this space longer. As of mid-2026, the main alternatives are CodeRabbit ($24/dev/month), Greptile (enterprise pricing), and Qodo formerly CodiumAI ($19/dev/month). Each takes a meaningfully different approach to what "AI code review" means, and the right choice depends heavily on your existing tooling, team size, and whether you prioritize breadth of catch rate or reduction in false-positive noise. Copilot's 71% actionable feedback rate and the unique "Fix with Copilot" agentic workflow give it a strong position for teams already on GitHub's ecosystem, while CodeRabbit's deliberate noise reduction (44% catch rate, fewer comments) appeals to teams suffering alert fatigue. Greptile's 82% catch rate is the highest in the field but comes with an average 8.5 comments per PR, requiring significant developer triage time. Understanding how these tools compare across price, accuracy, and integration model helps teams make the right build-vs-buy decision rather than defaulting to whichever tool arrived first in their inbox.
+Take 200 reviews a month at Balanced effort and use only GitHub's published ranges. The AI-credit component works out to 200 × $0.25 = $50 at the low end and 200 × $5.00 = $1,000 at the high end, before Actions minutes. The same volume at Lite effort is 200 × $0.05 = $10 to 200 × $1.00 = $200. The spread is the point: the published range is more than an order of magnitude wide, so a team planning a budget needs its own distribution from real pull requests rather than an average.
 
-| Tool | Actionable Feedback Rate | Avg Comments/PR | Price | Agentic Fix |
-|---|---|---|---|---|
-| GitHub Copilot | 71% | 5.1 | Included with Copilot Business/Enterprise | Yes ("Fix with Copilot") |
-| CodeRabbit | 44% | ~3.2 | $24/dev/month | No |
-| Greptile | 82% | ~8.5 | Contact sales | No |
-| Qodo | ~65% | ~4.8 | $19/dev/month | Partial (test gen) |
+Attribution follows who asked. An automatic review requested by a repository setting is billed to the pull request author; a review a person requests manually is billed to that person; pull requests authored by bots, or reviews requested by a bot, are billed to the organization. On Business and Enterprise, budgets govern access: when the applicable user budget, organization budget, cost center budget or enterprise spending limit is exhausted, code review is blocked along with the other AI-credit features.
 
-### GitHub Copilot
+## Limits worth knowing before you enable it
 
-Copilot's biggest advantage is integration — no webhook setup, no third-party auth, no separate dashboard. If your team is already on GitHub and paying for Copilot, enabling code review is one toggle. The 71% actionable feedback rate is competitive, and the "Fix with Copilot" agentic workflow has no equivalent in competing tools as of May 2026. The weakness is the shared premium request pool: heavy review load can degrade Copilot chat and completion availability for developers.
+- **Default approvals.** Unless configured otherwise, Copilot's Comment review does not count toward required approvals for the pull request.
+- **No model choice.** Model switching is not supported; Copilot code review uses a fixed mix of models and prompts. It may use models that are not enabled on your organization's Models settings page, because that page only controls Copilot Chat.
+- **Actions dependency.** Without Actions, reviews still arrive, but without repository-wide context gathering or the cloud-agent handoff.
+- **One-way conversation.** Replies you write on Copilot's comments are for humans; Copilot does not read them or respond.
+- **Free tier excluded.** Copilot Free does not include code review, and users on it have no AI-credit allowance for it.
 
-### CodeRabbit
+## A short adoption checklist
 
-CodeRabbit's 44% actionable feedback rate sounds lower but reflects a deliberate choice to reduce noise — it posts fewer comments that are more likely to matter. Teams frustrated by alert fatigue often prefer this. At $24/dev/month, it's an additional line item for GitHub Copilot subscribers, but organizations without Copilot Business may find it competitive. CodeRabbit integrates via GitHub App and doesn't require any GitHub plan upgrade.
+1. Confirm the plan tier and, for Business or Enterprise, decide whether you want the no-license path — and budget for it, since those reviews are additional usage.
+2. Turn on the organization policy before changing repository settings.
+3. Choose a default effort level deliberately; start low and raise it only where review quality on real pull requests justifies the cost.
+4. Enable automatic review on the branches that matter rather than everywhere, so volume stays predictable.
+5. Set budgets and confirm attribution, especially if bots open pull requests in your repositories.
+6. Run ten real pull requests, then read the AI-credit and Actions-minute lines in billing instead of extrapolating from the published table.
+7. Decide explicitly whether Copilot's review should count as an approval. By default it does not.
 
-### Greptile
+## What changed in this revision, and why
 
-Greptile's 82% catch rate comes from its whole-codebase context model — instead of reviewing only the PR diff, it indexes the entire repository and evaluates changes against existing patterns and architectural conventions. This is valuable for catching issues that are invisible when looking at a diff in isolation (e.g., a new API route that duplicates an existing endpoint). The tradeoff is noise: 8.5 average comments per PR requires developer time to triage. Greptile is enterprise-priced with no self-serve option.
+This page was first published on 23 May 2026 and substantially revised on 30 October 2026 after re-checking GitHub's documentation. Five corrections matter to anyone who saw the earlier version. Code review was described as requiring a Business or Enterprise subscription; it is available on all paid plans, with Free excluded. The autonomous fix was described as generally available; the cloud-agent handoff is in public preview. Billing was described as Actions minutes converted into AI credits from 1 June 2026; the documented model is two separate components, AI credits for the review and Actions minutes for the agentic steps. And figures for review volume, the share of actionable comments, average comments per review, and competitor catch rates were withdrawn — none had a primary source, and vendor-reported rates built on different denominators cannot be compared as though they shared a method. The enterprise row also said the billing page published no per-user figure; it does publish Copilot Standalone at $10 USD per user per month and no Copilot seat charge through GitHub Enterprise Cloud, so both licensing models are now stated instead of a single seat price.
 
-### Qodo
+If you are budgeting this against the rest of your Copilot spend, the [Copilot usage metrics guide](/posts/copilot-usage-metrics-accuracy-coverage-guide-2026/) covers how to read consumption reporting after you switch it on.
 
-Qodo combines code review with automated test generation. When it identifies a bug or missing edge case, it can generate a failing test that demonstrates the problem — useful for teams that want to grow test coverage alongside review quality. At $19/dev/month, it's price-competitive with Copilot add-ons and works across GitHub, GitLab, and Bitbucket.
+## Sources
 
-**Bottom line:** For pure GitHub shops already paying for Copilot Business, enabling Copilot code review is a no-brainer — it's already paid for and the agentic fix workflow is genuinely useful. For teams that need cross-platform support, deeper architectural analysis, or want to minimize noise above all else, CodeRabbit or Greptile are worth evaluating separately.
+- [GitHub Docs — GitHub Copilot code review (concepts)](https://docs.github.com/en/copilot/concepts/agent-capabilities/agent-powered-workflows-and-operations/code-review), checked 30 October 2026
+- [GitHub Docs — Using GitHub Copilot code review](https://docs.github.com/en/copilot/how-tos/use-copilot-agents/request-a-code-review/use-code-review), checked 30 October 2026
+- [GitHub Docs — GitHub Copilot licenses (billing)](https://docs.github.com/en/billing/concepts/product-billing/github-copilot-licenses), checked 30 October 2026
 
-## Best Practices for Teams Using Agentic Code Review
-
-Getting value from Copilot's agentic code review requires treating it like a junior reviewer, not an oracle. The teams that integrate it well have a few practices in common.
-
-**Set clear expectations with your team.** Copilot review comments look identical to human comments in the PR timeline unless reviewers check the avatar. Make sure your team knows which comments are AI-generated so they apply appropriate skepticism. Some teams add a PR template note: "Copilot auto-review enabled — verify AI suggestions before accepting."
-
-**Review "Fix with Copilot" commits before merging.** The agent's commit will appear in the PR with the message "Copilot suggested fix for: [comment text]." Always open the diff. For small, self-contained fixes this takes 20 seconds and is almost always correct. For anything touching shared utilities or config, read it carefully.
-
-**Use Copilot review as a first pass, not a gate.** The most effective pattern is: Copilot reviews first, humans review second. This way, human reviewers spend less time on mechanical issues (missing null checks, obvious style violations) and more time on design, correctness, and domain logic. Don't configure Copilot as the only required reviewer unless the repo is low-risk.
-
-**Tune the exclude paths.** The default configuration reviews every file in the diff. Add exclusions for auto-generated code, vendor directories, and schema files. This reduces noise, lowers AI Credit consumption, and keeps the review focused on code humans actually wrote.
-
-**Monitor for rate limiting.** If your organization has many concurrent PRs open during a sprint push, Copilot review requests may queue. Set up a Slack or Teams notification for PRs waiting on Copilot review for more than 15 minutes — this usually signals a shared pool saturation event.
-
-## Limitations and When to Use Human Review Instead
-
-GitHub Copilot agentic code review is a useful tool with real limitations that teams often discover the hard way. Understanding where it falls short prevents over-reliance.
-
-**Context beyond the diff.** Copilot reviews the PR diff and has read access to the repo, but it doesn't have the business context your team carries: the architecture decision record explaining why a particular pattern was chosen, the customer incident that made a certain edge case critical, or the upcoming refactor that makes a current implementation intentionally temporary. Human reviewers carry this context; Copilot does not.
-
-**Interpersonal and style judgment.** Code review is partly a communication act. Human reviewers calibrate feedback to the author's experience level, note where they're uncertain, and distinguish "this must change" from "I'd do it differently." Copilot's comments are uniformly confident regardless of how ambiguous the situation is.
-
-**Security-sensitive code.** Copilot flags common security patterns (SQL injection risk, missing authentication checks, insecure deserialization) competently, but it's not a substitute for a dedicated security review on authentication flows, cryptographic implementations, or privilege escalation paths. The model can miss subtle vulnerabilities that experienced security engineers catch through deep domain knowledge.
-
-**Large, cross-cutting PRs.** On PRs with 1,000+ lines across many files — a large refactor, a migration, a new subsystem — Copilot's per-file analysis misses the forest for the trees. The aggregate architectural impact of many small changes requires a human reviewer to evaluate holistically.
-
-**The practical rule:** Use Copilot review as standard on all PRs. Require human review additionally for: security-sensitive changes, database migrations, API contract changes, and any PR over 500 lines.
-
----
-
-## FAQ
-
-**Is GitHub Copilot agentic code review available on the free Copilot plan?**
-No. Copilot code review requires Copilot Business ($19/user/month) or Copilot Enterprise ($39/user/month). The individual free and paid Copilot plans do not include code review as of May 2026.
-
-**How does "Fix with Copilot" differ from GitHub Copilot Workspace?**
-"Fix with Copilot" is scoped to implementing a single review suggestion — it reads one comment, applies one change, and commits it. Copilot Workspace is a broader agentic environment for multi-step tasks (writing specs, generating code across multiple files, running tests). They use the same underlying agent infrastructure but are designed for different scopes.
-
-**Will Copilot code review affect my GitHub Actions minutes quota?**
-Starting June 1, 2026, yes. Copilot code review consumes AI Credits billed through the GitHub Actions minutes system. Your Copilot Business or Enterprise plan includes a baseline allotment; heavy usage on large PRs or high-volume repos may incur additional charges. Monitor under Settings → Billing → Actions and AI Credits.
-
-**Can I configure Copilot code review to skip certain file types?**
-Yes. In repository settings under Copilot → Code review, you can specify exclude paths using glob patterns (e.g., `vendor/**`, `**/*.generated.ts`, `migrations/**`). This reduces noise and lowers AI Credit consumption.
-
-**How does Copilot code review perform compared to CodeRabbit?**
-Copilot has a higher actionable feedback rate (71% vs CodeRabbit's 44%) and includes the "Fix with Copilot" agentic workflow. CodeRabbit generates fewer comments per PR (less noise) and works across GitHub, GitLab, and Bitbucket without requiring a GitHub plan upgrade. For teams already on Copilot Business, Copilot review is the cost-efficient default; CodeRabbit is worth considering if noise reduction is the top priority.
+No live Copilot review was executed for this article: no licensed repository was available while it was written. Everything above is documented behaviour and published list pricing, re-checked on the date shown. Where the documentation does not publish a number — a latency distribution, a measured cost distribution, a catch rate — this page does not supply one.
