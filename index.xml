@@ -1,4 +1,138 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>RockB</title><link>https://baeseokjae.github.io/</link><description>Recent content on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sun, 01 Nov 2026 00:16:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/index.xml" rel="self" type="application/rss+xml"/><item><title>Your Embedding Server Stops at 2,048 Tokens: Measuring the Local Embedding Context Ceiling That Silently Empties Agent Memory (2026)</title><link>https://baeseokjae.github.io/posts/local-embedding-context-ceiling-2026/</link><pubDate>Sun, 01 Nov 2026 00:16:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/local-embedding-context-ceiling-2026/</guid><description>Ollama 0.20.3 served an embedding model whose Modelfile asked for 8,192 tokens and allocated 2,048. Here is how to measure the real ceiling, prove which chunks were clipped, and size a chunker against the number the server actually uses.</description><content:encoded><![CDATA[<p>If your agent&rsquo;s memory is written through a local embedding endpoint, the context window that decides what gets remembered is not the one printed on the model card. On the machine used for this article, Ollama 0.20.3 allocated 2,048 prompt tokens to <code>nomic-embed-text:latest</code> while the installed model&rsquo;s own parameters said <code>num_ctx 8192</code>, and it accepted a 64,599-character document with HTTP 200 by silently evaluating only the first 2,048 tokens. The number that governs your ingest never appears in the embedding call, the client library, or the config file you wrote. It appears in <code>ollama ps</code>.</p>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>RockB</title><link>https://baeseokjae.github.io/</link><description>Recent content on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sun, 01 Nov 2026 00:52:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/index.xml" rel="self" type="application/rss+xml"/><item><title>Retrying a Failed Tool Call: Duplicate Side Effects and the Token Bill Nobody Meters</title><link>https://baeseokjae.github.io/posts/agent-tool-retry-duplicate-side-effects-2026/</link><pubDate>Sun, 01 Nov 2026 00:52:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-tool-retry-duplicate-side-effects-2026/</guid><description>A 650-trial local fault injection separates a stall before the commit from a stall after it. Regenerating the call id duplicated the effect in 50 of 50 post-commit trials, reusing it duplicated none, and the retry resent 5,640 characters where one call sent 1,920.</description><content:encoded><![CDATA[<p>An agent loop calls a tool that files a ticket, posts a review comment, or inserts a row. The call stalls and the client gives up at its timeout. The loop does what every retry wrapper does: it tries again. Nobody in that loop knows whether the first attempt reached the database, so the second attempt may be the first real write or the second one. When it is the second, the user sees a duplicate comment under a single logical step, and the token meter shows one step because the meter counts steps, not executions.</p>
+<p>The correct answer is not &ldquo;retry less&rdquo;. It is that a retry is only safe when the server can recognise the second attempt as the same operation. This post measures the difference between the two failure shapes that a client cannot distinguish, and then measures what the retry costs in resent prompt text. The experiment is 650 trials on one host against a local tool server with a SQLite effect ledger, so the duplicate count is read from the database rather than inferred from logs. The retry budget half of this problem is covered in <a href="https://baeseokjae.github.io/posts/agent-cost-circuit-breaker-pattern-guide-2026/">the circuit-breaker and retry-budget guide</a>; this post is about the correctness half that assumes away.</p>
+<h2 id="a-timeout-is-not-a-failure-signal">A timeout is not a failure signal</h2>
+<p>Amazon&rsquo;s guidance is blunt about the assumption most retry wrappers are built on: &ldquo;retrying a service call as mitigation for a transient fault is based on a simplifying assumption that an operation can be retried without any side effects&rdquo; (<a href="https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/)">https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/)</a>. The same article states the goal a retry loop has to meet: &ldquo;we want to make sure that the result of the call happens only once, even if we need to make that call multiple times as part of our retry loop.&rdquo;</p>
+<p>The client-side version of the problem is stated just as directly in the AWS timeouts and backoff article: &ldquo;A timeout or failure doesn&rsquo;t necessarily mean that side effects haven&rsquo;t happened&rdquo; (<a href="https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/)">https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/)</a>. That sentence is the entire failure mode. The client observes a transport outcome; the server holds the truth about the commit; and no amount of retry logic on the client side can recover the truth by trying again.</p>
+<p>HTTP does not rescue you either, because agent tool calls are almost always writes. Per RFC 9110 as restated in the Idempotency-Key Internet-Draft, &ldquo;the methods <code>OPTIONS</code>, <code>HEAD</code>, <code>GET</code>, <code>PUT</code> and <code>DELETE</code> are idempotent while methods <code>POST</code> and <code>PATCH</code> are not&rdquo; (<a href="https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-idempotency-key-header)">https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-idempotency-key-header)</a>. A tool call that creates a comment or a ticket is a POST. It inherits no idempotency guarantee from the protocol, so the guarantee has to be constructed by the caller and honoured by the server.</p>
+<p>Stripe&rsquo;s API documentation shows what that construction looks like when it is done properly: the API &ldquo;supports idempotency for safely retrying requests without accidentally performing the same operation twice&rdquo;, and for API v1 &ldquo;Stripe saves the status code and body of the first request made with a given idempotency key after endpoint execution begins. Retries with the same key return the saved response&rdquo; (<a href="https://docs.stripe.com/api/idempotent_requests)">https://docs.stripe.com/api/idempotent_requests)</a>. That construction comes with an expiry, and the wording matters: &ldquo;For API v1, you can remove keys from the system automatically after they&rsquo;re at least 24 hours old. We generate a new request if a key is reused after the original is pruned.&rdquo; That is permission for the operator to prune keys, not a promise that Stripe expires them on a timer, and it still fixes the boundary a retry loop lives inside: once the key is gone, the same call id is a brand-new request.</p>
+<h2 id="the-fixture-one-ledger-four-policies">The fixture: one ledger, four policies</h2>
+<p>The experiment is deliberately small and offline: a <code>ThreadingHTTPServer</code> on 127.0.0.1 with one <code>POST /tool</code> endpoint, an append-only <code>effects</code> table in SQLite, and a <code>responses</code> table that stores the status and body under the request&rsquo;s <code>Idempotency-Key</code>. A duplicate is a second row in <code>effects</code> for the same trial, counted in the database after the client has finished, not inferred from the client&rsquo;s own bookkeeping.</p>
+<p>Three fault modes are injected at the server, and the client&rsquo;s timeout is 0.12 s while the late reply takes 0.35 s:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Fault mode</th>
+					<th>What the server does</th>
+					<th>What the client sees</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>none</code></td>
+					<td>Commits, replies 200</td>
+					<td>200</td>
+			</tr>
+			<tr>
+					<td><code>error_502_before</code></td>
+					<td>Replies 502 without touching the ledger</td>
+					<td>502</td>
+			</tr>
+			<tr>
+					<td><code>timeout_before</code></td>
+					<td>Sleeps past the client timeout, never commits</td>
+					<td>Timeout, every attempt</td>
+			</tr>
+			<tr>
+					<td><code>timeout_after</code></td>
+					<td>Commits first, then sleeps past the client timeout on the first attempt</td>
+					<td>Timeout on attempt 1, indistinguishable from <code>timeout_before</code></td>
+			</tr>
+	</tbody>
+</table>
+<p>Four client policies run against those faults, and the difference between the first two is the whole subject of this post. Policy A retries up to three times, regenerating both the tool call id and the <code>Idempotency-Key</code> on each attempt. Policy B retries with the original tool call id reused as the <code>Idempotency-Key</code>. Policy C keeps regenerating keys but the server dedupes on <code>(tool, sha256(args))</code>. Policy D fails closed and never retries.</p>
+<p>Fifty trials run per policy per fault mode (four policies × three fault modes × 50 = 600), plus a 50-trial no-fault control under the blind policy, for 650 ledger rows in total. Two controls had to come out clean before any cell could be read as a finding: the no-fault cell had to commit exactly one effect per trial, and the pre-commit stall had to produce zero duplicates under every policy. The full matrix ran in 108.48 s of wall time on this host, with no model calls and no external network.</p>
+<h2 id="what-the-650-trials-showed">What the 650 trials showed</h2>
+<p>The table below is the complete fault matrix, read back from <code>ledger.csv</code>; every cell is 50 trials. &ldquo;Effects&rdquo; is the number of rows the server actually committed per trial, and &ldquo;final status&rdquo; is what the client last received, with 0 meaning it timed out and got nothing.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Policy</th>
+					<th>Stall before commit</th>
+					<th>Stall after commit</th>
+					<th>502 before commit</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>A: blind retry, new call id</td>
+					<td>0/50 duplicates, 0 effects, 4.0 attempts</td>
+					<td><strong>50/50 duplicates, 2 effects</strong>, 2.0 attempts</td>
+					<td>0/50 duplicates, 0 effects, 4.0 attempts</td>
+			</tr>
+			<tr>
+					<td>B: retry, reuse call id</td>
+					<td>0/50 duplicates, 0 effects, 4.0 attempts</td>
+					<td>0/50 duplicates, 1 effect, 2.0 attempts</td>
+					<td>0/50 duplicates, 0 effects, 4.0 attempts</td>
+			</tr>
+			<tr>
+					<td>C: arg-hash dedupe</td>
+					<td>0/50 duplicates, 0 effects, 4.0 attempts</td>
+					<td>0/50 duplicates, 1 effect, 2.0 attempts</td>
+					<td>0/50 duplicates, 0 effects, 4.0 attempts</td>
+			</tr>
+			<tr>
+					<td>D: no retry</td>
+					<td>0/50 duplicates, 0 effects, 1.0 attempt</td>
+					<td>0/50 duplicates, 1 effect, 1.0 attempt</td>
+					<td>0/50 duplicates, 0 effects, 1.0 attempt</td>
+			</tr>
+	</tbody>
+</table>
+<p>The obvious objection is that duplicating after an injected post-commit stall is true by construction. It is, for policy A, and that is exactly why it is presented as a control rather than a discovery: it proves the injector commits before the client gives up, and that the ledger can see the second row. The finding is in the columns beside it. Under the same injected fault, reusing the original call id (B) and server-side argument-hash dedupe (C) both dropped to zero duplicates and left exactly one row in the ledger, by two different mechanisms: B&rsquo;s retry carried the same key and was answered from the response stored under it, while C&rsquo;s retry arrived with a fresh key and was caught by the argument-hash branch, which replied 200 with the id of the effect already written instead of inserting a second one. The pre-commit column is where matching outcomes hide different behaviour. All four policies wrote nothing and duplicated nothing there, but A, B and C averaged 4.0 attempts each against 1.0 for D, and every retrying client still finished with status 0 and no knowledge of whether anything had happened.</p>
+<p>That last point is the part that gets lost in retry-policy debates. &ldquo;Zero duplicates&rdquo; is not the same as &ldquo;safe&rdquo;. The pre-commit stall is the honest control for the opposite reason: no effect landed at all, and the retrying policies burned four attempts trying to establish an outcome they never got, ending with status 0 and an unknown result. Duplicate-freedom in that column is not a property of the policy; it is a property of the server never having written anything.</p>
+<p>Policy D shows the same trap from the other side. It produced zero duplicates in every column, including the post-commit stall, where exactly one effect did land. The client still ended with no response, so the loop&rsquo;s knowledge of the world after that trial is &ldquo;unknown&rdquo;, and this harness cannot distinguish D&rsquo;s zero duplicates from a write that succeeded quietly. Anyone adopting fail-closed as the safe option needs a reconciliation step — list-by-causation-id, or a read-back of the resource — or the effect stays unconfirmed until a human notices.</p>
+<p>The 502 column adds a cheaper lesson. A 502 that never resolves is a fault no retry can fix, and the retrying policies spent four attempts and 13,080 characters per trial to establish that nothing was written. None of those attempts duplicated anything, because the server rejected them before the ledger, but none of them made progress either.</p>
+<h2 id="the-token-bill-nobody-meters">The token bill nobody meters</h2>
+<p>Every retried step re-sends the transcript, and in these trials the resent prompt text is the measurable part of the bill. The first attempt sends a 1,920-character payload; each retry sends that payload plus a 1,800-character transcript allowance.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Outcome per trial</th>
+					<th>Attempts</th>
+					<th>Characters resent</th>
+					<th>Multiple of one call</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Served first time, no fault</td>
+					<td>1.0</td>
+					<td>1,920</td>
+					<td>1.00×</td>
+			</tr>
+			<tr>
+					<td>Post-commit stall, one retry</td>
+					<td>2.0</td>
+					<td>5,640</td>
+					<td>2.94×</td>
+			</tr>
+			<tr>
+					<td>Retries exhausted (stall or 502 before commit)</td>
+					<td>4.0</td>
+					<td>13,080</td>
+					<td>6.81×</td>
+			</tr>
+	</tbody>
+</table>
+<p>The 2.94× is the number a step meter hides. The meter records one tool step; the executions were two; the prompt text sent is 2.94 times what a single execution sends at this payload size. The 6.81× is what a retry loop costs when the fault never clears — and in the 502 column it bought nothing at all. These are character counts from this fixture, not billed tokens: no tokenizer and no vendor price was applied, so the ratios describe the shape of the multiplication, not a dollar figure. The mechanism that makes step meters under-count is the same one described in <a href="https://baeseokjae.github.io/posts/token-usage-meters-for-agent-cost-tracking/">the guide to token meters for agent cost tracking</a>, which counts a logical step per recorded call.</p>
+<p>There is a second, quieter cost in the blind-retry policy: the regenerated call id is what made the duplicate possible. In the post-commit column, the call id changed on 50 of 50 policy-A trials and on 0 of 50 under policies B and C, and that difference is the mechanism, not a side effect. A retry wrapper that rebuilds the request from scratch — new id, new key, same arguments — is a duplicate generator the moment the first attempt committed. A retry wrapper that carries the original id forward is a dedupe client.</p>
+<h2 id="what-to-change-in-your-loop">What to change in your loop</h2>
+<p>Carry the tool call id into the idempotency key and do not mint a new one on retry. That single change took the post-commit column from 50/50 to 0/50 here, and it costs nothing in the happy path because the key is only consulted when a retry arrives. If your wrapper builds a fresh request object per attempt, the call id is usually sitting in the original request and only has to be threaded through the retry path rather than regenerated.</p>
+<p>Add server-side dedupe on <code>(tool, argument hash)</code> as the second line for the case where keys are regenerated by a framework you do not control. Policy C matched policy B&rsquo;s result from the other side of the wire, which matters because the client is not always the component you can change.</p>
+<p>Treat the retention window as a real boundary. A stored response only prevents a duplicate while it is still stored; Stripe documents 24 hours as the earliest age at which an API v1 key can be removed, and a key reused after the original is pruned generates a new request. Any retry, replay, or queue-drain path that can run later than the window needs a durable causation record of its own.</p>
+<p>Do not adopt fail-closed without a reconcile step. Policy D&rsquo;s zero duplicates includes trials where the effect landed and the client never learned it, and an agent that reports &ldquo;the tool call failed&rdquo; in that state will either retry it manually later or tell a user something false. Log the outcome as unknown and read back the resource.</p>
+<h2 id="what-this-fixture-does-not-show">What this fixture does not show</h2>
+<p>This is one HTTP server, one SQLite file and a loopback network on a single host. No vendor endpoint, load balancer, or multi-region retry path was exercised, and no named product&rsquo;s retry behaviour is being characterised. The 0.12 s client timeout against a 0.35 s reply is chosen to make the race deterministic, not to model production latency. Only the first attempt of a post-commit trial stalls; a fault that stalls every attempt was run in an earlier pass and discarded because no retry could ever observe the stored response. Retries stop at four attempts, so nothing here says what happens across a process restart, and the argument-hash policy only covers retries that send identical arguments.</p>
+<p>The harness, the 650-row ledger, the summary and the method note are published so the matrix can be re-run rather than believed:</p>
+<ul>
+<li><a href="https://github.com/baeseokjae/baeseokjae.github.io/raw/main/research/evidence/agent-tool-retry-duplicate-side-effects-2026/tool_retry_fault_harness.py">https://github.com/baeseokjae/baeseokjae.github.io/raw/main/research/evidence/agent-tool-retry-duplicate-side-effects-2026/tool_retry_fault_harness.py</a></li>
+<li><a href="https://github.com/baeseokjae/baeseokjae.github.io/raw/main/research/evidence/agent-tool-retry-duplicate-side-effects-2026/ledger.csv">https://github.com/baeseokjae/baeseokjae.github.io/raw/main/research/evidence/agent-tool-retry-duplicate-side-effects-2026/ledger.csv</a></li>
+<li><a href="https://github.com/baeseokjae/baeseokjae.github.io/raw/main/research/evidence/agent-tool-retry-duplicate-side-effects-2026/summary.json">https://github.com/baeseokjae/baeseokjae.github.io/raw/main/research/evidence/agent-tool-retry-duplicate-side-effects-2026/summary.json</a></li>
+<li><a href="https://github.com/baeseokjae/baeseokjae.github.io/raw/main/research/evidence/agent-tool-retry-duplicate-side-effects-2026/method.md">https://github.com/baeseokjae/baeseokjae.github.io/raw/main/research/evidence/agent-tool-retry-duplicate-side-effects-2026/method.md</a></li>
+</ul>
+<p>Run it from a private scratch directory with <code>python3 tool_retry_fault_harness.py --out ledger.csv --faults 50 --db &quot;$TMPDIR/effects.sqlite&quot;</code>; it writes a fresh ledger and summary and needs no network access beyond loopback. If your agent stack retries tool calls, the useful thing to copy is not the fixture but the two controls: prove that a stall before the commit never duplicates, and prove that the post-commit case does — until the second one fails, a retry policy has not been tested at all.</p>
+]]></content:encoded></item><item><title>Your Embedding Server Stops at 2,048 Tokens: Measuring the Local Embedding Context Ceiling That Silently Empties Agent Memory (2026)</title><link>https://baeseokjae.github.io/posts/local-embedding-context-ceiling-2026/</link><pubDate>Sun, 01 Nov 2026 00:16:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/local-embedding-context-ceiling-2026/</guid><description>Ollama 0.20.3 served an embedding model whose Modelfile asked for 8,192 tokens and allocated 2,048. Here is how to measure the real ceiling, prove which chunks were clipped, and size a chunker against the number the server actually uses.</description><content:encoded><![CDATA[<p>If your agent&rsquo;s memory is written through a local embedding endpoint, the context window that decides what gets remembered is not the one printed on the model card. On the machine used for this article, Ollama 0.20.3 allocated 2,048 prompt tokens to <code>nomic-embed-text:latest</code> while the installed model&rsquo;s own parameters said <code>num_ctx 8192</code>, and it accepted a 64,599-character document with HTTP 200 by silently evaluating only the first 2,048 tokens. The number that governs your ingest never appears in the embedding call, the client library, or the config file you wrote. It appears in <code>ollama ps</code>.</p>
 <p>That is the whole finding, and it is narrower than it sounds. If you are comparing advertised context on hosted APIs, <a href="https://baeseokjae.github.io/posts/llm-context-window-comparison-2026/">that comparison already exists</a> and this article will not repeat it. This one measures the endpoint under your own ingest loop: what it allocates, when it clips without complaint, and how to prove after the fact which of your chunks were shortened before they ever became vectors.</p>
 <h2 id="the-symptom-memory-that-only-remembers-page-one">The symptom: memory that only remembers page one</h2>
 <p>A local memory pipeline looks healthy while it fails. The chat model and the embedder run on the same box, the ingest job walks a document directory, chunks the text, posts each chunk to <code>/api/embed</code>, and writes the returned vector to a store. Short notes — preferences, a name, a one-line decision — come back perfectly. Long documents do not. Ask about something from page six of a design doc and the agent answers from page one, or says it does not know.</p>
