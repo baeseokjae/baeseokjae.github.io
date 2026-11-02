@@ -1,4 +1,175 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Posts on RockB</title><link>https://baeseokjae.github.io/posts/</link><description>Recent content in Posts on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sun, 01 Nov 2026 00:52:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/posts/index.xml" rel="self" type="application/rss+xml"/><item><title>Retrying a Failed Tool Call: Duplicate Side Effects and the Token Bill Nobody Meters</title><link>https://baeseokjae.github.io/posts/agent-tool-retry-duplicate-side-effects-2026/</link><pubDate>Sun, 01 Nov 2026 00:52:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-tool-retry-duplicate-side-effects-2026/</guid><description>A 650-trial local fault injection separates a stall before the commit from a stall after it. Regenerating the call id duplicated the effect in 50 of 50 post-commit trials, reusing it duplicated none, and the retry resent 5,640 characters where one call sent 1,920.</description><content:encoded><![CDATA[<p>An agent loop calls a tool that files a ticket, posts a review comment, or inserts a row. The call stalls and the client gives up at its timeout. The loop does what every retry wrapper does: it tries again. Nobody in that loop knows whether the first attempt reached the database, so the second attempt may be the first real write or the second one. When it is the second, the user sees a duplicate comment under a single logical step, and the token meter shows one step because the meter counts steps, not executions.</p>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Posts on RockB</title><link>https://baeseokjae.github.io/posts/</link><description>Recent content in Posts on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sun, 01 Nov 2026 13:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/posts/index.xml" rel="self" type="application/rss+xml"/><item><title>Your 18GB GGUF Is Not an 18GB Budget: Sizing KV Cache and Context for a Local Coding Model</title><link>https://baeseokjae.github.io/posts/local-llm-vram-kv-cache-budget-2026/</link><pubDate>Sun, 01 Nov 2026 13:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/local-llm-vram-kv-cache-budget-2026/</guid><description>A GGUF file is the weights, not the budget. Run the KV-cache formula before you download, with a measured 0.5B check against it on a 12 GB CPU host and the q8_0 setting that saves nothing without Flash Attention.</description><content:encoded><![CDATA[<p>You download a 4-bit quantised model, the file is roughly 18 GB, you have 24 GB of VRAM, and the arithmetic looks settled. Then the agent session gets long, the server either dies or quietly starts answering with a fraction of the context you asked for, and the model that &ldquo;fit yesterday&rdquo; no longer fits.</p>
+<p>The missing term is the key/value cache. It is not in the GGUF file, it is not on the model card, and it is allocated by the runtime at load time from the context length you set — not from the number of tokens you happen to send. On the 12 GB CPU box used for the measurements below, the same 0.5B model occupied 417 MB of reported model memory at a 2,048-token context and 794 MB at 32,768, with an identical file on disk.</p>
+<p>This article gives you one formula to run before downloading, one measured check of that formula that you can repeat, and one warning about a setting that looks like it halves memory and does not.</p>
+<h2 id="what-the-cache-is-in-one-paragraph">What the cache is, in one paragraph</h2>
+<p>Every transformer layer keeps, for every token in context, one key vector and one value vector per <em>key/value head</em>. The attention heads read them; they are not learned weights, they are state. The size is fixed by the model geometry and the cache element type:</p>
+<pre tabindex="0"><code>bytes_per_token = 2 × n_layers × n_kv_heads × head_dim × bytes_per_element
+</code></pre><p>The 2 is key plus value. <code>n_layers</code> and <code>n_kv_heads</code> come from the model&rsquo;s own <code>config.json</code>. <code>head_dim</code> is either an explicit field or <code>hidden_size / num_attention_heads</code>. <code>bytes_per_element</code> is 2 for f16 and about 1.0625 for q8_0, because q8_0 stores 32 values in 34 bytes — 8 bits each plus a scale.</p>
+<p>Grouped-query attention is why this number is not as frightening as it looks. A model can have 64 attention heads and only 8 key/value heads; the cache scales with the second number. That is also why the per-token cost cannot be guessed from parameter count alone: two models of the same size can differ by 8x in cache cost depending on how aggressively they share KV heads.</p>
+<p>Ollama&rsquo;s own documentation fixes the default that catches people: &ldquo;By default, Ollama uses a context window size of 4096 tokens&rdquo;, overridable with <code>OLLAMA_CONTEXT_LENGTH</code> or per request with <code>num_ctx</code> (<a href="https://docs.ollama.com/faq">Ollama FAQ</a>). A coding agent session with file contents and tool output routinely exceeds that. Either the runtime truncates, or you raise the context and the cache grows with it.</p>
+<h2 id="worked-example-one-the-small-model-measured">Worked example one: the small model, measured</h2>
+<p>The tag used here is <code>qwen2.5:0.5b</code> at Q4_K_M. Its own config gives <code>num_hidden_layers</code> 24, <code>num_key_value_heads</code> 2, <code>num_attention_heads</code> 14 and <code>hidden_size</code> 896, so <code>head_dim</code> is 896 / 14 = 64 (<a href="https://huggingface.co/Qwen/Qwen2.5-0.5B/raw/main/config.json">Qwen2.5-0.5B config.json</a>).</p>
+<p>That yields 2 × 24 × 2 × 64 × 2 = 12,288 bytes per token, or 12.00 KiB. At a 32,768-token context the cache alone is 384 MiB — comparable to the model itself, on a model whose file is about 400 MB.</p>
+<p>This is the shape of the problem in miniature: at a context the model advertises, the cache can be the same order of magnitude as the weights. Nobody notices on a 0.5B model because 384 MiB is noise. Scale the geometry up and the same term decides whether the card is big enough.</p>
+<h2 id="worked-example-two-a-32b-model-computed-not-measured">Worked example two: a 32B model, computed not measured</h2>
+<p>Take Qwen3-32B, whose config was fetched and read for this article: 64 layers, 64 attention heads, 8 key/value heads, <code>head_dim</code> 128, 40,960 maximum positions (<a href="https://huggingface.co/Qwen/Qwen3-32B/raw/main/config.json">Qwen3-32B config.json</a>).</p>
+<p>2 × 64 × 8 × 128 × 2 = 262,144 bytes per token = 256 KiB for f16. With q8_0 packing at 34 bytes per 32 elements the same geometry costs 136 KiB per token.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Context</th>
+					<th>f16 cache</th>
+					<th>q8_0 cache (with Flash Attention)</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>8,192 tokens</td>
+					<td>2 GiB</td>
+					<td>1.06 GiB</td>
+			</tr>
+			<tr>
+					<td>32,768 tokens</td>
+					<td>8 GiB</td>
+					<td>4.25 GiB</td>
+			</tr>
+			<tr>
+					<td>40,960 tokens</td>
+					<td>10 GiB</td>
+					<td>5.31 GiB</td>
+			</tr>
+	</tbody>
+</table>
+<p>Every number in that table is <strong>computed</strong> from the config and the formula. None of it was measured on a 32B model — this host has no GPU and 12 GB of RAM. It is arithmetic you can redo in a spreadsheet in a minute, and that is the point: the term is predictable before you download anything.</p>
+<p>Note what changed the number: not the parameter count, but 8 KV heads instead of 64, and a quantised cache. A dense 32B model without grouped-query attention would have cost eight times more per token and would not fit at that context on any consumer card.</p>
+<h2 id="the-measured-check-on-this-machine">The measured check on this machine</h2>
+<p>The probe starts a private Ollama server, forces one load per cell at a requested <code>num_ctx</code>, reads the runner&rsquo;s <code>VmRSS</code> from <code>/proc/&lt;pid&gt;/status</code>, and confirms what the server actually honoured with <code>ollama ps</code>. Nothing else runs, so the only moving part is the cache allocation.</p>
+<table>
+	<thead>
+			<tr>
+					<th>num_ctx</th>
+					<th>KV type</th>
+					<th>Flash Attention</th>
+					<th>runner VmRSS</th>
+					<th><code>ollama ps</code> SIZE</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>2,048</td>
+					<td>f16</td>
+					<td>off</td>
+					<td>494,748 kB</td>
+					<td>417 MB</td>
+			</tr>
+			<tr>
+					<td>8,192</td>
+					<td>f16</td>
+					<td>off</td>
+					<td>567,752 kB</td>
+					<td>492 MB</td>
+			</tr>
+			<tr>
+					<td>32,768</td>
+					<td>f16</td>
+					<td>off</td>
+					<td>862,668 kB</td>
+					<td>794 MB</td>
+			</tr>
+			<tr>
+					<td>2,048</td>
+					<td>q8_0</td>
+					<td>off</td>
+					<td>494,220 kB</td>
+					<td>417 MB</td>
+			</tr>
+			<tr>
+					<td>8,192</td>
+					<td>q8_0</td>
+					<td>off</td>
+					<td>568,064 kB</td>
+					<td>492 MB</td>
+			</tr>
+			<tr>
+					<td>32,768</td>
+					<td>q8_0</td>
+					<td>off</td>
+					<td>862,896 kB</td>
+					<td>794 MB</td>
+			</tr>
+			<tr>
+					<td>8,192</td>
+					<td>q8_0</td>
+					<td>on</td>
+					<td>521,648 kB</td>
+					<td>442 MB</td>
+			</tr>
+			<tr>
+					<td>32,768</td>
+					<td>q8_0</td>
+					<td>on</td>
+					<td>678,308 kB</td>
+					<td>593 MB</td>
+			</tr>
+	</tbody>
+</table>
+<p>The reported context matched the requested context in all eight rows, so no row is secretly a measurement of a different context.</p>
+<p>From 2,048 to 32,768 tokens, f16 grew by 367,920 kB over 30,720 tokens: 11.98 KiB per token against 12.00 computed, an error of minus 0.20 percent. Subtracting the slope leaves a base of about 470 MB that barely moves across contexts (720 kB spread on eight rows), which is the Q4_K_M weights plus graph and allocator overhead. The slope is the portable part; the base is not.</p>
+<h2 id="the-trap-a-setting-that-looks-like-half-the-memory">The trap: a setting that looks like half the memory</h2>
+<p><code>OLLAMA_KV_CACHE_TYPE=q8_0</code> with default settings produced the same slope as f16: 12.00 KiB per token, 228 kB apart at 32,768 tokens, which is noise. The knob did nothing.</p>
+<p>Ollama&rsquo;s documentation says why, in the sentence most people skim: the K/V cache &ldquo;can be quantized to significantly reduce memory usage <strong>when Flash Attention is enabled</strong>&rdquo;. Re-running the same two cells with <code>OLLAMA_FLASH_ATTENTION=1</code> halved the slope: 156,660 kB over 24,576 tokens is 6.37 KiB per token against 6.38 computed, and 0.532x the f16 slope. The saving is real — but only after the precondition is met.</p>
+<p>Two practical consequences. First, verify a memory setting by its effect on resident memory, not by the name of the flag; a quantised cache type on a backend that cannot run Flash Attention is inert, and you will only find out when the box swaps. Second, compare slopes, not single readings: the base also moved with Flash Attention (567,752 kB to 521,648 kB at 8,192 tokens), so a one-point comparison would have been misleading in the opposite direction.</p>
+<h2 id="turning-it-into-a-budget">Turning it into a budget</h2>
+<p>The budget is three terms, and only one of them is on the download page:</p>
+<pre tabindex="0"><code>resident ≈ weights (GGUF bytes) + KV cache at your context + runtime overhead
+</code></pre><p>Work the numbers in the same unit before you buy anything. For a 32B-class model at a 32,768-token context, the cache term alone is 8 GiB at f16 or 4.25 GiB at q8_0 with Flash Attention. If your file is the 18 GB the title refers to — a figure this article takes from the reader&rsquo;s rule of thumb and does <strong>not</strong> verify for any specific 31B release — then 18 + 8 + 2 GB of overhead is 28 GB, which does not fit a 24 GB card at full context. The same model with a quantised cache lands near 24 GB: still on the edge, and still not something to plan around without measuring your own box.</p>
+<p>Three corrections that change the answer more often than a bigger GPU:</p>
+<ul>
+<li><strong>Parallel slots multiply the cache.</strong> <code>OLLAMA_NUM_PARALLEL</code> defaults to 1, and the docs state that required memory scales with it. A shared server sized for one user&rsquo;s context is not sized for four.</li>
+<li><strong>The context default is 4,096, not the model&rsquo;s maximum.</strong> A setup that &ldquo;fit yesterday&rdquo; may have fit because the runtime was quietly using a small context. Raising <code>num_ctx</code> to the model&rsquo;s <a href="https://baeseokjae.github.io/posts/llm-context-window-comparison-2026/">advertised maximum</a> is where the memory goes.</li>
+<li><strong>Quantising the cache is not free of preconditions.</strong> It needs Flash Attention, which needs a backend and device that support it. Check the effect, not the flag.</li>
+</ul>
+<p>When the total does not fit, the levers in order of cost are: lower the context to what the agent actually uses, quantise the cache if Flash Attention is available, reduce parallel slots, and only then move to a smaller model.</p>
+<h2 id="doing-it-on-your-own-machine-in-ten-minutes">Doing it on your own machine in ten minutes</h2>
+<p>The probe is small enough to read before you run it. It starts its own server on a free loopback port so it does not disturb a running instance, samples the runner&rsquo;s resident set after each load, records what <code>ollama ps</code> reports as the honoured context, and writes one CSV row per cell.</p>
+<p>Files, all first-party and published with the article:</p>
+<table>
+	<thead>
+			<tr>
+					<th>File</th>
+					<th>What it is</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-llm-vram-kv-cache-budget-2026/scripts/kv_budget_probe.py">kv_budget_probe.py</a></td>
+					<td>The probe: context and cache-type matrix, RSS sampling, <code>ollama ps</code> cross-check</td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-llm-vram-kv-cache-budget-2026/kv_budget_prompt.txt">kv_budget_prompt.txt</a></td>
+					<td>The fixed 30-token fixture with a head and a tail token, kept for replay and hashing; the probe sends a 1-token generation because the allocation happens at load</td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-llm-vram-kv-cache-budget-2026/kv-budget-2026-11-01.csv">kv-budget-2026-11-01.csv</a></td>
+					<td>The eight measured rows behind the table above</td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-llm-vram-kv-cache-budget-2026/kv-budget-formula-check.md">kv-budget-formula-check.md</a></td>
+					<td>Measured slope against the config-derived slope, with the residual explained</td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-llm-vram-kv-cache-budget-2026/method.md">method.md</a></td>
+					<td>Server flags, sampling points, host, and what was deliberately not measured</td>
+			</tr>
+	</tbody>
+</table>
+<p>Point it at a model that fits your box. Two cells are enough to get your own slope: the same cache type at two contexts, resident memory at each, difference divided by the context difference. If your slope is within a quarter of the formula, you can trust the arithmetic for the model you actually want; if it is not, the runtime is allocating something the formula does not describe and the formula&rsquo;s answer for a bigger model is not safe to use.</p>
+<h2 id="what-this-does-and-does-not-establish">What this does and does not establish</h2>
+<p>Measured, on one CPU-only host with one model tag: the cache is allocated at load from <code>num_ctx</code>, it grows linearly at the formula&rsquo;s rate within 0.20 percent for f16 and 0.01 percent for q8_0 with Flash Attention, and the q8_0 setting is inert without Flash Attention.</p>
+<p>Not measured, and not claimed: any throughput or tokens-per-second figure, any quality comparison, any GPU-backend behaviour, any multi-slot configuration, and any resident-memory number for a 32B or 27B model. The 32B figures are computed from its published config, and the 27B family is absent on purpose: the <code>google/gemma-3-27b-it</code> config returned HTTP 401 on both attempts, so its geometry is unverified here and no number for it appears in this article. One sample per cell was taken; repeat-run spread between identical configurations was 228 kB against a 368 MB slope, which is enough for a slope and not enough for sub-percent claims about the constant overhead.</p>
+<p>The one-sentence version: the file you download is the smallest term in the budget, and the term that grows is the one nobody puts on the model card. Compute it before you download, then confirm it on your own machine with two loads.</p>
+<p>If you have not chosen the model yet, <a href="https://baeseokjae.github.io/posts/best-local-llm-models-2026/">the model-selection comparison</a> and <a href="https://baeseokjae.github.io/posts/best-ollama-models-coding-2026/">the coding-model shortlist</a> are the better starting points; <a href="https://baeseokjae.github.io/posts/llm-inference-engineering-guide/">the inference-engineering guide</a> explains PagedAttention and serving-side batching, which this article deliberately does not re-explain; and <a href="https://baeseokjae.github.io/posts/gemma-4-local-setup-guide-2026/">the 31B local setup guide</a> covers the download half of the question.</p>
+]]></content:encoded></item><item><title>Retrying a Failed Tool Call: Duplicate Side Effects and the Token Bill Nobody Meters</title><link>https://baeseokjae.github.io/posts/agent-tool-retry-duplicate-side-effects-2026/</link><pubDate>Sun, 01 Nov 2026 00:52:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-tool-retry-duplicate-side-effects-2026/</guid><description>A 650-trial local fault injection separates a stall before the commit from a stall after it. Regenerating the call id duplicated the effect in 50 of 50 post-commit trials, reusing it duplicated none, and the retry resent 5,640 characters where one call sent 1,920.</description><content:encoded><![CDATA[<p>An agent loop calls a tool that files a ticket, posts a review comment, or inserts a row. The call stalls and the client gives up at its timeout. The loop does what every retry wrapper does: it tries again. Nobody in that loop knows whether the first attempt reached the database, so the second attempt may be the first real write or the second one. When it is the second, the user sees a duplicate comment under a single logical step, and the token meter shows one step because the meter counts steps, not executions.</p>
 <p>The correct answer is not &ldquo;retry less&rdquo;. It is that a retry is only safe when the server can recognise the second attempt as the same operation. This post measures the difference between the two failure shapes that a client cannot distinguish, and then measures what the retry costs in resent prompt text. The experiment is 650 trials on one host against a local tool server with a SQLite effect ledger, so the duplicate count is read from the database rather than inferred from logs. The retry budget half of this problem is covered in <a href="https://baeseokjae.github.io/posts/agent-cost-circuit-breaker-pattern-guide-2026/">the circuit-breaker and retry-budget guide</a>; this post is about the correctness half that assumes away.</p>
 <h2 id="a-timeout-is-not-a-failure-signal">A timeout is not a failure signal</h2>
 <p>Amazon&rsquo;s guidance is blunt about the assumption most retry wrappers are built on: &ldquo;retrying a service call as mitigation for a transient fault is based on a simplifying assumption that an operation can be retried without any side effects&rdquo; (<a href="https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/)">https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/)</a>. The same article states the goal a retry loop has to meet: &ldquo;we want to make sure that the result of the call happens only once, even if we need to make that call multiple times as part of our retry loop.&rdquo;</p>
