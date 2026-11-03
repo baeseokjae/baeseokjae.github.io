@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Silent Retrieval Failure on RockB</title><link>https://baeseokjae.github.io/tags/silent-retrieval-failure/</link><description>Recent content in Silent Retrieval Failure on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Mon, 02 Nov 2026 15:58:22 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/silent-retrieval-failure/index.xml" rel="self" type="application/rss+xml"/><item><title>Swap the Embedding Model, Keep the Store: Agent Memory That Returns the Wrong Neighbour Without an Error</title><link>https://baeseokjae.github.io/posts/agent-memory-embedding-swap-recall-2026/</link><pubDate>Mon, 02 Nov 2026 15:40:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-memory-embedding-swap-recall-2026/</guid><description>A 40-document recall harness shows what happens when the encoder behind an existing vector store changes: same-width swaps return wrong neighbours with no exception, while width mismatches fail loudly. Includes the guard that records encoder id, digest and dimension per vector.</description><content:encoded><![CDATA[<p>An agent memory store can survive an embedding-model change while quietly returning the wrong fact. Nothing in the stack raises, because nothing in the stack compares the encoder that wrote a vector with the encoder that now reads it. In a 40-document fixture with 15 single-answer queries, one encoder on both sides ranked the labelled document first for 15 of 15 queries. Replacing the document encoder with a different model of the same width dropped that to 1 of 15, and no call failed. Replacing it with a model of a different width failed all 15 queries with a length error — the loud case, and the easy one.</p>
+<p>That contrast is the whole point. The dimension check most teams already have catches one of these two failures. The other one changes what your agent believes.</p>
+<h2 id="the-failure-neighbours-come-back-the-space-does-not">The failure: neighbours come back, the space does not</h2>
+<p>The scenario is ordinary maintenance. A team moves memory embeddings from a hosted model to a local one, upgrades a model version, or switches providers during an outage. The write path keeps running, the table keeps its shape, and <code>search(query, k=5)</code> keeps returning five rows. If the new encoder has the same output width as the old one, even a strict database column will accept the new vectors: a <code>vector(384)</code> column takes 384 floats from any model on earth.</p>
+<p>What changed is not the schema. It is the coordinate system. Cosine similarity only means something when both vectors were produced by the same function; compare two different functions and the ranking is noise with a plausible-looking shape. The agent does not report &ldquo;no match&rdquo; — it reports the nearest row in a meaningless space, phrased fluently. That is worse than an outage, because an outage is visible.</p>
+<p>This is a different failure from the one where long inputs are clipped before they become vectors. <a href="https://baeseokjae.github.io/posts/local-embedding-context-ceiling-2026/">That truncation problem is measured here</a>. The swap problem happens after a correct write: the vector is complete, the row is intact, and only its provenance is wrong.</p>
+<h2 id="what-actually-changes-when-the-encoder-changes">What actually changes when the encoder changes</h2>
+<p>Three properties decide whether two encoders share a space, and a dimension check tests only the third.</p>
+<p>The training objective and data decide the geometry. <a href="https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2">all-MiniLM-L6-v2</a> is documented as mapping sentences to a 384-dimensional dense space for semantic search; a different 384-dimensional model is trained on a different objective and arranges the same words differently.</p>
+<p>The input convention decides the point, even for one model. <a href="https://huggingface.co/nomic-ai/nomic-embed-text-v1.5">nomic-embed-text-v1.5&rsquo;s card</a> requires a task instruction prefix — <code>search_document: </code> for stored text and <code>search_query: </code> for queries — and says the prefix is mandatory. Feeding that model unprefixed text produces a vector that is valid, 768-dimensional, and not the vector the model was trained to produce for retrieval.</p>
+<p>The width decides only whether the error is loud. Ollama&rsquo;s <a href="https://github.com/ollama/ollama/blob/main/docs/api.md">embed API reference</a> documents a <code>dimensions</code> parameter that sets the number of dimensions for the embedding, so width is not necessarily fixed per model: a client can request a shorter vector from the same weights, and a store keyed only on <code>(model, width)</code> would accept that output as if it belonged to the full-width space.</p>
+<p>Input length is a separate lever in the same API and does not touch width. The reference&rsquo;s <code>truncate</code> option defaults to <code>true</code> and clips the end of each <em>input</em> to fit the model&rsquo;s context length — the vector still comes out at full width. That is the write-time information loss measured in <a href="https://baeseokjae.github.io/posts/local-embedding-context-ceiling-2026/">the embedding input-length article</a>, and it can occur with no model change at all. Keep the two apart: clipping changes what the model saw, a swap changes which function produced the vector.</p>
+<h2 id="the-harness-40-documents-15-queries-three-encoders">The harness: 40 documents, 15 queries, three encoders</h2>
+<p>The measurement is deliberately small so it can be re-run on a laptop. The fixture is 40 synthetic agent-memory statements — deployment windows, retention periods, ports, contact preferences, identifiers — and 15 questions, each with exactly one defensible gold document. No real user data is involved. The baseline result is also the fixture&rsquo;s label check: if a competent encoder cannot put the gold document first for every query, the labels are ambiguous and the fixture is not usable.</p>
+<p>Documents and queries are embedded through the local Ollama endpoint, stored as plain Python lists, and scored by brute-force cosine over every query-document pair. There is no ANN index, so no approximation error can be confused with the effect being measured. Encoders are pinned by digest rather than tag, because <code>:latest</code> can be repointed: nomic-embed-text <code>0a109f422b47</code> at 768 dimensions, all-minilm <code>1b226e2802db</code> at 384, and snowflake-arctic-embed:33m <code>e8db018629b4</code> at 384, read from the host&rsquo;s tag list on 2026-11-02 with Ollama 0.20.3. nomic was called with the prefixes its card requires; the two 384-dimension models were called without any task prefix, so the swap rows do not separate a prefix effect from a space effect.</p>
+<p>Five configurations were scored: a matched baseline, both directions of a same-width cross-model swap, a half-migrated store, and a cross-width query. Each produced one record per query plus an aggregate.</p>
+<h2 id="the-result-matrix">The result matrix</h2>
+<table>
+	<thead>
+			<tr>
+					<th>Configuration</th>
+					<th>Document encoder</th>
+					<th>Query encoder</th>
+					<th>Width</th>
+					<th>recall@1</th>
+					<th>recall@5</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Baseline</td>
+					<td>nomic-embed-text</td>
+					<td>nomic-embed-text</td>
+					<td>768/768</td>
+					<td>15/15</td>
+					<td>15/15</td>
+			</tr>
+			<tr>
+					<td>Same-width swap A</td>
+					<td>all-minilm</td>
+					<td>snowflake-arctic-embed:33m</td>
+					<td>384/384</td>
+					<td>1/15</td>
+					<td>2/15</td>
+			</tr>
+			<tr>
+					<td>Same-width swap B</td>
+					<td>snowflake-arctic-embed:33m</td>
+					<td>all-minilm</td>
+					<td>384/384</td>
+					<td>1/15</td>
+					<td>3/15</td>
+			</tr>
+			<tr>
+					<td>Half-migrated store</td>
+					<td>nomic + all-minilm (20/20)</td>
+					<td>nomic-embed-text</td>
+					<td>768+384 / 768</td>
+					<td>7/15</td>
+					<td>7/15</td>
+			</tr>
+			<tr>
+					<td>Cross-width</td>
+					<td>nomic-embed-text</td>
+					<td>all-minilm</td>
+					<td>768/384</td>
+					<td>—</td>
+					<td>—</td>
+			</tr>
+	</tbody>
+</table>
+<p>The two same-width rows are the alarming ones. Recall at rank one fell from 15 of 15 to 1 of 15 in both directions, and the best of the two still missed 12 of 15 gold documents inside the top five. No embedding call raised, every vector came back at the recorded width, and this harness kept its vectors in a plain Python list, so no column type was consulted at all — but the 384-dimension vectors would have satisfied a <code>vector(384)</code> column just as readily, because their width was correct; no width constraint anywhere in this stack would have rejected them. If the only monitoring you have is &ldquo;the query returned k rows&rdquo;, this failure is invisible.</p>
+<p>The mixed store is the migration-in-progress case. Twenty documents were embedded by all-minilm and twenty by nomic, alternating; queries used nomic, so half the table belonged to the query&rsquo;s space and half did not. Recall@1 came out at 7 of 15 — better than the full swap, because the matching half was reachable, and still less than half of the baseline. The harness skipped 300 query-document comparisons (20 mismatched documents across 15 queries) rather than pretending to score them. In a real store the same state is worse than a ranking problem: part of the table cannot be served at all, and nothing in the application knows which part.</p>
+<h2 id="the-loud-failure-is-the-safe-one">The loud failure is the safe one</h2>
+<p>Querying the 768-dimension store with the 384-dimension encoder raised <code>ValueError: vector length mismatch: 384 vs 768</code> for all 15 queries. That is the outcome to want. A width mismatch stops the request at the first comparison, which is why a schema like <a href="https://github.com/pgvector/pgvector">pgvector&rsquo;s <code>vector(n)</code> column</a> is worth having: it fixes the width at write time, so a differently sized vector is rejected on insert instead of discovered on query.</p>
+<p>Two caveats keep this from being a complete defence. First, the exception text above belongs to this harness&rsquo;s pure-Python cosine; the failure is client-dependent. A client that pads, slices or truncates to the stored width — or a provider that honours a <code>dimensions</code> parameter — will return ranked neighbours with no error at all. Second, the width is the only property a database column checks. Same-width models pass every constraint in the stack, which is exactly the configuration that measured 1 of 15.</p>
+<p>One hypothesis was tested and dropped rather than published as a maybe: whether Ollama&rsquo;s native <code>/api/embed</code> and its OpenAI-compatible <code>/v1/embeddings</code> return different spaces for the same input. For one model and one input string, the vectors were identical to six decimal places (cosine 1.0, 384 dimensions on both paths). There is no endpoint-divergence warning to give here.</p>
+<h2 id="the-guard-one-identifier-per-vector-checked-before-scoring">The guard: one identifier per vector, checked before scoring</h2>
+<p>The fix is not a better model. It is provenance: every vector records which encoder produced it, and every query refuses to run against a store written by a different one. A model tag alone is insufficient, because tags move; a digest alone is insufficient, because width can change under one model through <code>dimensions</code>. Concatenate them.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-sql" data-lang="sql"><span style="display:flex;"><span><span style="color:#66d9ef">CREATE</span> <span style="color:#66d9ef">TABLE</span> memory_vectors (
+</span></span><span style="display:flex;"><span>  doc_id      TEXT <span style="color:#66d9ef">NOT</span> <span style="color:#66d9ef">NULL</span>,
+</span></span><span style="display:flex;"><span>  encoder_id  TEXT <span style="color:#66d9ef">NOT</span> <span style="color:#66d9ef">NULL</span>,          <span style="color:#75715e">-- e.g. nomic-embed-text:latest@0a109f42:768
+</span></span></span><span style="display:flex;"><span>  dim         INTEGER <span style="color:#66d9ef">NOT</span> <span style="color:#66d9ef">NULL</span>,
+</span></span><span style="display:flex;"><span>  content_sha TEXT <span style="color:#66d9ef">NOT</span> <span style="color:#66d9ef">NULL</span>,
+</span></span><span style="display:flex;"><span>  vector      BLOB <span style="color:#66d9ef">NOT</span> <span style="color:#66d9ef">NULL</span>,          <span style="color:#75715e">-- packed float32
+</span></span></span><span style="display:flex;"><span>  <span style="color:#66d9ef">PRIMARY</span> <span style="color:#66d9ef">KEY</span> (doc_id, encoder_id)
+</span></span><span style="display:flex;"><span>);
+</span></span></code></pre></div><p>The <code>content_sha</code> column answers a second question the recall harness cannot: whether the stored vector still corresponds to the text it is supposed to represent. If the document changed and the vector did not, the row is stale even though its encoder id matches.</p>
+<p>The read path then becomes a refusal rather than a hope:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">require_same_space</span>(store_encoder_id, store_dim, query_encoder_id, query_dim):
+</span></span><span style="display:flex;"><span>    problems <span style="color:#f92672">=</span> []
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> query_encoder_id <span style="color:#f92672">!=</span> store_encoder_id:
+</span></span><span style="display:flex;"><span>        problems<span style="color:#f92672">.</span>append(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;encoder mismatch: store=</span><span style="color:#e6db74">{</span>store_encoder_id<span style="color:#e6db74">}</span><span style="color:#e6db74"> query=</span><span style="color:#e6db74">{</span>query_encoder_id<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> query_dim <span style="color:#f92672">!=</span> store_dim:
+</span></span><span style="display:flex;"><span>        problems<span style="color:#f92672">.</span>append(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;dimension mismatch: store=</span><span style="color:#e6db74">{</span>store_dim<span style="color:#e6db74">}</span><span style="color:#e6db74"> query=</span><span style="color:#e6db74">{</span>query_dim<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> problems:
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">raise</span> <span style="color:#a6e22e">RuntimeError</span>(<span style="color:#e6db74">&#34;refusing cross-space search: &#34;</span> <span style="color:#f92672">+</span> <span style="color:#e6db74">&#34;; &#34;</span><span style="color:#f92672">.</span>join(problems))
+</span></span></code></pre></div><p>During a migration, &ldquo;refuse&rdquo; would take the feature down, so the guard also needs a read-only mode that reports exposure instead of blocking: count rows by <code>encoder_id</code>, return the fraction the target encoder can actually serve, and fail the migration gate until that fraction is 1.0 with exactly one encoder id present.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">reindex_state</span>(rows, target_dim):
+</span></span><span style="display:flex;"><span>    total <span style="color:#f92672">=</span> len(rows)
+</span></span><span style="display:flex;"><span>    live <span style="color:#f92672">=</span> sum(<span style="color:#ae81ff">1</span> <span style="color:#66d9ef">for</span> r <span style="color:#f92672">in</span> rows <span style="color:#66d9ef">if</span> r[<span style="color:#e6db74">&#34;dim&#34;</span>] <span style="color:#f92672">==</span> target_dim)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> {<span style="color:#e6db74">&#34;total&#34;</span>: total, <span style="color:#e6db74">&#34;servable&#34;</span>: live,
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;silently_unreachable&#34;</span>: total <span style="color:#f92672">-</span> live,
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;ready&#34;</span>: total <span style="color:#f92672">==</span> live <span style="color:#f92672">and</span> len({r[<span style="color:#e6db74">&#34;encoder_id&#34;</span>] <span style="color:#66d9ef">for</span> r <span style="color:#f92672">in</span> rows}) <span style="color:#f92672">==</span> <span style="color:#ae81ff">1</span>}
+</span></span></code></pre></div><p>That function is the difference between the mixed-store row and a migration you can reason about. It converts &ldquo;we re-embedded most of the table&rdquo; into a number.</p>
+<h2 id="migration-checklist">Migration checklist</h2>
+<ol>
+<li>Build a shadow index under a new <code>encoder_id</code>. Write both encoders&rsquo; vectors for new documents (&ldquo;dual write&rdquo;) so the old path keeps serving while the new one fills.</li>
+<li>Run a labelled recall check against both indexes before cutover, on the same queries. Compare recall@5, not just &ldquo;does search return rows&rdquo;. A drop from 15/15 to 1/15 is what a cross-space query looks like when nobody is looking for it.</li>
+<li>Backfill by <code>content_sha</code>, not by <code>updated_at</code>: a row whose text did not change still needs a new vector, and a row whose text changed twice needs one vector, not three.</li>
+<li>Cut over by changing the stored <code>encoder_id</code> the reader expects — the guard will refuse mixed states — then delete the old rows only after the new index serves the full table.</li>
+<li>Keep the labelled query set. It is the only regression test that fails when a future model swap reintroduces the silent case: the width check in this harness raised on every cross-width pair — the whole of the last configuration and the mismatched half of the mixed store — while every same-width comparison returned a full ranking.</li>
+</ol>
+<p>For stores that expose a fixed vector width, an insert at the wrong width fails at the column. That covers only part of step 3: a same-width vector from another model is accepted by every schema constraint, so the rest is enforced only by the <code>encoder_id</code> check, which is why the check belongs in the read path and not in a deployment checklist.</p>
+<h2 id="reproduce-it-in-a-few-minutes">Reproduce it in a few minutes</h2>
+<p>The measured run used the 40-document fixture described above; the scoring loop is small enough to paste, and swapping in your own documents and queries is the intended use. The core is a brute-force cosine over two lists of vectors:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> math <span style="color:#f92672">import</span> sqrt
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">cosine</span>(a, b):
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> len(a) <span style="color:#f92672">!=</span> len(b):
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">raise</span> <span style="color:#a6e22e">ValueError</span>(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;vector length mismatch: </span><span style="color:#e6db74">{</span>len(a)<span style="color:#e6db74">}</span><span style="color:#e6db74"> vs </span><span style="color:#e6db74">{</span>len(b)<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>)
+</span></span><span style="display:flex;"><span>    dot <span style="color:#f92672">=</span> sum(x <span style="color:#f92672">*</span> y <span style="color:#66d9ef">for</span> x, y <span style="color:#f92672">in</span> zip(a, b))
+</span></span><span style="display:flex;"><span>    na, nb <span style="color:#f92672">=</span> sqrt(sum(x <span style="color:#f92672">*</span> x <span style="color:#66d9ef">for</span> x <span style="color:#f92672">in</span> a)), sqrt(sum(y <span style="color:#f92672">*</span> y <span style="color:#66d9ef">for</span> y <span style="color:#f92672">in</span> b))
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> dot <span style="color:#f92672">/</span> (na <span style="color:#f92672">*</span> nb) <span style="color:#66d9ef">if</span> na <span style="color:#f92672">and</span> nb <span style="color:#66d9ef">else</span> <span style="color:#ae81ff">0.0</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">recall_at_k</span>(docs, queries, k):
+</span></span><span style="display:flex;"><span>    hits <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> q <span style="color:#f92672">in</span> queries:
+</span></span><span style="display:flex;"><span>        ranked <span style="color:#f92672">=</span> sorted(docs, key<span style="color:#f92672">=</span><span style="color:#66d9ef">lambda</span> d: cosine(q[<span style="color:#e6db74">&#34;vector&#34;</span>], d[<span style="color:#e6db74">&#34;vector&#34;</span>]), reverse<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>)
+</span></span><span style="display:flex;"><span>        hits <span style="color:#f92672">+=</span> q[<span style="color:#e6db74">&#34;gold&#34;</span>] <span style="color:#f92672">in</span> [d[<span style="color:#e6db74">&#34;id&#34;</span>] <span style="color:#66d9ef">for</span> d <span style="color:#f92672">in</span> ranked[:k]]
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> hits <span style="color:#f92672">/</span> len(queries)
+</span></span></code></pre></div><p>Embed <code>docs</code> and <code>queries</code> with the same model first, confirm recall@1 is at or near 1.0, and only then re-embed the documents with the candidate model and re-run against the original query vectors. The difference between those two numbers is the cost of the swap on your corpus.</p>
+<p>The evidence behind the numbers in this article — fixture, harness, per-configuration JSONL and the digest ledger — is a private author-side working record kept with the run; it is not offered as a download from this page. What is reproducible without it is the procedure above and the two guard functions, which are complete as written.</p>
+<h2 id="limitations">Limitations</h2>
+<p>The fixture has 40 documents and 15 single-answer queries, and the baseline is saturated at 15 of 15. The measured collapse therefore shows that cross-space ranking is near-random on this fixture; it does not estimate the size of the drop on a larger, harder corpus, where a matched encoder would also miss some queries. All numbers come from a single run on one 2-vCPU host with Ollama 0.20.3, two 384-dimension open models and one 768-dimension model. No proprietary embedder, reranker, hybrid BM25 leg or ANN index was involved, so nothing here measures approximation error, latency or the cost of re-embedding a production table.</p>
+<p>The mixed-store result depends on a lenient client: this harness skips width-mismatched pairs, while pgvector would reject them at the column type and an application-level store might accept them silently. The 768-vs-384 exception text is Python-specific for the same reason. The 384-dimension pair was embedded without task prefixes, so part of that drop may belong to input convention rather than to a different vector space; the two causes are not separated here, which is another reason to treat the number as a demonstration of the failure mode rather than a measurement of any model. And no search-demand data supports the topic: the memory cluster has measured impressions, but no embedding-migration query appears in the samples behind this page, so treat it as an unmeasured failure mode rather than a searched-for one.</p>
+<p>If you are still choosing a store rather than migrating one, <a href="https://baeseokjae.github.io/posts/mem0-vs-zep-production-guide-2026/">the store comparison</a> and <a href="https://baeseokjae.github.io/posts/zep-ai-agent-memory-review-2026/">the Zep review</a> cover that decision. If you are designing the write path this guard sits on, <a href="https://baeseokjae.github.io/posts/agent-memory-write-path-reliability-2026/">the write-path reliability protocol</a> is the companion piece, and <a href="https://baeseokjae.github.io/posts/agent-memory-architecture-guide-2026/">the architecture guide</a> puts the vector layer in context.</p>
+]]></content:encoded></item></channel></rss>
