@@ -1,4 +1,238 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>RockB</title><link>https://baeseokjae.github.io/</link><description>Recent content on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Mon, 02 Nov 2026 00:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/index.xml" rel="self" type="application/rss+xml"/><item><title>What Agent Compaction Actually Drops: published measurements and a retention test you can run</title><link>https://baeseokjae.github.io/posts/agent-context-compaction-fidelity-2026/</link><pubDate>Mon, 02 Nov 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-context-compaction-fidelity-2026/</guid><description>Published measurements of summarisation loss are narrower and stranger than the advice: temporal expressions survived at 3.05% before a one-sentence prompt fix and 62.39% after, named entities and event structure barely changed, and 5x compression raised retrieval calls from 21.0 to 63.9 while completion stayed flat. This post reads those results, separates them from the model&amp;#39;s own recall limits, and ships a 12-probe retention test — probe template, scorer and fixture test — for your own transcripts.</description><content:encoded><![CDATA[<p>An agent works for two hours. The harness compacts the transcript, the run continues, and somewhere in the next twenty turns it re-runs a migration it has already run, asks the user for a value the user typed an hour ago, or refactors a file it was explicitly told not to touch. Nothing in the run log marks the turn where that fact disappeared. The summary reads fluently, the task still finishes, and the only trace of the loss is work the agent repeats.</p>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>RockB</title><link>https://baeseokjae.github.io/</link><description>Recent content on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Mon, 02 Nov 2026 00:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/index.xml" rel="self" type="application/rss+xml"/><item><title>Two Agent Sessions, One Local Model Server: what concurrency does to latency, context and tool calls</title><link>https://baeseokjae.github.io/posts/local-llm-concurrent-agent-sessions-2026/</link><pubDate>Mon, 02 Nov 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/local-llm-concurrent-agent-sessions-2026/</guid><description>Ollama ships one parallel slot per model, so a second agent session waits behind the first: four concurrent requests serialised to 4.0x the single-request wall time on a 2-vCPU host, and OLLAMA_NUM_PARALLEL=4 made each request 4.4-8.0x slower against the default server&amp;#39;s single-request baseline (3.8-7.0x against its own) instead of faster. Measured latency, the documented context rules, and what to log when a session stalls.</description><content:encoded><![CDATA[<p>Your first coding-agent session answers in a couple of seconds. You open a second one against the same local server, and now the first session&rsquo;s next request stalls for many seconds, or your client aborts with a read timeout while the server log shows no error at all. Restart the server and run one session: everything is fast again.</p>
+<p>Nothing is wrong with the model or with either agent. Both sessions are sending requests to one server process that was never configured to work on more than one at a time, and the queue between them is invisible to your client. This article shows the documented defaults that decide how many requests a local server will actually run at once, measures what the second and fourth session do to wall time on a small CPU host, and lists what to record so you can prove the cause instead of guessing.</p>
+<h2 id="the-shared-resource-is-the-server-not-the-model-weights">The shared resource is the server, not the model weights</h2>
+<p>Two agents pointed at <code>http://localhost:11434</code> are two HTTP clients against one Ollama process. That process loads the model once and then decides how to schedule the requests it receives. Ollama&rsquo;s own documentation splits concurrency into two levels: how many <em>models</em> may be resident at once, and how many <em>parallel requests</em> a single model will process at the same time — <a href="https://docs.ollama.com/faq.md">Ollama FAQ, concurrency section</a>. The second number is the one that decides whether your two sessions overlap or take turns.</p>
+<p>The FAQ states the rule directly: &ldquo;For a given model, if there is sufficient available memory when the model is loaded, it is configured to allow parallel request processing&rdquo;, and a model that is loaded with only one request processing at a time will make the second caller wait. Requests that cannot be served immediately are queued in arrival order — &ldquo;Queued requests will be processed in order&rdquo; — and only rejected when the queue itself is full (<a href="https://docs.ollama.com/faq.md">Ollama FAQ</a>).</p>
+<h2 id="ollamas-default-is-one-slot-per-model-not-four">Ollama&rsquo;s default is one slot per model, not four</h2>
+<p>Three server settings decide the shape of the queue, and all three have defaults you probably never set (<a href="https://docs.ollama.com/faq.md">Ollama FAQ</a>) — the values below are quoted from that page, which is the same text this run read on 2026-11-02:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Setting</th>
+					<th>Documented default</th>
+					<th>What it changes</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>OLLAMA_NUM_PARALLEL</code></td>
+					<td>1</td>
+					<td>Parallel requests the model processes at once; &ldquo;Required RAM will scale by <code>OLLAMA_NUM_PARALLEL</code> * <code>OLLAMA_CONTEXT_LENGTH</code>&rdquo;</td>
+			</tr>
+			<tr>
+					<td><code>OLLAMA_MAX_LOADED_MODELS</code></td>
+					<td>3 (CPU) or 3 x GPUs</td>
+					<td>How many distinct models may stay resident</td>
+			</tr>
+			<tr>
+					<td><code>OLLAMA_MAX_QUEUE</code></td>
+					<td>512</td>
+					<td>Requests held while busy before new ones are rejected</td>
+			</tr>
+	</tbody>
+</table>
+<p>Check what your own server is running with before you theorise about it. An empty <code>env | grep '^OLLAMA'</code> means every value is a default, and the model row from <code>ollama ps</code> prints the context the server believes it is serving plus how long it will stay loaded:</p>
+<pre tabindex="0"><code>$ env | grep &#39;^OLLAMA&#39;        # no output = all defaults, so OLLAMA_NUM_PARALLEL=1
+$ ollama ps                   # NAME  ID  SIZE  PROCESSOR  CONTEXT  UNTIL
+</code></pre><p>The per-request context is a separate knob from those server variables: <code>num_ctx</code> is the &ldquo;Context length size (number of tokens)&rdquo; in the <a href="https://docs.ollama.com/api/generate.md">Generate API reference</a>, and <code>options.num_ctx</code> is what an agent client sends with each call. A client that sets a generous context per request is not asking for a generous number of slots.</p>
+<h2 id="what-the-probe-measured-on-one-cpu-host">What the probe measured on one CPU host</h2>
+<p>The measurement below is deliberately narrow: one machine, one small model, no GPU, and one fixed prompt. It answers &ldquo;what does a second session cost on a host like mine&rdquo;, and it says nothing about throughput on hardware with more cores.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Item</th>
+					<th>Value</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Host</td>
+					<td>2 vCPU aarch64 (Neoverse-N1), 11 GiB RAM, no GPU</td>
+			</tr>
+			<tr>
+					<td>Server</td>
+					<td><code>ollama version is 0.20.3</code></td>
+			</tr>
+			<tr>
+					<td>Model</td>
+					<td><code>qwen2.5:0.5b</code>, 397 MB, Q4_K_M</td>
+			</tr>
+			<tr>
+					<td>Request</td>
+					<td>one non-streaming <code>POST /api/generate</code>, fixed 59-token prompt, <code>num_ctx=2048</code>, <code>num_predict=64</code>, <code>temperature=0</code>, <code>seed=7</code>, <code>keep_alive=5m</code></td>
+			</tr>
+			<tr>
+					<td>Load</td>
+					<td>N concurrent clients released from a single barrier, so every request enters the server in the same instant</td>
+			</tr>
+			<tr>
+					<td>Config A</td>
+					<td>system server, no <code>OLLAMA_*</code> variables (defaults, therefore one slot)</td>
+			</tr>
+			<tr>
+					<td>Config B</td>
+					<td>second server on <code>127.0.0.1:11435</code> started as <code>OLLAMA_HOST=127.0.0.1:11435 OLLAMA_NUM_PARALLEL=4 OLLAMA_CONTEXT_LENGTH=2048 ollama serve</code></td>
+			</tr>
+	</tbody>
+</table>
+<p>Wall time is measured client-side around the whole call, which is exactly what your agent&rsquo;s HTTP client sees. Every request in every cell returned HTTP 200 with <code>eval_count=64</code>.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Config</th>
+					<th>N</th>
+					<th>Observed wall times (ms)</th>
+					<th>Slowest vs the 3256.9 ms default N=1 row</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>A: defaults (1 slot)</td>
+					<td>1</td>
+					<td>3256.9; 3209.0</td>
+					<td>1.0x</td>
+			</tr>
+			<tr>
+					<td>A: defaults (1 slot)</td>
+					<td>2</td>
+					<td>3223.4, 6235.9</td>
+					<td>1.9x</td>
+			</tr>
+			<tr>
+					<td>A: defaults (1 slot)</td>
+					<td>4</td>
+					<td>4163.3, 7127.3, 10138.3, 13131.4</td>
+					<td>4.0x</td>
+			</tr>
+			<tr>
+					<td>A: defaults (1 slot)</td>
+					<td>4 (repeat)</td>
+					<td>3504.4, 6513.7, 9455.4, 12418.3</td>
+					<td>3.8x</td>
+			</tr>
+			<tr>
+					<td>B: <code>OLLAMA_NUM_PARALLEL=4</code></td>
+					<td>4</td>
+					<td>25586.7, 26199.3, 26211.4, 26212.7</td>
+					<td>8.0x</td>
+			</tr>
+			<tr>
+					<td>B: <code>OLLAMA_NUM_PARALLEL=4</code></td>
+					<td>4 (repeat)</td>
+					<td>14003.7, 14316.3, 14320.7, 14325.4</td>
+					<td>4.4x</td>
+			</tr>
+			<tr>
+					<td>B: <code>OLLAMA_NUM_PARALLEL=4</code></td>
+					<td>1</td>
+					<td>3753.9</td>
+					<td>1.15x</td>
+			</tr>
+	</tbody>
+</table>
+<p>The last column divides by one denominator throughout: the 3256.9 ms N=1 row of configuration A, the default server. That makes the last three rows a comparison between two servers, not a before/after on one. Measured against the four-slot server&rsquo;s own single-request row (3753.9 ms), the same two four-slot cells are 7.0x and 3.8x — the same conclusion, a smaller factor, and the number that isolates what the slot setting did on that process.</p>
+<p>Two shapes are worth reading out of that table. Under the default configuration the four requests finish at roughly 3.0-second intervals — 4163, 7127, 10138, 13131 ms in the first repeat, 2964 to 3011 ms apart, and 3504, 6514, 9455, 12418 ms in the second, 2942 to 3009 ms apart — which is about one single-request duration each, the signature of one slot serving four requests back to back rather than four requests progressing together. The N=2 cell shows the same thing at smaller scale: one request returned in 3223 ms, the second in 6236 ms, because it started by waiting for the first to finish.</p>
+<p>With four slots the shape inverts, and it does not improve. In the first repeat all four requests finished within 630 ms of each other but each took 25.6 to 26.2 seconds, roughly twice as long as the slowest queued request under one slot. In the second repeat the same cell landed at 14.0 to 14.3 seconds. The single-request baseline on that second server was 3753.9 ms, so four slots bought parallelism without buying speed: the four requests shared the same two cores, and every one of them ran slower than it would have alone.</p>
+<p>The honest confidence statement: most cells have two repeats, not twenty, and the N=2 cell and the second server&rsquo;s N=1 baseline have one. The spread between repeats is large — the same four-slot cell produced a 26-second band and a 14-second band — so treat these as order-of-magnitude figures for a two-core box, not as p95 latencies. They are not a throughput benchmark and they do not transfer to GPU serving.</p>
+<h2 id="why-the-client-sees-a-timeout-rather-than-a-503">Why the client sees a timeout rather than a 503</h2>
+<p>The obvious hypothesis — &ldquo;the second session gets rejected&rdquo; — does not hold at the sizes a developer actually runs. <code>OLLAMA_MAX_QUEUE</code> defaults to 512 requests, so the server holds queued work instead of refusing it unless you are far past two or three agent sessions (<a href="https://docs.ollama.com/faq.md">Ollama FAQ</a>). In the probe, 21 requests across all cells produced zero non-200 statuses and zero error bodies; the only observable effect of concurrency was elapsed time.</p>
+<p>That is worse than an error, because the failure moves into your client. A queued request looks identical to a slow one until your own read timeout fires. An agent framework with a 30-second HTTP timeout on a host where a queued request can take 26 seconds will abort, retry, and — if the retried tool call carried a side effect — do the same work twice. If you have seen duplicate writes from a &ldquo;flaky&rdquo; local agent, the retry-on-timeout path is worth auditing alongside the queue behaviour in <a href="https://baeseokjae.github.io/posts/agent-tool-retry-duplicate-side-effects-2026/">agent tool retries and duplicate side effects</a>.</p>
+<p>The practical consequence: on a one-slot server, your effective concurrency limit is set by the client timeout, not by the server&rsquo;s capacity. Two sessions are fine if a single request takes 3 seconds and your timeout is 30. Four sessions with a longer prompt are not, because the fourth request inherits three queue waits and only the last one looks slow.</p>
+<h2 id="context-multiplied-by-slots-here-per-slot-there">Context: multiplied by slots here, per-slot there</h2>
+<p>The memory side of concurrency is documented, and it is not what most people assume. Ollama does not divide one context window among parallel requests — it multiplies: &ldquo;Parallel request processing for a given model results in increasing the context size by the number of parallel requests. For example, a 2K context with 4 parallel requests will result in an 8K context and additional memory allocation&rdquo; (<a href="https://docs.ollama.com/faq.md">Ollama FAQ</a>). Combined with the stated RAM rule (<code>OLLAMA_NUM_PARALLEL</code> x <code>OLLAMA_CONTEXT_LENGTH</code>), that means raising slots on a memory-tight box can turn a working setup into an allocation failure at load time, before any request is served.</p>
+<p>The reported field is a trap. A server started with <code>OLLAMA_NUM_PARALLEL=4</code> and <code>OLLAMA_CONTEXT_LENGTH=2048</code> answered <code>/api/ps</code> with <code>context_length: 2048</code> for a model it had just loaded, even though the vendor rule says four slots allocate four times that context. Reading <code>ollama ps</code> CONTEXT as &ldquo;the memory I am using&rdquo; will therefore understate a multi-slot server; the recorded response is in the published evidence below.</p>
+<p>llama.cpp&rsquo;s server takes the opposite configuration shape. Slots are counted explicitly with <code>-np, --parallel N</code> (&ldquo;number of server slots, default: -1, -1 = auto&rdquo;), and per-slot context is a separate flag: <code>--kv-unified-per-slot N</code>, &ldquo;context limit per parallel slot; when set without -c/&ndash;ctx-size, the shared KV pool is sized to n_parallel*N&rdquo; (<a href="https://raw.githubusercontent.com/ggml-org/llama.cpp/master/tools/server/README.md">llama.cpp server README</a>). So on llama-server you choose both the slot count and the per-slot window, while on Ollama the per-request <code>num_ctx</code> is multiplied by the slot count. Either way, the number that matters for memory is slots x context, not context.</p>
+<p>Before you raise slots, do the arithmetic for the model you actually run — the KV-cache sizing formula and a measured check of it are in <a href="https://baeseokjae.github.io/posts/local-llm-vram-kv-cache-budget-2026/">sizing KV cache and context for a local coding model</a>. A 4-slot server is a 4x cache budget on the same weights.</p>
+<h2 id="a-decision-table-for-two-to-four-sessions">A decision table for two to four sessions</h2>
+<table>
+	<thead>
+			<tr>
+					<th>Situation</th>
+					<th>What to configure</th>
+					<th>Why</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Two or three agent sessions on a 2-core CPU box</td>
+					<td>Leave <code>OLLAMA_NUM_PARALLEL=1</code>; raise the client&rsquo;s read timeout well past a single request&rsquo;s worst case</td>
+					<td>Four slots on two cores measured 4.4-8.0x slower per request than the default server&rsquo;s 3256.9 ms single-request row, and 3.8-7.0x slower against the four-slot server&rsquo;s own 3753.9 ms row; queueing is cheaper than contention at this core count</td>
+			</tr>
+			<tr>
+					<td>Spare cores and spare memory</td>
+					<td>Try <code>OLLAMA_NUM_PARALLEL=N</code> with <code>OLLAMA_CONTEXT_LENGTH</code> set explicitly, then measure your own p50</td>
+					<td>The vendor rule multiplies context by slots, so both time and memory change together; nothing here predicts your hardware</td>
+			</tr>
+			<tr>
+					<td>Sessions that must never block each other</td>
+					<td>Separate servers on separate ports with separate models, or separate hosts</td>
+					<td>Two processes cannot contend for the same slot, and each keeps its own context budget</td>
+			</tr>
+			<tr>
+					<td>llama-server instead of Ollama</td>
+					<td>Set <code>-np</code> explicitly, and set <code>--kv-unified-per-slot</code> when you want a hard per-session window</td>
+					<td>Auto slots hide how the shared KV pool is divided; explicit values make the memory budget auditable</td>
+			</tr>
+	</tbody>
+</table>
+<p>The middle row is the one to be sceptical about: the only first-party evidence in this article for raising slots is negative, on two cores. GPU serving divides work differently and was not measured here, so nothing above is a claim about what slots do on a GPU.</p>
+<h2 id="what-to-log-when-a-session-stalls">What to log when a session stalls</h2>
+<p>If a session dies while another is running, the question is not &ldquo;which agent is broken&rdquo; but &ldquo;what did this request wait for&rdquo;. Record these five items per request and the answer is usually visible in one table:</p>
+<ul>
+<li>Client-side wall time around the whole HTTP call — the number your timeout compares against.</li>
+<li>HTTP status and the verbatim response body on failure; a 200 with a body is a different bug from a 503.</li>
+<li><code>done_reason</code> and <code>eval_count</code> from the response — a <code>length</code> stop means your own <code>num_predict</code> cap was hit, not that the server truncated anything.</li>
+<li>Start timestamps of every concurrent session, so queue waits can be attributed rather than assumed.</li>
+<li>The server&rsquo;s own row (<code>ollama ps</code> CONTEXT and UNTIL, or the llama-server slot log) taken while the requests are in flight, not after they finish.</li>
+</ul>
+<p>None of that requires instrumenting the model. It does mean your agent&rsquo;s HTTP layer must log the call rather than only its own decision loop.</p>
+<p>One thing this article does <strong>not</strong> establish: whether concurrency truncates tool-call arguments. No tool-calling payload was sent in this probe, no malformed tool call appeared in any cell, and no shortened context was observed — every response carried the same 316 characters and the same <code>eval_count</code>. If you are debugging a tool call that arrives with a cut-off JSON argument, the surfaces to inspect are the raw assistant message before your parser, the <code>done_reason</code>, and the per-request <code>num_ctx</code>, but this measurement gives you no evidence that a second session causes it.</p>
+<h2 id="files-method-and-how-to-rerun-it">Files, method, and how to rerun it</h2>
+<p>The probe is a single stdlib Python script: it releases N clients from one barrier, records wall time, status and the verbatim error body per request, and flushes partial results after every cell so a deadline cannot lose data. These files are first-party and published with the article:</p>
+<table>
+	<thead>
+			<tr>
+					<th>File</th>
+					<th>What it is</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-llm-concurrent-agent-sessions-2026/probe.py">probe.py</a></td>
+					<td>The driver: barrier-synchronised cells, per-request records, deadline and partial flush</td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-llm-concurrent-agent-sessions-2026/probe-default.json">probe-default.json</a></td>
+					<td>Raw records for config A (defaults, one slot), 2026-11-02T08:03:10Z to 08:03:49Z</td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-llm-concurrent-agent-sessions-2026/probe-par4.json">probe-par4.json</a></td>
+					<td>Raw records for config B (<code>OLLAMA_NUM_PARALLEL=4</code>), 08:04:54Z to 08:05:38Z</td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-llm-concurrent-agent-sessions-2026/ps-check.json">ps-check.json</a></td>
+					<td>The <code>/api/ps</code> response quoted above, with the server environment that produced it</td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-llm-concurrent-agent-sessions-2026/method.md">method.md</a></td>
+					<td>Host, versions, run order, and what was deliberately not measured</td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-llm-concurrent-agent-sessions-2026/raw-records-manifest.json">raw-records-manifest.json</a></td>
+					<td>SHA-256 and byte counts of the research-stage files, so a rerun can be compared byte for byte; <code>ps-check.json</code> was recorded afterwards in the write run and its hash is in the review record rather than this manifest</td>
+			</tr>
+	</tbody>
+</table>
+<p>To repeat the default-configuration cells on your own box, keep the script in a scratch directory of your choosing and give it a deadline in epoch seconds:</p>
+<pre tabindex="0"><code>OLLAMA_PROBE_BASE=http://127.0.0.1:11434 OLLAMA_PROBE_LABEL=my-host \
+OLLAMA_PROBE_OUT=&#34;$TMPDIR/probe-mine.json&#34; \
+OLLAMA_PROBE_DEADLINE=$(( $(date +%s) + 150 )) \
+python3 probe.py
+</code></pre><p>For the four-slot cell, start a second server with your own model and flags, point <code>OLLAMA_PROBE_BASE</code> at it, and run <code>python3 probe.py n4</code>, which replays N=4 twice and then N=1 as the baseline. Compare the second client&rsquo;s wall time against the first: if the N=2 pair finishes at the same time, your server has two or more usable slots; if the second finishes at roughly twice the first, it has one.</p>
+<h2 id="what-this-does-and-does-not-establish">What this does and does not establish</h2>
+<p>Measured on one host: with the shipped default of one slot, four concurrent agent-shaped requests serialised and the last one took 4.0x the single-request wall time; setting <code>OLLAMA_NUM_PARALLEL=4</code> on the same two-core box made each request 4.4x to 8.0x slower than the default server&rsquo;s 3256.9 ms single-request row (3.8x to 7.0x against that server&rsquo;s own 3753.9 ms baseline) rather than faster; every request still returned HTTP 200.</p>
+<p>Not measured, and not claimed: GPU serving of any kind, a real coding model generating hundreds of tokens, tool-calling payloads, throughput in tokens per second, memory high-water marks, and any comparison between Ollama and llama.cpp beyond their documented flag semantics. The absolute latencies here describe a two-vCPU host running a 397 MB model with a 64-token generation cap; your numbers will differ, and the shape — queueing at the default, contention when slots exceed cores — is what this article asks you to check rather than assume. For the wider comparison of engines and their parallel-request handling, see <a href="https://baeseokjae.github.io/posts/vllm-vs-ollama-production-2026/">vLLM vs Ollama in production</a> and <a href="https://baeseokjae.github.io/posts/local-ai-model-serving-frameworks-2026/">local model serving frameworks</a>; for the multi-agent side, <a href="https://baeseokjae.github.io/posts/local-ai-agents-guide-2026/">running local AI agents</a> covers what each session does with the model it gets.</p>
+]]></content:encoded></item><item><title>What Agent Compaction Actually Drops: published measurements and a retention test you can run</title><link>https://baeseokjae.github.io/posts/agent-context-compaction-fidelity-2026/</link><pubDate>Mon, 02 Nov 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-context-compaction-fidelity-2026/</guid><description>Published measurements of summarisation loss are narrower and stranger than the advice: temporal expressions survived at 3.05% before a one-sentence prompt fix and 62.39% after, named entities and event structure barely changed, and 5x compression raised retrieval calls from 21.0 to 63.9 while completion stayed flat. This post reads those results, separates them from the model&amp;#39;s own recall limits, and ships a 12-probe retention test — probe template, scorer and fixture test — for your own transcripts.</description><content:encoded><![CDATA[<p>An agent works for two hours. The harness compacts the transcript, the run continues, and somewhere in the next twenty turns it re-runs a migration it has already run, asks the user for a value the user typed an hour ago, or refactors a file it was explicitly told not to touch. Nothing in the run log marks the turn where that fact disappeared. The summary reads fluently, the task still finishes, and the only trace of the loss is work the agent repeats.</p>
 <p>That is the reader problem this post takes up: which pinned facts survive a summarisation pass, what the pass costs in tokens, and how to make the facts that cannot be lost survive it. The framing matters, because &ldquo;which facts survive&rdquo; is an empirical question and the honest answer is narrower than the advice literature implies. Every number below is quoted from a published study or a vendor document and linked where it appears. No retention figure here is a measurement performed by this article; what the post adds is a reading of the published evidence and the shape of a retention test an operator can run against their own harness.</p>
 <h2 id="three-shipped-compaction-paths-and-they-lose-different-things">Three shipped compaction paths, and they lose different things</h2>
 <p>Compaction is not one mechanism. Anthropic&rsquo;s production API path replaces older conversation turns with a summary that the model writes on the server, so the client needs no summarisation code of its own (<a href="https://platform.claude.com/docs/en/build-with-claude/compaction)">https://platform.claude.com/docs/en/build-with-claude/compaction)</a>. Because the summary is generated rather than selected, its content is not deterministic across runs or model versions. The API summariser&rsquo;s own prompt and target length are unpublished, and no per-fact measurement of what that summary retains is published either — which is a narrower statement than vendor-wide silence on retention, as the next section shows.</p>
