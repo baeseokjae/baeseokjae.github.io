@@ -1,4 +1,195 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Posts on RockB</title><link>https://baeseokjae.github.io/posts/</link><description>Recent content in Posts on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Mon, 02 Nov 2026 15:58:22 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/posts/index.xml" rel="self" type="application/rss+xml"/><item><title>Swap the Embedding Model, Keep the Store: Agent Memory That Returns the Wrong Neighbour Without an Error</title><link>https://baeseokjae.github.io/posts/agent-memory-embedding-swap-recall-2026/</link><pubDate>Mon, 02 Nov 2026 15:40:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-memory-embedding-swap-recall-2026/</guid><description>A 40-document recall harness shows what happens when the encoder behind an existing vector store changes: same-width swaps return wrong neighbours with no exception, while width mismatches fail loudly. Includes the guard that records encoder id, digest and dimension per vector.</description><content:encoded><![CDATA[<p>An agent memory store can survive an embedding-model change while quietly returning the wrong fact. Nothing in the stack raises, because nothing in the stack compares the encoder that wrote a vector with the encoder that now reads it. In a 40-document fixture with 15 single-answer queries, one encoder on both sides ranked the labelled document first for 15 of 15 queries. Replacing the document encoder with a different model of the same width dropped that to 1 of 15, and no call failed. Replacing it with a model of a different width failed all 15 queries with a length error — the loud case, and the easy one.</p>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Posts on RockB</title><link>https://baeseokjae.github.io/posts/</link><description>Recent content in Posts on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 03 Nov 2026 06:50:12 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/posts/index.xml" rel="self" type="application/rss+xml"/><item><title>Local LLM VRAM Planning 2026: The KV Cache Math Behind the Context You Can Actually Serve</title><link>https://baeseokjae.github.io/posts/local-llm-vram-kv-cache-sizing-2026/</link><pubDate>Tue, 03 Nov 2026 06:29:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/local-llm-vram-kv-cache-sizing-2026/</guid><description>Does this model, quant and context fit your card? Compute weights plus KV from the model&amp;#39;s own config at a pinned revision, with a per-model table, a hybrid-attention counterexample and a runnable planner.</description><content:encoded><![CDATA[<p>A model card says 40,960 tokens. The Q4_K_M file is 4.68 GiB. The card has 12 GB. You set <code>-c 40960</code>, and one of three things happens: the load fails, the runtime spills layers to CPU and tokens per second collapse, or the server starts and silently serves a shorter context than you asked for.</p>
+<p>Which of the three you get depends on a number that appears in none of those three places — the key/value cache the runtime allocates at load time from the context you request. This page computes it for four specific models from their own <code>config.json</code> at a pinned revision, turns it into a &ldquo;largest context that fits this card&rdquo; table, and ships a planner you can run offline.</p>
+<p>If you searched for benchmark charts, this page will disappoint you on purpose. There are no throughput measurements here: this environment has no GPU, and inventing a tokens-per-second table is worse than saying so. What is here is arithmetic you can check in a minute, plus the one failure mode that arithmetic gets wrong.</p>
+<h2 id="the-budget-is-three-terms">The budget is three terms</h2>
+<pre tabindex="0"><code>resident ≈ GGUF file size + KV cache at your context + runtime overhead
+</code></pre><p>Only the first term is on the download page. The third term — compute buffers, CUDA context, the graph allocator — is machine- and backend-specific; the planner below takes it as a declared allowance and prints it separately, so you can see what you are assuming rather than have it hidden in a fudge factor.</p>
+<p>The middle term is the one that changes with context:</p>
+<pre tabindex="0"><code>bytes_per_token = 2 × n_layers × n_kv_heads × head_dim × bytes_per_element
+</code></pre><p>Two for key plus value. <code>n_layers</code>, <code>n_key_value_heads</code> and <code>head_dim</code> come from the model&rsquo;s <code>config.json</code> — not from the parameter count, and not from the size of the file. Two 8B-class models can differ by 8× here depending on how many heads share keys and values.</p>
+<p>Qwen3-8B, read from <a href="https://huggingface.co/Qwen/Qwen3-8B/raw/main/config.json">its config</a> at revision <code>b968826d9c46dd6066d109eabc6255188de91218</code>: 36 layers, 8 KV heads, head_dim 128, and <code>max_position_embeddings</code> 40,960. That is 2 × 36 × 8 × 128 × 2 = 147,456 bytes per token — 144 KiB — which is 0.56 GiB at 4,096 tokens and 5.62 GiB at the native 40,960.</p>
+<p>Same model, same file, a cache five times larger than the weights at the context the card advertises. That is the whole trap in one number.</p>
+<h2 id="four-models-computed-from-their-own-configs">Four models, computed from their own configs</h2>
+<p>Every row below is computed at batch size 1 with an f16 cache, from the config fields saved at the revisions read on 2026-11-03, and the GGUF sizes are the published file sizes in the same repositories. None of it is a measured load.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Model</th>
+					<th>Layers</th>
+					<th>KV heads × head dim</th>
+					<th>Native ctx</th>
+					<th>f16 KV B/token</th>
+					<th>KV at 8k</th>
+					<th>KV at native</th>
+					<th>Q4_K_M file</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Qwen3-8B</td>
+					<td>36</td>
+					<td>8 × 128</td>
+					<td>40,960</td>
+					<td>147,456</td>
+					<td>1.12 GiB</td>
+					<td>5.62 GiB</td>
+					<td>4.68 GiB</td>
+			</tr>
+			<tr>
+					<td>Qwen3-14B</td>
+					<td>40</td>
+					<td>8 × 128</td>
+					<td>40,960</td>
+					<td>163,840</td>
+					<td>1.25 GiB</td>
+					<td>6.25 GiB</td>
+					<td>8.38 GiB</td>
+			</tr>
+			<tr>
+					<td>Devstral-Small-2507</td>
+					<td>40</td>
+					<td>8 × 128</td>
+					<td>131,072</td>
+					<td>163,840</td>
+					<td>1.25 GiB</td>
+					<td>20.0 GiB</td>
+					<td>13.35 GiB</td>
+			</tr>
+			<tr>
+					<td>Gemma 4 31B (hybrid)</td>
+					<td>60</td>
+					<td>16 × 256</td>
+					<td>262,144</td>
+					<td>see below</td>
+					<td>1.41 GiB</td>
+					<td>20.8 GiB</td>
+					<td>17.07 GiB</td>
+			</tr>
+	</tbody>
+</table>
+<p>Config sources: <a href="https://huggingface.co/Qwen/Qwen3-14B/raw/main/config.json">Qwen3-14B</a>, <a href="https://huggingface.co/mistralai/Devstral-Small-2507/raw/main/config.json">Devstral-Small-2507</a>, <a href="https://huggingface.co/google/gemma-4-31B-it/raw/main/config.json">Gemma 4 31B</a>. The file-size column comes from one mirror per model, each an <code>/api/models/&lt;repo&gt;/tree/main?blobs=true</code> listing read on 2026-11-03: the <a href="https://huggingface.co/api/models/unsloth/Qwen3-8B-GGUF/tree/main?blobs=true">unsloth Qwen3-8B GGUF tree</a> behind 4.68 GiB, the <a href="https://huggingface.co/api/models/unsloth/Qwen3-14B-GGUF/tree/main?blobs=true">unsloth Qwen3-14B GGUF tree</a> behind 8.38 GiB, the <a href="https://huggingface.co/api/models/unsloth/Devstral-Small-2507-GGUF/tree/main?blobs=true">unsloth Devstral GGUF tree</a> behind 13.35 GiB, and the <a href="https://huggingface.co/api/models/unsloth/gemma-4-31B-it-GGUF/tree/main?blobs=true">unsloth Gemma 4 31B GGUF tree</a> behind 17.07 GiB. Another quantiser&rsquo;s Q4_K_M is a different file with a different byte size, so treat the mirror as part of the number.</p>
+<p>Read the Devstral row before you buy: a 13.35 GiB file whose native context needs 20 GiB of cache on top. The weights fit 24 GB comfortably; the context does not.</p>
+<h2 id="quantisation-moves-the-left-hand-term-not-the-right-hand-one">Quantisation moves the left-hand term, not the right-hand one</h2>
+<p>Going from BF16 to Q4_K_M shrinks the file by roughly 3.3× for Qwen3-8B (15.26 GiB to 4.68 GiB). It does not touch the cache unless you also quantise the cache. With q8_0 packing — 32 elements in 34 bytes, 1.0625 bytes per element — the same 40,960-token context costs 2.99 GiB instead of 5.62, and the whole plan lands at 8.67 GiB including a 1 GiB allowance.</p>
+<p>Ollama documents that this only works with Flash Attention enabled, and that the setting is global rather than per model (<a href="https://docs.ollama.com/faq">Ollama FAQ</a>). A quantised cache type on a backend that cannot run Flash Attention is inert — the flag is accepted, the memory does not move. The CPU-only probe published with <a href="https://baeseokjae.github.io/posts/local-llm-vram-kv-cache-budget-2026/">the budget article</a> shows exactly that: the same slope with <code>OLLAMA_KV_CACHE_TYPE=q8_0</code> until Flash Attention was turned on, then half.</p>
+<h2 id="where-the-single-slope-formula-fails-gemma-4-31b">Where the single-slope formula fails: Gemma 4 31B</h2>
+<p>Take the naive rule to Gemma 4 31B and you get 2 × 60 × 16 × 256 × 2 = 983,040 bytes per token, or 240 GiB at its 262,144-token maximum. That number is correct arithmetic and a wrong plan. The config declares a <code>layer_types</code> list in which only 10 of 60 layers are full attention, with <code>global_head_dim</code> 512 and 4 global KV heads; the other 50 slide over a 1,024-token window.</p>
+<p>A sliding layer does not grow with context. It holds one window, ever. So the cost is a slope plus a fixed term:</p>
+<ul>
+<li>10 full layers: 2 × 10 × 4 × 512 × 2 = 81,920 bytes per token</li>
+<li>50 sliding layers: 2 × 50 × 16 × 256 × 2 × 1,024 = 800 MiB fixed, per slot</li>
+<li>at 32,768 tokens: 2.50 GiB + 0.78 GiB = 3.28 GiB, not 30 GiB</li>
+</ul>
+<p>This is the correction that matters most for 2026 models: if <code>layer_types</code> or <code>sliding_window</code> appears in a config, the per-token formula alone overestimates the cache by an order of magnitude, and a planner built on it will tell you a 24 GB card cannot run a 31B at 32k when the arithmetic says it can.</p>
+<h2 id="largest-context-that-fits-at-a-declared-1-gib-overhead">Largest context that fits, at a declared 1 GiB overhead</h2>
+<p>Computed with the same fixtures: file size plus f16 cache plus 1 GiB for compute buffers and CUDA context, capped at the model&rsquo;s native context. If your runtime&rsquo;s overhead is larger, subtract it and recompute — the planner does this for you.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Q4_K_M</th>
+					<th>8 GiB</th>
+					<th>12 GiB</th>
+					<th>16 GiB</th>
+					<th>24 GiB</th>
+					<th>48 GiB</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Qwen3-8B</td>
+					<td>16,893</td>
+					<td>40,960</td>
+					<td>40,960</td>
+					<td>40,960</td>
+					<td>40,960</td>
+			</tr>
+			<tr>
+					<td>Qwen3-14B</td>
+					<td>does not fit</td>
+					<td>17,170</td>
+					<td>40,960</td>
+					<td>40,960</td>
+					<td>40,960</td>
+			</tr>
+			<tr>
+					<td>Devstral-Small-2507</td>
+					<td>does not fit</td>
+					<td>does not fit</td>
+					<td>10,813</td>
+					<td>63,242</td>
+					<td>131,072</td>
+			</tr>
+			<tr>
+					<td>Gemma 4 31B (hybrid)</td>
+					<td>does not fit</td>
+					<td>does not fit</td>
+					<td>does not fit</td>
+					<td>67,485</td>
+					<td>262,144</td>
+			</tr>
+	</tbody>
+</table>
+<p>Capped cells are written as the native context, not as the larger number the formula would allow. An 8 GiB card holds Qwen3-8B at 16,893 tokens and nothing else in this set; a 12 GB card holds it at the full 40,960 with about 0.7 GiB to spare, which is not a margin to plan a desktop session around once the display compositor takes its share.</p>
+<h2 id="concurrency-multiplies-the-cache-not-the-weights">Concurrency multiplies the cache, not the weights</h2>
+<p>Four parallel slots at 32,768 tokens on Qwen3-8B is 18 GiB of cache against 4.5 GiB for one slot — the weights are loaded once, the cache is allocated per slot. A server sized for one user&rsquo;s long context is not sized for four users&rsquo; long contexts, and the difference is not in the file size anyone quotes.</p>
+<h2 id="the-planner">The planner</h2>
+<p><code>plan.py</code> reads a fixture of the four configs above and prints the breakdown, exiting non-zero on overflow so it can gate a launch script:</p>
+<pre tabindex="0"><code>$ python3 plan.py --model qwen3-8b --quant Q4_K_M --context 40960 --vram 12
+model    : qwen3-8b (Qwen/Qwen3-8B, native 40960 tokens, dense)
+weights  : 4.68 GiB  (Q4_K_M GGUF file)
+kv       : 5.62 GiB  (f16, 147,456 B/token x 40960)
+overhead : 1.00 GiB  (declared allowance, not measured)
+total    : 11.30 GiB
+device   : 12.00 GiB  margin +0.70 GiB
+verdict  : fits at the declared allowance
+</code></pre><p>Full output of the two-slot run, unedited (the verdict line goes to stderr, so it prints before the buffered stdout when the terminal interleaves them):</p>
+<pre tabindex="0"><code>$ python3 plan.py --model gemma-4-31b-it --quant Q4_K_M --context 32768 --parallel 2 --vram 24
+model    : gemma-4-31b-it (google/gemma-4-31B-it, native 262144 tokens, hybrid)
+weights  : 17.07 GiB  (Q4_K_M GGUF file)
+kv       : 6.56 GiB  (f16, 81,920 B/token x 32768 + 0.78 GiB fixed window per slot, x2 slots)
+overhead : 1.00 GiB  (declared allowance, not measured)
+total    : 24.63 GiB
+device   : 24.00 GiB  margin -0.63 GiB
+verdict  : DOES NOT FIT - lower context, quantise the KV cache, or reduce parallel slots
+</code></pre><p>Two slots on the hybrid model is the difference between fitting 24 GB and not: one slot totals 21.35 GiB, two slots 24.63 GiB.</p>
+<p>Files, first-party and published with the article:</p>
+<table>
+	<thead>
+			<tr>
+					<th>File</th>
+					<th>What it is</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-llm-vram-kv-cache-sizing-2026/plan.py">plan.py</a></td>
+					<td>The planner: weights + KV + declared overhead, hybrid-aware, non-zero exit on overflow</td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-llm-vram-kv-cache-sizing-2026/plan-fixtures.json">plan-fixtures.json</a></td>
+					<td>The four configs and their published GGUF sizes, with the Qwen3-8B revision pinned</td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-llm-vram-kv-cache-sizing-2026/test_plan.py">test_plan.py</a></td>
+					<td>Six tests (14 assertions) pinning 147,456 B/token, 5.62 GiB at 40,960, the 4× slot multiplier and the hybrid fixed term</td>
+			</tr>
+	</tbody>
+</table>
+<p>To add your own model, copy a config object into the fixtures file. The planner reads six fixture fields and nothing else; <code>num_hidden_layers</code>, <code>num_key_value_heads</code>, <code>head_dim</code> and <code>gguf_gib</code> drive the arithmetic, and the other two are for display:</p>
+<ul>
+<li><code>num_hidden_layers</code>, <code>num_key_value_heads</code>, <code>head_dim</code> — from the model&rsquo;s <code>config.json</code></li>
+<li><code>max_position_embeddings</code> — from <code>config.json</code>; printed in the header and used only to cap the &ldquo;fits&rdquo; search</li>
+<li><code>gguf_gib</code> — an object of <code>{&quot;Q4_K_M&quot;: 4.68, ...}</code>, one entry per quant you intend to plan for, each value being the published file size in bytes divided by 1024³</li>
+<li><code>repo</code> — the model id, printed in the header; if you omit it the printer says <code>repo not recorded</code> instead of failing</li>
+</ul>
+<p><code>hybrid</code> is the only optional block, and it needs all five of <code>full_layers</code>, <code>sliding_layers</code>, <code>window</code>, <code>global_head_dim</code>, <code>global_kv_heads</code>. Add it only if the config carries <code>layer_types</code> or <code>sliding_window</code>: the mere presence of the key switches the model onto the hybrid branch, so a <code>hybrid</code> block invented for a dense model produces a wrong total rather than a denser one. <code>revision</code> is optional bookkeeping, never read by the arithmetic.</p>
+<p><code>plan.py --list</code> shows what loaded, and <code>python3 plan.py --model &lt;name&gt; --quant &lt;quant&gt; --context &lt;n&gt; --vram &lt;GiB&gt;</code> prints the breakdown and exits 1 when the total exceeds the card.</p>
+<h2 id="what-this-page-does-not-establish">What this page does not establish</h2>
+<p>Every number above is arithmetic from published configs and file sizes, not an observed successful load: no GPU was available for this run. The formula itself was validated on a CPU-only host against a 0.5B model in the budget article — 11.98 KiB per token measured against 12.00 computed, and 6.37 against 6.38 for q8_0 with Flash Attention — which validates the arithmetic, not GPU behaviour, and not any large model.</p>
+<p>Also out of scope: throughput, quality, tokens per second, vendor performance claims, whether a given runtime honours <code>layer_types</code> rather than allocating a uniform cache per layer, and vision projectors, which ship as separate <code>mmproj</code> files in the Gemma repositories and are not in any figure here.</p>
+<p>Two gated repositories stayed gated: <a href="https://huggingface.co/api/models/meta-llama/Llama-3.3-70B-Instruct">meta-llama/Llama-3.3-70B-Instruct</a> reports <code>gated: manual</code> and both it and <code>google/gemma-3-27b-it</code> returned 401 for <code>config.json</code> from this host. Neither has a per-token figure here, and neither appears in any table above; the 70B is named only because it was the fifth repo the fixture plan asked for and could not be measured the same way.</p>
+<p>If your runtime reports a served context shorter than the one you requested, that is a different failure from the one this page predicts — <a href="https://baeseokjae.github.io/posts/ollama-silent-context-truncation-2026/">the truncation diagnosis</a> and <a href="https://baeseokjae.github.io/posts/llama-server-context-overflow-diagnosis-2026/">the overflow diagnosis</a> cover it. Once the model fits, <a href="https://baeseokjae.github.io/posts/local-llm-rig-cost-payback-2026/">the payback model</a> turns a throughput number into a purchase decision, and <a href="https://baeseokjae.github.io/posts/best-local-llm-models-2026/">the model-list page</a> is the place to choose between these four.</p>
+]]></content:encoded></item><item><title>Swap the Embedding Model, Keep the Store: Agent Memory That Returns the Wrong Neighbour Without an Error</title><link>https://baeseokjae.github.io/posts/agent-memory-embedding-swap-recall-2026/</link><pubDate>Mon, 02 Nov 2026 15:40:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-memory-embedding-swap-recall-2026/</guid><description>A 40-document recall harness shows what happens when the encoder behind an existing vector store changes: same-width swaps return wrong neighbours with no exception, while width mismatches fail loudly. Includes the guard that records encoder id, digest and dimension per vector.</description><content:encoded><![CDATA[<p>An agent memory store can survive an embedding-model change while quietly returning the wrong fact. Nothing in the stack raises, because nothing in the stack compares the encoder that wrote a vector with the encoder that now reads it. In a 40-document fixture with 15 single-answer queries, one encoder on both sides ranked the labelled document first for 15 of 15 queries. Replacing the document encoder with a different model of the same width dropped that to 1 of 15, and no call failed. Replacing it with a model of a different width failed all 15 queries with a length error — the loud case, and the easy one.</p>
 <p>That contrast is the whole point. The dimension check most teams already have catches one of these two failures. The other one changes what your agent believes.</p>
 <h2 id="the-failure-neighbours-come-back-the-space-does-not">The failure: neighbours come back, the space does not</h2>
 <p>The scenario is ordinary maintenance. A team moves memory embeddings from a hosted model to a local one, upgrades a model version, or switches providers during an outage. The write path keeps running, the table keeps its shape, and <code>search(query, k=5)</code> keeps returning five rows. If the new encoder has the same output width as the old one, even a strict database column will accept the new vectors: a <code>vector(384)</code> column takes 384 floats from any model on earth.</p>
