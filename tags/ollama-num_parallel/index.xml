@@ -1,4 +1,142 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Ollama Num_parallel on RockB</title><link>https://baeseokjae.github.io/tags/ollama-num_parallel/</link><description>Recent content in Ollama Num_parallel on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Mon, 02 Nov 2026 00:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/ollama-num_parallel/index.xml" rel="self" type="application/rss+xml"/><item><title>Two Agent Sessions, One Local Model Server: what concurrency does to latency, context and tool calls</title><link>https://baeseokjae.github.io/posts/local-llm-concurrent-agent-sessions-2026/</link><pubDate>Mon, 02 Nov 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/local-llm-concurrent-agent-sessions-2026/</guid><description>Ollama ships one parallel slot per model, so a second agent session waits behind the first: four concurrent requests serialised to 4.0x the single-request wall time on a 2-vCPU host, and OLLAMA_NUM_PARALLEL=4 made each request 4.4-8.0x slower against the default server&amp;#39;s single-request baseline (3.8-7.0x against its own) instead of faster. Measured latency, the documented context rules, and what to log when a session stalls.</description><content:encoded><![CDATA[<p>Your first coding-agent session answers in a couple of seconds. You open a second one against the same local server, and now the first session&rsquo;s next request stalls for many seconds, or your client aborts with a read timeout while the server log shows no error at all. Restart the server and run one session: everything is fast again.</p>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Ollama Num_parallel on RockB</title><link>https://baeseokjae.github.io/tags/ollama-num_parallel/</link><description>Recent content in Ollama Num_parallel on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Wed, 04 Nov 2026 00:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/ollama-num_parallel/index.xml" rel="self" type="application/rss+xml"/><item><title>Two Agents, One Ollama: Measuring Why the Second Request Queues Instead of Speeding Up (2026)</title><link>https://baeseokjae.github.io/posts/ollama-concurrent-requests-latency-2026/</link><pubDate>Wed, 04 Nov 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/ollama-concurrent-requests-latency-2026/</guid><description>A CPU-only measurement of two simultaneous Ollama requests: the second one waits one full generation, and the response body proves it. Includes the one-line queue diagnostic, a 17-batch matrix for OLLAMA_NUM_PARALLEL 1/2/4, and why extra slots buy latency, not throughput.</description><content:encoded><![CDATA[<p>You start a second coding agent against the Ollama endpoint that already answers your first one. Nothing errors out. The second call simply sits there for two or three seconds, and when both finish your &ldquo;parallel&rdquo; run has taken longer than running the two prompts one after the other. The usual conclusion is that the model is slow, the quant is wrong, or the machine needs more RAM. On the host measured here, none of those were true: the second request was queued, and the HTTP response said so in its own timing fields.</p>
+<p>This post is the mechanism, a diagnostic you can run against one response, and a measured verdict for CPU-only machines. Everything below comes from 17 recorded batches on a 2-core aarch64 box with Ollama 0.20.3 and <code>qwen2.5:0.5b</code>, run on 2026-11-04 between 00:33:20Z and 00:35:37Z. The raw records are published with the article so the numbers can be recomputed rather than trusted.</p>
+<h2 id="what-ollama-does-with-the-second-request">What Ollama does with the second request</h2>
+<p>Ollama&rsquo;s own documentation describes two levels of concurrency: several models resident at once, and, inside one model, several requests processed in parallel. The second level is what a subagent fan-out or a background embedding call runs into, and it is a per-model setting rather than a per-request one — <a href="https://docs.ollama.com/faq.md">the FAQ states that parallel request processing is configured when the model is loaded, and that a model is &ldquo;configured to allow parallel request processing&rdquo; only if memory allows</a>. When memory does not allow it, &ldquo;all new requests will be queued until the new model can be loaded&rdquo;, and &ldquo;queued requests will be processed in order&rdquo;.</p>
+<p>The compiled defaults decide how often that path is taken. In the runtime&rsquo;s configuration source, <a href="https://raw.githubusercontent.com/ollama/ollama/main/envconfig/config.go">parallel request processing defaults to 1, the pending queue to 512, and the maximum number of resident models to 0, meaning automatic</a>. So a stock install handles exactly one generation per model at a time. The second request is not rejected and not run concurrently — it goes into the scheduler&rsquo;s pending channel, which is also where the &ldquo;server busy&rdquo; error comes from: <a href="https://raw.githubusercontent.com/ollama/ollama/main/server/sched.go">in the scheduler, a request whose runner is neither loaded nor reloadable is pushed to a pending channel, and only a full channel returns <code>ErrMaxQueue</code></a>. Up to 512 requests can therefore wait politely for a slot before anything fails.</p>
+<p>That is the whole trap. A queued request returns HTTP 200 with a normal-looking answer. The only trace of the wait is time that belongs to no phase of the work.</p>
+<h2 id="the-diagnostic-one-response-four-fields">The diagnostic: one response, four fields</h2>
+<p><code>/api/generate</code> reports its own timing breakdown, in nanoseconds: <code>total_duration</code>, <code>load_duration</code>, <code>prompt_eval_duration</code>, and <code>eval_duration</code>, <a href="https://docs.ollama.com/api/generate.md">documented in the generate API reference</a>. For a request that was never queued, those three components add up to the total. For a request that waited, they do not, and the difference is the queue wait:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>curl -s http://127.0.0.1:11434/api/generate -d <span style="color:#e6db74">&#39;{&#34;model&#34;:&#34;qwen2.5:0.5b&#34;,&#34;prompt&#34;:&#34;hello&#34;,&#34;stream&#34;:false}&#39;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>| python3 -c <span style="color:#e6db74">&#39;import json,sys; r=json.load(sys.stdin); t=r[&#34;total_duration&#34;]; \
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">q=t-(r[&#34;load_duration&#34;]+r[&#34;prompt_eval_duration&#34;]+r[&#34;eval_duration&#34;]); \
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">print(&#34;total_s=%.2f queue_s=%.2f queue_fraction=%.2f&#34; % (t/1e9, q/1e9, q/t))&#39;</span>
+</span></span></code></pre></div><p>Two details make the difference between a working diagnostic and a misleading one. First, <code>load_duration</code> is not zero even when the model is already resident: on this host it was 0.20-0.30 s for a warm 0.5B model and 0.49-1.04 s on the 4-slot instance. Load plus prompt-eval overhead was 0.24-0.34 s on the default and 2-slot instances, 0.62-0.92 s in the warm 4-slot batch and 0.96-1.32 s in the second cold 4-slot batch, so subtracting only <code>eval_duration</code> from <code>total_duration</code> inflates apparent waiting by roughly a quarter to a third of a second at one or two slots and by up to about 1.3 s at four. (The first cold 4-slot batch is worse still — a prompt-cache miss put 4.64 s of prompt evaluation on three of its four requests — and is excluded from the reported table for that reason.) Second, the fraction matters more than the absolute value, because a long generation dilutes the same queue wait into a smaller share.</p>
+<p>On the measured host the split was unambiguous. Solo requests in the default configuration left a residual of 0.05 s, about 2% of a 2.3-2.6 s total. In the same configuration, the second of two simultaneous requests showed a residual of 2.16, 2.27, 2.17 and 2.41 s across four batches — 40-51% of its total time — while the first request in that batch still finished with a 0.05 s residual.</p>
+<h2 id="the-measurement-17-batches-three-configurations">The measurement: 17 batches, three configurations</h2>
+<p>The runtime was Ollama 0.20.3, <a href="https://github.com/ollama/ollama/releases/tag/v0.20.3">published 2026-04-07 according to the GitHub release metadata</a>. The probe sends <code>POST /api/generate</code> with <code>stream: false</code>, <code>temperature: 0</code>, <code>seed: 42</code> and <code>num_predict: 64</code>, one fixed prompt, and every request produced <code>eval_count: 46</code>. Concurrent requests synchronise on a barrier so they leave together. Three server configurations were used: A is the pre-existing default server on port 11434; B is a dedicated instance on port 11500 with <code>OLLAMA_NUM_PARALLEL=2</code>; C is a dedicated instance on port 11501 with <code>OLLAMA_NUM_PARALLEL=4</code>. Both dedicated instances used the system model directory and <code>OLLAMA_MAX_QUEUE=1</code>, which is worth noting: with free slots available, nothing was rejected, so the single-queue-slot limit never fired.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Config</th>
+					<th>Concurrency</th>
+					<th>Warm batches</th>
+					<th>Per-request total (s)</th>
+					<th>Per-request eval (s)</th>
+					<th>Queue residual (s)</th>
+					<th>Aggregate tok/s</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>A default</td>
+					<td>1</td>
+					<td>3</td>
+					<td>2.30-2.59</td>
+					<td>2.00-2.27</td>
+					<td>0.05</td>
+					<td>17.7-20.0</td>
+			</tr>
+			<tr>
+					<td>A default</td>
+					<td>2</td>
+					<td>4</td>
+					<td>2.40-2.62 (first) / 4.49-5.69 (second)</td>
+					<td>2.02-2.26 (first) / 1.96-3.13 (second)</td>
+					<td>0.05 (first) / 2.16-2.41 (second)</td>
+					<td>16.2-20.4</td>
+			</tr>
+			<tr>
+					<td>B <code>NUM_PARALLEL=2</code></td>
+					<td>1</td>
+					<td>2</td>
+					<td>2.29-2.48</td>
+					<td>1.99-2.17</td>
+					<td>0.05</td>
+					<td>18.5-20.1</td>
+			</tr>
+			<tr>
+					<td>B <code>NUM_PARALLEL=2</code></td>
+					<td>2</td>
+					<td>3</td>
+					<td>4.08-4.60</td>
+					<td>3.67-4.13</td>
+					<td>0.09-0.17</td>
+					<td>20.0-22.0</td>
+			</tr>
+			<tr>
+					<td>C <code>NUM_PARALLEL=4</code></td>
+					<td>4</td>
+					<td>1</td>
+					<td>8.70-8.94</td>
+					<td>7.81-7.90</td>
+					<td>0.12-0.34</td>
+					<td>20.6</td>
+			</tr>
+	</tbody>
+</table>
+<p>Four batches were excluded as cold and are marked <code>cold=true</code> in the per-batch summary: the very first solo batch (4.93 s, of which 4.61 s was <code>eval_duration</code> at 10.0 tok/s; <code>load_duration</code> was 0.22 s, no higher than the warm solo rows), one 2-slot batch on config B where a cold prompt cache pushed <code>prompt_eval_duration</code> to 1.58 s, and the two earliest 4-slot batches (19.2 s and 16.4 s): the first carries the 4.64 s prompt-eval miss on three requests described above, and the second spent 14.8 s of its 16.4 s in <code>eval_duration</code> at 3.1 tok/s with <code>load_duration</code> 0.73-1.04 s. They ran at 9.6 and 11.2 aggregate tok/s against 20.6 in the warm batch. Cold exclusion is stated because it changes the numbers: the excluded 4-slot batches are twice as slow as the one warm batch reported.</p>
+<h2 id="what-the-numbers-say">What the numbers say</h2>
+<p>Under the default configuration, the second request waited about as long as one full generation. Its total was 4.49-5.69 s against 2.30-2.59 s for a solo request, and the wait it added — 2.16-2.41 s — is almost exactly the eval time of the batch-mate holding the slot (2.02-2.26 s). Per-request token rates mostly held: in three of the four batches the queued request generated at 22.0-23.4 tok/s against 20.3-22.8 for that batch-mate. The exception is rep 1, where the queued request ran at 14.7 tok/s (eval_duration 3.13 s) against 21.7 for the first, even though the first request&rsquo;s own latency was unchanged at 2.46 s. That is still a queue, not CPU contention: if the two generations had been sharing two cores for their whole duration, the first request&rsquo;s latency would have moved, and it did not.</p>
+<p>Setting <code>OLLAMA_NUM_PARALLEL=2</code> removed the wait and replaced it with slower generations. Both requests came back in 4.08-4.60 s with <code>eval_duration</code> 3.67-4.13 s, against 2.00-2.27 s solo, and the queue residual fell to 0.09-0.17 s. Per-request throughput halved from roughly 20-23 tok/s to 11.1-12.5 tok/s. On two cores, two concurrent generations each run at about half speed, which is what a shared CPU should do.</p>
+<p>Aggregate throughput barely moved. Warm batches gave a median of 19.1 tok/s solo on config A, 19.8 tok/s for config A at concurrency 2, 22.0 tok/s for config B at concurrency 2, and 20.6 tok/s for the single warm config C batch at concurrency 4. The best-case ratio that could be argued, 22.0 / 19.8 = 1.11x, sits inside a run-to-run spread of 16.2-22.0 tok/s, and far below the 1.5x improvement that would have made extra slots worth recommending on this hardware. Doubling or quadrupling the slot count changed latency per request by roughly 1.8-3.9x and throughput by nothing measurable.</p>
+<p>The practical consequence is the counter-intuitive one: for two prompts on a CPU-only host, fanning out to two agents takes as long as — or slightly longer than — calling them one after the other, because the queue serialises them anyway when only one slot exists, and splits the cores when two exist. Parallelism on a CPU host is not free capacity; it is a different shape of the same capacity.</p>
+<h2 id="what-it-costs-in-memory">What it costs in memory</h2>
+<p>Slots are not free. The FAQ states that parallel request processing increases the context size by the number of parallel requests, and the server log confirms the arithmetic: the load line reports <code>Parallel:2 ... KvSize:8192</code> for the 2-slot instance and <code>Parallel:4 ... KvSize:16384</code> for the 4-slot instance, against a 4,096-token default context. <code>KvSize</code> is the total KV allocation across slots, not a per-slot value.</p>
+<p><code>/api/ps</code> shows the result in reported model memory: <code>size</code> 442,191,360 bytes for the default server and 492,523,008 bytes with two slots — 50,331,648 bytes, or 48.0 MiB, more, a rise of 11.4%. One detail that catches readers out: <code>context_length</code> stayed at 4096 in both <code>/api/ps</code> captures, so a per-request context that halved is not what the API reports. The KV allocation doubles — <code>KvSize:8192</code> for two slots against the 4,096-token default context — while the total reported <code>size</code> rises by 11.4%. The reported per-slot context does not change. If you are sizing a second slot, do the arithmetic from context times slot count, as in <a href="/posts/local-llm-vram-kv-cache-budget-2026/">the KV-cache budget walkthrough for a local coding model</a>, rather than trusting the single <code>context_length</code> field.</p>
+<p>Every one of these captures reports <code>size_vram: 0</code>. This host has no GPU, and nothing here should be read as a statement about GPU behaviour, where a second slot may overlap compute across SMs and actually raise throughput.</p>
+<h2 id="what-to-do-instead">What to do instead</h2>
+<p>Serialise, then batch. If the second call is an embedding step or a summarisation pass that does not need to interleave with the first, run it after the agent&rsquo;s tool call rather than beside it — you lose nothing on a CPU host, because the scheduler was serialising it anyway whenever the slot was busy.</p>
+<p>If you do want concurrent slots, enable them deliberately and budget the memory, then verify with the residual diagnostic that requests are actually overlapping rather than queueing. A residual near zero with doubled <code>eval_duration</code> means the slots are working as intended; a residual equal to one solo generation means you are still at one slot, whatever the environment variable says, which is the usual symptom of setting it on the client instead of the server process.</p>
+<p>Move to a GPU when throughput, not latency, is the goal. The 1.11x aggregate result here is a statement about two CPU cores, not about <code>OLLAMA_NUM_PARALLEL</code> in general — and even on a GPU, <a href="/posts/vllm-vs-ollama-production-2026/">the queue-versus-batching distinction is what decides whether a serving stack helps</a>.</p>
+<h2 id="what-this-is-not">What this is not</h2>
+<p>It is not a GPU benchmark, a model comparison, or a vLLM comparison. One 0.5B Q4_K_M model, 46 generated tokens, two cores: long prompts and prefill-bound workloads were not measured, and <code>OLLAMA_MAX_LOADED_MODELS</code> behaviour — a second <em>model</em> being swapped in — was not tested at all. The 503 path behind <code>OLLAMA_MAX_QUEUE</code> is documented in the source linked above but was not reproduced live, because every request in this matrix eventually received a slot. The queue-versus-compute split is derived from Ollama&rsquo;s own duration fields; no external profiler or debug-level scheduler trace corroborates it.</p>
+<p>If your local agent is underperforming, scheduler queueing is one of several causes. Context truncation is the other common one on the same endpoint, covered in <a href="/posts/ollama-silent-context-truncation-2026/">why a local model silently answers with less context than you sent</a>. If you leave Ollama for llama.cpp&rsquo;s server, the equivalent knob is <code>-np</code>, and its splitting behaviour differs from Ollama&rsquo;s scheduler — see <a href="/posts/llama-server-context-overflow-diagnosis-2026/">diagnosing llama-server context overflow</a>. For the environment-variable reference and the OpenAI-compatible endpoint, the <a href="/posts/ollama-api-local-llm-integration-developer-guide-2026/">Ollama API integration guide</a> lists the same three settings; the tuning block in <a href="/posts/aider-ollama-local-coding-2026/">the Aider + Ollama setup</a> is the one this post measures. And if you are choosing a model for a CPU-only host in the first place, <a href="/posts/best-ollama-models-coding-2026/">the coding-model shortlist for CPU inference</a> is the better starting point than any concurrency tuning.</p>
+<h2 id="reproduce-it">Reproduce it</h2>
+<p>The measurement is reproducible on a 2-core CPU box in under three minutes: 17 batches took 137 s including model load. The files below are the exact inputs and outputs of the run described above, published so every figure in this article can be recomputed from the raw response bodies.</p>
+<table>
+	<thead>
+			<tr>
+					<th>File</th>
+					<th>What it is</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-concurrent-requests-latency-2026/probe.py">probe.py</a></td>
+					<td>stdlib-only probe: barrier-synchronised concurrent <code>POST /api/generate</code>, records status and all timing fields</td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-concurrent-requests-latency-2026/run.sh">run.sh</a></td>
+					<td>the exact commands: host capture, <code>/api/ps</code> before and after, the three server configurations, per-cell warm-up</td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-concurrent-requests-latency-2026/results.jsonl">results.jsonl</a></td>
+					<td>17 batches, one JSON object per batch, every request&rsquo;s raw nanosecond fields</td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-concurrent-requests-latency-2026/summary.csv">summary.csv</a></td>
+					<td>per-batch derived rows: aggregate tok/s, per-request medians, queue residual, cold flag</td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-concurrent-requests-latency-2026/method.md">method.md</a></td>
+					<td>request shape, derived formulas, what was deliberately not measured; the authoritative <code>cold</code> flag is in <code>summary.csv</code></td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-concurrent-requests-latency-2026/host.txt">host.txt</a></td>
+					<td><code>ollama --version</code>, <code>nproc</code>, <code>free -m</code>, kernel and architecture</td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-concurrent-requests-latency-2026/ps_A.txt">ps_A.txt</a> / <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-concurrent-requests-latency-2026/ps_B.txt">ps_B.txt</a></td>
+					<td><code>/api/ps</code> after each configuration: <code>size</code>, <code>size_vram</code>, <code>context_length</code></td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-concurrent-requests-latency-2026/server_b_lines.txt">server_b_lines.txt</a> / <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-concurrent-requests-latency-2026/server_c_lines.txt">server_c_lines.txt</a></td>
+					<td>the server config and load lines showing <code>OLLAMA_NUM_PARALLEL</code>, <code>Ollama version 0.20.3</code>, <code>Parallel</code> and <code>KvSize</code></td>
+			</tr>
+	</tbody>
+</table>
+<p>To rerun on your own hardware, start a second server on a spare port against the same model directory rather than restarting the one your editor is using, point <code>probe.py</code> at it, and compare the residual fraction for concurrency 1 and 2. If the second request&rsquo;s residual is near zero and its <code>eval_duration</code> roughly doubles, your slots are working; if the residual is about one solo generation, they are not. Note that <code>summary.csv</code> reports the per-batch median across the requests in that batch, so a two-request batch with one queued request shows a residual median of roughly half the queued request&rsquo;s own wait — read the per-request fields in <code>results.jsonl</code> when you want the wait of the request that actually queued.</p>
+]]></content:encoded></item><item><title>Two Agent Sessions, One Local Model Server: what concurrency does to latency, context and tool calls</title><link>https://baeseokjae.github.io/posts/local-llm-concurrent-agent-sessions-2026/</link><pubDate>Mon, 02 Nov 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/local-llm-concurrent-agent-sessions-2026/</guid><description>Ollama ships one parallel slot per model, so a second agent session waits behind the first: four concurrent requests serialised to 4.0x the single-request wall time on a 2-vCPU host, and OLLAMA_NUM_PARALLEL=4 made each request 4.4-8.0x slower against the default server&amp;#39;s single-request baseline (3.8-7.0x against its own) instead of faster. Measured latency, the documented context rules, and what to log when a session stalls.</description><content:encoded><![CDATA[<p>Your first coding-agent session answers in a couple of seconds. You open a second one against the same local server, and now the first session&rsquo;s next request stalls for many seconds, or your client aborts with a read timeout while the server log shows no error at all. Restart the server and run one session: everything is fast again.</p>
 <p>Nothing is wrong with the model or with either agent. Both sessions are sending requests to one server process that was never configured to work on more than one at a time, and the queue between them is invisible to your client. This article shows the documented defaults that decide how many requests a local server will actually run at once, measures what the second and fourth session do to wall time on a small CPU host, and lists what to record so you can prove the cause instead of guessing.</p>
 <h2 id="the-shared-resource-is-the-server-not-the-model-weights">The shared resource is the server, not the model weights</h2>
 <p>Two agents pointed at <code>http://localhost:11434</code> are two HTTP clients against one Ollama process. That process loads the model once and then decides how to schedule the requests it receives. Ollama&rsquo;s own documentation splits concurrency into two levels: how many <em>models</em> may be resident at once, and how many <em>parallel requests</em> a single model will process at the same time — <a href="https://docs.ollama.com/faq.md">Ollama FAQ, concurrency section</a>. The second number is the one that decides whether your two sessions overlap or take turns.</p>
