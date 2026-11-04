@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Qwen3-Vl Projector on RockB</title><link>https://baeseokjae.github.io/tags/qwen3-vl-projector/</link><description>Recent content in Qwen3-Vl Projector on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 03 Nov 2026 17:20:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/qwen3-vl-projector/index.xml" rel="self" type="application/rss+xml"/><item><title>What an Ollama Vision Tag Really Ships: qwen3-vl Projector Packaging, Image-Token Cost and the 4096-Token Wall (2026)</title><link>https://baeseokjae.github.io/posts/local-vlm-tag-projector-image-token-cost-2026/</link><pubDate>Tue, 03 Nov 2026 17:20:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/local-vlm-tag-projector-image-token-cost-2026/</guid><description>Separate the three failures behind &amp;#39;the model ignored my image&amp;#39; — a tag that 404s, a tag that drops the pixels, and image tokens eating a 4096-token context — with registry layer tables, a measured prompt-token count and the KV arithmetic for one image.</description><content:encoded><![CDATA[<p>You pull a vision model, send a screenshot, and get an answer that reads as if no image was attached. Or the request that worked with one image dies as soon as a second one is in the prompt. The error message, when there is one, points at the request, not at the three very different things that can be wrong: the tag you typed does not exist, the tag exists but the runtime drops the image, or the model does see the image and the image tokens have already consumed the context window.</p>
+<p>This page separates those three cases with registry metadata, one measured prompt-token count and arithmetic you can redo. Everything below was observed on 2026-11-03 on a CPU-only host with Ollama 0.20.3; the registry and config figures carry that date because tags change, and the 32B tag was never executed here — its row is metadata and arithmetic only.</p>
+<h2 id="three-failures-that-all-look-like-the-model-ignored-my-image">Three failures that all look like &ldquo;the model ignored my image&rdquo;</h2>
+<p>The first case fails at pull time. The family name is <code>qwen3-vl</code>, with the hyphen; typing it as <code>qwen3vl</code> produces a manifest request for <a href="https://registry.ollama.ai/v2/library/qwen3vl/manifests/32b">registry.ollama.ai/v2/library/qwen3vl/manifests/32b</a> that returns HTTP 404, while the same request against <a href="https://registry.ollama.ai/v2/library/qwen3-vl/manifests/32b">the correctly hyphenated repository</a> returns a manifest. That distinction matters because a 404 on pull is unambiguous while a successful pull of a tag that cannot see is not.</p>
+<p>The second case fails silently. A text-only tag given an image payload returns HTTP 200, accepts the <code>images</code> array without comment — the <a href="https://github.com/ollama/ollama/blob/main/docs/api.md">Ollama API documentation</a> describes <code>images</code> as &ldquo;a list of base64-encoded images (for multimodal models such as <code>llava</code>)&rdquo; and documents no capability validation — and then answers as though nothing was attached. Measured on <code>qwen2.5:0.5b</code>: the same question with a 640x480 PNG cost 46 prompt tokens, without it 41. A five-token difference is an image marker, not a 300-token pixel grid, and the assistant replied &ldquo;I&rsquo;m sorry, but I cannot see the image you&rsquo;re referring to&rdquo; in both requests.</p>
+<p>The third case is the one that produces confusing errors on large prompts. The image is tokenized correctly and the tokens are simply expensive: the same model with <code>qwen3-vl:2b</code> and one 640x480 image reported 330 prompt tokens against 28 for the same question with no image.</p>
+<h2 id="what-the-tag-actually-contains">What the tag actually contains</h2>
+<p>An Ollama manifest is a layer list with media types. Reading it tells you what the tag packs, and the answer differs between sizes of the same family. Observed on 2026-11-03 at 16:13 UTC:</p>
+<ul>
+<li><a href="https://registry.ollama.ai/v2/library/qwen3-vl/manifests/2b">qwen3-vl:2b</a> — model layer 1889496384 B, two licence layers, params; no projector layer.</li>
+<li><a href="https://registry.ollama.ai/v2/library/qwen3-vl/manifests/4b">qwen3-vl:4b</a> — model layer 2497281600 B plus a projector layer of 839325984 B.</li>
+<li><a href="https://registry.ollama.ai/v2/library/qwen3-vl/manifests/8b">qwen3-vl:8b</a> — model layer 5028391424 B plus a projector layer of 1162568672 B.</li>
+<li><a href="https://registry.ollama.ai/v2/library/qwen3-vl/manifests/32b">qwen3-vl:32b</a> — model layer 20910274496 B, two licence layers, params; no projector layer.</li>
+<li><a href="https://registry.ollama.ai/v2/library/llava/manifests/7b">llava:7b</a> — model layer 4108916992 B plus a 624434368 B projector.</li>
+<li><a href="https://registry.ollama.ai/v2/library/gemma3/manifests/4b">gemma3:4b</a> — model layer 2499012288 B plus an 851251104 B projector.</li>
+<li><a href="https://registry.ollama.ai/v2/library/qwen2.5/manifests/0.5b">qwen2.5:0.5b</a> — model layer 397807936 B, system, template, licence; no projector.</li>
+</ul>
+<p>So within one family the 4B and 8B tags carry a separate <code>projector</code> blob (~800 MB and ~1.1 GB) and the 2B and 32B tags do not. Read that as packaging, not capability: a single-GGUF tag can carry the vision tower and the merger inside the model layer, and the next section shows that this is exactly what happens with the 2B.</p>
+<h2 id="why-the-layer-table-is-not-a-capability-check">Why the layer table is not a capability check</h2>
+<p><code>ollama show qwen3-vl:2b</code> on the same host reported architecture <code>qwen3vl</code>, parameters 2.1B, context length 262144, quantization Q4_K_M and capabilities <code>completion, vision, tools, thinking</code>. The tag has no projector layer and still declares vision, and the trace below shows it tokenizing an image into the prompt.</p>
+<p>That observation retires the stronger hypothesis this page was originally planned around — that a qwen3-vl size shipping without a projector layer is a text-only tag. It is not: for the 2B, the <a href="https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct">model card of the checkpoint behind the tag</a> describes a conditional-generation vision-language model, and the manifest layer list alone cannot prove runtime capability either way. The layer table is useful for explaining download size and for spotting a tag that ships a separate projector; it is not a suitability test.</p>
+<h2 id="the-arithmetic-of-one-image">The arithmetic of one image</h2>
+<p>Qwen3-VL splits an image into 16-pixel patches and merges 2x2 blocks, so the token count for a square input with no rescaling is <code>(H/16) * (W/16) / 4</code>. That is 300 tokens for 640x480, 1024 for 1024x1024 and 1600 for 1280x1280. The geometry comes from the published config of each checkpoint: <a href="https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct/raw/main/config.json">2B</a>, <a href="https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct/raw/main/config.json">4B</a>, <a href="https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct/raw/main/config.json">8B</a> and <a href="https://huggingface.co/Qwen/Qwen3-VL-32B-Instruct/raw/main/config.json">32B</a> all declare <code>patch_size</code> 16, <code>spatial_merge_size</code> 2 and <code>head_dim</code> 128, and differ in <code>num_hidden_layers</code> (28, 36, 36, 64) with 8 key/value heads throughout.</p>
+<p>Cache cost uses the same formula as the site&rsquo;s <a href="https://baeseokjae.github.io/posts/local-llm-vram-kv-cache-budget-2026/">text KV budget guide</a>: twice (key and value) × layers × KV heads × head_dim × 2 bytes at f16. At 32B geometry that is 262144 bytes per token, at 8B and 4B 147456, at 2B 114688.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Geometry</th>
+					<th>KV per token (f16)</th>
+					<th>1 image 640x480 (300 tok)</th>
+					<th>1 image 1024x1024 (1024 tok)</th>
+					<th>1 image 1280x1280 (1600 tok)</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Qwen3-VL-2B</td>
+					<td>112 KiB</td>
+					<td>32.8 MiB</td>
+					<td>112 MiB</td>
+					<td>175 MiB</td>
+			</tr>
+			<tr>
+					<td>Qwen3-VL-4B</td>
+					<td>144 KiB</td>
+					<td>42.2 MiB</td>
+					<td>144 MiB</td>
+					<td>225 MiB</td>
+			</tr>
+			<tr>
+					<td>Qwen3-VL-8B</td>
+					<td>144 KiB</td>
+					<td>42.2 MiB</td>
+					<td>144 MiB</td>
+					<td>225 MiB</td>
+			</tr>
+			<tr>
+					<td>Qwen3-VL-32B</td>
+					<td>256 KiB</td>
+					<td>75 MiB</td>
+					<td>256 MiB</td>
+					<td>400 MiB</td>
+			</tr>
+	</tbody>
+</table>
+<p>Two of those numbers are worth holding on to. A single 1280x1280 image is 1600 prompt tokens, which is 39.1% of a 4096-token context, and at 32B geometry it costs 400 MiB of KV before the model has generated a single token. For scale, the 32B tag&rsquo;s model layer is 20910274496 B — 19.47 GiB at Q4 — so one full-resolution image is about 2% of the weights in cache, per image, per concurrent request.</p>
+<p>One more config field deserves a flag. Every one of those configs declares <code>num_position_embeddings</code> 2304 for the vision tower, which after 2x2 merging implies a ceiling of 576 merged tokens for a single image — an inference from that field, not a limit the config states. A 1280x1280 image computed from raw geometry is 1600 tokens, 2.78x that ceiling, so a runtime that honours the cap and a runtime that does not will disagree badly at high resolutions. No request in this run got above 640x480, so which behaviour Ollama 0.20.3 has here is unverified, and the 1600-token figure above should be read as the uncapped arithmetic.</p>
+<h2 id="measured-what-one-image-actually-adds-to-the-prompt">Measured: what one image actually adds to the prompt</h2>
+<p>On a 2 vCPU Neoverse-N1 host with no GPU, <code>qwen3-vl:2b</code> Q4_K_M, <code>num_ctx</code> set to 4096 and <code>num_predict</code> 32, the same 85-character question was sent through <code>/api/chat</code> twice: once alone and once with one 1956-byte 640x480 PNG attached. The text-only request returned HTTP 200 after 44.4 s with <code>prompt_eval_count</code> 28; the with-image request returned HTTP 200 after 115.7 s with <code>prompt_eval_count</code> 330. The image therefore added 302 prompt tokens against 300 computed from the config geometry — a 0.67% gap, inside the 5% band this check was allowed to treat as reconcilable. An earlier baseline in the same session used a shorter prompt (<code>Reply with the single word: ready.</code>, 34 characters, 18 tokens); because the prompt text differed, that pair is not used for the delta and is disclosed here only so the two records are not confused.</p>
+<p>The 2-token gap is consistent with chat-template image placeholders and any grid padding the runtime adds, but this run did not isolate which, so the honest statement is that the computed grid predicts the measured cost to within 1% on this input. The 115.7 s is prefill-bound and is wall-clock on two cores for one request; it is not a benchmark and says nothing about relative model quality. The assistant <code>response</code> field is empty because the 32-token budget ran out, but the <code>thinking</code> field of that same with-image request is populated: <code>So, let's look at the image. It's a flag divided into three horizontal sections. The top is red, then green, then blue.</code> with <code>done_reason</code> <code>length</code>. That text matches the fixture&rsquo;s three colour bands and shows the budget being consumed before any answer text, so the measurement establishes that the image reached the model and was tokenized; the truncated thinking is not a scored answer about the image.</p>
+<p>A second request with one 1024x1024 PNG and the same prompt did not complete: the client timed out at 180.1 s with no HTTP status. That row is a timeout, not a measurement, and no token count is attributed to it anywhere on this page.</p>
+<h2 id="the-4096-token-wall">The 4096-token wall</h2>
+<p>Ollama&rsquo;s FAQ answers the context question directly: &ldquo;By default, Ollama uses a context window size of 4096 tokens&rdquo; (<a href="https://docs.ollama.com/faq">Ollama FAQ</a>). Combining that default with the arithmetic above is where vision requests start failing in ways that look like model bugs.</p>
+<p>At 1600 tokens per 1280x1280 image, two images consume 3200 tokens — 78.1% of the default context — leaving 896 tokens for the system prompt, the chat template, your question and the answer. Three images do not fit at all. At 1024x1024 the budget is 1024 tokens per image, so four fit with nothing left for text. Nothing in the earlier sections is needed to see the shape of the problem: default context minus image tokens is the room your actual instructions get.</p>
+<p>Raising <code>num_ctx</code> is the fix, and it is not free. At 32B geometry the KV cache costs 256 KiB per token, so 4096 tokens of context is 1024 MiB, 16384 tokens is 4096 MiB, and every additional 1000 tokens of context adds 250 MiB — on top of 19.47 GiB of weights. If the request fits after raising the context, the answer is memory, not a faster model.</p>
+<h2 id="a-check-you-can-run-on-your-own-machine">A check you can run on your own machine</h2>
+<p>Three commands separate the three cases, and none of them needs a GPU:</p>
+<pre tabindex="0"><code># 1. what the tag packs, and what the runtime says it can do
+curl -s https://registry.ollama.ai/v2/library/qwen3-vl/manifests/2b \
+  | python3 -c &#39;import json,sys; [print(l[&#34;mediaType&#34;], l[&#34;size&#34;]) for l in json.load(sys.stdin)[&#34;layers&#34;]]&#39;
+ollama show qwen3-vl:2b
+
+# 2. the same question with and without an image, reading prompt_eval_count
+#    (send via POST /api/chat with options.num_ctx set explicitly; the field
+#     prompt_eval_count is what you compare, not the wall time)
+
+# 3. compute the grid your image should produce
+python3 -c &#39;print((480//16)*(640//16)//4)&#39;   # 640x480 -&gt; 300
+</code></pre><p>Read the comparison in step 2 like this: a with-image delta of roughly zero means the runtime took the payload and dropped the pixels, so the tag has no vision path; a delta close to the grid from step 3 means the image was tokenized and the cost is real; a delta far above the grid means the runtime rescaled or padded the image and your context budget is worse than the arithmetic says. Run the same pair at <code>num_ctx</code> 4096 and 16384 to see whether your failure is the context wall rather than the image itself.</p>
+<h2 id="what-this-does-not-prove">What this does not prove</h2>
+<p>Only one tag was executed: <code>qwen3-vl:2b</code>. The 4B, 8B and 32B rows are manifest and config evidence, and no claim is made about how those tags behave at runtime — the 32B would not fit in this workspace&rsquo;s ~10 GiB of free disk at a 19.47 GiB model layer. Everything ran on one CPU-only host with one Ollama version, 0.20.3, and one image size that completed; the 1024x1024 attempt is a timeout, and the two-image and 1280x1280 requests were never sent.</p>
+<p>The 0.67% gap between measured and computed image tokens is reported, not explained: placeholder tokens and grid padding were not isolated. The <code>num_position_embeddings</code> ceiling is unresolved in both directions and is presented as an inference, not as a documented limit. The <code>llama-server --mmproj</code> path was not exercised at all, so this page says nothing about which projector blob a llama.cpp server needs. And the <code>qwen3vl</code> 404 was verified at the registry manifest endpoint, not traced through a full <code>ollama pull</code>.</p>
+<p>The raw capture files behind these numbers are a private local author verification, not a published dataset: registry manifests and model configs are third-party bytes and are not redistributed here. The registry layer sizes, config fields and all derived arithmetic are reproducible from the commands above and the linked endpoints. The prompt-token counts — 28 and 330 here, 46 and 41 in the text-only control — are one-host, one-version observations: they come from Ollama 0.20.3 with this chat template on the host described above, and a comparable runtime should land close but is not guaranteed to match to the token.</p>
+<p>If you want the text-only memory model that this page builds on, the <a href="https://baeseokjae.github.io/posts/local-llm-vram-kv-cache-budget-2026/">KV cache and context sizing guide</a> derives the per-token formula and measures it; for the endpoint mechanics of <code>/api/chat</code> see the <a href="https://baeseokjae.github.io/posts/ollama-api-local-llm-integration-developer-guide-2026/">Ollama API integration guide</a>; for choosing which text tag to run see <a href="https://baeseokjae.github.io/posts/best-ollama-models-coding-2026/">Ollama models for coding</a>; and for how to evaluate multimodal inputs by task rather than by capability label see <a href="https://baeseokjae.github.io/posts/multimodal-ai-2026/">multimodal AI evaluation</a>.</p>
+]]></content:encoded></item></channel></rss>
