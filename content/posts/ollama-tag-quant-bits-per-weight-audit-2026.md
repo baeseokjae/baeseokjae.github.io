@@ -1,7 +1,9 @@
 ---
 date: 2026-11-03 00:30:00+00:00
-lastmod: 2026-11-03 00:39:00+00:00
-description: Pull a 32B model, get an 18-20 GB file, and nothing on the tag says why. Sum the manifest's weight layer, divide by the model's own parameter count, and the quantization becomes a number you can check before downloading.
+lastmod: 2026-11-09 07:40:19+00:00
+description: A 32B Ollama tag can serve a 20.2 GB file. Read its declared quantization,
+  separate model and projector bytes, and use matching tensor counts for bits per
+  weight.
 draft: false
 schema: schema-ollama-tag-quant-bits-per-weight-audit-2026
 tags:
@@ -12,138 +14,177 @@ tags:
 - model sizing
 - bits per weight
 - artifact provenance
-title: 'The Tag Says Nothing About Bits: Reading a Local Model''s Real Quantization From Its Registry Manifest'
+title: Reading an Ollama Model's Quantization and Size From Its Registry Manifest
 ---
 
-You ran `ollama pull qwen3:32b`. The progress bar stopped somewhere between 18 GB and 20 GB, the model answered, and nothing in the output told you what you had just downloaded. A 32-billion-parameter model needs 64 GB at bf16. You got a fifth of that. The tag said `32b` and stopped there: no `q4_K_M`, no `q8_0`, no indication that four bits per weight is what your download actually contains.
+You ran `ollama pull qwen3:32b` and got a model file of about 20.2 GB, or 18.8 GiB. A nominal 32-billion-parameter model needs 64 GB for bf16 weights alone. The downloaded model file is about 31.6% of that nominal baseline, not one-fifth. The tag says `32b`, but it does not spell out the quantization recipe.
 
-That gap is measurable before you download a single byte. An Ollama tag resolves to a registry manifest that lists each layer with its exact byte size, and the manifest's config blob carries the field the tag name omits. This article does that arithmetic on 14 tags across 7 model families and shows the numbers, the fetch times, and the code to reproduce them.
+You can check the registry's declared quantization and file sizes before downloading model-weight blobs. An Ollama manifest lists layers and byte sizes; its small config blob supplies `file_type`. Turning those bytes into bits per weight takes another step: the parameter count must describe the tensors in the same file.
+
+**Correction, November 9, 2026:** The original version confused ideal four-bit storage with a mixed-quantization file, used mismatched denominators for DeepSeek, Gemma and one Mistral tag, and treated an unsupported ±3% rule as an integrity check. This revision corrects the arithmetic, checks the tensor counts, and separates advertised file sizes from actual network and disk use.
 
 ## The download that looks broken
 
-For `qwen3:32b`, the weights layer in the manifest is 20,201,240,160 bytes. That single number explains the whole confusion:
+For `qwen3:32b`, the manifest's model layer is 20,201,240,160 bytes:
 
-- 20,201,240,160 bytes = 20.201 decimal GB (the figure a registry page, a download counter or a package listing reports)
-- 20,201,240,160 bytes = 18.814 GiB (the same bytes in binary units — the "18.8 GB" that appears in blog posts and in tools that print GiB)
+- **20.201 decimal GB**, using 1 GB = 1,000,000,000 bytes.
+- **18.814 GiB**, using 1 GiB = 1,073,741,824 bytes.
 
-Both figures describe the same artifact, and which one a given tool prints is a formatting choice, not a different file. Nobody truncated the download and nobody shipped you a 2 GB shard of a 64 GB model. A 32B model at four bits per weight is supposed to be about 20 GB, and that is exactly what arrives. The "18 GB vs 48 GB" question that sends people to a search box is a unit mismatch layered on top of an unstated quantization level.
+Those are two representations of the same file. Unit conversion accounts for that difference; it cannot by itself explain a much larger gap such as 18 GB versus 48 GB.
 
-The manifest for that tag was fetched at 2026-11-03T00:22:45Z and its bytes hash to `030ee887880fc378860c2dd35101da424377520441ae4bfe7be6deff8ade7840`. Every number below is bound to a digest like that one, because registry tags can be re-pointed even though the blobs behind a digest are immutable.
+The idealized four-bit calculation is `32,000,000,000 × 4 / 8 = 16,000,000,000` bytes, or 16 GB. Real `Q4_K_M` files use a mixture of tensor types plus block scales, other quantization data, GGUF metadata and alignment. They need not average exactly four bits per parameter.
 
-## What the tag promises, and what the manifest proves
+Using this artifact's exact 32,762,123,264 tensor elements, the ideal four-bit payload would be 16.381 GB and a bf16 payload would be 65.524 GB. Its 20.201 GB model file is therefore about **30.8% of that exact bf16 baseline**, with a file-level average of **4.933 bits per stored tensor element**. These are weight-storage comparisons, not estimates of total inference RAM or VRAM.
 
-A tag name is a label, not a contract. `qwen3:32b` names a family and a size. `qwen3:32b-q8_0` names a family, a size and a quantization. `mistral:7b` names a family and a size while the file it points at is 4-bit. The manifest is where the file becomes specific:
+The November 3 snapshot recorded manifest SHA256 `030ee887880fc378860c2dd35101da424377520441ae4bfe7be6deff8ade7840`. The November 9 recheck returned the same hash. Tags can move; a digest identifies the bytes referenced by that particular snapshot.
 
-1. `config.digest` — points at a small JSON blob. That blob has a `file_type` field. For [qwen3:32b](https://registry.ollama.ai/v2/library/qwen3/manifests/32b) it reads `Q4_K_M`; the config blob itself is [a digest-addressed read of 488 bytes](https://registry.ollama.ai/v2/library/qwen3/blobs/sha256:afdf5c7585b363536f93782f1e44f1b81db4237847cd8b4bd2c5c33b0d76c94b).
-2. `layers[]` — each entry has `mediaType` and `size`. The weights are the layer with `mediaType: application/vnd.ollama.image.model`, and that layer alone is what the bits-per-weight arithmetic divides: it is the file that holds the tensors the quantization applies to.
-3. The other layers are separate downloads with other jobs: `template`, `params` and `license` are metadata, and a multimodal tag adds `application/vnd.ollama.image.projector`. The metadata layers are small — 1,723 bytes of template, 11,338 of license and 120 of params on `qwen3:32b`, about 13 KB in total — but the projector is not: on `gemma3:4b` it is 851,251,104 bytes, another 34% on top of the 2,499,012,288-byte weight layer. So the pull is 3,350,272,259 bytes even though the weights are 2.5 GB. The projector is part of the download and not part of the bpw calculation; the two numbers answer different questions, and a table that shows only one of them is wrong about the other.
-4. The layer digest — a second, independent fingerprint of the weights you are about to pull.
+## What the manifest tells you
 
-So one unauthenticated `GET` to the manifest, one to the config blob, decides which weights are being served. No key, no auth, no blob download: the 47 reads behind this article's table spanned 18.14 seconds of wall clock, which is under a second for the manifest-plus-config pair of a single tag on this host.
+A tag name is a label. Some names include a quantization suffix, such as `qwen3:32b-q8_0`; others leave it out. Resolve the tag and inspect these fields:
 
-## Method: weight bytes × 8 ÷ parameter count
+1. **`config.digest`** points to a small JSON blob. For [qwen3:32b](https://registry.ollama.ai/v2/library/qwen3/manifests/32b), the [488-byte config](https://registry.ollama.ai/v2/library/qwen3/blobs/sha256:afdf5c7585b363536f93782f1e44f1b81db4237847cd8b4bd2c5c33b0d76c94b) declares `file_type: Q4_K_M` and `model_family: qwen3`. This is a file-level label, not a promise that every tensor has one storage type.
+2. **`layers[]`** lists each layer's `mediaType`, `size` and `digest`. This audit uses the complete `application/vnd.ollama.image.model` file for its numerator. That includes the GGUF container's metadata and alignment as well as tensor data.
+3. **Other layers have separate roles.** Templates, parameters and licenses are small in this sample. Multimodal Gemma also has an `application/vnd.ollama.image.projector` layer. On `gemma3:4b`, that layer is 851,251,104 bytes, about 34.1% of the 2,499,012,288-byte language-model file. Their sizes must be kept separate when calculating language-model bpw.
+4. **The model-layer digest identifies the advertised artifact.** Checking a downloaded blob against that digest verifies its bytes against the manifest. Reading a matching size or quant label alone does not do that.
 
-Bits per weight is a size accounting, and it only needs two honest inputs:
+The sum of `layers[].size` is useful capacity information. It is **not an exact network-transfer or incremental-disk figure**: it excludes the config and manifest, downloads can reuse or resume cached blobs, and several tags can share one stored blob. HTTP overhead and filesystem allocation are separate concerns. [Ollama's pull implementation](https://github.com/ollama/ollama/blob/main/server/images.go) handles config downloads, cache reuse and digest verification separately.
 
-- **Weight bytes** from the manifest's model layer, as above.
-- **Parameter count** from the model repository's own metadata — the `safetensors.total` field in Hugging Face's `/api/models/<repo>` response for the exact repository that model card names. Never estimated from file size, because that would make the whole calculation circular.
+## Method: match the file and the denominator
 
-The nominal figures the measurement is compared against come from llama.cpp's own block definitions in [gguf-py/gguf/constants.py](https://raw.githubusercontent.com/ggml-org/llama.cpp/master/gguf-py/gguf/constants.py), not from a vendor's marketing page: a `Q4_K` block is 144 bytes per 256 weights (4.5 bpw), `Q6_K` is 210 bytes per 256 weights (6.5625 bpw), `Q8_0` is 34 bytes per 32 weights (8.5 bpw). A `Q4_K_M` file is a mixed layout that keeps some tensors at Q6_K, which puts a healthy file at roughly 4.85 bpw overall.
+The table calculates:
 
-That gives a reconciliation test anyone can apply: if `weights_bytes × 8 ÷ parameters` lands within ±3% of the nominal bpw for the quant the config blob claims, the manifest arithmetic is trustworthy and the download is what it says it is. If it lands wildly off, either the parameter count is wrong or the file is not what the tag claims.
+`file_bpw = model_layer_bytes × 8 / stored_tensor_elements`
+
+For the denominator, count the elements represented by the model file's tensor metadata: for each unique tensor name, multiply its dimensions, then sum across tensors. The tensor-count links in the table point to Ollama's tensor listings for the exact model blob. The correction recheck parsed those listings, rejected duplicate tensor names, and counted the tensors without downloading their weight data.
+
+A Hugging Face repository's `safetensors.total` can be a useful cross-check, but it is not automatically the right divisor. The source repository must match the actual model version, and its scope must match the file. A multimodal total can include a vision component stored in another blob. Tied or duplicated weights also require attention when comparing source parameters with serialized tensor elements. Both Llama 3.1 blobs here store an additional 64-element `rope_freqs.weight` tensor. The table includes it, so its denominator describes serialized tensor elements rather than strictly learned parameters; the difference does not affect the displayed three-decimal bpw.
+
+Exact quant-block sizes come from [llama.cpp's GGUF constants](https://github.com/ggml-org/llama.cpp/blob/master/gguf-py/gguf/constants.py): `Q4_K` stores 256 values in 144 bytes, or 4.5 bpw; `Q6_K` uses 210 bytes, or 6.5625 bpw; `Q8_0` stores 32 values in 34 bytes, or 8.5 bpw. Those block rates include scales and other block data, but not the whole GGUF container.
+
+`Q4_K_M` is a mixed quantization recipe, not a universal 4.85 bpw constant. Architecture, tensor shapes, quantizer choices and higher-precision tensors affect the file average. The [quantizer source](https://github.com/ggml-org/llama.cpp/blob/master/src/llama-quant.cpp) shows both tensor-specific choices and fallbacks for incompatible shapes. There is no supported universal ±3% pass/fail test here. A plausible file size cannot prove the quantization layout, model quality or download integrity.
 
 ## The audit: 14 tags, 7 families
 
-Each tag links to the manifest it was measured from. `file_type` is read from that manifest's config blob, not guessed from the tag name. Fetch window: 2026-11-03T00:22:44Z to 00:22:50Z, all HTTP 200.
+The original manifest reads ran on November 3, 2026. During the November 9 correction recheck, all 14 manifest hashes were unchanged. The byte sizes below are therefore the same artifacts; the denominator corrections change their interpretation. Each row links to its registry manifest and to its model-blob tensor listing. All 14 captured configs declare `Q4_K_M` or `Q8_0` as shown.
 
-The last column is what `ollama pull` actually transfers: weights plus every other layer in that manifest, summed from the same saved bytes. For the eleven tags without a projector layer it differs from the weights by at most 14 KB and can be ignored. For the three gemma3 tags it does not: 851 MB, 854 MB and 858 MB of projector ride along, which is why `gemma3:4b` costs 3.350 GB of disk and not 2.499 GB.
+“Model bytes” means the complete model GGUF file. “Layer sum” means only the manifest's layer sizes, excluding config and manifest bytes. GB is decimal; GiB is binary. The tensor count excludes any separate projector blob.
 
-| Tag | `file_type` (from config) | Weight bytes | Decimal GB | GiB | Measured bpw | vs nominal | All-layer pull (bytes / decimal GB) |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| [qwen3:4b](https://registry.ollama.ai/v2/library/qwen3/manifests/4b) | Q4_K_M | 2,497,280,480 | 2.497 | 2.326 | 4.967 | +2.41% | 2,497,293,444 / 2.497 |
-| [qwen3:8b](https://registry.ollama.ai/v2/library/qwen3/manifests/8b) | Q4_K_M | 5,225,374,496 | 5.225 | 4.867 | 5.104 | +5.23% | 5,225,387,677 / 5.225 |
-| [qwen3:32b](https://registry.ollama.ai/v2/library/qwen3/manifests/32b) | Q4_K_M | 20,201,240,160 | 20.201 | 18.814 | 4.933 | +1.71% | 20,201,253,341 / 20.201 |
-| [qwen3:32b-q8_0](https://registry.ollama.ai/v2/library/qwen3/manifests/32b-q8_0) | Q8_0 | 35,132,291,680 | 35.132 | 32.719 | 8.579 | +0.93% | 35,132,304,861 / 35.132 |
-| [llama3.1:8b](https://registry.ollama.ai/v2/library/llama3.1/manifests/8b) | Q4_K_M | 4,920,738,944 | 4.921 | 4.583 | 4.902 | +1.08% | 4,920,752,841 / 4.921 |
-| [llama3.1:70b](https://registry.ollama.ai/v2/library/llama3.1/manifests/70b) | Q4_K_M | 42,520,398,176 | 42.520 | 39.600 | 4.821 | -0.59% | 42,520,412,073 / 42.520 |
-| [gemma3:4b](https://registry.ollama.ai/v2/library/gemma3/manifests/4b) | Q4_K_M | 2,499,012,288 | 2.499 | 2.327 | 4.649 | -4.14% | 3,350,272,259 / 3.350 |
-| [gemma3:12b](https://registry.ollama.ai/v2/library/gemma3/manifests/12b) | Q4_K_M | 7,309,830,496 | 7.310 | 6.808 | 4.798 | -1.07% | 8,164,039,587 / 8.164 |
-| [gemma3:27b](https://registry.ollama.ai/v2/library/gemma3/manifests/27b) | Q4_K_M | 16,555,661,472 | 16.556 | 15.419 | 4.828 | -0.45% | 17,413,409,507 / 17.413 |
-| [mistral:7b](https://registry.ollama.ai/v2/library/mistral/manifests/7b) | Q4_K_M | 4,372,811,712 | 4.373 | 4.072 | 4.826 | -0.48% | 4,372,823,897 / 4.373 |
-| [mistral:7b-instruct-q8_0](https://registry.ollama.ai/v2/library/mistral/manifests/7b-instruct-q8_0) | Q8_0 | 7,696,794,208 | 7.697 | 7.168 | 8.495 | -0.05% | 7,696,805,637 / 7.697 |
-| [deepseek-r1:8b](https://registry.ollama.ai/v2/library/deepseek-r1/manifests/8b) | Q4_K_M | 5,225,373,760 | 5.225 | 4.867 | 5.206 | +7.33% | 5,225,375,560 / 5.225 |
-| [qwen2.5:0.5b](https://registry.ollama.ai/v2/library/qwen2.5/manifests/0.5b) | Q4_K_M | 397,807,936 | 0.398 | 0.370 | 6.442 | +32.82% | 397,820,829 / 0.398 |
-| [phi4:14b](https://registry.ollama.ai/v2/library/phi4/manifests/14b) | Q4_K_M | 9,053,114,464 | 9.053 | 8.431 | 4.940 | +1.87% | 9,053,115,905 / 9.053 |
+| Tag | Declared type | Model bytes | GB / GiB | Stored tensor elements | File bpw | Layer sum (bytes) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| [qwen3:4b](https://registry.ollama.ai/v2/library/qwen3/manifests/4b) | Q4_K_M | 2,497,280,480 | 2.497 / 2.326 | [4,022,468,096](https://ollama.com/library/qwen3:4b/blobs/3e4cb1417446) | 4.967 | 2,497,293,444 |
+| [qwen3:8b](https://registry.ollama.ai/v2/library/qwen3/manifests/8b) | Q4_K_M | 5,225,374,496 | 5.225 / 4.867 | [8,190,735,360](https://ollama.com/library/qwen3:8b/blobs/a3de86cd1c13) | 5.104 | 5,225,387,677 |
+| [qwen3:32b](https://registry.ollama.ai/v2/library/qwen3/manifests/32b) | Q4_K_M | 20,201,240,160 | 20.201 / 18.814 | [32,762,123,264](https://ollama.com/library/qwen3:32b/blobs/3291abe70f16) | 4.933 | 20,201,253,341 |
+| [qwen3:32b-q8_0](https://registry.ollama.ai/v2/library/qwen3/manifests/32b-q8_0) | Q8_0 | 35,132,291,680 | 35.132 / 32.719 | [32,762,123,264](https://ollama.com/library/qwen3:32b-q8_0/blobs/de447d788da3) | 8.579 | 35,132,304,861 |
+| [llama3.1:8b](https://registry.ollama.ai/v2/library/llama3.1/manifests/8b) | Q4_K_M | 4,920,738,944 | 4.921 / 4.583 | [8,030,261,312](https://ollama.com/library/llama3.1:8b/blobs/667b0c1932bc) | 4.902 | 4,920,752,841 |
+| [llama3.1:70b](https://registry.ollama.ai/v2/library/llama3.1/manifests/70b) | Q4_K_M | 42,520,398,176 | 42.520 / 39.600 | [70,553,706,560](https://ollama.com/library/llama3.1:70b/blobs/de20d2cf2dc4) | 4.821 | 42,520,412,073 |
+| [gemma3:4b](https://registry.ollama.ai/v2/library/gemma3/manifests/4b) | Q4_K_M | 2,499,012,288 | 2.499 / 2.327 | [3,880,101,888](https://ollama.com/library/gemma3:4b/blobs/f06e91e18fc7) | 5.152 | 3,350,272,259 |
+| [gemma3:12b](https://registry.ollama.ai/v2/library/gemma3/manifests/12b) | Q4_K_M | 7,309,830,496 | 7.310 / 6.808 | [11,765,792,256](https://ollama.com/library/gemma3:12b/blobs/13576eb6dd8d) | 4.970 | 8,164,039,587 |
+| [gemma3:27b](https://registry.ollama.ai/v2/library/gemma3/manifests/27b) | Q4_K_M | 16,555,661,472 | 16.556 / 15.419 | [27,009,007,616](https://ollama.com/library/gemma3:27b/blobs/3eb75691d2db) | 4.904 | 17,413,409,507 |
+| [mistral:7b](https://registry.ollama.ai/v2/library/mistral/manifests/7b) | Q4_K_M | 4,372,811,712 | 4.373 / 4.072 | [7,248,023,552](https://ollama.com/library/mistral:7b/blobs/f5074b1221da) | 4.826 | 4,372,823,897 |
+| [mistral:7b-instruct-q8_0](https://registry.ollama.ai/v2/library/mistral/manifests/7b-instruct-q8_0) | Q8_0 | 7,696,794,208 | 7.697 / 7.168 | [7,241,732,096](https://ollama.com/library/mistral:7b-instruct-q8_0/blobs/0624ba75c3ce) | 8.503 | 7,696,805,637 |
+| [deepseek-r1:8b](https://registry.ollama.ai/v2/library/deepseek-r1/manifests/8b) | Q4_K_M | 5,225,373,760 | 5.225 / 4.867 | [8,190,735,360](https://ollama.com/library/deepseek-r1:8b/blobs/e6a7edc1a4d7) | 5.104 | 5,225,375,560 |
+| [qwen2.5:0.5b](https://registry.ollama.ai/v2/library/qwen2.5/manifests/0.5b) | Q4_K_M | 397,807,936 | 0.398 / 0.370 | [494,032,768](https://ollama.com/library/qwen2.5:0.5b/blobs/c5396e06af29) | 6.442 | 397,820,829 |
+| [phi4:14b](https://registry.ollama.ai/v2/library/phi4/manifests/14b) | Q4_K_M | 9,053,114,464 | 9.053 / 8.431 | [14,659,507,200](https://ollama.com/library/phi4:14b/blobs/fd7b6731c33c) | 4.940 | 9,053,115,905 |
 
-Ten of fourteen tags land inside ±3%. The four that do not are not broken downloads, and understanding why is the difference between a measurement and a superstition:
+The corrected rows reveal why the denominator matters:
 
-- **gemma3:4b at 4.649 bpw (-4.14%)** is *smaller* per weight than a textbook Q4_K_M, using the repository total of 4,300,079,472 parameters. A blended figure below 4.85 means part of that model carries fewer bits per weight than the Q4_K_M nominal, on average; which tensors, this audit does not identify. The 851 MB projector layer on this tag is not part of the divisor — it is a separate download — and whether the published parameter total counts parameters that live in that layer is not something this audit established.
-- **qwen3:8b (+5.23%) and deepseek-r1:8b (+7.33%)** are *larger* per weight. Both are 8B-class models, where the token embedding and output projection are a big fraction of all parameters and are commonly kept at higher precision than the transformer blocks, which pushes the blended figure up. I did not inspect these files tensor by tensor, so treat that as the expected mechanism rather than a proven per-tensor result.
-- **qwen2.5:0.5b at 6.442 bpw (+32.82%)** is the clearest case: at 494,032,768 parameters the embedding and output matrices are a large share of the model, so any precision kept on them dominates the blended number. A small model is exactly where the average diverges most from the block nominal.
+- **DeepSeek-R1 8B:** The [official tag page](https://ollama.com/library/deepseek-r1:8b) identifies `DeepSeek-R1-0528-Qwen3-8B`, not the earlier Llama-based distilled model. The [matching repository](https://huggingface.co/api/models/deepseek-ai/DeepSeek-R1-0528-Qwen3-8B) has 8,190,735,360 parameters, agreeing with the blob's tensor count. That changes the result from **5.206 to 5.104 bpw**. The manifest hash is unchanged, so this was an incorrect source-model match, not a later tag update.
+- **Gemma 3:** The language-model blobs contain 3,880,101,888, 11,765,792,256 and 27,009,007,616 tensor elements for the 4B, 12B and 27B tags. The original calculation divided those files by larger multimodal repository totals. With matching denominators, their file averages are **5.152, 4.970 and 4.904 bpw**. The old 4.649 figure for Gemma 4B did not demonstrate unusually low tensor precision. The separate projector layers are 851,251,104, 854,200,224 and 857,739,168 bytes.
+- **Mistral Q8_0:** The `7b-instruct-q8_0` blob has 7,241,732,096 tensor elements and a 32,000-token vocabulary. The original denominator, 7,248,023,552, came from a different Mistral version. The matching blob count changes **8.495 to 8.503 bpw**. Similar family names do not establish identical source models.
+- **Qwen2.5 0.5B:** Its **6.442 bpw** calculation is unchanged, but its explanation needs more than a general claim about embeddings. The blob's tensor listing shows Q8_0 token embeddings, many Q5_0 matrices, and a mixture of Q4_K, Q6_K and other tensor types. Its hidden width is 896, which is not divisible by the 256-value K-block size. llama.cpp's quantizer supports fallbacks from Q4_K to Q5_0 and from Q6_K to Q8_0 for incompatible shapes. The listed layout is consistent with that mechanism; it is not evidence of a corrupt file. The 494,032,768-element total includes no separately stored output.weight tensor.
 
-The practical reading: bpw is a *range* per quant, not a constant. For Q4_K_M in this sample it spans 4.649 to 6.442, and a ±3% test on a model under 1B parameters will produce false alarms. The test tells you whether a download is plausible, not whether every tensor is where you think it is.
+## One model, two quantizations
 
-## One model, two quantizations, one comparison
+The two Qwen3 32B blobs have the same 32,762,123,264 tensor elements. Their model files grow from 20,201,240,160 bytes at `Q4_K_M` to 35,132,291,680 bytes at `Q8_0`: **1.739 times the storage**, or about **73.9% more**. The file averages are 4.933 and 8.579 bpw.
 
-Because parameter count is fixed per model, two tags of the same family compare directly on manifest bytes. `qwen3:32b` and `qwen3:32b-q8_0` both report 32,762,123,264 parameters. Weights go from 20,201,240,160 bytes to 35,132,291,680 bytes — a factor of 1.739 — and bpw from 4.933 to 8.579. That is the entire trade: you get more precision and pay 74% more disk and, at inference, more memory bandwidth per token. Whether Q8_0 is worth it for your workload is a quality question this audit does not answer.
+That is a file-size comparison. It does not measure quality, tokens per second, runtime memory or memory traffic. Those depend on the implementation, offloading, batching, cache behavior and workload, and need their own measurements.
 
-The same table also settles a claim worth testing rather than repeating: the served quant is a property of the *tag*, not of your VRAM. `qwen3:32b` is Q4_K_M because the tag points at a Q4_K_M manifest, and `ollama pull qwen3:32b` will pull those exact bytes on a 12 GB laptop and on a 96 GB workstation alike. Ollama chooses between *tags* you name; it does not silently rebuild a different quant of the tag you asked for.
+For a particular resolved model-blob digest, the artifact bytes do not change with your VRAM. Hardware still affects whether and how the model runs. This observation concerns the captured plain GGUF manifests; it does not assert that every tag, platform or future manifest-list selection always resolves to the same artifact.
 
 ## Run it yourself
 
-The reader script below is the compact form of the audit: it takes `family:tag` pairs, reads the manifest and its config blob, and prints weight bytes in both unit systems, the config's `file_type`, the origin server's own `Date` header, and a UTC timestamp taken *after* the body was read — never a hand-written time. It downloads no model blobs and needs no account.
+Save this as `manifest_audit.py`. It reads a public library manifest and config, checks the config's declared digest and size, and reports model sizes and the layer sum. It does not download or verify the model-weight blobs. An optional parameter count produces file bpw; leave it out until you have matched the count to the blob's tensor metadata.
 
 ```python
 #!/usr/bin/env python3
-"""One-shot manifest audit: weights bytes -> bits per weight, no blob download."""
-import hashlib, json, sys, urllib.request
+"""Read public library manifests; optional family:tag=parameter_count."""
+import hashlib
+import json
+import re
+import sys
+import urllib.request
 from datetime import datetime, timezone
 
-def get(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "manifest-audit/1.0"})
-    with urllib.request.urlopen(req, timeout=20) as r:
-        body = r.read()
-        return body, r.status, r.headers.get("Date"), datetime.now(timezone.utc).isoformat()
 
-def manifest(family, tag):
-    body, status, server_date, read_at = get(
-        f"https://registry.ollama.ai/v2/library/{family}/manifests/{tag}")
-    m = json.loads(body)
-    weights = sum(l["size"] for l in m["layers"]
-                  if l["mediaType"] == "application/vnd.ollama.image.model")
-    cfg, _, _, _ = get(f"https://registry.ollama.ai/v2/library/{family}/blobs/{m['config']['digest']}")
-    return {"tag": f"{family}:{tag}", "http_status": status, "server_date": server_date,
-            "read_at_utc": read_at, "manifest_sha256": hashlib.sha256(body).hexdigest(),
-            "weights_bytes": weights, "gb": round(weights / 1e9, 3),
-            "gib": round(weights / 2**30, 3), "config_file_type": json.loads(cfg).get("file_type")}
+def get(url):
+    req = urllib.request.Request(url, headers={"User-Agent": "manifest-audit/2.0"})
+    with urllib.request.urlopen(req, timeout=30) as response:
+        body = response.read()
+        return body, response.headers.get("Date"), datetime.now(timezone.utc).isoformat()
+
+
+def audit(spec):
+    match = re.fullmatch(r"([A-Za-z0-9_.-]+):([A-Za-z0-9_.-]+)(?:=([1-9][0-9]*))?", spec)
+    if not match:
+        raise ValueError("Expected family:tag or family:tag=positive_parameter_count")
+    family, tag, count = match.groups()
+    base = f"https://registry.ollama.ai/v2/library/{family}"
+    body, server_date, read_at = get(f"{base}/manifests/{tag}")
+    manifest = json.loads(body)
+    if "layers" not in manifest:
+        raise ValueError("Not a plain model manifest; resolve its manifest list first")
+    layers = manifest["layers"]
+    model_layers = [x for x in layers if x["mediaType"] == "application/vnd.ollama.image.model"]
+    if not model_layers:
+        raise ValueError("No model layer; do not infer a parameter ratio")
+    config_ref = manifest["config"]
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", config_ref["digest"]):
+        raise ValueError("Unsupported config digest")
+    config_body, _, _ = get(f"{base}/blobs/{config_ref['digest']}")
+    if (len(config_body) != config_ref["size"] or
+            "sha256:" + hashlib.sha256(config_body).hexdigest() != config_ref["digest"]):
+        raise ValueError("Config size or digest mismatch")
+    config = json.loads(config_body)
+    model_bytes = sum(x["size"] for x in model_layers)
+    parameters = int(count) if count else None
+    return {
+        "tag": f"{family}:{tag}", "read_at_utc": read_at, "response_date": server_date,
+        "manifest_sha256": hashlib.sha256(body).hexdigest(),
+        "model_family": config.get("model_family"), "file_type": config.get("file_type"),
+        "model_layers": model_layers, "model_bytes": model_bytes,
+        "decimal_gb": round(model_bytes / 10**9, 3), "gib": round(model_bytes / 2**30, 3),
+        "all_layer_bytes": sum(x["size"] for x in layers),
+        "config_bytes": config_ref["size"], "manifest_bytes": len(body),
+        "parameters_supplied": parameters,
+        "file_bpw": round(model_bytes * 8 / parameters, 3) if parameters else None,
+    }
+
 
 if __name__ == "__main__":
+    if not sys.argv[1:]:
+        raise SystemExit("Usage: python3 manifest_audit.py family:tag[=parameter_count] ...")
     for spec in sys.argv[1:]:
-        family, tag = spec.split(":", 1)
-        print(json.dumps(manifest(family, tag)))
+        print(json.dumps(audit(spec)))
 ```
 
-Run `python3 manifest_audit.py qwen3:32b phi4:14b` and you get back the same manifest hash this article records (`030ee887...` for `qwen3:32b`, `ac896e5b...` for `phi4:14b`), which is how you verify the tag has not been re-pointed since 2026-11-03. To get bits per weight, divide: `weights_bytes * 8 / parameters`, with the parameter total taken from the model repository's own metadata. Environment for this run: `ollama version is 0.20.3` on a 2 vCPU / 11 GB Linux host; the 47 reads behind the table took about 18 seconds of wall clock and downloaded no weights.
+Run `python3 manifest_audit.py qwen3:32b=32762123264 phi4:14b`. The Qwen row includes `file_bpw: 4.933`; the Phi row leaves it `null` because no denominator was supplied. Compare the returned hashes with your saved snapshot. A later run is not guaranteed to return the same hash because tags can move.
 
-Everything above was computed from saved response bytes: raw manifests, config blobs, model-repository metadata and the llama.cpp constant table are kept in this article's evidence directory as a private author-side verification set, hashed in the review receipt so the numbers can be re-checked against what was actually fetched. They are not offered as a downloadable dataset — the script above regenerates the same rows on your machine, which is the more useful artifact anyway.
+`read_at_utc` is taken after the manifest body is read. `response_date` is the HTTP Date header and may reflect an intermediary's cached response; it is not a substitute for recording your own observation time. The script deliberately rejects manifest lists rather than silently choosing an artifact. It supports the plain public `library/family:tag` examples in this article, not every registry or authenticated model.
 
 ## What this does not tell you
 
-- **bpw is not quality.** It is bytes per parameter. Two files at 4.9 bpw can differ in how badly they were quantized — which tensors were kept at higher precision, and with what calibration data. A perplexity or eval claim needs an eval, not this arithmetic.
-- **Tags move.** These numbers are scoped to the digests and fetch times recorded above. A re-pointed tag will produce different bytes and a different hash; run the script rather than trusting a table, including this one.
-- **14 tags is a sample, not a census.** Seven families, chosen to include one model at two quants and one model small enough to check against a local pull. Do not generalize the deviation figures to the whole library.
-- **One row was cross-checked locally.** `qwen2.5:0.5b` was compared against the local blob store and `ollama list` on 2026-11-02: the weights digest and size matched the registry. The other 13 tags were never downloaded on this host.
+- **File bpw is storage accounting, not quality.** Similar averages can hide different tensor layouts and quantization choices. An accuracy or perplexity claim needs an evaluation.
+- **The registry declares the bytes.** This correction fetched manifests, configs and tensor metadata, not full model-weight blobs. It did not independently check every advertised tensor against downloaded weights.
+- **Tags move and model identities matter.** Keep the manifest hash, layer digest, observation time and denominator provenance together. A family name and rounded “B” count are insufficient.
+- **Fourteen tags are a sample.** These observations do not establish a universal range or pass/fail threshold for a quantization recipe.
+- **Storage is not runtime memory.** KV cache, activations, work buffers, offloaded layers and backend choices are outside this audit.
 
-If your download came out at 18.something GB for a 32B model, nothing is wrong. Read the config's `file_type`, multiply the weight bytes by 8, divide by the parameter count, and you will know which weights you are running before the first token is generated.
+Read `file_type` to learn the declared quantization recipe. Read layer sizes to plan storage. Match tensor scope before calculating file bpw, and verify blob digests when checking a download. Each step answers a different question.
 
-## Sources
+## Sources and correction evidence
 
-All fetched 2026-11-03 during the run recorded above; every response was saved with its HTTP status, origin `Date` header and sha256 before being used.
+The row links identify the primary registry manifests and digest-specific tensor listings. The November 9 recheck preserved response times, response hashes, manifests, configs and the parsed tensor names, types and dimensions in the repository's correction evidence. The original November 3 CSV is retained as the historical record; it has not been silently rewritten to erase the corrected denominators.
 
-Model repository metadata used for parameter totals: [Qwen3-4B](https://huggingface.co/api/models/Qwen/Qwen3-4B), [Qwen3-8B](https://huggingface.co/api/models/Qwen/Qwen3-8B), [Qwen3-32B](https://huggingface.co/api/models/Qwen/Qwen3-32B), [Llama-3.1-8B](https://huggingface.co/api/models/meta-llama/Llama-3.1-8B), [Llama-3.1-70B](https://huggingface.co/api/models/meta-llama/Llama-3.1-70B), [gemma-3-4b-it](https://huggingface.co/api/models/google/gemma-3-4b-it), [gemma-3-12b-it](https://huggingface.co/api/models/google/gemma-3-12b-it), [gemma-3-27b-it](https://huggingface.co/api/models/google/gemma-3-27b-it), [Mistral-7B-Instruct-v0.3](https://huggingface.co/api/models/mistralai/Mistral-7B-Instruct-v0.3), [DeepSeek-R1-Distill-Llama-8B](https://huggingface.co/api/models/deepseek-ai/DeepSeek-R1-Distill-Llama-8B), [Qwen2.5-0.5B](https://huggingface.co/api/models/Qwen/Qwen2.5-0.5B), [microsoft/phi-4](https://huggingface.co/api/models/microsoft/phi-4).
+For implementation details, see the linked llama.cpp constants and quantizer, and Ollama's pull implementation. The [Qwen2.5-0.5B-Instruct config](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct/raw/main/config.json) documents its tied embeddings and dimensions. The [Mistral-7B-Instruct-v0.1 config](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.1/raw/main/config.json) matches the Q8 artifact's vocabulary and RoPE settings, but matching architecture alone does not prove the exact weight lineage; the table uses the blob's counted elements instead.
 
-Model cards consulted for the rounded parameter figures the tags do not repeat: [Qwen3-32B card](https://huggingface.co/Qwen/Qwen3-32B/raw/main/README.md) ("Number of Parameters: 32.8B"), [Qwen3-8B card](https://huggingface.co/Qwen/Qwen3-8B/raw/main/README.md) ("Number of Parameters: 8.2B"), [Llama 3.1 model card](https://raw.githubusercontent.com/meta-llama/llama-models/main/models/llama3_1/MODEL_CARD.md), [Mistral-7B-Instruct-v0.3 card](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3/raw/main/README.md), [DeepSeek-R1-Distill-Llama-8B card](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-8B/raw/main/README.md), [phi-4 card](https://huggingface.co/microsoft/phi-4/raw/main/README.md).
-
-Quant block sizes: [llama.cpp gguf-py constants](https://raw.githubusercontent.com/ggml-org/llama.cpp/master/gguf-py/gguf/constants.py). Manifest reads for the remaining tags in the table are the per-row links above.
-
-Related reading on this site: [the idealized params × bits ÷ 8 sizing formula and why real artifacts differ](https://baeseokjae.github.io/posts/best-local-llm-models-2026/), [a single-model setup guide with its own quant table](https://baeseokjae.github.io/posts/qwen-3-32b-local-guide-2026/), [the deployment checklist that asks you to record the quantization](https://baeseokjae.github.io/posts/qwen-3-full-lineup-guide-2026/), [model choice for coding assistants](https://baeseokjae.github.io/posts/best-ollama-models-coding-2026/), and [a provider-side quantization comparison](https://baeseokjae.github.io/posts/unsloth-dynamic-3-0-ggufs/).
+Related reading on this site: [the idealized params × bits ÷ 8 sizing formula and why real artifacts differ](https://baeseokjae.github.io/posts/best-local-llm-models-2026/), [the Qwen3 32B setup guide](https://baeseokjae.github.io/posts/qwen-3-32b-local-guide-2026/), and [the deployment checklist that asks you to record quantization](https://baeseokjae.github.io/posts/qwen-3-full-lineup-guide-2026/).
