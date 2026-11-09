@@ -1,0 +1,242 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Local Llm Cold Start on RockB</title><link>https://baeseokjae.github.io/tags/local-llm-cold-start/</link><description>Recent content in Local Llm Cold Start on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sun, 08 Nov 2026 00:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/local-llm-cold-start/index.xml" rel="self" type="application/rss+xml"/><item><title>Agent Loops That Alternate Local Models: Measuring Ollama keep_alive and Cold-Start Stalls (2026)</title><link>https://baeseokjae.github.io/posts/ollama-keep-alive-model-switch-latency-2026/</link><pubDate>Sun, 08 Nov 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/ollama-keep-alive-model-switch-latency-2026/</guid><description>Twelve recorded responses on a two-core CPU-only Ollama host: keep_alive=0 reloaded on every switch, keep_alive=5m still evicted when OLLAMA_MAX_LOADED_MODELS=1, and keep_alive=-1 kept both models resident. Includes the load_duration/total_duration diagnostic and the recorded /api/ps residency states.</description><content:encoded><![CDATA[<p>Your agent finishes a coding turn, then calls a vision model to read a screenshot, then goes back to the coder. Each hand-off costs a pause the client reports as model latency: eight seconds, fifty seconds, eight seconds. The obvious diagnosis is that the model is slow, the quantization is wrong, or the machine needs more RAM. On the host measured here, none of those explained it. The model was being loaded from disk, again, on every switch, and the HTTP response said so in its own timing fields.</p>
+<p>This article is the mechanism, a diagnostic you can run against a single response, and the measured residency behaviour of three <code>keep_alive</code> configurations on one CPU-only machine. Every number below comes from responses recorded on 2026-11-06 between 13:24:31Z and 13:33:36Z against Ollama 0.20.3, and the raw records ship with the post so you can recompute them instead of trusting a table.</p>
+<h2 id="the-pause-that-looks-like-model-latency">The pause that looks like model latency</h2>
+<p>An Ollama server holds a model in memory for a while after answering, then unloads it. The FAQ states the default window plainly: <a href="https://docs.ollama.com/faq.md">models are kept in memory for 5 minutes before being unloaded</a>. <code>keep_alive</code> on <code>/api/generate</code> and <code>/api/chat</code> overrides that window, and the same page lists four accepted forms: a duration string such as <code>10m</code>, a number of seconds, any negative number, which keeps the model loaded, and <code>0</code>, which unloads the model immediately after generating a response.</p>
+<p>Two models in one loop interact with two separate limits. The first is how long each model stays resident. The second is <a href="https://docs.ollama.com/faq.md">OLLAMA_MAX_LOADED_MODELS, &ldquo;the maximum number of models that can be loaded concurrently provided they fit in available memory&rdquo;, defaulting to 3 for CPU inference</a>. When the number of models your loop touches exceeds the resident limit, or when the second model does not fit alongside the first, something has to be evicted — and an evicted model is a cold model on its next call, no matter what <code>keep_alive</code> says.</p>
+<p>That is the trap: <code>keep_alive=5m</code> reads like &ldquo;keep my model warm&rdquo; and behaves like it only until a second model needs the slot.</p>
+<h2 id="one-response-contains-both-phases">One response contains both phases</h2>
+<p><code>/api/generate</code> reports its own timing breakdown in nanoseconds, and the field descriptions are specific: <a href="https://docs.ollama.com/api/generate.md"><code>total_duration</code> is &ldquo;time spent generating the response&rdquo;, <code>load_duration</code> is &ldquo;time spent loading the model&rdquo;, <code>prompt_eval_duration</code> covers prompt evaluation and <code>eval_duration</code> covers token generation</a>. The same page documents <a href="https://docs.ollama.com/api/generate.md"><code>keep_alive</code>: &ldquo;model keep-alive duration (for example 5m or 0 to unload immediately)&rdquo;</a>.</p>
+<p>So one response is enough to classify a slow call. If <code>load_duration</code> is a large fraction of <code>total_duration</code>, you paid for a load. If it is near zero while the wall clock was still long, the time went somewhere else — a queued request behind another generation, which is a different problem with a different fix (covered in <a href="/posts/ollama-concurrent-requests-latency-2026/">the concurrency measurement on this site</a>).</p>
+<p>The ratio is the diagnostic:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>curl -s http://127.0.0.1:11434/api/generate <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>  -d <span style="color:#e6db74">&#39;{&#34;model&#34;:&#34;qwen2.5:0.5b&#34;,&#34;prompt&#34;:&#34;Reply with the single word ok.&#34;,&#34;stream&#34;:false}&#39;</span> <span style="color:#ae81ff">\
+</span></span></span><span style="display:flex;"><span>| python3 -c <span style="color:#e6db74">&#39;import json,sys; r=json.load(sys.stdin); t=r[&#34;total_duration&#34;]; l=r[&#34;load_duration&#34;]; \
+</span></span></span><span style="display:flex;"><span><span style="color:#e6db74">print(f&#34;load {l/1e9:.2f}s of {t/1e9:.2f}s = {l/t:.0%}&#34;)&#39;</span>
+</span></span></code></pre></div><p><code>load 6.63s of 7.72s = 86%</code> is a load-dominated call. It means the model was not in memory when the request arrived, and no amount of prompt trimming or quantization tweaking will remove that second of wall clock.</p>
+<p>To see <em>what</em> is resident rather than infer it, <a href="https://docs.ollama.com/api/ps.md"><code>/api/ps</code> lists the models currently running, with an expiry timestamp and the VRAM they occupy</a>. That endpoint is what turns a guess about eviction into an observation. The probe below calls it before and after every request.</p>
+<h2 id="what-was-measured">What was measured</h2>
+<p>Three configurations ran, out of four scripted, alternating a 0.5B text model and a 2.1B vision model on one endpoint, with <code>num_predict=64</code>, <code>temperature=0</code>, <code>seed=42</code> and the prompt <code>Reply with the single word ok.</code> Each configuration got a freshly started <code>ollama serve</code> on the same port — 11435 by default — stopped between phases, so that <code>OLLAMA_MAX_LOADED_MODELS</code> was re-applied and nothing stayed warm from a previous configuration.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Config</th>
+					<th>keep_alive</th>
+					<th>OLLAMA_MAX_LOADED_MODELS</th>
+					<th>Calls recorded</th>
+					<th>Status</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>A</td>
+					<td><code>0</code></td>
+					<td>3</td>
+					<td>6</td>
+					<td>complete</td>
+			</tr>
+			<tr>
+					<td>B</td>
+					<td><code>5m</code></td>
+					<td>1</td>
+					<td>4</td>
+					<td>complete</td>
+			</tr>
+			<tr>
+					<td>D</td>
+					<td><code>-1</code></td>
+					<td>3</td>
+					<td>2</td>
+					<td>stopped at the attempt deadline</td>
+			</tr>
+			<tr>
+					<td>C</td>
+					<td><code>5m</code></td>
+					<td>3</td>
+					<td>0</td>
+					<td>not run</td>
+			</tr>
+	</tbody>
+</table>
+<p>The host is a two-core aarch64 machine with 11,927 MB total RAM and no swap, running Ollama 0.20.3 with CPU inference only — <code>/api/ps</code> reported <code>size_vram: 0</code> for every resident model, so nothing here describes GPU behaviour. Config C, the &ldquo;warm second call with room for two&rdquo; baseline, never executed: each <code>qwen3-vl:2b</code> load costs 29–63 seconds on this box, and the run&rsquo;s deadline arrived first. The gap is stated again under limits, because it is the difference between &ldquo;pinning helps&rdquo; and &ldquo;pinning removes the load stall&rdquo;, and only the first was measured.</p>
+<h2 id="config-a-keep_alive0-reloads-on-every-single-call">Config A: keep_alive=0 reloads on every single call</h2>
+<p>Six calls, alternating models, unload immediately after each response.</p>
+<table>
+	<thead>
+			<tr>
+					<th>#</th>
+					<th>Model</th>
+					<th>total_duration</th>
+					<th>load_duration</th>
+					<th>load share</th>
+					<th>Resident after</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>0</td>
+					<td>qwen2.5:0.5b</td>
+					<td>7.72 s</td>
+					<td>6.63 s</td>
+					<td>86%</td>
+					<td>qwen2.5:0.5b</td>
+			</tr>
+			<tr>
+					<td>1</td>
+					<td>qwen3-vl:2b</td>
+					<td>72.09 s</td>
+					<td>46.32 s</td>
+					<td>64%</td>
+					<td>qwen3-vl:2b</td>
+			</tr>
+			<tr>
+					<td>2</td>
+					<td>qwen2.5:0.5b</td>
+					<td>9.18 s</td>
+					<td>8.09 s</td>
+					<td>88%</td>
+					<td>qwen2.5:0.5b</td>
+			</tr>
+			<tr>
+					<td>3</td>
+					<td>qwen3-vl:2b</td>
+					<td>49.87 s</td>
+					<td>39.38 s</td>
+					<td>79%</td>
+					<td>qwen3-vl:2b</td>
+			</tr>
+			<tr>
+					<td>4</td>
+					<td>qwen2.5:0.5b</td>
+					<td>9.93 s</td>
+					<td>8.13 s</td>
+					<td>82%</td>
+					<td>qwen2.5:0.5b</td>
+			</tr>
+			<tr>
+					<td>5</td>
+					<td>qwen3-vl:2b</td>
+					<td>65.89 s</td>
+					<td>38.47 s</td>
+					<td>58%</td>
+					<td>qwen3-vl:2b</td>
+			</tr>
+	</tbody>
+</table>
+<p>Six of six calls carried a non-zero <code>load_duration</code>. The text model&rsquo;s load share stayed between 82% and 88% (median 86%); the vision model&rsquo;s between 58% and 79% (median 64%). Each <code>keep_alive=0</code> response unloaded its own model after answering, so that model&rsquo;s next turn started cold: the <code>/api/ps</code> capture taken immediately after a response listed the model that had just answered, while every <code>resident_before</code> at the following switch listed only the other model and never both. Six calls, six loads.</p>
+<p>Note the absolute numbers rather than only the shares. Loading the 0.5B model cost 6.6–8.1 seconds here; loading the 2.1B vision model cost 38.5–46.3 seconds. The share varies because the denominator includes generation, and the vision model&rsquo;s generation phase swung from 8.3 to 24.4 seconds across three calls on an otherwise idle two-core machine. Comparing load shares <em>across</em> two models with different output lengths confuses the two phases; comparing a single model across configurations does not.</p>
+<h2 id="config-b-keep_alive5m-does-not-survive-an-eviction-limit-of-1">Config B: keep_alive=5m does not survive an eviction limit of 1</h2>
+<p>Same loop, <code>keep_alive=5m</code>, but <code>OLLAMA_MAX_LOADED_MODELS=1</code>.</p>
+<table>
+	<thead>
+			<tr>
+					<th>#</th>
+					<th>Model</th>
+					<th>total_duration</th>
+					<th>load_duration</th>
+					<th>load share</th>
+					<th>Resident before → after</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>0</td>
+					<td>qwen2.5:0.5b</td>
+					<td>6.23 s</td>
+					<td>5.12 s</td>
+					<td>82%</td>
+					<td>none → qwen2.5:0.5b</td>
+			</tr>
+			<tr>
+					<td>1</td>
+					<td>qwen3-vl:2b</td>
+					<td>58.76 s</td>
+					<td>29.07 s</td>
+					<td>49%</td>
+					<td>qwen2.5:0.5b → qwen3-vl:2b</td>
+			</tr>
+			<tr>
+					<td>2</td>
+					<td>qwen2.5:0.5b</td>
+					<td>9.65 s</td>
+					<td>4.88 s</td>
+					<td>51%</td>
+					<td>qwen3-vl:2b → qwen2.5:0.5b</td>
+			</tr>
+			<tr>
+					<td>3</td>
+					<td>qwen3-vl:2b</td>
+					<td>58.11 s</td>
+					<td>39.14 s</td>
+					<td>67%</td>
+					<td>qwen2.5:0.5b → qwen3-vl:2b</td>
+			</tr>
+	</tbody>
+</table>
+<p>Four of four calls loaded. Call 2 is the one that matters: the 0.5B model had been requested with <code>keep_alive=5m</code> two calls earlier, the 5-minute window had not elapsed, and it was still reloaded for 4.88 seconds — because call 1 had evicted it. Every <code>resident_before</code> list contains the other model and every <code>resident_after</code> list contains only the model that just answered. The keep-alive window was never the binding constraint; the resident slot count was.</p>
+<p>One caveat on the default: the FAQ says the CPU default is 3, so <code>OLLAMA_MAX_LOADED_MODELS=1</code> is a deliberately tightened setting, used here to isolate the eviction rule with two small models on a small host. The rule it demonstrates is general — if the number of models your loop alternates exceeds the resident limit, <code>keep_alive</code> cannot save you — but the specific value 1 should not be read as a stock install. A recommendation to raise the limit to 2, as some guides make, only helps if both models actually fit; see the residency note below.</p>
+<h2 id="config-d-keep_alive-1-keeps-both-models-resident">Config D: keep_alive=-1 keeps both models resident</h2>
+<p>Two calls, then the deadline.</p>
+<table>
+	<thead>
+			<tr>
+					<th>#</th>
+					<th>Model</th>
+					<th>total_duration</th>
+					<th>load_duration</th>
+					<th>load share</th>
+					<th>Resident after</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>0</td>
+					<td>qwen2.5:0.5b</td>
+					<td>15.49 s</td>
+					<td>9.67 s</td>
+					<td>62%</td>
+					<td>qwen2.5:0.5b</td>
+			</tr>
+			<tr>
+					<td>1</td>
+					<td>qwen3-vl:2b</td>
+					<td>114.64 s</td>
+					<td>62.77 s</td>
+					<td>55%</td>
+					<td>qwen3-vl:2b, qwen2.5:0.5b</td>
+			</tr>
+	</tbody>
+</table>
+<p>Call 1 is the observation that configs A and B never produced: the probe&rsquo;s <code>resident_after</code> list for that call contains <strong>both</strong> models. The pinning request was honoured — <code>keep_alive=-1</code> kept the text model resident while a second model loaded alongside it. The record in <code>results.jsonl</code> carries the two names and <code>size_vram: 0</code> for each; the 2,947,025,696-byte (2.75 GiB) weight size is the <code>qwen3-vl:2b</code> entry in the <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-keep-alive-model-switch-latency-2026/ps_A_ka0_max3.json">config-A</a> and <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-keep-alive-model-switch-latency-2026/ps_B_ka5m_max1.json">config-B</a> <code>/api/ps</code> captures for the same digest. No post-phase <code>/api/ps</code> capture was saved for config D, so co-residency here is the per-call resident list, not a snapshot of the co-resident total.</p>
+<p>What was <em>not</em> measured is the payoff. Call 2 would have been the first warm call in the whole matrix — the 0.5B model answering with no load phase — and it never ran. So the honest verdict is narrower than the usual advice: pinning both models changes the residency state as claimed, and this run does not contain a warm-call timing that proves the saved seconds. Anyone quoting a speed-up from <code>keep_alive=-1</code> on this evidence would be quoting something that was not recorded.</p>
+<h2 id="the-decision-rule-this-supports">The decision rule this supports</h2>
+<p>Given a working pair of models and one endpoint:</p>
+<ol>
+<li>Run the loop twice with the diagnostic above. If <code>load_duration/total_duration</code> is consistently below roughly 0.1 while the wall clock is still long, loading is not your problem — look at queueing or at the client&rsquo;s own retries, not at <code>keep_alive</code>.</li>
+<li>If the share is high and <code>/api/ps</code> between calls shows only one model, you are being evicted. Decide which of the two causes applies by checking whether both models fit: compare each model&rsquo;s reported <code>size</code> in <code>/api/ps</code> against free memory, and remember that the <a href="/posts/local-llm-vram-kv-cache-budget-2026/">KV cache is allocated per model on top of the weights</a>.</li>
+<li>If they fit with headroom, pin them with <code>keep_alive=-1</code> and confirm with <code>/api/ps</code> that both entries appear. That removes the reload; it does not by itself make generation faster.</li>
+<li>If they do not fit, <code>keep_alive</code> is the wrong lever. Batch the loop by model — all coder calls, then all vision calls — so each switch is paid once instead of once per turn, or give the second model its own endpoint so each server holds one resident model and neither evicts the other.</li>
+<li>If you are choosing the pair itself, prefer the smaller model on the constrained side: the load cost scales with the weights, and 39 seconds against 7 seconds on the same machine is the difference between a usable loop and an unusable one.</li>
+</ol>
+<p>The residency check is the part worth making routine. <code>keep_alive</code> tells the server what you want; <code>/api/ps</code> tells you what you got, and the two disagreed in every configuration measured here.</p>
+<h2 id="reproduce-it">Reproduce it</h2>
+<p>The runner and probe ship with this article and use only the Python standard library:</p>
+<ul>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-keep-alive-model-switch-latency-2026/run.sh"><code>run.sh</code></a> — runs configurations B, D and C in that order, starting a fresh server per configuration on the same port and stopping it between phases so <code>OLLAMA_MAX_LOADED_MODELS</code> is re-applied, and captures <code>/api/ps</code> on both sides of each phase.</li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-keep-alive-model-switch-latency-2026/probe.py"><code>probe.py</code></a> — alternates the two models, records <code>total_duration</code>, <code>load_duration</code>, <code>prompt_eval_duration</code>, <code>eval_duration</code>, <code>eval_count</code>, HTTP status, the resident list before and after each call, and the derived <code>load_share</code>.</li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-keep-alive-model-switch-latency-2026/results.jsonl"><code>results.jsonl</code></a> — configs B and D as recorded, one JSON object per call.</li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-keep-alive-model-switch-latency-2026/results_configA.jsonl"><code>results_configA.jsonl</code></a> — the six config-A records from the original separate invocation of the same probe; the file also holds one extra cold-open B call that the tables do not use. <code>run.sh</code> does not run config A, so use the invocation below for it.</li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-keep-alive-model-switch-latency-2026/ps_A_ka0_max3.json"><code>ps_A_ka0_max3.json</code></a> and <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-keep-alive-model-switch-latency-2026/ps_B_ka5m_max1.json"><code>ps_B_ka5m_max1.json</code></a> — the <code>/api/ps</code> captures taken before and after those phases.</li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-keep-alive-model-switch-latency-2026/env.txt"><code>env.txt</code></a> — core count, <code>ollama --version</code>, <code>free -m</code> and swap state at run time.</li>
+</ul>
+<p>Run <code>./run.sh</code> from a directory containing both scripts; it writes to <code>results.jsonl</code> in that directory and starts servers on port 11435 by default. It covers configurations B, D and C only. For the six config-A records, start a server with <code>OLLAMA_MAX_LOADED_MODELS=3</code> — <code>run.sh</code>&rsquo;s <code>start_server 3</code> shows the environment it uses — and run <code>python3 probe.py http://127.0.0.1:11435 A_ka0_max3 0 6 results_configA.jsonl</code>: same label, <code>keep_alive=0</code> and six alternating calls as the shipped file. Every row of the tables above can be read straight out of those JSONL files, including the <code>resident_before</code> and <code>resident_after</code> arrays that carry the eviction and pinning evidence.</p>
+<h2 id="limits">Limits</h2>
+<ul>
+<li>Everything here is CPU-only inference on a two-core host with no swap. GPU hosts load models in a fraction of the time and the load share will be much smaller; the diagnostic still applies, the numbers do not transfer.</li>
+<li>Each configuration started from a fresh server, so config-to-config timings also include cold page cache. Within-configuration comparisons are the sound ones; do not read config D&rsquo;s 114.64-second vision call as evidence that pinning made generation slower.</li>
+<li>Config C (5m with room for two models) never ran, and config D stopped after two calls. The matrix is therefore A complete, B complete, D partial — with the warm pinned call, which is the whole selling point of pinning, unmeasured. Config D also has no post-phase <code>/api/ps</code> capture, so its co-residency rests on the probe&rsquo;s <code>resident_after</code> list.</li>
+<li>The two models differ in output length for the same <code>num_predict</code> (the vision model returned 64 tokens with no visible text, consistent with reasoning tokens), so cross-model load shares are not directly comparable. Absolute <code>load_duration</code> values are.</li>
+<li>One model pair, one quantization each, one host. Other pairs will change the absolute load cost.</li>
+<li>The run used local hardware and no paid provider; attributable monetary cost is unknown, not zero.</li>
+</ul>
+<p>The narrow takeaway: a multi-second pause on every model switch is usually a load, the response proves it in one field, and keep-alive only keeps a model resident while the server is allowed to keep it. If you never check <code>/api/ps</code>, you are tuning a window that an eviction already closed.</p>
+]]></content:encoded></item></channel></rss>
