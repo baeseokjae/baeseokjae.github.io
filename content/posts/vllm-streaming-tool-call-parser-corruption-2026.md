@@ -1,32 +1,40 @@
 ---
-title: "vLLM Streaming Tool-Call Corruption: Detecting Merged, Truncated and Retyped Arguments Before Your Agent Executes Them"
-date: 2026-10-28T00:00:00+00:00
-lastmod: 2026-10-28T00:00:00+00:00
+title: 'vLLM Tool-Call Streaming: Detecting Corrupted Arguments'
+date: 2026-10-28 00:00:00+00:00
+lastmod: 2026-11-10 00:00:00+00:00
 tags:
-  - vLLM
-  - vLLM tool call parser
-  - streaming tool calls
-  - tool call corruption
-  - SSE chunk boundary
-  - OpenAI compatible API
-  - function calling
-  - local LLM serving
-  - agent safety
-  - schema validation
-  - tool-call gate
-  - vLLM 0.32.0
-description: "Three open vLLM reports show merged, truncated and dropped tool-call arguments at different version scopes. Here is how to localize the fault and gate execution."
+- vLLM
+- vLLM tool call parser
+- streaming tool calls
+- tool call corruption
+- SSE chunk boundary
+- OpenAI compatible API
+- function calling
+- local LLM serving
+- agent safety
+- schema validation
+- tool-call gate
+- vLLM 0.32.0
+description: Three vLLM reports filed in October 2026 show merged, truncated and dropped tool-call arguments at different version scopes. Here is how to localize the fault and gate execution.
 draft: false
-schema: "schema-vllm-streaming-tool-call-parser-corruption-2026"
+schema: schema-vllm-streaming-tool-call-parser-corruption-2026
+cover:
+  image: /images/vllm-streaming-tool-call-parser-corruption-2026.png
+  alt: 'Diagnostic sequence for a streaming tool call: preserve raw SSE, inspect reconstructed call boundaries, validate JSON and value types, and gate execution. This is not a new vLLM benchmark.'
+  caption: Diagnostic sequence · separate server parser faults from client reassembly
+  relative: false
+  hidden: false
+images:
+- /images/vllm-streaming-tool-call-parser-corruption-2026.png
 ---
 
 A streaming tool call can reach your agent corrupted while every SSE frame on the wire is valid JSON. The damage shows up after reassembly: two calls fused into one, an argument string cut mid-token, or a number that became the string `"3"`. The request returns HTTP 200, `finish_reason` says `tool_calls`, and an agent that trusts the payload executes the wrong thing. The practical question is not whether vLLM is "broken" in general; it is whether the corruption is in the server's parser or in your client's reassembly, and how to stop execution until that is settled. This article separates what the current primary reports actually establish, shows how to localize the fault with a raw SSE capture, and ships a small gate that refuses any call whose arguments do not round-trip against your declared schema.
 
-## What the three open reports actually establish
+## What the three October 2026 reports actually establish
 
 The first report is [vllm-project/vllm#64012](https://github.com/vllm-project/vllm/issues/64012), filed 2026-10-27 and still open. It is explicitly a legacy-version report: the reporter confirms the failure on **vLLM 0.19.0** with `vllm/tool_parsers/qwen3xml_tool_parser.py` at SHA256 `7c2ba229b0b6dcd061b9f581390a5fb892a2fc20023b20656d91706522f311bd`, states that the v0.19.1 source is byte-identical, and says the reproduction needs no GPU, weights, tokenizer or network. Two independent `<tool_call>` blocks parse correctly when they arrive in one chunk or when the split falls between the calls. When a chunk holds the first call's closing tags plus the opening of the second, the same concatenated text produces malformed JSON and can truncate a string value. The reporter adds that #45003 removed the old XML parser and #45413 introduced newer engine routing, and calls this "the legacy v0.19.0 implementation, not an asserted regression on current main." That boundary matters: reading this thread as evidence about v0.32.x is a version error.
 
-The second report, [vllm-project/vllm#63983](https://github.com/vllm-project/vllm/issues/63983), is a different failure and a different scope. Against **main at commit 5d35ce3**, with parser code only and no GPU, the `functiongemma` parser extracts arguments written as `key:<escape>value<escape>`. FunctionGemma's own chat template wraps only strings that way; numbers, booleans, arrays and objects are emitted bare, never match the parser's regex, and are silently dropped. The issue's printed output makes the consequence concrete: a `set_alarm` call carrying `hour:7`, `enabled:true`, `days:[mon,tue]` and `snooze:{minutes:5}` comes back as `{"label": "Wake up"}`. The call "succeeds" with four of its five arguments missing.
+The second report, [vllm-project/vllm#63983](https://github.com/vllm-project/vllm/issues/63983), is a different failure and a different scope. It was filed 2026-10-27 and closed as completed on 2026-11-02 with no closing comment, so read the report as evidence of what the parser did, not as an open ticket. Against **main at commit 5d35ce3**, with parser code only and no GPU, the `functiongemma` parser extracts arguments written as `key:<escape>value<escape>`. FunctionGemma's own chat template wraps only strings that way; numbers, booleans, arrays and objects are emitted bare, never match the parser's regex, and are silently dropped. The issue's printed output makes the consequence concrete: a `set_alarm` call carrying `hour:7`, `enabled:true`, `days:[mon,tue]` and `snooze:{minutes:5}` comes back as `{"label": "Wake up"}`. The call "succeeds" with four of its five arguments missing.
 
 The third, [vllm-project/vllm#63941](https://github.com/vllm-project/vllm/issues/63941), concerns Kimi K3 at **main commit cd9aa5b5ee** (2026-10-26), also parser-level and CPU-only. When a generation is cut inside an XTML control marker by `max_tokens`, the non-streaming path returns the raw partial marker text as user-visible `content`, while the streaming path withholds the same fragment. The two paths disagree about the same tokens. The reporter notes that current main tip `6fe3d447ac` does not touch `kimi_k3_tool_parser.py`.
 
