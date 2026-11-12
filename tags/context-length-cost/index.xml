@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Context Length Cost on RockB</title><link>https://baeseokjae.github.io/tags/context-length-cost/</link><description>Recent content in Context Length Cost on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sun, 08 Nov 2026 00:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/context-length-cost/index.xml" rel="self" type="application/rss+xml"/><item><title>Turn-Time Budget for a Local Coding Agent: what a measured tokens/second figure buys you in tool-call turns</title><link>https://baeseokjae.github.io/posts/local-agent-turn-time-budget-2026/</link><pubDate>Sun, 08 Nov 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/local-agent-turn-time-budget-2026/</guid><description>One turn is prefill over the prompt plus decode over the output plus tool overhead. Using llama-bench&amp;#39;s printed CPU rows for 7B Q4_0 at one thread, a 512-token prompt and 256-token output cost 82.98 s of prefill and 63.21 s of decode: 148.19 s per turn, 1.23 h for thirty turns, and a decode rate of at least 0.497 tok/s to fit a 600 s client timeout. A stdlib harness measures your own host and inverts the equation.</description><content:encoded><![CDATA[<p>Your local model answers a chat question in a couple of seconds and feels fine. You wire it into an agent that needs thirty tool calls to finish one refactor, and around the eighth request the client gives up with a read timeout, or the patch comes back cut in half because generation stopped mid-function. Nothing in the server log looks like an error. Restart the session with a shorter conversation and it completes.</p>
+<p>The question that actually decides the fix is arithmetic: given the rate this machine produces, how long is one turn, how long is thirty turns, and what decode rate does the client timeout require? This article answers that with a formula, a worked example computed from llama.cpp&rsquo;s own printed benchmark rows, and a small harness you run against your own endpoint. It publishes no tokens-per-second table of its own, and the reason is at the end: the one place this project could run the measurement was too noisy to produce a number worth printing.</p>
+<h2 id="one-tokenssecond-figure-is-the-wrong-unit">One tokens/second figure is the wrong unit</h2>
+<p>A turn is not one number. It is two different operations with different costs. llama.cpp&rsquo;s benchmark tool states the split in its own flag list: prompt processing (<code>pp</code>) is &ldquo;processing a prompt in batches&rdquo;, and text generation (<code>tg</code>) is &ldquo;generating a sequence of tokens&rdquo;, measured as separate tests (<a href="https://raw.githubusercontent.com/ggml-org/llama.cpp/master/tools/llama-bench/README.md">llama.cpp llama-bench README</a>). Prefill scales with how many tokens you send; decode scales with how many tokens you ask for back. They do not move together: in the CPU rows quoted further down, one thread gives 6.17 tok/s of prefill against 4.05 tok/s of decode, while 32 threads gives 59.00 against 16.41, so the ratio between the two is a property of the host and the batch size rather than of the model. This is also why a model-selection page that declines to rank models by speed is right to refuse (<a href="/posts/best-ollama-models-coding-2026/">best Ollama models for coding</a>): a rate without a host, a prompt length and an output length is not a property of the model.</p>
+<p>Ollama exposes the same split per request. Its generate endpoint returns <code>prompt_eval_count</code> (&ldquo;Number of input tokens in the prompt&rdquo;), <code>prompt_eval_cached_count</code> (&ldquo;Number of prompt tokens read from the cache&rdquo;), <code>prompt_eval_duration</code> (&ldquo;Time spent evaluating uncached prompt tokens in nanoseconds&rdquo;), <code>eval_count</code> (&ldquo;Number of output tokens generated in the response&rdquo;) and <code>eval_duration</code> (&ldquo;Time spent generating tokens in nanoseconds&rdquo;) (<a href="https://docs.ollama.com/api/generate.md">Ollama API reference, generate</a>). That is everything needed to derive two rates for one real request instead of trusting a headline figure someone measured on a different machine:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Field in the response</th>
+					<th>What it counts</th>
+					<th>Rate you derive</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>prompt_eval_count</code></td>
+					<td>total input tokens: cached plus newly evaluated</td>
+					<td>—</td>
+			</tr>
+			<tr>
+					<td><code>prompt_eval_cached_count</code></td>
+					<td>the cached subset of those tokens (optional in the response)</td>
+					<td>—</td>
+			</tr>
+			<tr>
+					<td><code>prompt_eval_duration</code></td>
+					<td>nanoseconds spent evaluating the uncached remainder</td>
+					<td>prefill tok/s = (count − cached) ÷ (duration ÷ 1e9)</td>
+			</tr>
+			<tr>
+					<td><code>eval_count</code></td>
+					<td>tokens actually generated</td>
+					<td>—</td>
+			</tr>
+			<tr>
+					<td><code>eval_duration</code></td>
+					<td>nanoseconds spent generating them</td>
+					<td>decode tok/s = count ÷ (duration ÷ 1e9)</td>
+			</tr>
+	</tbody>
+</table>
+<p>Three caution notes are built into those definitions. First, <code>prompt_eval_count</code> is the <em>whole</em> prompt, cached tokens included, while <code>prompt_eval_duration</code> times only the ones the server actually evaluated — so dividing the count by the duration overstates prefill on any prefix-cache hit. Ollama&rsquo;s own metrics printer subtracts the cached count before dividing (<code>uncached := max(0, m.PromptEvalCount-cached)</code> then <code>uncached / duration</code> in <a href="https://raw.githubusercontent.com/ollama/ollama/main/api/types.go"><code>api/types.go</code></a>), and the server builder shows why the two numbers disagree: the count is <code>CacheN + PromptN</code> while the duration is <code>PromptMS</code> (<a href="https://raw.githubusercontent.com/ollama/ollama/main/llm/llama_server.go"><code>llm/llama_server.go</code></a>). Second, <code>prompt_eval_cached_count</code> is optional, so a missing value has to be treated as 0 — the no-cache case — which is what the harness below does. Third, <code>prompt_eval_duration</code> excludes network and client time. All three are reasons to derive the prefill numerator as a subtraction and to add overhead explicitly rather than hope the server accounted for it.</p>
+<h2 id="the-turn-equation">The turn equation</h2>
+<p>For a single stream, with no queueing:</p>
+<pre tabindex="0"><code>turn_s = prompt_tokens / prefill_tps + output_tokens / decode_tps + tool_overhead_s
+</code></pre><p>Three terms, three different levers. <code>tool_overhead_s</code> is everything between the model finishing and the next request starting: tool execution, file reads, transport, retry backoff. On a local host it is often the smallest term, and that is exactly why it misleads people — it is the term that hides the retry multiplier later.</p>
+<p>Worked example. The inputs are llama-bench&rsquo;s own printed sample rows for <code>llama 7B mostly Q4_0</code>, backend <code>CPU</code>, 1 thread: <code>pp 64</code> at 6.17 ± 0.07 tok/s and <code>tg 16</code> at 4.05 ± 0.02 tok/s (<a href="https://raw.githubusercontent.com/ggml-org/llama.cpp/master/tools/llama-bench/README.md">llama-bench README table</a>). They are upstream sample output, not a measurement made for this article and not a description of any reader&rsquo;s machine. The scenario is declared: a 512-token prompt, a 256-token output, 2 s of tool overhead per turn.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Term</th>
+					<th>Arithmetic</th>
+					<th>Seconds</th>
+					<th>Share of turn</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Prefill</td>
+					<td>512 ÷ 6.17</td>
+					<td>82.98</td>
+					<td>56%</td>
+			</tr>
+			<tr>
+					<td>Decode</td>
+					<td>256 ÷ 4.05</td>
+					<td>63.21</td>
+					<td>43%</td>
+			</tr>
+			<tr>
+					<td>Tool overhead</td>
+					<td>declared</td>
+					<td>2.00</td>
+					<td>1%</td>
+			</tr>
+			<tr>
+					<td><strong>Turn</strong></td>
+					<td>sum</td>
+					<td><strong>148.19</strong></td>
+					<td>100%</td>
+			</tr>
+	</tbody>
+</table>
+<p>Prefill is more than half of that turn. That is the finding most tokens/second headlines erase: a page that quotes one number cannot tell you whether the dominant cost is reading your prompt or writing the answer.</p>
+<h2 id="what-thirty-turns-cost">What thirty turns cost</h2>
+<p>Multiply, assuming a prompt that does not grow:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Turns</th>
+					<th>Task time</th>
+					<th>Hours</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>10</td>
+					<td>1,481.9 s</td>
+					<td>0.41</td>
+			</tr>
+			<tr>
+					<td>30</td>
+					<td>4,445.8 s</td>
+					<td>1.23</td>
+			</tr>
+			<tr>
+					<td>50</td>
+					<td>7,409.6 s</td>
+					<td>2.06</td>
+			</tr>
+	</tbody>
+</table>
+<p>The assumption is the problem. An agent loop appends every tool result to the conversation, so the prompt grows each turn and the task time grows faster than the turn count suggests. Holding decode and overhead fixed at the values above, a 1,024-token prompt costs 231.17 s per turn and a 4,096-token prompt costs 729.07 s per turn. All of the extra 580.9 s went to prefill: 4,096 ÷ 6.17 = 663.86 s of it.</p>
+<h2 id="inverting-the-equation">Inverting the equation</h2>
+<p>The useful form runs backwards. If the client&rsquo;s per-request budget is <code>T</code>, the prompt costs <code>P</code> seconds to prefill and overhead is <code>H</code>, the slowest decode rate that still fits one turn is:</p>
+<pre tabindex="0"><code>min_decode_tps = output_tokens / (T - P - H)
+</code></pre><p>At the same inputs: 256 ÷ (600 − 82.98 − 2) = <strong>0.497 tok/s</strong>. The 600 s figure is a real default, not an illustration — openai-python ships <code>DEFAULT_TIMEOUT = httpx2.Timeout(timeout=600, connect=5.0)</code> and <code>DEFAULT_MAX_RETRIES = 2</code> (<a href="https://raw.githubusercontent.com/openai/openai-python/main/src/openai/_constants.py">openai-python <code>_constants.py</code></a>). Two retries mean one slow turn can occupy up to three times its own latency: 3 × 148.19 = 444.6 s for a turn that was already inside budget.</p>
+<p>There is a harder limit above the decode floor. Prefill alone consumes the whole 600 s budget at 6.17 × 600 = 3,702 prompt tokens. Past that point the minimum decode rate stops existing: at a 4,096-token prompt the turn is 729.07 s, and no amount of decode speed saves it. The same arithmetic at 8,192 prompt tokens gives 1,327.7 s of prefill — before the first output token is generated. This is the failure mode that looks like a model problem and is actually a context problem, and it is why <a href="/posts/local-llm-vram-kv-cache-sizing-2026/">deciding whether the model fits your card</a> is only step one: fitting is not the same as finishing a turn.</p>
+<h2 id="where-the-time-goes-and-the-order-to-fix-it">Where the time goes, and the order to fix it</h2>
+<p>Given a measured prefill and decode rate, the terms rank predictably:</p>
+<ol>
+<li><strong>Prompt length.</strong> It multiplies prefill, and prefill is the largest term in the worked example. Sending whole files instead of retrieved spans is the usual cause.</li>
+<li><strong>Output tokens.</strong> It multiplies decode. A capped <code>num_predict</code> turns a 63.21 s decode term into 31.60 s at 128 tokens, and the turn into 116.59 s.</li>
+<li><strong>Retries.</strong> Two retries turn one over-budget turn into three, which is how a task that should take 1.23 h becomes a session that looks hung.</li>
+<li><strong>The timeout itself.</strong> Raising it hides the problem until the next context growth, and it is the only lever that costs nothing to describe and costs the most to rely on.</li>
+</ol>
+<p>If prefill alone exceeds the request budget, shortening the output is the wrong first fix. The turn stays over budget no matter how few tokens you ask for. Cut context, or move the model off CPU, or raise <code>T</code> — in that order of cheapness.</p>
+<h2 id="measure-your-own-host">Measure your own host</h2>
+<p>The harness is one stdlib file, <code>turn_budget.py</code>, with a three-prompt fixture and a test file. It does not download models and does not set server variables; it talks to an endpoint you already have running:</p>
+<pre tabindex="0"><code>python3 turn_budget.py measure --model &lt;your-tag&gt; --jsonl &#34;$TMPDIR/runs.jsonl&#34; --repeats 3
+python3 turn_budget.py summarise --jsonl &#34;$TMPDIR/runs.jsonl&#34;
+python3 turn_budget.py compute --jsonl &#34;$TMPDIR/runs.jsonl&#34; \
+    --turns 30 --output-tokens 256 --tool-overhead 2 --timeout 600
+</code></pre><p>Three design rules matter more than the code. First, rates are derived from the per-request counters above — prefill from <code>prompt_eval_count</code> minus <code>prompt_eval_cached_count</code>, over the uncached-only <code>prompt_eval_duration</code> — never from a headline figure or from the raw count. Second, every record is written and <code>fsync</code>ed before the next request starts — a run killed at its cap still leaves usable evidence, which is exactly how an earlier attempt of this project lost seven of nine records. Third, the summary applies a spread gate: repeats that disagree by more than 10% are reported as <code>rejected_noisy</code> and the medians are not printed as a baseline. <code>compute</code> refuses a rejected run file for the same reason.</p>
+<p>Run the arithmetic without a server, or reproduce the numbers above with no endpoint at all:</p>
+<pre tabindex="0"><code>python3 turn_budget.py example
+python3 turn_budget.py compute --prefill-tps 6.17 --decode-tps 4.05 \
+    --prompt-tokens 512 --output-tokens 256 --tool-overhead 2 --turns 30 --timeout 600
+</code></pre><p>The 24 unit tests pin every figure in this article: 82.98 s of prefill, 63.21 s of decode, 148.19 s per turn, 4,445.8 s over thirty turns, the 0.497 tok/s floor, 3,702 prompt tokens at the timeout, and the round trip where feeding the minimum decode rate back into the turn equation returns exactly 600 s. They also pin the cache accounting — a 64-token prompt with 32 tokens served from the prefix cache has to produce the same rate as a 32-token uncached prompt, a missing <code>prompt_eval_cached_count</code> has to be treated as 0, and a fully cached prompt has to be refused instead of reported. They run with <code>python3 test_turn_budget.py</code>, need no network, and use a synthetic response to exercise the JSONL path including a failed request.</p>
+<h2 id="the-negative-result-behind-the-missing-baseline">The negative result behind the missing baseline</h2>
+<p>This project tried to publish a measured baseline and could not. The attempt ran on a shared 2-vCPU, 11 GB sandbox against <code>qwen3-vl:2b</code> (<code>Q4_K_M</code>, digest <code>0635d9d857d497aeadba3d7d27485746c50554446f9f6ec01ef39788221adbe</code>) with three fixtures and three repeats inside a declared 110 s run budget. Two of nine records completed; both were recovered from the script&rsquo;s stdout after its own 130 s kill cap ended the run — the method note documents the two limits separately. Decode came out at 1.615 and 3.165 tok/s — a 96% spread — and prefill at 3.781 and 228.859 tok/s, the slower one including cold model load. That fails the same 10% gate the shipped script enforces, so those figures are recorded as a rejected run and appear nowhere in this article as a baseline or a hardware comparison.</p>
+<p>The 228.859 tok/s figure is also cache-affected and is not a prefill measurement. It was computed the old way, by dividing <code>prompt_eval_count</code> — which counts cached tokens as well as newly evaluated ones — by the uncached-only <code>prompt_eval_duration</code>; both records show a 32-token <code>prompt_eval_count</code> for the same fixture, and neither captured <code>prompt_eval_cached_count</code>, so how much of that 32 was served from the prefix cache cannot be recovered. The corrected formula can only put the true uncached rate at or below 228.859 tok/s, and how far below depends on a cached count nobody recorded — which is the whole reason the run is published as rejected rather than quoted.</p>
+<p>The useful part of that failure is the shape of it: the same fixture and token counts took 79.8 s and 16.9 s on the same host minutes apart. A single run on a machine with co-resident services is not a measurement, and the gate exists because the obvious alternative — average the two and print 2.39 tok/s — would have produced a confident, wrong number.</p>
+<h2 id="what-this-cannot-tell-you">What this cannot tell you</h2>
+<p>The worked example rests on CPU rows printed in a README with no CPU model named, at a <code>pp</code> batch of 64 tokens and a 16-token <code>tg</code> run, so it supports &ldquo;CPU prefill can dominate a long-context turn&rdquo; and nothing more precise. No GPU was measured for this article and no cross-hardware table is offered; GPU rates, batch sizes and backend flags change both terms by orders of magnitude, and a comparison built from mixed sources would be worse than no comparison. A different tokenizer changes <code>prompt_tokens</code> for the same text, so a reader who copies the 512-token scenario with different content will get a different prefill term — derive token counts from the response, not from word counts.</p>
+<h2 id="reader-deliverables">Reader deliverables</h2>
+<p>The harness, fixture, tests and the worked-example output are published files in this site&rsquo;s repository, not a private directory:</p>
+<ul>
+<li>Measurement harness — <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-agent-turn-time-budget-2026/turn_budget.py">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-agent-turn-time-budget-2026/turn_budget.py</a></li>
+<li>Three-prompt fixture — <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-agent-turn-time-budget-2026/fixtures/prompts.json">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-agent-turn-time-budget-2026/fixtures/prompts.json</a></li>
+<li>Arithmetic tests — <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-agent-turn-time-budget-2026/test_turn_budget.py">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-agent-turn-time-budget-2026/test_turn_budget.py</a></li>
+<li>Test run record (command, exit code, 24 tests, no network) — <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-agent-turn-time-budget-2026/test-run.json">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-agent-turn-time-budget-2026/test-run.json</a></li>
+<li>Worked-example output, as printed by the script — <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-agent-turn-time-budget-2026/worked-example.json">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-agent-turn-time-budget-2026/worked-example.json</a></li>
+<li>Rejected run records from the failed baseline attempt — <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-agent-turn-time-budget-2026/runs.jsonl">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-agent-turn-time-budget-2026/runs.jsonl</a></li>
+<li>Method and host notes for that attempt — <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-agent-turn-time-budget-2026/method.md">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/local-agent-turn-time-budget-2026/method.md</a></li>
+</ul>
+<p>None of these files contain credentials, hostnames or personal data; they are text the script reads and writes. The fixture is invented test prose, and the run records carry the model digest, request options and derived rates only.</p>
+<h2 id="if-you-only-remember-one-thing">If you only remember one thing</h2>
+<p>The number to measure twice is not tokens per second. It is prompt tokens in, output tokens out, and a timeout — because <code>turn_s = prompt_tokens / prefill_tps + output_tokens / decode_tps + overhead</code> has an inverse, and the inverse is the only version that tells you whether your agent will finish. If your measured prefill puts the prompt alone past the client&rsquo;s budget, the model&rsquo;s decode speed is irrelevant; a second concurrent session cannot fix that either, as the <a href="/posts/local-llm-concurrent-agent-sessions-2026/">single-stream concurrency measurements</a> show, and neither can <a href="/posts/local-llm-rig-cost-payback-2026/">the payback calculation</a> that consumes this page&rsquo;s rate as an input.</p>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Ollama API reference, generate endpoint (<code>prompt_eval_count</code>, <code>prompt_eval_cached_count</code>, <code>prompt_eval_duration</code>, <code>eval_count</code>, <code>eval_duration</code>) — <a href="https://docs.ollama.com/api/generate.md">https://docs.ollama.com/api/generate.md</a></li>
+<li>Ollama server source, <code>llm/llama_server.go</code> (<code>promptEvalCount()</code> returns <code>CacheN + PromptN</code>; <code>PromptEvalCachedCount</code> is <code>CacheN</code>; <code>PromptEvalDuration</code> is <code>PromptMS</code>) — <a href="https://raw.githubusercontent.com/ollama/ollama/main/llm/llama_server.go">https://raw.githubusercontent.com/ollama/ollama/main/llm/llama_server.go</a></li>
+<li>Ollama API source, <code>api/types.go</code> (metrics printer computes the prompt eval rate as <code>(PromptEvalCount - cached) / PromptEvalDuration</code>) — <a href="https://raw.githubusercontent.com/ollama/ollama/main/api/types.go">https://raw.githubusercontent.com/ollama/ollama/main/api/types.go</a></li>
+<li>llama.cpp llama-bench README (<code>pp</code>/<code>tg</code> definitions and the printed CPU rows for 7B Q4_0 at 1 thread) — <a href="https://raw.githubusercontent.com/ggml-org/llama.cpp/master/tools/llama-bench/README.md">https://raw.githubusercontent.com/ggml-org/llama.cpp/master/tools/llama-bench/README.md</a></li>
+<li>openai-python <code>_constants.py</code> (<code>DEFAULT_TIMEOUT</code> 600 s, <code>DEFAULT_MAX_RETRIES</code> 2) — <a href="https://raw.githubusercontent.com/openai/openai-python/main/src/openai/_constants.py">https://raw.githubusercontent.com/openai/openai-python/main/src/openai/_constants.py</a></li>
+</ul>
+]]></content:encoded></item></channel></rss>
