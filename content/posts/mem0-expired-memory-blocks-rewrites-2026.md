@@ -1,6 +1,7 @@
 ---
 date: 2026-10-28 00:00:00+00:00
-description: 'On mem0ai 2.2.1 an expired memory still reaches the extraction prompt and the md5 dedup set, so a fresh add() of the same fact returns an empty list. Read the code path, the provider call an expiry update still makes, and a delete-then-add workaround.'
+lastmod: 2026-11-10 00:00:00+00:00
+description: On mem0ai 2.2.1 an expired memory still reaches the extraction prompt and the md5 dedup set, so a fresh add() of the same fact returns an empty list. Read the code path, the provider call an expiry update still makes, and a delete-then-add workaround.
 draft: false
 schema: schema-mem0-expired-memory-blocks-rewrites-2026
 tags:
@@ -9,7 +10,15 @@ tags:
 - expiration
 - deduplication
 - debugging
-title: 'When an Expired Memory Blocks the New One: mem0 OSS Expiry, Deduplication and the Write That Never Lands'
+title: 'mem0 Expired Memories: Why New Writes Get Blocked'
+cover:
+  image: /images/mem0-expired-memory-blocks-rewrites-2026.png
+  alt: 'The read/write asymmetry described for self-hosted mem0ai 2.2.1: an expired row can be hidden by reads yet remain available to the write-path duplicate check. The hosted platform is excluded.'
+  caption: mem0ai 2.2.1 · Python OSS / self-hosted · hosted platform excluded
+  relative: false
+  hidden: false
+images:
+- /images/mem0-expired-memory-blocks-rewrites-2026.png
 ---
 
 Your agent stored `user prefers aisle seats` with an expiration date. The date passed. The user says it again. You call `add()` with a fresh `expiration_date`, get no exception, get an empty `results` list, and `get_all()` shows nothing. The fact never lands, and it will never land as long as the expired copy is what the search returns.
