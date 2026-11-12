@@ -1,0 +1,290 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Ollama Structured Output vs Tool Calling on RockB</title><link>https://baeseokjae.github.io/tags/ollama-structured-output-vs-tool-calling/</link><description>Recent content in Ollama Structured Output vs Tool Calling on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Tue, 10 Nov 2026 09:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/ollama-structured-output-vs-tool-calling/index.xml" rel="self" type="application/rss+xml"/><item><title>Ollama Structured Output vs a JSON Tool: measured tool-call loss and invented values on a local model (2026)</title><link>https://baeseokjae.github.io/posts/ollama-structured-output-format-vs-json-tool-2026/</link><pubDate>Tue, 10 Nov 2026 09:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/ollama-structured-output-format-vs-json-tool-2026/</guid><description>18 requests on Ollama 0.20.3: 3 of 3 tool calls without a constraint, 0 of 12 with one — HTTP 200, done_reason stop, schema-valid invented values in content.</description><content:encoded><![CDATA[<p>There are two documented ways to get machine-readable output from a local Ollama model, and they look interchangeable. You can constrain the reply with <code>format</code> — or <code>response_format</code> on the OpenAI-compatible endpoint — so the decoder emits JSON that matches a schema. Or you can register a tool and let the model call it, with the tool&rsquo;s result being the JSON you wanted.</p>
+<p>The practical failure comes from doing both at once, which is a natural thing to do: keep the tools registered, and add <code>format</code> when a structured summary is due. On a self-hosted server the constraint wins and the tool call disappears. Nothing reports an error. The response is HTTP 200, <code>done_reason</code> is <code>stop</code>, <code>tool_calls</code> is absent, and <code>content</code> holds a schema-valid object in which the model has invented the values the tool was supposed to fetch.</p>
+<p>This article measures that on one host and turns it into a decision plus a startup check you can run. It is not a discovery: the behaviour is filed upstream as <a href="https://github.com/ollama/ollama/issues/18944">issue #18944</a> and <a href="https://github.com/ollama/ollama/issues/13750">issue #13750</a>, both open at the time of writing, and both are cited below. What those threads do not contain is a per-configuration count, so that is what this page adds.</p>
+<h2 id="the-short-answer">The short answer</h2>
+<p>If your harness needs a tool result, do not put a JSON constraint on the same request. Send one request with <code>tools</code> and no <code>format</code>, let the model call, execute the tool, append the result, and only then ask for JSON in a second request that carries <code>format</code> and no <code>tools</code>.</p>
+<p>If your harness needs a JSON object and no tool is involved, <code>format</code> alone is fine and does what the documentation says. The 3 control requests in this probe confirmed that path produces schema-valid content on the same model.</p>
+<p>The dangerous configuration is the combination. Measured here, 12 requests that carried both a tool array and a JSON constraint returned 0 tool calls, 18 out of 18 requests in the whole matrix returned HTTP 200, and no response signalled the difference between &ldquo;the model decided not to call&rdquo; and &ldquo;the server never let it call&rdquo;.</p>
+<h2 id="what-the-documentation-says-and-what-it-does-not-say">What the documentation says, and what it does not say</h2>
+<p>The <code>/api/chat</code> reference lists <code>format</code> and <code>tools</code> as separate optional fields with no stated interaction. <code>format</code> is described as: &ldquo;Format to return a response in. Can be <code>json</code> or a JSON schema&rdquo;. <code>tools</code> is described as: &ldquo;Optional list of function tools the model may call during the chat&rdquo;. Both descriptions live in the request schema on <a href="https://docs.ollama.com/api/chat">the /api/chat page</a>, and neither mentions the other.</p>
+<p>The same separation appears on the OpenAI-compatibility side. That page ticks <code>Tools</code>, <code>JSON mode</code> and <code>response_format</code> as supported, in two separate checklists — <code>Supported features</code> carries JSON mode and Tools, <code>Supported request fields</code> carries <code>response_format</code> — with no precedence rule anywhere on <a href="https://docs.ollama.com/api/openai-compatibility">the OpenAI-compatibility page</a>.</p>
+<p>The structured-outputs guidance is about the constraint alone: structured outputs &ldquo;let you enforce a JSON schema on model responses so you can reliably extract structured data, describe images, or keep every reply consistent&rdquo;, per <a href="https://docs.ollama.com/capabilities/structured-outputs">the structured-outputs capability page</a>. It also carries a note that &ldquo;Ollama&rsquo;s cloud currently does not support structured outputs&rdquo;, which matters later when comparing against the cloud-vs-self-hosted report in #13750.</p>
+<p>An absent precedence rule is an absent rule, not evidence that the fields are independent. That distinction is the whole reason this page reports counts instead of quoting the docs.</p>
+<h2 id="method-18-requests-six-configurations-one-small-model">Method: 18 requests, six configurations, one small model</h2>
+<p>Everything below was measured on one host. The server reported <code>{&quot;version&quot;:&quot;0.20.3&quot;}</code> from <code>/api/version</code>, and the model was <code>qwen2.5:0.5b</code>, already installed. The machine had 2 CPU cores and about 11.9 GB of RAM, with no GPU in use. Sampling was <code>temperature: 0, seed: 7</code>, <code>stream: false</code>, and a single user message.</p>
+<p>The prompt was chosen so that a fabricated answer is detectable by construction: &ldquo;What is the current temperature in Lisbon right now? You must use the get_weather tool to find out.&rdquo; The live temperature exists only behind the tool, so any numeric temperature in <code>content</code> next to zero <code>tool_calls</code> is invented, not retrieved. The probe never executed the tool, which is deliberate: the question is not what the tool returns, it is whether the model reaches the tool path at all.</p>
+<p>The registered tool had one required argument:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{<span style="color:#f92672">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;function&#34;</span>,
+</span></span><span style="display:flex;"><span> <span style="color:#f92672">&#34;function&#34;</span>: {<span style="color:#f92672">&#34;name&#34;</span>: <span style="color:#e6db74">&#34;get_weather&#34;</span>,
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">&#34;description&#34;</span>: <span style="color:#e6db74">&#34;Get the current air temperature for a city from the weather service.&#34;</span>,
+</span></span><span style="display:flex;"><span>              <span style="color:#f92672">&#34;parameters&#34;</span>: {<span style="color:#f92672">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;object&#34;</span>,
+</span></span><span style="display:flex;"><span>                             <span style="color:#f92672">&#34;properties&#34;</span>: {<span style="color:#f92672">&#34;city&#34;</span>: {<span style="color:#f92672">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;string&#34;</span>}},
+</span></span><span style="display:flex;"><span>                             <span style="color:#f92672">&#34;required&#34;</span>: [<span style="color:#e6db74">&#34;city&#34;</span>]}}}
+</span></span></code></pre></div><p>Six configurations, three repetitions each, 18 requests total:</p>
+<table>
+	<thead>
+			<tr>
+					<th>id</th>
+					<th>endpoint</th>
+					<th>extra fields</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>a</td>
+					<td><code>/api/chat</code></td>
+					<td><code>tools</code> only</td>
+			</tr>
+			<tr>
+					<td>b</td>
+					<td><code>/api/chat</code></td>
+					<td><code>tools</code> + <code>format</code> = 2-field schema <code>{city, temperature_c}</code></td>
+			</tr>
+			<tr>
+					<td>c</td>
+					<td><code>/api/chat</code></td>
+					<td><code>tools</code> + <code>format</code> = enum-only schema <code>{decision: use_tool|answer_directly}</code></td>
+			</tr>
+			<tr>
+					<td>d</td>
+					<td><code>/api/chat</code></td>
+					<td><code>tools</code> + <code>format</code> = <code>&quot;json&quot;</code></td>
+			</tr>
+			<tr>
+					<td>e</td>
+					<td><code>/api/chat</code></td>
+					<td><code>format</code> = 2-field schema, no <code>tools</code> (control)</td>
+			</tr>
+			<tr>
+					<td>f</td>
+					<td><code>/v1/chat/completions</code></td>
+					<td><code>tools</code> + <code>response_format</code> json_schema (same schema as b)</td>
+			</tr>
+	</tbody>
+</table>
+<p>The exact request body for cell b, which is the one most readers will recognise from their own code:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-json" data-lang="json"><span style="display:flex;"><span>{<span style="color:#f92672">&#34;model&#34;</span>: <span style="color:#e6db74">&#34;qwen2.5:0.5b&#34;</span>,
+</span></span><span style="display:flex;"><span> <span style="color:#f92672">&#34;messages&#34;</span>: [{<span style="color:#f92672">&#34;role&#34;</span>: <span style="color:#e6db74">&#34;user&#34;</span>,
+</span></span><span style="display:flex;"><span>               <span style="color:#f92672">&#34;content&#34;</span>: <span style="color:#e6db74">&#34;What is the current temperature in Lisbon right now? You must use the get_weather tool to find out.&#34;</span>}],
+</span></span><span style="display:flex;"><span> <span style="color:#f92672">&#34;stream&#34;</span>: <span style="color:#66d9ef">false</span>,
+</span></span><span style="display:flex;"><span> <span style="color:#f92672">&#34;options&#34;</span>: {<span style="color:#f92672">&#34;temperature&#34;</span>: <span style="color:#ae81ff">0</span>, <span style="color:#f92672">&#34;seed&#34;</span>: <span style="color:#ae81ff">7</span>},
+</span></span><span style="display:flex;"><span> <span style="color:#f92672">&#34;tools&#34;</span>: [ <span style="color:#960050;background-color:#1e0010">...</span> <span style="color:#960050;background-color:#1e0010">get_weather</span> <span style="color:#960050;background-color:#1e0010">...</span> ],
+</span></span><span style="display:flex;"><span> <span style="color:#f92672">&#34;format&#34;</span>: {<span style="color:#f92672">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;object&#34;</span>,
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">&#34;properties&#34;</span>: {<span style="color:#f92672">&#34;city&#34;</span>: {<span style="color:#f92672">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;string&#34;</span>}, <span style="color:#f92672">&#34;temperature_c&#34;</span>: {<span style="color:#f92672">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;number&#34;</span>}},
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">&#34;required&#34;</span>: [<span style="color:#e6db74">&#34;city&#34;</span>, <span style="color:#e6db74">&#34;temperature_c&#34;</span>]}}
+</span></span></code></pre></div><p>Per request the run recorded the endpoint, configuration, model, repetition, HTTP status, <code>done_reason</code> or <code>finish_reason</code>, <code>n_calls</code>, the called function and its arguments, <code>content</code> length and text, whether <code>content</code> parsed as JSON, whether it validated against the required keys, <code>eval_count</code>, wall seconds, and a fabrication flag (zero calls plus a temperature-shaped value). The rows are appended to an append-only NDJSON log, <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-structured-output-format-vs-json-tool-2026/results.jsonl">results.jsonl</a>, which is published with this article alongside the harness; every count in the tables below is a field of that file.</p>
+<h2 id="result-3-of-3-calls-without-a-constraint-0-of-12-with-one">Result: 3 of 3 calls without a constraint, 0 of 12 with one</h2>
+<table>
+	<thead>
+			<tr>
+					<th>id</th>
+					<th>configuration</th>
+					<th>n</th>
+					<th>HTTP 200</th>
+					<th>tool calls</th>
+					<th>done_reason</th>
+					<th>content parses as JSON</th>
+					<th>satisfies the schema it was sent</th>
+					<th>fabricated value</th>
+					<th>mean wall s (load-contaminated)</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>a</td>
+					<td>tools only</td>
+					<td>3</td>
+					<td>3</td>
+					<td><strong>3</strong></td>
+					<td>stop</td>
+					<td>n/a (no content)</td>
+					<td>n/a</td>
+					<td>0</td>
+					<td>7.61</td>
+			</tr>
+			<tr>
+					<td>b</td>
+					<td>tools + 2-field schema</td>
+					<td>3</td>
+					<td>3</td>
+					<td><strong>0</strong></td>
+					<td>stop</td>
+					<td>3</td>
+					<td>3 (two-field)</td>
+					<td>3</td>
+					<td>2.66</td>
+			</tr>
+			<tr>
+					<td>c</td>
+					<td>tools + enum schema</td>
+					<td>3</td>
+					<td>3</td>
+					<td><strong>0</strong></td>
+					<td>stop</td>
+					<td>3</td>
+					<td>3 (enum)</td>
+					<td>0</td>
+					<td>1.83</td>
+			</tr>
+			<tr>
+					<td>d</td>
+					<td>tools + <code>format: json</code></td>
+					<td>3</td>
+					<td>3</td>
+					<td><strong>0</strong></td>
+					<td>stop</td>
+					<td>3</td>
+					<td>n/a (no schema sent)</td>
+					<td>0</td>
+					<td>3.23</td>
+			</tr>
+			<tr>
+					<td>e</td>
+					<td>schema, no tools</td>
+					<td>3</td>
+					<td>3</td>
+					<td>0</td>
+					<td>stop</td>
+					<td>3</td>
+					<td>3 (two-field)</td>
+					<td>3</td>
+					<td>7.38</td>
+			</tr>
+			<tr>
+					<td>f</td>
+					<td><code>/v1</code> tools + <code>response_format</code></td>
+					<td>3</td>
+					<td>3</td>
+					<td><strong>0</strong></td>
+					<td>stop</td>
+					<td>3</td>
+					<td>3 (two-field)</td>
+					<td>3</td>
+					<td>4.87</td>
+			</tr>
+	</tbody>
+</table>
+<p>The two validity columns are separate on purpose. A per-row validator in the harness scores every reply against the two-field <code>{city, temperature_c}</code> reference schema, so the log records <code>false</code> with reason <code>missing:city,temperature_c</code> for cells c and d — that number says the reply did not match a reference schema those requests were never given, not that the reply was malformed. Scored against what each request actually carried, cell c&rsquo;s <code>{&quot;decision&quot;: &quot;use_tool&quot;}</code> satisfies the enum schema, and cell d was sent the bare string <code>&quot;json&quot;</code>, which carries no schema to satisfy at all. The <code>mean wall s</code> column is labelled with its defect rather than removed: those means mix a 15.67 s cold start with warm calls of 2-5 s, so they are wall times, not a comparison of the two paths (see the latency note below).</p>
+<p>Read the tool-call column against the configuration column. Without a constraint, every request produced a <code>get_weather</code> call with <code>{&quot;city&quot;: &quot;Lisbon&quot;}</code> and an empty <code>content</code>. With any JSON constraint — a two-field schema, an enum-only schema, the bare string <code>&quot;json&quot;</code>, or the OpenAI-compatible <code>response_format</code> — no request produced a call. Nine of those twelve were on <code>/api/chat</code> and three on <code>/v1/chat/completions</code>; the count is 0 in both groups.</p>
+<p>Cell e is the important control. With no tool in the request at all, the same model under the same schema returned the same fabricated object as cell b. That is expected — there was nothing to call — and it establishes that the constrained path is the &ldquo;answer directly&rdquo; path by construction. Adding <code>tools</code> to that configuration did not reopen the tool path: b and e behaved identically apart from token counts.</p>
+<p><code>eval_count</code> separates the two cases at the wire level: 22 completion tokens for a tool-call turn without a constraint, 17 for the constrained two-field reply, 10 for the enum reply, 19 for the <code>format: json</code> reply. The model was generating either way; only the destination changed.</p>
+<h2 id="what-the-model-produced-instead">What the model produced instead</h2>
+<p>Three different shapes appeared in <code>content</code>, and each one defeats a different kind of check.</p>
+<p><strong>A schema-valid invention.</strong> Cell b returned <code>{&quot;city&quot;: &quot;Lisbon&quot;, &quot;temperature_c&quot;: 10}</code> in all three repetitions, byte-identical. It parses, it validates, and the temperature is made up. Any harness that asserts &ldquo;the final object matches the schema&rdquo; passes. This is the shape that ends up in a spreadsheet.</p>
+<p><strong>A pseudo-call in prose.</strong> Cell d returned <code>{&quot;name&quot;: &quot;get_weather&quot;, &quot;arguments&quot;: {&quot;city&quot;: &quot;Lisbon&quot;}}</code> three times. The model&rsquo;s intent survived intact; the server routed it into <code>content</code> as data instead of into <code>tool_calls</code>. A harness that greps <code>content</code> for a function name might even &ldquo;work&rdquo; here by accident, and a harness that expects <code>tool_calls</code> silently gets nothing.</p>
+<p><strong>A decision object that says the right thing and does nothing.</strong> The enum schema in cell c returned <code>{&quot;decision&quot;: &quot;use_tool&quot;}</code> in all three runs. The model wanted to call the tool, said so, and the constraint left it no way to express that as a call. The schema was satisfied; the request was not.</p>
+<p>Cell f adds a detail worth noting for anyone comparing endpoints. On <code>/v1/chat/completions</code> the fabricated temperatures were 14.5, 17 and 18.2 — three different invented values under <code>temperature: 0</code> and <code>seed: 7</code>, where the native endpoint returned the same byte string three times. Reproducibility settings are not carried identically across the two surfaces, so a determinism argument built on one endpoint does not transfer to the other.</p>
+<h2 id="prior-art-the-behaviour-is-filed-upstream">Prior art: the behaviour is filed upstream</h2>
+<p><a href="https://github.com/ollama/ollama/issues/18944">Issue #18944</a>, opened 2026-10-11 and open at the time of writing, reports it for <code>qwen3.5:9b</code> on <code>/api/chat</code>: &ldquo;When using the /api/chat endpoint and the format is set to json, then the model is unable to use any tool calls. It might either try to use the tool call in the response or it will make something up in the response.&rdquo; Both observed shapes in this probe — pseudo-call in <code>content</code>, invented values — are named in that report.</p>
+<p>The thread also documents the reasoning, and the correction to it. A maintainer first replied that &ldquo;a tool call does not confirm to a JSON schema, so the model can&rsquo;t generate the tool call&rdquo;. The reporter then noted that tools worked with a JSON format until roughly version 0.32, and the maintainer agreed that his first comment reflected older versions: it worked for thinking models up to 0.34.3, and the behaviour changed in 0.34.4 with a linked pull request, #18479. Those version numbers come from the thread; nothing on this host can confirm them, and the server measured here reports 0.20.3 while still reproducing the failure. No regression boundary is asserted anywhere in this article.</p>
+<p><a href="https://github.com/ollama/ollama/issues/13750">Issue #13750</a>, opened 2026-01-16 and open at the time of writing, states the precedence directly: &ldquo;When both tools and response_format are present in the request, response_format takes complete priority over tools. The model is forced to generate a hallucinated JSON response conforming to the schema without ever considering tool calls.&rdquo; The reporter also reports that the same request works on Ollama.com, which conflicts with the current documentation note that the cloud does not support structured outputs. Both statements are recorded here as reported; they are not reconciled into a claim.</p>
+<p>None of the comments in either thread reports a per-configuration call count, which is the gap this page fills. It is also why the article is framed as a measured decision and a detection rule, not as a bug discovery.</p>
+<h2 id="the-detection-rule-a-harness-should-run">The detection rule a harness should run</h2>
+<p><code>finish_reason</code> cannot distinguish a suppressed call from a legitimate one. Neither can schema validation: cell b passed it while inventing the number. The failure is visible only in the relationship between the request&rsquo;s shape and the response&rsquo;s shape, which means detection belongs at the configuration level, not per response.</p>
+<p>The cheap version is a startup canary: send the same deterministic request twice, once with <code>tools</code> only and once with <code>tools</code> plus <code>format</code>, and compare the call counts. If the unconstrained request calls and the constrained one never does, the server has this behaviour and every &ldquo;tools + format&rdquo; code path in the harness is dead.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">canary</span>(base, model, tool, schema, prompt):
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">ask</span>(extra):
+</span></span><span style="display:flex;"><span>        body <span style="color:#f92672">=</span> {<span style="color:#e6db74">&#34;model&#34;</span>: model, <span style="color:#e6db74">&#34;stream&#34;</span>: <span style="color:#66d9ef">False</span>,
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;messages&#34;</span>: [{<span style="color:#e6db74">&#34;role&#34;</span>: <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#e6db74">&#34;content&#34;</span>: prompt}],
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;options&#34;</span>: {<span style="color:#e6db74">&#34;temperature&#34;</span>: <span style="color:#ae81ff">0</span>, <span style="color:#e6db74">&#34;seed&#34;</span>: <span style="color:#ae81ff">7</span>},
+</span></span><span style="display:flex;"><span>                <span style="color:#e6db74">&#34;tools&#34;</span>: [tool], <span style="color:#f92672">**</span>extra}
+</span></span><span style="display:flex;"><span>        req <span style="color:#f92672">=</span> urllib<span style="color:#f92672">.</span>request<span style="color:#f92672">.</span>Request(base <span style="color:#f92672">+</span> <span style="color:#e6db74">&#34;/api/chat&#34;</span>,
+</span></span><span style="display:flex;"><span>                                     data<span style="color:#f92672">=</span>json<span style="color:#f92672">.</span>dumps(body)<span style="color:#f92672">.</span>encode(),
+</span></span><span style="display:flex;"><span>                                     headers<span style="color:#f92672">=</span>{<span style="color:#e6db74">&#34;Content-Type&#34;</span>: <span style="color:#e6db74">&#34;application/json&#34;</span>})
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">with</span> urllib<span style="color:#f92672">.</span>request<span style="color:#f92672">.</span>urlopen(req, timeout<span style="color:#f92672">=</span><span style="color:#ae81ff">120</span>) <span style="color:#66d9ef">as</span> r:
+</span></span><span style="display:flex;"><span>            d <span style="color:#f92672">=</span> json<span style="color:#f92672">.</span>loads(r<span style="color:#f92672">.</span>read())
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> len((d<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;message&#34;</span>) <span style="color:#f92672">or</span> {})<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;tool_calls&#34;</span>) <span style="color:#f92672">or</span> []), d
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    bare <span style="color:#f92672">=</span> ask({})[<span style="color:#ae81ff">0</span>]
+</span></span><span style="display:flex;"><span>    constrained, resp <span style="color:#f92672">=</span> ask({<span style="color:#e6db74">&#34;format&#34;</span>: schema})
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> bare <span style="color:#f92672">and</span> <span style="color:#f92672">not</span> constrained:
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">raise</span> <span style="color:#a6e22e">RuntimeError</span>(
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;tools+format suppresses tool calls on this server: bare=</span><span style="color:#e6db74">%d</span><span style="color:#e6db74"> constrained=</span><span style="color:#e6db74">%d</span><span style="color:#e6db74"> &#34;</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;done_reason=</span><span style="color:#e6db74">%r</span><span style="color:#e6db74"> content=</span><span style="color:#e6db74">%r</span><span style="color:#e6db74">&#34;</span> <span style="color:#f92672">%</span> (
+</span></span><span style="display:flex;"><span>                bare, constrained, resp<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;done_reason&#34;</span>),
+</span></span><span style="display:flex;"><span>                ((resp<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;message&#34;</span>) <span style="color:#f92672">or</span> {})<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;content&#34;</span>) <span style="color:#f92672">or</span> <span style="color:#e6db74">&#34;&#34;</span>)[:<span style="color:#ae81ff">120</span>]))
+</span></span></code></pre></div><p>The canary costs two requests and fails at boot instead of six weeks later in a spreadsheet. Keep it alongside your version check: the behaviour is version- and model-scoped, so a server upgrade or a model swap is exactly when it should run again.</p>
+<p>A per-response check is possible but weaker, because &ldquo;the model correctly decided not to call&rdquo; is indistinguishable from &ldquo;the call was suppressed&rdquo; without knowing whether the prompt required the tool. If you must do it per response, make provenance explicit: require that every fact field in the final object carry the <code>tool_call_id</code> that produced it, and reject a reply whose fact fields have no tool provenance. That converts cell b from a pass into a loud failure without needing to infer intent.</p>
+<h2 id="decision-table">Decision table</h2>
+<table>
+	<thead>
+			<tr>
+					<th>Your need</th>
+					<th>Configuration</th>
+					<th>Status in this probe</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Final JSON, no tool involved</td>
+					<td><code>format</code> alone</td>
+					<td>Measured: schema-valid content in 3 of 3 (e).</td>
+			</tr>
+			<tr>
+					<td>A tool result, then more work</td>
+					<td><code>tools</code> only on the call turn</td>
+					<td>Measured: calls in 3 of 3 (a).</td>
+			</tr>
+			<tr>
+					<td>Tool result and a JSON summary in one flow</td>
+					<td>two requests: call with <code>tools</code>, then summarise with <code>format</code> and no <code>tools</code></td>
+					<td>Not measured here. Follows from the suppression above and is the obvious workaround, but treat it as a hypothesis until your own canary confirms it.</td>
+			</tr>
+			<tr>
+					<td>Both fields in one request</td>
+					<td>none — treat the tool as unavailable</td>
+					<td>Measured: 0 calls in 12 of 12 constrained requests; invented values in 6.</td>
+			</tr>
+	</tbody>
+</table>
+<p>The two-turn path is the one readers will reach for, and it is worth being blunt that this run did not execute it: no second arm, no final-output validity rate. What this run establishes is the boundary that makes the two-turn design necessary — an unconstrained call turn works, and any constraint on that same turn does not.</p>
+<h2 id="wall-times-recorded-not-a-latency-comparison">Wall times: recorded, not a latency comparison</h2>
+<p>The title of this page does not claim a latency result, and this section is why. The mean wall times in the table are contaminated by model load. The first <code>a</code> request took 15.67 s while the process was loading <code>qwen2.5:0.5b</code> onto 2 CPU cores; the next two took 2.5 s and 4.7 s. With n=3 per cell, a single cold start moves the mean by seconds, and the constrained cells look faster partly because they emit fewer completion tokens (17 versus 22). Do not read those means as a comparison of the two paths. A real comparison needs a warmed model, interleaved repetitions, and many more than three samples per cell.</p>
+<h2 id="limitations">Limitations</h2>
+<p>One model (<code>qwen2.5:0.5b</code>), one server version (0.20.3), one host, one prompt wording, one turn, three repetitions per cell. A 0-in-3 result is compatible with a truly zero rate and with a substantial rate, so the claim is &ldquo;no call in 12 constrained requests on this configuration&rdquo;, not &ldquo;this never happens anywhere&rdquo;. The upstream reports show the same shape on <code>qwen3.5:9b</code> and on 0.14.1 and 0.16.1, which is why the behaviour looks server-side rather than model-specific, but no larger model was run here.</p>
+<p>The tool was never executed, so no real temperature exists to compare the invented one against; fabrication is established by the question being unanswerable without the tool, not by diffing against a live reading. The exact invented number is model- and prompt-specific.</p>
+<p>No second prompt wording was run, so the effect is shown not to depend on sampling (identical output across repetitions at <code>temperature: 0</code>) but not shown to be independent of phrasing. No two-turn loop was measured.</p>
+<h2 id="how-to-reproduce-it">How to reproduce it</h2>
+<p>The harness behind the table is a single stdlib-only Python file: one <code>urllib</code> POST per request, an NDJSON append per response, and a wall-clock budget that stops the run and keeps partial rows. It is published with the run record, along with a test that exercises it without a model:</p>
+<table>
+	<thead>
+			<tr>
+					<th>file</th>
+					<th>what it is</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-structured-output-format-vs-json-tool-2026/probe.py">probe.py</a></td>
+					<td>the matrix harness: six configurations, both endpoints, <code>PROBE_MODELS</code> / <code>PROBE_REPS</code> / <code>PROBE_DEADLINE_S</code> from the environment</td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-structured-output-format-vs-json-tool-2026/results.jsonl">results.jsonl</a></td>
+					<td>the 18 rows behind the table, one JSON object per request</td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-structured-output-format-vs-json-tool-2026/summary.json">summary.json</a></td>
+					<td>per-configuration counts and means, derived from those rows</td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-structured-output-format-vs-json-tool-2026/run_meta.json">run_meta.json</a></td>
+					<td>model, repetitions, deadline and the host server version reported at run time</td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-structured-output-format-vs-json-tool-2026/fixture_test.py">fixture_test.py</a></td>
+					<td>stdlib mock server that replays one tool-calling and one constrained reply, then runs the harness against it</td>
+			</tr>
+			<tr>
+					<td><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-structured-output-format-vs-json-tool-2026/fixture_output.txt">fixture_output.txt</a></td>
+					<td>the recorded output of that test: 14 assertions, 0 failed</td>
+			</tr>
+	</tbody>
+</table>
+<pre tabindex="0"><code>PROBE_MODELS=qwen2.5:0.5b PROBE_REPS=3 PROBE_DEADLINE_S=140 \
+  python3 probe.py
+</code></pre><p>Keep the two kinds of check apart, because they establish different things. The fixture test proves the harness mechanics — that the request bodies are shaped as described, that each response becomes one NDJSON row with the recorded fields, that the validator scores a reply against the two-field reference schema, and that the canary below raises when a call is suppressed. It runs against a mock server on <code>127.0.0.1</code> with a fixed replay rule and no model, so it is not evidence about any Ollama build and says nothing about tool-call rates. The table is the live part: 18 requests against Ollama 0.20.3 with <code>qwen2.5:0.5b</code> on 2026-11-10, and only that run is evidence about the server.</p>
+<p>To repeat the live run, point the harness at a server on <code>127.0.0.1:11434</code>, or change one constant for a remote host. A fresh run either reproduces the table or shows that the installed version no longer behaves this way — which is the result worth having either way, since the upstream thread&rsquo;s own version attribution is unresolved.</p>
+<p>If you arrived here from a build guide, the surrounding pieces are in <a href="/posts/local-ai-agents-guide-2026/">the local agents guide</a>, the two-path overview is in <a href="/posts/llm-function-calling-tool-use-guide-2026/">the function-calling guide</a>, the library-level decision this page does not repeat is in <a href="/posts/llm-structured-output-guide-2026/">the structured-output guide</a>, and the endpoint reference is <a href="/posts/ollama-api-local-llm-integration-developer-guide-2026/">the Ollama API integration guide</a>.</p>
+<p>Two neighbouring silent failures are worth telling apart from this one. A tool call can also vanish through conversation-history replay, with a different signature: empty <code>content</code>, no <code>tool_calls</code>, non-zero <code>eval_count</code>, covered in <a href="/posts/ollama-tool-call-history-corruption-2026/">the history-corruption write-up</a>. And a prompt that overflows the context window truncates silently, which produces the same &ldquo;nothing useful came back&rdquo; experience from the input side, covered in <a href="/posts/ollama-silent-context-truncation-2026/">the context-truncation note</a>. Neither is this constraint path; the equivalent defect on a different local server, where the streaming parser corrupts calls, is in <a href="/posts/vllm-streaming-tool-call-parser-corruption-2026/">the vLLM parser write-up</a>.</p>
+<p>The one-line version: a JSON constraint and a registered tool are not two ways to the same end. On a self-hosted Ollama server measured here, the constraint wins silently, the call disappears, and the object that comes back is valid, plausible, and invented.</p>
+]]></content:encoded></item></channel></rss>
