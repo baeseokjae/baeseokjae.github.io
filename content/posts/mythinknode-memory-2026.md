@@ -1,6 +1,7 @@
 ---
-title: "MyThinkNode Memory Review 2026: An ~8,100-Line Local Coding Agent With a Keyword-Navigated Memory Tree"
+title: "MyThinkNode Review: A Keyword-Navigated Agent Memory Tree"
 date: 2026-10-15T15:15:00+00:00
+lastmod: 2026-11-12T13:10:00+00:00
 tags:
   - mythinknode
   - AI coding agent
@@ -13,7 +14,7 @@ draft: false
 schema: schema-mythinknode-memory-2026
 cover:
   image: "/images/mythinknode-memory-2026.png"
-  alt: "MyThinkNode Memory Review 2026: An ~8,100-Line Local Coding Agent With a Keyword-Navigated Memory Tree"
+  alt: "MyThinkNode Review: A Keyword-Navigated Agent Memory Tree"
   relative: false
 ---
 
@@ -28,27 +29,30 @@ Every factual claim here is anchored to the public repository at one recorded co
 The check is a bounded author-side read, not a service measurement, and it can be repeated in about a minute:
 
 ```
-git clone --depth 1 https://github.com/wangztmw/mythinknode.git
+git clone https://github.com/wangztmw/mythinknode.git
+cd mythinknode
+git fetch --depth 1 origin 0095fa7e31ead09f592056ed94c2942d4682bdab
+git checkout FETCH_HEAD
 git rev-parse HEAD                      # 0095fa7e31ead09f592056ed94c2942d4682bdab
 find . -path ./.git -prune -o -name '*.ts' -print | wc -l    # 92
 find . -path ./.git -prune -o -name '*.ts' -print | xargs wc -l | tail -1   # 8147 total
 ```
 
-Line counts include comments and blank lines; there is no `dist/` or `node_modules/` directory in the clone, so the 8,147 figure is the whole tracked source surface, not logical statements. Design statements were read from the files the project itself publishes: the [README](https://raw.githubusercontent.com/wangztmw/mythinknode/main/README.md), the [CHANGELOG](https://raw.githubusercontent.com/wangztmw/mythinknode/main/CHANGELOG.md), [package.json](https://raw.githubusercontent.com/wangztmw/mythinknode/main/package.json), [src/nodemind/reflector.ts](https://raw.githubusercontent.com/wangztmw/mythinknode/main/src/nodemind/reflector.ts), [src/query_loop.ts](https://raw.githubusercontent.com/wangztmw/mythinknode/main/src/query_loop.ts) and [src/session_loop.ts](https://raw.githubusercontent.com/wangztmw/mythinknode/main/src/session_loop.ts), each fetched from the `main` branch whose head is `0095fa7e`. The raw artifacts of this pass stay in the repository's private evidence directory for controller verification; they are not offered to readers as a downloadable dataset, and nothing on this page depends on receiving them.
+Line counts include comments and blank lines; there is no `dist/` or `node_modules/` directory in the clone, so the 8,147 figure is the whole tracked source surface, not logical statements. Design statements were read from the files the project itself publishes: the [README](https://raw.githubusercontent.com/wangztmw/mythinknode/0095fa7e31ead09f592056ed94c2942d4682bdab/README.md), the [CHANGELOG](https://raw.githubusercontent.com/wangztmw/mythinknode/0095fa7e31ead09f592056ed94c2942d4682bdab/CHANGELOG.md), [package.json](https://raw.githubusercontent.com/wangztmw/mythinknode/0095fa7e31ead09f592056ed94c2942d4682bdab/package.json), [src/nodemind/reflector.ts](https://raw.githubusercontent.com/wangztmw/mythinknode/0095fa7e31ead09f592056ed94c2942d4682bdab/src/nodemind/reflector.ts), [src/query_loop.ts](https://raw.githubusercontent.com/wangztmw/mythinknode/0095fa7e31ead09f592056ed94c2942d4682bdab/src/query_loop.ts) and [src/session_loop.ts](https://raw.githubusercontent.com/wangztmw/mythinknode/0095fa7e31ead09f592056ed94c2942d4682bdab/src/session_loop.ts), each read at that pinned commit rather than at a moving branch. The clone recipe above was re-run on 2026-11-12T13:10:18Z on a Linux host and printed the two numbers shown; a plain default clone in the same minute landed on `7b2e4341` instead, where the same two commands return 113 and 10,329, so the pin is not decoration — the counts are revision-specific. The raw artifacts of this pass stay in the repository's private evidence directory for controller verification; they are not offered to readers as a downloadable dataset, and nothing on this page depends on receiving them.
 
 No run, benchmark or recall test was performed for this article. Where the author makes a performance claim, it is labelled as the author's claim. The README and CHANGELOG are written in Chinese; the quoted lines below are translations, not the author's exact English wording.
 
 ## What MyThinkNode is, verified at v1.0.0
 
-The repository metadata read from the [GitHub repository API](https://api.github.com/repos/wangztmw/mythinknode) on 2026-10-15 gives: created 2026-08-13T23:12:36Z, last push 2026-08-27T01:30:58Z, default branch `main`, MIT license, TypeScript, 2 stars, 0 forks, 0 open issues, and the project description "Minimal AI coding agent with cross-session memory — a navigable knowledge tree (NodeMind) that remembers past pitfalls". [package.json](https://raw.githubusercontent.com/wangztmw/mythinknode/main/package.json) declares the package as `@wangzt_mw/mythinknode` version `1.0.0`, whose 1.0.0 entry in the [CHANGELOG](https://raw.githubusercontent.com/wangztmw/mythinknode/main/CHANGELOG.md) is dated 2026-08-26.
+The repository metadata read from the [GitHub repository API](https://api.github.com/repos/wangztmw/mythinknode) on 2026-11-12T13:03:46Z gives: created 2026-08-13T23:12:36Z, last push 2026-11-06T08:02:10Z, default branch `main`, MIT license, TypeScript, 2 stars, 0 forks, 0 open issues, and the project description "Minimal AI coding agent with cross-session memory — a navigable knowledge tree (NodeMind) that remembers past pitfalls". [package.json](https://raw.githubusercontent.com/wangztmw/mythinknode/0095fa7e31ead09f592056ed94c2942d4682bdab/package.json) declares the package as `@wangzt_mw/mythinknode` version `1.0.0`, whose 1.0.0 entry in the [CHANGELOG](https://raw.githubusercontent.com/wangztmw/mythinknode/0095fa7e31ead09f592056ed94c2942d4682bdab/CHANGELOG.md) is dated 2026-08-26.
 
-The repository was last pushed 49 days before this review read it, so the verified state is genuinely the current state, not a stale branch: the head commit returned by the API is the same `0095fa7e` revision fetched and cloned here.
+Two dates matter here and they are not the same date. The metadata row above is a point-in-time read taken 2026-11-12T13:03:46Z, and the last push recorded at that moment was `2026-11-06T08:02:10Z` — six days earlier. `main` had also moved past the reviewed revision: the [compare view](https://api.github.com/repos/wangztmw/mythinknode/compare/0095fa7e31ead09f592056ed94c2942d4682bdab...main) returned six commits ahead and no commits behind, and the [head of main](https://api.github.com/repos/wangztmw/mythinknode/commits/main) was `7b2e4341`, tagged in the CHANGELOG as 1.1.1 on 2026-11-06. So what this page describes is the v1.0.0 tree at a fixed commit, not the tip of the project: the 1.1.x line adds an Ink terminal UI, a Vision image-analysis tool and a NodeMindTool that compiles tree nodes into callable tools, and none of that was opened for this review. The file counts follow the same split — 92 `.ts` files and 8,147 lines at `0095fa7e`, 113 files and 10,329 lines at `7b2e4341`, both measured on 2026-11-12 with the commands above. The pinned numbers are the ones this page defends, and a reader who clones the default branch should expect the larger pair.
 
 Scope correction, recorded explicitly: earlier notes on this project described roughly 4,300 lines of TypeScript, 13 tools and a single memory design (NodeMind). That was the 2026-08-14 snapshot of the same work in progress. At v1.0.0 the verified figures are ~8,100 lines, 16 tools, and three separate memory subsystems. The reader problem is unchanged; the numbers and the subsystem list are not, and the old figures should not be repeated.
 
 ## The core thesis: session_loop × query_loop
 
-The README states the project's skeleton in one line: `session_loop × query_loop (LLM × tool)`, then explains it — the `session_loop` owns one session's full pipeline (pre-retrieval → execution → reflection → compression) while the `query_loop` owns a single LLM ↔ tool round, and multiplying the two is the entire agent skeleton (translation of the README). [src/query_loop.ts](https://raw.githubusercontent.com/wangztmw/mythinknode/main/src/query_loop.ts) carries that shape in code as a `LoopResult` interface with the terminal states `success`, `blocked`, `killed`, `crashed` and `max_rounds`, plus token counters.
+The README states the project's skeleton in one line: `session_loop × query_loop (LLM × tool)`, then explains it — the `session_loop` owns one session's full pipeline (pre-retrieval → execution → reflection → compression) while the `query_loop` owns a single LLM ↔ tool round, and multiplying the two is the entire agent skeleton (translation of the README). [src/query_loop.ts](https://raw.githubusercontent.com/wangztmw/mythinknode/0095fa7e31ead09f592056ed94c2942d4682bdab/src/query_loop.ts) carries that shape in code as a `LoopResult` interface with the terminal states `success`, `blocked`, `killed`, `crashed` and `max_rounds`, plus token counters.
 
 The thesis matters for memory because it fixes where memory belongs. If an agent is two loops, memory is not a subsystem bolted beside them — it is a resource the loops consult, and MyThinkNode makes that consultation explicit and model-driven. The practical consequence is that a memory read costs a decision and a tool call rather than an injection, which is the trade this review keeps returning to.
 
@@ -82,7 +86,7 @@ The one quantitative claim in that section is the author's: single-layer search 
 
 A knowledge base that any component may write to eventually rots, and MyThinkNode's answer is a single writer: the Reflector is the tree's only write entry point. Mid-session the agent only queues tags; after the session the Reflector analyses the full tool logs and decides, per tag, whether to create, update or skip a node.
 
-[src/nodemind/reflector.ts](https://raw.githubusercontent.com/wangztmw/mythinknode/main/src/nodemind/reflector.ts) shows the write path itself: the node object is assembled with `createdAt` preserved from any existing node, `updatedAt` refreshed, and attributes merged rather than replaced (`this._mergeAttrs(existing.attrs, attrs)`) before `this.store.upsertNode(node, parentId)` — wrapped in a `try/catch` that logs `[NodeMind] Reflector upsertNode failed:` instead of aborting the session.
+[src/nodemind/reflector.ts](https://raw.githubusercontent.com/wangztmw/mythinknode/0095fa7e31ead09f592056ed94c2942d4682bdab/src/nodemind/reflector.ts) shows the write path itself: the node object is assembled with `createdAt` preserved from any existing node, `updatedAt` refreshed, and attributes merged rather than replaced (`this._mergeAttrs(existing.attrs, attrs)`) before `this.store.upsertNode(node, parentId)` — wrapped in a `try/catch` that logs `[NodeMind] Reflector upsertNode failed:` instead of aborting the session.
 
 The architectural benefit is that no write happens mid-session, so a bad mid-session write cannot restructure the tree while the agent is still navigating it; all mutations are batched and applied by one component that has seen the whole session. The honest limit: single-writer is design intent read from documentation and code. No concurrency fault injection, corruption stress test or test-suite run was performed for this review, so "the tree stays clean" is a structural argument, not a measured reliability result.
 
@@ -102,7 +106,7 @@ That compression of a debugging session into three fields is portable to any age
 
 ## Delta context compression: only persist what the model cannot derive
 
-Each session ends with `MessageProcessor` compressing the round's messages into a five-part summary — `GOAL → TIMELINE → FINDINGS → FILES → NUMBERS` — with the raw transcript written to `raws/S{n}.json` and the condensed version appended to context. [src/session_loop.ts](https://raw.githubusercontent.com/wangztmw/mythinknode/main/src/session_loop.ts) is the pipeline file named in the README's tree listing.
+Each session ends with `MessageProcessor` compressing the round's messages into a five-part summary — `GOAL → TIMELINE → FINDINGS → FILES → NUMBERS` — with the raw transcript written to `raws/S{n}.json` and the condensed version appended to context. [src/session_loop.ts](https://raw.githubusercontent.com/wangztmw/mythinknode/0095fa7e31ead09f592056ed94c2942d4682bdab/src/session_loop.ts) is the pipeline file named in the README's tree listing.
 
 The principle is delta compression: persist only what the model cannot reconstruct for itself from the codebase or from other stored notes. Filtering happens at write time rather than read time, which keeps the footprint small and future reads cheap, at the cost of lossy judgement — if the model misjudges what is derivable, the fact is simply gone. No before/after recall comparison was run here, so the accuracy of that judgement is untested on this page.
 
@@ -120,13 +124,13 @@ These parameters were read from the project's documentation and file listing, no
 
 ## How MyThinkNode compares to ClawMem, Graphiti, MemoryBank and the MCP memory pattern
 
-The memory tooling field has three common shapes, and MyThinkNode is a fourth. The rows below were read from each project's [repository API](https://api.github.com/repos/wangztmw/mythinknode) on 2026-10-15; star and fork counts move daily and indicate attention, not quality.
+The memory tooling field has three common shapes, and MyThinkNode is a fourth. Every row below was read from that project's own [repository API](https://api.github.com/repos/wangztmw/mythinknode) on 2026-11-12, between 13:03:46Z and 13:10:51Z according to each response's `Date` header; star and fork counts move daily and indicate attention, not quality. Two rows — ClawMem and Graphiti — have gained stars since the figures first recorded for this page in October, which is the drift you should expect from any such table.
 
 | Project | Language | Stars | Forks | Memory approach | Write model |
 |---------|----------|-------|-------|-----------------|-------------|
 | MyThinkNode | TypeScript (MIT) | 2 | 0 | Filesystem keyword tree + knowledge DAG + session trace graph | Single-writer Reflector, after the session |
-| [ClawMem](https://api.github.com/repos/yoloshii/ClawMem) | TypeScript (MIT) | 210 | 38 | On-device hybrid RAG: SQLite + vectors + llama.cpp | Hooks + MCP |
-| [Graphiti](https://api.github.com/repos/getzep/graphiti) | Python (Apache-2.0) | 31,785 | 3,270 | Real-time temporal knowledge graph | LLM-built graph |
+| [ClawMem](https://api.github.com/repos/yoloshii/ClawMem) | TypeScript (MIT) | 212 | 42 | On-device hybrid RAG: SQLite + vectors + llama.cpp | Hooks + MCP |
+| [Graphiti](https://api.github.com/repos/getzep/graphiti) | Python (Apache-2.0) | 32,770 | 3,366 | Real-time temporal knowledge graph | LLM-built graph |
 | [MemoryBank](https://api.github.com/repos/feelingsonice/MemoryBank) | Rust (MIT) | 36 | 3 | Agentic memory using knowledge graphs | Graph store |
 | [wire-memory](https://api.github.com/repos/usewire/wire-memory) | JavaScript (MIT) | 10 | 3 | Persistent memory plugin capturing decisions and corrections | Claude Code plugin |
 | [hive-memory](https://api.github.com/repos/moonx010/hive-memory) | TypeScript (MIT) | 8 | 2 | Cross-project memory as an MCP server | MCP server |
@@ -143,14 +147,14 @@ First, retrieval quality becomes curation quality. Since search returns one laye
 
 Second, growth is unbounded in a way a vector index is not. Node ids, paths and keyword sets are the index, so every new node changes the navigation surface a model has to reason over, and nothing in the published files describes pruning, deduplication of near-identical nodes, or a capacity limit.
 
-Third, the write path is a single component with no test coverage visible in the tree. [src/nodemind/reflector.ts](https://raw.githubusercontent.com/wangztmw/mythinknode/main/src/nodemind/reflector.ts) already carries a fix for a malformed-title case from 1.0.0, which is evidence that node creation fails on real inputs; the failure is tolerated rather than prevented.
+Third, the write path is a single component with no test coverage visible in the tree. [src/nodemind/reflector.ts](https://raw.githubusercontent.com/wangztmw/mythinknode/0095fa7e31ead09f592056ed94c2942d4682bdab/src/nodemind/reflector.ts) already carries a fix for a malformed-title case from 1.0.0, which is evidence that node creation fails on real inputs; the failure is tolerated rather than prevented.
 
-Fourth, the project itself is young and tiny: 2 stars, 0 forks, one author, a last push 49 days before this review, Chinese-only documentation, and three memory subsystems arriving in a single 1.0.0 release. Tool count rose from 13 to 16 in that release, which is the opposite of the "minimal" framing in the README.
+Fourth, the project itself is young and tiny: 2 stars, 0 forks, one author, a last push six days before the metadata read above, Chinese-only documentation, and three memory subsystems arriving in a single 1.0.0 release. Tool count rose from 13 to 16 in that release, which is the opposite of the "minimal" framing in the README.
 
 ## Verdict: is a keyword-navigated tree worth building yourself?
 
 Yes as a primitive, not yet as a dependency. If your constraint is "no vector database and no hosted memory service", MyThinkNode is a working demonstration that a filesystem tree plus one disciplined writer carries cross-session experience, and the parts worth copying are the ones that do not require the project: a single writer that sees the whole session before persisting, failure routes stored as Symptom → Root Cause → Fix, write-time delta compression, and keywords as the navigation surface instead of embeddings.
 
-Adopt it as a library and the risks are the ordinary early-stage ones. There is no test suite, no community, one author, and a documented node-creation failure mode already patched once. Every performance claim in the documentation is unattributed to a method, and a bounded search for third-party evaluation of this specific project returned only general agent-memory benchmark literature — no benchmark, review or academic evaluation of MyThinkNode itself.
+Adopt it as a library and the risks are the ordinary early-stage ones. There is no test suite, no community, one author, and a documented node-creation failure mode already patched once. Every performance claim in the documentation is unattributed to a method, and a bounded author search on 2026-10-15 for third-party evaluation of this specific project — a handful of queries, not an exhaustive crawl — returned only general agent-memory benchmark literature, with no benchmark, review or academic evaluation of MyThinkNode itself. That is an absence of finding, not proof of absence.
 
 The design question to answer honestly before choosing either primitive: does your agent need to recall *where* something is, or does it need the *content* now? A tree wins when memory is curated, structured and small, and when you want the model to stay in control of its context. A vector or graph store wins when the corpus is large, unstructured, or time-dependent — which is exactly the ground Graphiti's temporal graph and ClawMem's hybrid retrieval occupy. MyThinkNode is a well-argued case that vectorised answers are not the only primitive; it is not yet evidence that the tree wins at scale.
