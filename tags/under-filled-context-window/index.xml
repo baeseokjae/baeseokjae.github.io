@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Under-Filled Context Window on RockB</title><link>https://baeseokjae.github.io/tags/under-filled-context-window/</link><description>Recent content in Under-Filled Context Window on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sat, 14 Nov 2026 19:12:40 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/under-filled-context-window/index.xml" rel="self" type="application/rss+xml"/><item><title>Scoped Agent Memory: Why a Post-Filtered Top-k Returns One or Two Rows and Ships the Rest to the Model (2026)</title><link>https://baeseokjae.github.io/posts/agent-memory-scoped-retrieval-probe-2026/</link><pubDate>Sat, 14 Nov 2026 19:12:40 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-memory-scoped-retrieval-probe-2026/</guid><description>A 12-tenant, 168-query probe of the search-then-filter pattern: the caller received 1.80 of the 5 requested rows on average while 3.20 of the unfiltered top-5 belonged to other tenants. Includes an adapter-agnostic probe, the exact fixture, and the CI assertions that keep the filter before ranking.</description><content:encoded><![CDATA[<p>A team keeps every user&rsquo;s or tenant&rsquo;s memories in one vector collection and enforces isolation in application code. The search returns the nearest neighbours, then a list comprehension keeps the rows that belong to the caller:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span>rows <span style="color:#f92672">=</span> store<span style="color:#f92672">.</span>search(query, k<span style="color:#f92672">=</span><span style="color:#ae81ff">5</span>)
+</span></span><span style="display:flex;"><span>rows <span style="color:#f92672">=</span> [r <span style="color:#66d9ef">for</span> r <span style="color:#f92672">in</span> rows <span style="color:#66d9ef">if</span> r[<span style="color:#e6db74">&#34;tenant_id&#34;</span>] <span style="color:#f92672">==</span> caller]
+</span></span></code></pre></div><p>That reads as correct. It is also the pattern this page measures, and on a synthetic 12-tenant store it produced two failures that raise nothing and log nothing. The caller received 1.80 of the 5 rows requested, on average, across 168 queries - minimum 1, and 98.2% of queries came back short. In the same fixture, 3.20 of the 5 rows in the unfiltered top-5 belonged to other tenants, which means any code path that assembles the prompt before filtering, or simply loses the filter in a refactor, hands other customers&rsquo; facts to the model.</p>
+<p>The probe, the fixture, the vectors and the per-query result rows behind every number below are downloadable, and the section on running it against your own store needs no labelled data.</p>
+<h2 id="the-two-line-pattern-that-looks-correct">The two-line pattern that looks correct</h2>
+<p>The arithmetic is the whole story. A top-k search returns at most k rows. If j of those rows belong to other tenants, a post-filter can only return k minus j, and it cannot return anything else - the ranker has already discarded every row below position k, including the caller&rsquo;s own rows. Nothing about the store is broken in this scenario; the store answered the question it was asked. The bug is that the question was global and the answer was treated as scoped.</p>
+<p>Two call paths make it worse. The first is prompt assembly: some code fetches context, formats it, and filters later, or filters only for display. The second is a second call site - a summariser, a tool wrapper, a background consolidation job - that was written from an older snippet without the filter. Both are invisible to a test that asserts the store returns k rows, because the store does.</p>
+<p>At a coarse level the ceiling generalises to any store, embedder or index: post-filtering a top-k can never return more than the k rows that were ranked. How far below k it falls depends on how many foreign rows rank above the caller&rsquo;s rows, which is what the rest of this page measures.</p>
+<h2 id="what-12-tenants-actually-return">What 12 tenants actually return</h2>
+<p>The harness scores exact cosine over every document - no ANN index, so approximation error cannot be mistaken for the effect - and compares three strategies on the same vectors: <code>post_filter</code> (global top-k, then filter in application code), <code>scoped</code> (restrict the candidate set to the caller, then rank), and <code>leak</code> (hand the raw global top-k to the prompt with no filter).</p>
+<p>The fixture is 30 synthetic tenants with 10 fact types each (database host, token lifetime, service owner, queue retry budget, region, cluster version, on-call day, log retention, API rate limit, cache bucket). Every row follows the same <code>&quot;&lt;fact&gt; for &lt;tenant&gt;: &lt;value&gt;&quot;</code> template - the confusable-pair condition - and every row carries the tenant slug, which is generous to the post-filter: a lexical matcher can find the caller&rsquo;s rows at all. Queries are 10 single-gold and 4 multi-fact per tenant (14 per tenant: 168 at 12 tenants, 420 at 30), while the store holds 10 fact rows per tenant. Each sweep truncates the store to n tenants and scores the same embedder output (all-minilm, 384 dimensions).</p>
+<p>At k=5, mixed query set (single-gold plus multi-fact), post-filter versus scoped:</p>
+<table>
+	<thead>
+			<tr>
+					<th>tenants</th>
+					<th>queries</th>
+					<th>post-filter rows (mean)</th>
+					<th>queries short of k=5</th>
+					<th>foreign rows in raw top-5</th>
+					<th>scoped rows (mean)</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>2</td>
+					<td>28</td>
+					<td>3.93</td>
+					<td>96.4%</td>
+					<td>1.07</td>
+					<td>5.0</td>
+			</tr>
+			<tr>
+					<td>5</td>
+					<td>70</td>
+					<td>1.84</td>
+					<td>100%</td>
+					<td>3.16</td>
+					<td>5.0</td>
+			</tr>
+			<tr>
+					<td>12</td>
+					<td>168</td>
+					<td>1.80</td>
+					<td>98.2%</td>
+					<td>3.20</td>
+					<td>5.0</td>
+			</tr>
+			<tr>
+					<td>30</td>
+					<td>420</td>
+					<td>1.84</td>
+					<td>97.4%</td>
+					<td>3.16</td>
+					<td>5.0</td>
+			</tr>
+	</tbody>
+</table>
+<p>Two things in that table matter more than the exact digits. The under-fill is not a small-store problem: it is already near its floor at five tenants and stays there at thirty, because what drives it is how many foreign rows sit above the caller&rsquo;s rows in a global ranking, not how many documents exist. And the leak surface saturates at roughly a dozen tenants - by then the raw top-5 is about two-thirds other tenants&rsquo; rows, so the marginal risk of adding tenants is small compared with the risk of having any shared collection at all.</p>
+<p>Raising k does not fix it. At 12 tenants on the same query set, post-filtering returned 1.55 of 3 rows at k=3, 1.80 of 5 at k=5, and 2.23 of 10 at k=10, with 100% of queries short at k=10 and 7.77 of the 10 unfiltered rows belonging to other tenants. A larger k costs latency and prompt budget and returns a fraction of what was asked for.</p>
+<p>Three means in this family circulate and they are not interchangeable. 1.80 of 5 is the 12-tenant store over the 168-query mixed set. 1.57 is the same store and same k restricted to the 120 single-gold queries. 1.38 is those same 120 single-gold queries scored against the full 300-document, 30-tenant store, where more foreign rows compete for the five slots. The last is the reader-facing probe&rsquo;s selftest population, not the sweep result. An independent exact-cosine rescoring from the committed vectors reproduced the file&rsquo;s per-query counts on 120 of 120 single-gold rows at 12 tenants and k=5, and reproduced all three means.</p>
+<h2 id="why-the-model-never-sees-the-missing-row">Why the model never sees the missing row</h2>
+<p>Under-fill has no failure signal. The call returns a list, the list is shorter than requested, and every downstream consumer treats &ldquo;three memories&rdquo; as the context that exists. An agent asked to assemble five relevant memories from a store holding the fact answers that it does not have it, and the stored fact never appears in the trace. The retrieval layer reports success because it was never asked whether the result was complete.</p>
+<p>The recall cost is real on the population where it can be measured, but it is not a general gold loss. On single-gold queries at 12 tenants and k=5 (120 queries), the gold row survived in context 100% of the time under both post-filtering and scoped retrieval - no measured gold loss, because the single gold row did rank inside the global top-5 even when the returned set averaged 1.57 rows. On multi-fact queries (48 at 12 tenants) the gap opens to 87.5% versus 100%, a loss of one query in eight, because two gold rows now compete for the few slots that survive the filter. That is worth fixing, but it is not a collapse, and a page that described post-filtering as making retrieval fail outright would be overstating what the fixture shows.</p>
+<p>The leak side is the sharper problem. The <code>leak</code> strategy - the raw top-k, no filter - has the same gold-in-context rates (100% on single-gold queries, 87.5% on multi-fact queries, 96.4% over the mixed 168-query set) because filtering never helped the gold row&rsquo;s rank; what changes is that up to 3.20 of those 5 rows are another tenant&rsquo;s facts, with the caller&rsquo;s tenant slug and values in the same prompt window. In the reader-facing probe&rsquo;s selftest over the 300-document store, the raw top-5 averaged 3.62 foreign rows, 72.3% of the returned set.</p>
+<h2 id="where-the-filter-has-to-sit">Where the filter has to sit</h2>
+<p>The filter belongs before ranking, in one of two forms: restrict the candidate set to the caller and rank inside it, or pass the tenant predicate into the store&rsquo;s query so the engine restricts what it ranks. Both make the caller&rsquo;s own rows eligible for every slot. A list comprehension after top-k does neither.</p>
+<p>Database documentation describes the same arithmetic at the engine level, and it is worth reading carefully because the mechanism differs from application code. pgvector&rsquo;s README states that with approximate indexes filtering is applied <em>after</em> the index is scanned, and gives the consequence: if a condition matches 10% of rows, with HNSW and the default <code>hnsw.ef_search</code> of 40, only about 4 rows will match on average. The same README documents iterative index scans, which scan more of the index when needed, and the CHANGELOG lists &ldquo;Added support for iterative index scans&rdquo; under 0.8.0 (2024-10-30). Read at those pinned pages, that is a database filtering after its own ANN scan - the same shape of failure as filtering after top-k, not evidence about how any other engine behaves, and not applicable to exact sequential scans.</p>
+<p>The two other patterns in this article are documented as query-time filters rather than measured fill behaviour. Chroma&rsquo;s metadata filtering page describes <code>where</code> in <code>get</code> and <code>query</code> as filtering records by their metadata, with a query for <code>page = 10</code> touching only records whose <code>page</code> field is 10. Qdrant&rsquo;s multitenancy guide describes keeping tenants in one collection by adding a tenant payload field with a keyword payload index and <code>is_tenant: true</code>, then filtering by that field so each tenant only sees its own data. Both establish where the filter travels; neither page states what happens to the number of results when the filter is selective, and this article claims no fill or performance behaviour for either product.</p>
+<h2 id="five-minutes-run-the-probe-on-your-store">Five minutes: run the probe on your store</h2>
+<p>The downloadable <code>isolation_probe.py</code> takes a three-method adapter - <code>search(query, k)</code> returning rows with a <code>tenant</code> field, <code>search_scoped(query, tenant, k)</code>, and an optional <code>write(tenant, text)</code> for canaries - and prints PASS/FAIL per assertion. It needs no labelled data: under-fill is measured by asking for k rows and counting what comes back, and the leak surface is measured by planting two canary facts per tenant and counting foreign rows in a raw top-k.</p>
+<p>The assertions are deliberately split between the store and the application:</p>
+<ul>
+<li>A1 fill: <code>len(search(q, k)) == k</code> for every query and k.</li>
+<li>A1b post-filter fill: <code>len([r for r in search(q, k) if r.tenant == caller]) == k</code> - this is the one that fails when the application filters after top-k even though the store is correct.</li>
+<li>A2 scope: every row of <code>search_scoped(q, tenant, k)</code> has that tenant.</li>
+<li>A3 agreement: the post-filtered ids are a subset of the scoped ids for the same query.</li>
+<li>A4 no gold loss: when gold ids are supplied, they survive in the scoped results.</li>
+</ul>
+<p>Exercised against the committed reference adapter over the full 300-document fixture and 120 single-gold queries at 12 tenants, A1, A2, A3 and A4 passed on all 120 queries while A1b failed on 119 of 120 at k=5. That is the point of the split: an integration test that asserts store-level fill stays green while the assembled context is short by four rows on almost every request.</p>
+<h2 id="the-assertions-that-keep-it-fixed">The assertions that keep it fixed</h2>
+<p>The probe is a one-off check; the regression guard is the assertion, in CI, on the assembled context rather than on the store:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span>rows <span style="color:#f92672">=</span> retrieve_context(query, tenant, k<span style="color:#f92672">=</span><span style="color:#ae81ff">5</span>)
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">assert</span> len(rows) <span style="color:#f92672">==</span> <span style="color:#ae81ff">5</span>, <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;under-filled: </span><span style="color:#e6db74">{</span>len(rows)<span style="color:#e6db74">}</span><span style="color:#e6db74"> of 5&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">assert</span> {r[<span style="color:#e6db74">&#34;tenant_id&#34;</span>] <span style="color:#66d9ef">for</span> r <span style="color:#f92672">in</span> rows} <span style="color:#f92672">==</span> {tenant}, <span style="color:#e6db74">&#34;foreign row in context&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">assert</span> {r[<span style="color:#e6db74">&#34;id&#34;</span>] <span style="color:#66d9ef">for</span> r <span style="color:#f92672">in</span> rows} <span style="color:#f92672">==</span> {r[<span style="color:#e6db74">&#34;id&#34;</span>] <span style="color:#66d9ef">for</span> r <span style="color:#f92672">in</span> store<span style="color:#f92672">.</span>search_scoped(query, tenant, <span style="color:#ae81ff">5</span>)}
+</span></span></code></pre></div><p>Each line catches a different regression. The length assertion fails the moment the filter moves after the ranking, or when the store&rsquo;s own ANN scan under-returns on a selective predicate. The set assertion fails when a call site loses the filter entirely. The equality assertion fails when scoped and post-filtered retrieval disagree, which is exactly the state a partial refactor produces - and it also catches a scoped call that silently ignores the tenant argument. Run them on a fixture with at least a dozen tenants and several facts per tenant; with two tenants the under-fill is mild enough (3.93 of 5 here) that a regression can pass unnoticed.</p>
+<h2 id="what-this-does-not-show">What this does not show</h2>
+<p>The fixture is synthetic, with equal per-tenant document counts and one shared row template. Real stores have unequal per-tenant counts, near-duplicate rows across tenants and mixed languages, all of which move both the fill distribution and the foreign share. One embedder was used (all-minilm, 384 dimensions); a model that separates tenants more sharply shrinks the leak surface and raises the returned count, while the ceiling - at most k rows survive a post-filter of a top-k - is model-independent. Scoring was exact cosine over the full set with no ANN index, so the index&rsquo;s own under-return is not included here and the two effects are not simply additive. There was no generation step, so this page can speak to what reaches the context window and not to answer quality; no answer-accuracy or task-success improvement is claimed.</p>
+<p>No claim is made about how common cross-tenant leakage is, or that any named product does this by default. The measured claim concerns the application-level pattern implemented in the harness: query globally, filter afterwards. Vendor statements are limited to the four pages opened for this article, each scoped to what that page says. The demand behind this page is an editorial experiment, not search-data evidence - no search volume, keyword difficulty, traffic or ranking improvement is claimed.</p>
+<p>Everything needed to reproduce the numbers is published as first-party material under <code>research/evidence/agent-memory-scoped-retrieval-probe-2026/</code> in the site repository: the fixture, the committed embeddings, the harness, the reader probe, the per-query results, the per-configuration summary, the independent rescoring output, the environment record and the method. The fetched pgvector and Chroma pages and the extracted Qdrant page text were kept locally for verification and are not republished; the links above point at the originals.</p>
+<h2 id="sources-and-downloads">Sources and downloads</h2>
+<p>Primary pages read for this article (HTTP 200 on 2026-11-14, excerpts saved):</p>
+<ul>
+<li>pgvector README, sections on filtering and iterative index scans: <a href="https://raw.githubusercontent.com/pgvector/pgvector/master/README.md">https://raw.githubusercontent.com/pgvector/pgvector/master/README.md</a></li>
+<li>pgvector CHANGELOG, 0.8.0 release section: <a href="https://raw.githubusercontent.com/pgvector/pgvector/master/CHANGELOG.md">https://raw.githubusercontent.com/pgvector/pgvector/master/CHANGELOG.md</a></li>
+<li>Chroma documentation, metadata filtering: <a href="https://docs.trychroma.com/docs/querying-collections/metadata-filtering.md">https://docs.trychroma.com/docs/querying-collections/metadata-filtering.md</a></li>
+<li>Qdrant documentation, multitenancy - partition by payload: <a href="https://qdrant.tech/documentation/guides/multiple-partitions/">https://qdrant.tech/documentation/guides/multiple-partitions/</a></li>
+</ul>
+<p>First-party files (synthetic data, no credentials, no customer data):</p>
+<ul>
+<li>Probe: <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-scoped-retrieval-probe-2026/isolation_probe.py">isolation_probe.py</a></li>
+<li>Harness: <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-scoped-retrieval-probe-2026/harness.py">harness.py</a></li>
+<li>Fixture: <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-scoped-retrieval-probe-2026/fixture.jsonl">fixture.jsonl</a></li>
+<li>Committed vectors (6.1 MB): <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-scoped-retrieval-probe-2026/vectors.json">vectors.json</a></li>
+<li>Per-query results: <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-scoped-retrieval-probe-2026/results.jsonl">results.jsonl</a></li>
+<li>Per-configuration aggregates: <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-scoped-retrieval-probe-2026/summary.json">summary.json</a></li>
+<li>Independent rescoring: <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-scoped-retrieval-probe-2026/recheck.json">recheck.json</a></li>
+<li>Probe selftest output: <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-scoped-retrieval-probe-2026/probe_selftest.txt">probe_selftest.txt</a></li>
+<li>Environment record: <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-scoped-retrieval-probe-2026/env.json">env.json</a></li>
+<li>Method and commands: <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-scoped-retrieval-probe-2026/method.md">method.md</a></li>
+</ul>
+<p>Related pages on this site: the delete-path companion is <a href="https://baeseokjae.github.io/posts/agent-memory-delete-semantics-test-2026/">Delete Returns 200</a>, which shows that scope enforcement in <code>delete()</code> is the caller&rsquo;s responsibility in the same way; <a href="https://baeseokjae.github.io/posts/agent-memory-write-path-reliability-2026/">the write-path reliability review</a> treats scope as an input argument to every protocol method, which is the assumption this probe tests; <a href="https://baeseokjae.github.io/posts/mem0-agent-memory-guide-2026/">the agent-memory scoping guide</a> covers user, session and agent scope choice rather than filter placement; <a href="https://baeseokjae.github.io/posts/agent-memory-embedding-swap-recall-2026/">the embedding-swap recall test</a> is the other silent retrieval failure, caused by a changed encoder instead of a filter position; and <a href="https://baeseokjae.github.io/posts/agent-memory-architecture-guide-2026/">the architecture guide</a> covers where the store sits in the stack.</p>
+]]></content:encoded></item></channel></rss>
