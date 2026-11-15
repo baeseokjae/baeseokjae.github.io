@@ -1,20 +1,28 @@
 ---
-title: "Ollama's Silent Context Truncation: What num_ctx Overflow Actually Drops"
-date: 2026-10-31T15:28:00+00:00
+title: 'Ollama Context Truncation: What num_ctx Overflow Drops'
+date: 2026-10-31 15:28:00+00:00
 tags:
-  - "ollama silent truncation"
-  - "ollama num_ctx overflow"
-  - "prompt_eval_count misleading"
-  - "ollama context window truncation"
-  - "local llm agent history dropped"
-  - "ollama api chat truncation"
-  - "ollama prompt truncated no error"
-  - "llm context overflow silent"
-  - "ollama agent tool calling breaks"
-  - "ollama generate head tail tokens"
-description: "When a rendered conversation exceeds num_ctx, Ollama 0.20.3 drops whole messages from the front of /api/chat history and answers without an error, while prompt_eval_count reports only what was evaluated. Source reading plus a five-request probe."
+- ollama silent truncation
+- ollama num_ctx overflow
+- prompt_eval_count misleading
+- ollama context window truncation
+- local llm agent history dropped
+- ollama api chat truncation
+- ollama prompt truncated no error
+- llm context overflow silent
+- ollama agent tool calling breaks
+- ollama generate head tail tokens
+description: When a rendered conversation exceeds num_ctx, Ollama 0.20.3 drops whole messages from the front of /api/chat history and answers without an error, while prompt_eval_count reports only what was evaluated. Source reading plus a five-request probe.
 draft: false
-schema: "schema-ollama-silent-context-truncation-2026"
+schema: schema-ollama-silent-context-truncation-2026
+cover:
+  image: /images/ollama-silent-context-truncation-2026.png
+  alt: 'Conceptual summary of the article’s Ollama 0.20.3 chat path: a context clamp can remove older messages while retaining system messages and a recent tail; the evaluated count describes the shortened prompt.'
+  caption: Ollama 0.20.3 /api/chat path · /api/generate differs
+  relative: false
+  hidden: false
+images:
+- /images/ollama-silent-context-truncation-2026.png
 ---
 
 An agent on a local Ollama server stops acting on its own conversation mid-session: a tool result it received ten turns ago is treated as never having existed, and nothing in the API response says why. The usual suspects are the model, the sampler and the prompt wording. In Ollama 0.20.3 the likelier cause is the server. When the rendered conversation does not fit `num_ctx`, `/api/chat` removes whole messages from the front of the history, keeps the tail, and answers with a normal 200 response. `prompt_eval_count` then reports the size of the shortened prompt, not the size of the prompt you sent, so a dashboard built on that number shows a healthy, small request.
