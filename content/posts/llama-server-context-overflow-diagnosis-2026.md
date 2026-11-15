@@ -11,7 +11,15 @@ tags:
 - local-llm
 - ai-agents
 - debugging
-title: 'llama-server Context Overflow: Reading the "exceeds the available context size" Error and Finding Which Part of Your Agent''s Prompt Caused It (2026)'
+title: 'llama-server Context Overflow: Diagnose Prompt Limit Failures'
+cover:
+  image: /images/llama-server-context-overflow-diagnosis-2026.png
+  alt: 'Four diagnostic branches from the article: request rejection, a length stop, context shifting, and slow repeated prefill without an overflow. The figure summarizes source analysis, not new measurements.'
+  caption: Source and upstream-report analysis · not four new runtime measurements
+  relative: false
+  hidden: false
+images:
+- /images/llama-server-context-overflow-diagnosis-2026.png
 ---
 
 An agent that has been working against a self-hosted llama.cpp server for twenty or forty turns eventually stops working, and the symptom is almost never specific enough to act on: a half-written answer, an empty completion, a tool call that never arrives, or a request that never gets a reply at all. The tempting response is to raise `-c`, which is exactly the fix that KV memory may not allow, and which does nothing for the two of the four failure modes below that are not really about running out of room.
