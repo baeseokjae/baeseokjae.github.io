@@ -1,9 +1,17 @@
 ---
-title: "Your Embedding Server Stops at 2,048 Tokens: Measuring the Local Embedding Context Ceiling That Silently Empties Agent Memory (2026)"
+title: "Ollama Embeddings: Diagnose Silent Context Truncation"
 date: 2026-11-01T00:16:00+00:00
-lastmod: 2026-11-01T00:16:00+00:00
+lastmod: 2026-11-15T14:13:55+00:00
 description: "Ollama 0.20.3 served an embedding model whose Modelfile asked for 8,192 tokens and allocated 2,048. Here is how to measure the real ceiling, prove which chunks were clipped, and size a chunker against the number the server actually uses."
 draft: false
+cover:
+  image: /images/local-embedding-context-ceiling-2026.png
+  alt: "Comparison from the article's local test: model parameters requested 8,192 tokens, while the loaded runner and long-input evaluation used 2,048. This is not a universal model limit."
+  caption: "One CPU-only host · Ollama 0.20.3 · nomic-embed-text:latest"
+  relative: false
+  hidden: false
+images:
+  - /images/local-embedding-context-ceiling-2026.png
 tags:
   - local embedding context ceiling
   - ollama embed context length
