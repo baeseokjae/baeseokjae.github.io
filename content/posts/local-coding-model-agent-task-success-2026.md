@@ -1,22 +1,30 @@
 ---
-title: "Do Local Coding Models Actually Finish Agent Tasks? A Reproducible Task-Success Protocol"
-date: 2026-10-13T00:16:00+00:00
+title: Do Local Coding Models Actually Finish Agent Tasks? A Reproducible Task-Success Protocol
+date: 2026-10-13 00:16:00+00:00
 tags:
-  - local coding model task success
-  - agent task completion rate
-  - local llm coding agent harness
-  - swe-bench verified local models
-  - aider polyglot pass rate
-  - open-weight coding model eval
-  - agent scaffold matters
-  - terminal-bench harness
-  - local model agent benchmark gap
-  - coding agent escalation rate
-  - reproducible model evaluation protocol
-  - task success vs leaderboard
-description: "Leaderboards report scaffolds and retries, not end-state completion. A frozen four-task harness that scores a local model completed / partially / failed, with the raw matrix, transcripts and a fixture self-check you can rerun."
+- local coding model task success
+- agent task completion rate
+- local llm coding agent harness
+- swe-bench verified local models
+- aider polyglot pass rate
+- open-weight coding model eval
+- agent scaffold matters
+- terminal-bench harness
+- local model agent benchmark gap
+- coding agent escalation rate
+- reproducible model evaluation protocol
+- task success vs leaderboard
+description: Leaderboards report scaffolds and retries, not end-state completion. A frozen four-task harness that scores a local model completed / partially / failed, with the raw matrix, transcripts and a fixture self-check you can rerun.
 draft: false
-schema: "schema-local-coding-model-agent-task-success-2026"
+schema: schema-local-coding-model-agent-task-success-2026
+cover:
+  image: /images/local-coding-model-agent-task-success-2026.png
+  alt: Protocol illustration for defining a coding task, recording its run, checking acceptance criteria, and classifying the outcome. It contains no measured local-model performance results.
+  caption: Protocol illustration · local-model performance results were not run
+  relative: false
+  hidden: false
+images:
+- /images/local-coding-model-agent-task-success-2026.png
 ---
 
 Choosing between a local open-weight coding model and a managed agent is usually argued with the wrong number. Throughput, price per token and leaderboard position are all published and all easy to compare; none of them answers the question that decides the purchase: on this kind of task, on hardware like mine, how often does the model actually finish before it stalls, loops or asks for help?
