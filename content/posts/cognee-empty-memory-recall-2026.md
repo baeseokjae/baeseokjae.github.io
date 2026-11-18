@@ -1,23 +1,31 @@
 ---
-title: "When Agent Memory Returns Nothing: Cognee's Silent Empty-Recall Failures, Measured From Its Own Telemetry"
-date: 2026-10-29T00:00:00+00:00
-lastmod: 2026-10-29T00:00:00+00:00
+title: 'Cognee Empty Recall: Diagnose Missing Agent Memory'
+date: 2026-10-29 00:00:00+00:00
+lastmod: 2026-10-29 00:00:00+00:00
 tags:
-  - Cognee
-  - agent memory
-  - empty recall
-  - NoDataError
-  - knowledge graph
-  - memory reliability
-  - SubprocessTransportError
-  - RAG failure modes
-  - observability
-  - data pipeline
-  - cognee 1.6.4
-  - agent debugging
-description: "Vendor telemetry put 404 NoDataError on 25.8% of Cognee 1.6.1 POST /recall calls on 2026-10-08. A symptom-to-cause triage table, with the v1.6.4 code lines behind each silent failure."
+- Cognee
+- agent memory
+- empty recall
+- NoDataError
+- knowledge graph
+- memory reliability
+- SubprocessTransportError
+- RAG failure modes
+- observability
+- data pipeline
+- cognee 1.6.4
+- agent debugging
+description: Vendor telemetry put 404 NoDataError on 25.8% of Cognee 1.6.1 POST /recall calls on 2026-10-08. A symptom-to-cause triage table, with the v1.6.4 code lines behind each silent failure.
 draft: false
-schema: "schema-cognee-empty-memory-recall-2026"
+schema: schema-cognee-empty-memory-recall-2026
+cover:
+  image: /images/cognee-empty-memory-recall-2026.png
+  alt: Diagnostic map distinguishing an absent graph, a query with no matches, a failed ingestion pipeline, and a stopped worker. No aggregate failure rate is inferred from these categories.
+  caption: Diagnostic map · telemetry denominators and release dates stay in the article
+  relative: false
+  hidden: false
+images:
+- /images/cognee-empty-memory-recall-2026.png
 ---
 
 A memory layer fails quietly in one specific way that matters more than any benchmark score: the agent asks for context, receives nothing usable, and answers anyway. Nothing raises in the application. The model's confidence is unchanged, the user gets a plausible answer with no memory behind it, and no alert fires because from the client's point of view the call returned. Cognee is a graph-and-vector memory library for agents, and its maintainers publish dated fleet telemetry as public GitHub issues. That telemetry is unusual: it gives per-release, per-day denominators for exactly this failure, so the silence can be measured rather than described. This article maps each visible symptom to one cause, one probe, and one fix, and keeps every number tied to the release and date printed in the issue it came from.
