@@ -1,7 +1,7 @@
 ---
-title: "One Fact per Vector: What Chunk Granularity Does to Agent-Memory Recall, Measured on Three Local Embedders (2026)"
+title: "Agent Memory Chunking: When Smaller Chunks Lose the Answer"
 date: 2026-11-15T08:55:36+00:00
-lastmod: 2026-11-15T08:55:36+00:00
+lastmod: 2026-11-19T17:30:35+00:00
 description: "An 8-document, 13-question fixture on three local Ollama embedders: two-fact hit@1 falls from 13/15 with whole-document vectors to 0/15 at 3-sentence and single-sentence chunks, while mean top-3 context drops from 1,444 to 210 characters. Includes the probe script and fixture."
 draft: false
 tags:
@@ -15,6 +15,10 @@ tags:
   - vector store chunking
   - retrieval hit rate fixture
   - rag chunk boundary
+cover:
+  image: /images/agent-memory-chunk-granularity-recall-2026-presentation.png
+  alt: 'Conceptual checklist for memory chunk granularity: a question that needs two facts, the chunk boundaries that separate them, and the retrieved evidence — smaller chunks can split a multi-fact answer. Conceptual diagram, not measurement data.'
+  caption: 'Memory chunk granularity · conceptual checklist, not new measurement data'
 schema: "schema-agent-memory-chunk-granularity-recall-2026"
 ---
 
