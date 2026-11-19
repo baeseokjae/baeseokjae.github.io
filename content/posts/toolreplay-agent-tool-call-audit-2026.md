@@ -1,26 +1,31 @@
 ---
 cover:
-  alt: RockB — AI tools and engineering guides
-  image: /images/og-default.png
+  image: /images/toolreplay-agent-tool-call-audit-2026.png
+  alt: 'ToolReplay detector map: read a JSONL transcript and check inconsistent answers, redundant calls, and tools outside the declared grants. A transcript audit does not prove complete runtime safety.'
+  caption: ToolReplay detector map · transcript evidence does not prove complete safety
   relative: false
-title: "ToolReplay: Auditing an Agent Session for Non-Determinism and Scope Overreach"
-date: 2026-10-08T14:42:00+00:00
+  hidden: false
+title: 'ToolReplay: Auditing an Agent Session for Non-Determinism and Scope Overreach'
+date: 2026-10-08 14:42:00+00:00
 tags:
-  - "toolreplay"
-  - "agent tool call audit"
-  - "agent transcript replay"
-  - "ai agent observability"
-  - "permission overreach detection"
-  - "hash chain audit log"
-  - "deterministic replay"
-  - "agent scope enforcement"
-  - "tool call jsonl"
-  - "unattended coding agent audit"
-  - "agent audit cli"
-  - "agent tool call trace 2026"
-description: "ToolReplay v0.6.0 is a dependency-free Python CLI that replays a recorded agent tool-call transcript and reports non-determinism, redundant calls and permission overreach. A 2026 review with a reproduced run, the three detectors, and the blind spots the project documents itself."
+- toolreplay
+- agent tool call audit
+- agent transcript replay
+- ai agent observability
+- permission overreach detection
+- hash chain audit log
+- deterministic replay
+- agent scope enforcement
+- tool call jsonl
+- unattended coding agent audit
+- agent audit cli
+- agent tool call trace 2026
+description: ToolReplay v0.6.0 is a dependency-free Python CLI that replays a recorded agent tool-call transcript and reports non-determinism, redundant calls and permission overreach. A 2026 review with a reproduced run, the three detectors, and the blind spots the project documents itself.
+lastmod: '2026-11-18T17:42:00+00:00'
 draft: false
-schema: "schema-toolreplay-agent-tool-call-audit-2026"
+schema: schema-toolreplay-agent-tool-call-audit-2026
+images:
+- /images/toolreplay-agent-tool-call-audit-2026.png
 ---
 
 If you let a coding agent run unattended, the only durable record of what it did is the transcript of its tool calls. Dashboards show you totals; the transcript shows you the sequence. ToolReplay is a small, dependency-free Python CLI that reads one such transcript and answers three narrow questions about it: did the same call ever return two different answers, did the agent repeat a call that could not have changed anything, and did it call a tool it was never granted. It reads a JSON Lines file, and it does the work offline.
@@ -132,7 +137,7 @@ ToolReplay's limitations section is unusually candid, and it is the single best 
 
 ## A Snapshot of the Repository Itself
 
-The [GitHub repository API](https://api.github.com/repos/brandynfisher/ToolReplay) returned, on 2026-10-08: created 2026-09-14, last push 2026-09-14, 182 stars, 21 forks, Python, default branch `main`, MIT licence, and `has_issues` false — issue tracking is disabled, so there is no public issue thread to corroborate anything. Two details are worth flagging rather than repeating uncritically. The homepage metadata field still points at an unrelated URL, and the [release objects](https://api.github.com/repos/brandynfisher/ToolReplay) were all published on 2026-09-14 with author `brandynfisher`, while the [CHANGELOG](https://raw.githubusercontent.com/brandynfisher/ToolReplay/main/CHANGELOG.md) prints authored release dates from 2021-06-14 through 2026-03-12. The release history as authored reads as a multi-year project; as published on the forge it is a single day in September 2026. Treat the CHANGELOG dates as authored history, not independently timestamped releases. Star and fork counts are a point-in-time snapshot and will drift.
+The [GitHub repository API](https://api.github.com/repos/brandynfisher/ToolReplay) returned, re-checked on 2026-11-18: created 2026-09-14, last push 2026-09-14, 50 stars, 4 forks, Python, default branch `main`, MIT licence, and `has_issues` false — issue tracking is disabled, so there is no public issue thread to corroborate anything. Two details are worth flagging rather than repeating uncritically. The homepage metadata field still points at an unrelated URL, and the [release objects](https://api.github.com/repos/brandynfisher/ToolReplay) were all published on 2026-09-14 with author `brandynfisher`, while the [CHANGELOG](https://raw.githubusercontent.com/brandynfisher/ToolReplay/main/CHANGELOG.md) prints authored release dates from 2021-06-14 through 2026-03-12. The release history as authored reads as a multi-year project; as published on the forge it is a single day in September 2026. Treat the CHANGELOG dates as authored history, not independently timestamped releases. The star and fork counts are a point-in-time snapshot: the figures above are what the endpoint returned on 2026-11-18, and an earlier pair published in this review could not be reconciled with that response, so those counts were replaced rather than repeated.
 
 ## Where This Fits
 
@@ -140,7 +145,7 @@ ToolReplay audits an existing transcript rather than producing a score, which se
 
 ## Should You Use It
 
-For a team that already records agent tool calls into its own JSONL, ToolReplay is a good fit: it is small enough to read, it refuses to guess at malformed input, it exits non-zero on findings so it drops into CI as the command itself, and its reports are deterministic enough to commit and diff between runs. Those are the properties that make an audit artifact trustworthy, and the tool's documentation is honest about the four things it cannot see.
+For a team that already records agent tool calls into its own JSONL, ToolReplay is a good fit: it is small enough to read, it refuses to guess at malformed input, it exits non-zero on findings so it drops into CI as the command itself, and its reports are deterministic enough to commit and diff between runs. Those are the properties that make an audit artifact trustworthy, and the tool's documentation is honest about the six things it cannot see.
 
 It is not a general audit system. It has no argument-level scope enforcement, no signature over the final digest, no machine-readable report format, and no ingestion path for OpenTelemetry or vendor traces. If your agent emits a provider-native trace today, ToolReplay will not read it without you writing a converter, and a converter that loses a field it does not understand would defeat the strictness the tool is built around. It also should not be read as evidence about how agents generally behave: the shipped sample is a fixture, and one reproduced example is one example.
 
