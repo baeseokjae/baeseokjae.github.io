@@ -1,7 +1,7 @@
 ---
-title: "Delete Returns 200: What Agent-Memory Stores Actually Remove (and the read-back that proves it)"
+title: "Does Deleting Agent Memory Remove Its History? A mem0 Check"
 date: 2026-11-01T21:40:00+00:00
-lastmod: 2026-11-01T21:47:33+00:00
+lastmod: 2026-11-19T19:20:26+00:00
 description: "At mem0 commit 753496c, delete() removes the vector entry, returns success, and writes the deleted text into its SQLite history table, where history(memory_id) returns it with no is_deleted filter. A code-level trace plus a read-back probe you can run against your own store."
 draft: false
 tags:
@@ -16,6 +16,14 @@ tags:
   - mem0 history table
   - chroma delete where filter
 schema: "schema-agent-memory-delete-semantics-test-2026"
+cover:
+  image: /images/agent-memory-delete-semantics-test-2026-presentation.png
+  alt: 'Conceptual checklist for memory deletion scope: Vector entry, then History records, then Read-back checks. A delete response does not prove every copy is gone.'
+  caption: A delete response does not prove every copy is gone. Conceptual illustration; see article for evidence and limits.
+  relative: false
+  hidden: false
+images:
+  - /images/agent-memory-delete-semantics-test-2026-presentation.png
 ---
 
 A team tells a customer, or answers a data-protection questionnaire, that a fact can be removed from its agent's memory. The store accepts the delete — by id, by metadata filter, or through a natural-language "forget this" tool — and returns a success message. Nobody runs a recall afterwards. Weeks later the assistant mentions the fact again, or an auditor asks how you proved it was gone and the honest answer is that you watched a return code.
@@ -140,7 +148,7 @@ that match the where filter.
 
 Read literally, both sentences are about items that **match**. Three consequences follow, none of them a defect in Chroma, all of them ways a deletion looks complete and is not:
 
-- **A filter that no longer matches removes nothing.** Delete-by-`where` against a payload key that was never written, or was written as an int where the filter compares a string, matches zero items and returns without error. The caller sees the same success as a delete that matched.
+- **A filter that no longer matches removes no item.** Delete-by-`where` against a payload key that was never written, or written as an int where the filter compares a string, matches no items. The page says only that matching items are deleted; it does not say what a zero-match filter returns or whether it raises, and no call against Chroma was run here — so "returns without error" is not a documented guarantee, only an inference from that silence. What the page does establish is the operational gap: deletion is defined over matched items, so a caller who never checks the matched count has no documented signal separating a completed delete from an empty one.
 - **Derived copies are out of scope.** A summarised profile, a cached context block, a copy in a second collection, a nightly export — none of these are items in the collection the delete ran against. Chroma's sentence cannot cover them because the API never sees them.
 - **Deleting the embedding does not delete your audit trail.** Chroma has no opinion about the SQLite file mem0 writes alongside it. That division of labour is precisely how the mem0 finding above arises.
 
@@ -148,7 +156,7 @@ Read literally, both sentences are about items that **match**. Three consequence
 
 The protocol below is the deliverable. It is four deletion paths and six recall probes per path, with the fields that decide pass or fail recorded per probe rather than summarised into a single boolean that hides which path leaked.
 
-**Fixture.** Seven synthetic facts — invented company, invented people, invented dates — of which four are deleted, one per path. Each fact carries a sentinel string so a leak is unambiguous rather than a judgment call.
+**Fixture.** Four synthetic facts — invented company, invented people, invented dates — each deleted by one of the four paths. Each fact carries a sentinel string so a leak is unambiguous rather than a judgment call.
 
 **Paths.** delete by id; delete by metadata filter; a natural-language "forget the name of the security questionnaire contact" resolved to candidates and then deleted by id; and a TTL sweep that deletes rows past a retention window.
 
@@ -162,7 +170,7 @@ The protocol below is the deliverable. It is four deletion paths and six recall 
 - fail if any shipped read API returns the deleted plaintext after a success return;
 - pass only when both are false for that path.
 
-Everything is stdlib Python and SQLite: the harness, the fixture, and a reference store of about ninety lines that implements the six methods your own store needs. To point it at your store you implement the same adapter surface — add, search, delete by id, delete by filter, history, presence checks — and run the four paths unchanged.
+Everything is stdlib Python and SQLite: the harness, the fixture, and a reference store of 68 lines (56 non-blank) that implements the six methods your own store needs. To point it at your store you implement the same adapter surface — add, search, delete by id, delete by filter, history, presence checks — and run the four paths unchanged.
 
 Files for this article:
 
@@ -186,7 +194,7 @@ If your product tells a customer a fact is gone, the assertion belongs in your t
 
 1. **Delete, then recall.** Six probes: one verbatim, five paraphrased. Assert zero hits. This is the assertion almost no suite has.
 2. **Delete, then read every surface an operator can reach.** History endpoints, admin consoles, "what do you know about me" endpoints, exports. Assert the sentinel is absent from all of them. The mem0 finding is invisible to probe 1 alone.
-3. **Delete by filter, then check the row count.** A filter that matches nothing returns success. Assert `matched > 0` before you assert the deletion.
+3. **Delete by filter, then check the row count.** Matching is the documented unit of deletion, and a filter that matches nothing is not documented to report a failure. Assert `matched > 0` before you assert the deletion.
 4. **Delete, then re-ingest.** Ingest the same source document again and see whether the fact returns through a summary that was never deleted. Deletion that survives one ingest and fails the next is not deletion.
 5. **Batch deletes: assert the count.** `delete_all` removes what `list()` pages through. Assert the number of removed ids equals the number stored.
 6. **Record the pin.** Write the library commit, the vector-backend version, and the date into the test's output. A deletion property verified against `main` is not verified against the release you ship.
