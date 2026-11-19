@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Tool_calls Empty on RockB</title><link>https://baeseokjae.github.io/tags/tool_calls-empty/</link><description>Recent content in Tool_calls Empty on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sun, 08 Nov 2026 22:05:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/tool_calls-empty/index.xml" rel="self" type="application/rss+xml"/><item><title>Empty Responses at the Token Cap: reading done_reason=length in an Ollama agent loop (2026)</title><link>https://baeseokjae.github.io/posts/ollama-empty-tool-call-token-cap-2026/</link><pubDate>Sun, 08 Nov 2026 22:05:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/ollama-empty-tool-call-token-cap-2026/</guid><description>A tool-calling turn can return HTTP 200 with empty content and no tool_calls: the token cap fired mid-call. Read done_reason=length, and why raising the cap did not help here.</description><content:encoded><![CDATA[<p>An agent sends a request with a <code>tools</code> array and a modest output cap. The server answers HTTP 200, the body parses, and the assistant message is empty: <code>content</code> is <code>&quot;&quot;</code>, <code>tool_calls</code> is absent, and no error field explains it. The loop logs &ldquo;model returned no content&rdquo;, retries the identical request, and the next turn is empty in the same way. The operator starts suspecting the model, the quantisation or the chat template, because nothing in the client raised an exception.</p>
+<p>The response already contains the diagnosis. Read the stop reason and the token count before anything else: <code>done_reason</code> is <code>&quot;length&quot;</code> on the native <code>/api/chat</code> surface, <code>finish_reason</code> is <code>&quot;length&quot;</code> through <code>/v1/chat/completions</code>, and <code>eval_count</code> (native) or <code>usage.completion_tokens</code> (compatible surface) equals the cap that was set. The cap fired while the model was still emitting its tool-call preamble. In the chat handler a parsed call is emitted when the parser closes it: it is attached to the streaming chunk that completed it, or to the aggregated non-streaming response once generation is over. A call still incomplete when generation ends is never emitted at all, because the final chunk carries only whatever text the parser was holding outside the call. So the partial call is dropped rather than returned, and the response looks like an ordinary completed turn with nothing in it.</p>
+<p>That is the whole diagnostic, and it fits in one response. The rest of this article is the fixture that produced it, the server code path behind it, and a negative result that matters for the obvious fix: on this fixture, raising the cap from 8 to 64 tokens did not restore the call.</p>
+<h2 id="the-fields-that-separate-a-truncated-call-from-a-finished-turn">The fields that separate a truncated call from a finished turn</h2>
+<p>Both surfaces expose the same state with different names. The native handler returns <code>done_reason</code> and <code>eval_count</code>; the OpenAI-compatible handler maps <code>max_tokens</code> onto the same internal cap and returns <code>finish_reason</code> plus <code>usage</code>. The tools documentation for <a href="https://raw.githubusercontent.com/ollama/ollama/v0.20.3/docs/api.md">Ollama v0.20.3</a> shows the normal shapes of a streamed and a final <code>/api/chat</code> response, and the <a href="https://raw.githubusercontent.com/ollama/ollama/v0.20.3/docs/api/openai-compatibility.mdx">OpenAI-compatibility page</a> lists <code>max_tokens</code> and <code>tools</code> as supported parameters.</p>
+<table>
+	<thead>
+			<tr>
+					<th>What to read</th>
+					<th>Native <code>POST /api/chat</code></th>
+					<th><code>POST /v1/chat/completions</code></th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>why generation stopped</td>
+					<td><code>done_reason</code></td>
+					<td><code>choices[0].finish_reason</code></td>
+			</tr>
+			<tr>
+					<td>tokens actually generated</td>
+					<td><code>eval_count</code></td>
+					<td><code>usage.completion_tokens</code></td>
+			</tr>
+			<tr>
+					<td>call present</td>
+					<td><code>message.tool_calls</code></td>
+					<td><code>message.tool_calls</code></td>
+			</tr>
+			<tr>
+					<td>the limit you set</td>
+					<td><code>options.num_predict</code></td>
+					<td><code>max_tokens</code></td>
+			</tr>
+	</tbody>
+</table>
+<p>Three combinations are worth memorising, because they lead to different actions:</p>
+<ul>
+<li><code>length</code> plus a token count equal to your cap: the cap fired. Any partial call was dropped. This is the case measured here.</li>
+<li><code>stop</code> with a non-empty <code>content</code> and no <code>tool_calls</code>: the model answered in prose instead of calling a tool. Raising the cap will not change that.</li>
+<li><code>tool_calls</code> present: a call was parsed and returned. Whatever goes wrong after this is argument or client-side validation, not truncation.</li>
+</ul>
+<p>The <code>num_predict</code> option is documented in the <a href="https://raw.githubusercontent.com/ollama/ollama/v0.20.3/docs/modelfile.mdx">v0.20.3 Modelfile reference</a> as the maximum number of tokens to predict, defaulting to <code>-1</code> for unbounded generation. The cap in a failing request is therefore the caller&rsquo;s own number, not a hidden model limit.</p>
+<h2 id="what-the-measured-run-shows">What the measured run shows</h2>
+<p>The fixture is deliberately small and boring: <code>qwen2.5:0.5b</code> (Q4_K_M, 397 MB, 4096-token context) on Ollama 0.20.3, one <code>create_ticket</code> tool schema with three required fields (<code>title</code>, <code>priority</code> as an enum, <code>summary</code>), temperature 0, seed 7. Two prompt variants were used: A with a long operator preamble and a detailed customer message, B with a one-sentence preamble and a short request. Caps of 8, 16, 24, 32, 40 and 48 tokens were requested on both variants and both API surfaces, five repetitions per cell, with one extra repetition in the native variant-A cell at cap 24 and one further cell at 64 on the native surface. The run recorded 129 requests in total. The table below counts every request per cap, so its rows already include the two native streaming cells at caps 16 and 48; the remaining 127 requests are the graded cells.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Cap</th>
+					<th>Requests</th>
+					<th>Empty content, no <code>tool_calls</code></th>
+					<th>Complete calls</th>
+					<th>Stop reason</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>8</td>
+					<td>20</td>
+					<td>20</td>
+					<td>0</td>
+					<td><code>length</code></td>
+			</tr>
+			<tr>
+					<td>16</td>
+					<td>21</td>
+					<td>21</td>
+					<td>0</td>
+					<td><code>length</code></td>
+			</tr>
+			<tr>
+					<td>24</td>
+					<td>21</td>
+					<td>21</td>
+					<td>0</td>
+					<td><code>length</code></td>
+			</tr>
+			<tr>
+					<td>32</td>
+					<td>20</td>
+					<td>20</td>
+					<td>0</td>
+					<td><code>length</code></td>
+			</tr>
+			<tr>
+					<td>40</td>
+					<td>20</td>
+					<td>20</td>
+					<td>0</td>
+					<td><code>length</code></td>
+			</tr>
+			<tr>
+					<td>48</td>
+					<td>21</td>
+					<td>21</td>
+					<td>0</td>
+					<td><code>length</code></td>
+			</tr>
+			<tr>
+					<td>64</td>
+					<td>5</td>
+					<td>5</td>
+					<td>0</td>
+					<td><code>length</code></td>
+			</tr>
+			<tr>
+					<td>96</td>
+					<td>1</td>
+					<td>0</td>
+					<td>1</td>
+					<td><code>stop</code></td>
+			</tr>
+	</tbody>
+</table>
+<p>Every request at caps 8 through 64 returned HTTP 200 with <code>content</code> of length zero, no <code>tool_calls</code>, and a stop reason of <code>length</code>. On the native surface <code>eval_count</code> equalled the cap in every one of those requests; on the compatible surface <code>usage.completion_tokens</code> equalled <code>max_tokens</code> in all 60 compatible requests. The empty message is not a client serialisation artefact: the same state appears in the raw JSON body, on both surfaces, with the token accounting that proves generation happened.</p>
+<p>The single exception in the log is one request at 96 tokens on the native surface with variant A: a complete <code>create_ticket</code> call, <code>done_reason</code> <code>&quot;stop&quot;</code>, <code>eval_count</code> 95. It is one observation, not a boundary. No repetition was made at 96, variant B was not tested there, and the compatible surface never reached a complete call inside the tested range. Treat it as evidence that the fixture can complete at a larger cap, not as a value to copy.</p>
+<h2 id="why-the-content-is-empty-rather-than-truncated">Why the content is empty rather than truncated</h2>
+<p>The intuitive model of a token cap is &ldquo;the answer gets cut off&rdquo;, and for plain text that is what happens: you receive a partial sentence. With a <code>tools</code> array the observable is different, because a partial tool call has nowhere to go in the response schema.</p>
+<p>In the chat handler of <a href="https://raw.githubusercontent.com/ollama/ollama/v0.20.3/server/routes.go"><code>server/routes.go</code> at v0.20.3</a>, the branch that runs when the request carries a <code>tools</code> array hands each chunk to the tool parser (<code>toolCalls, content := toolParser.Add(res.Message.Content)</code>, line 2493). When the parser closes a call, that branch attaches the calls to the chunk that completed them and empties the content (<code>res.Message.ToolCalls = toolCalls; res.Message.Content = &quot;&quot;</code>, lines 2496-2501). When it has not closed one, the final chunk carries whatever text the parser is still holding and nothing else - <code>if r.Done { res.Message.Content = toolParser.Content(); ch &lt;- res }</code>, lines 2513-2515 - and a non-streaming call then attaches the collected calls only when at least one closed call was parsed: <code>if len(toolCalls) &gt; 0 { resp.Message.ToolCalls = toolCalls }</code>, lines 2608-2610. A generation stopped at the cap still reports done, but an unterminated call never becomes an entry in that slice, so the attachment is skipped and the message goes out with empty content. (The older <code>/api/generate</code> path applies the same rule in <code>GenerateHandler</code> with a different field, <code>if cr.Done &amp;&amp; len(toolCalls) &gt; 0 { res.ToolCalls = toolCalls }</code> at lines 584-585; every measurement in this article is on the chat path, where <code>/api/chat</code> and the <code>/v1/chat/completions</code> wrapper are both served by <code>ChatHandler</code>.) The response that reaches the client is a normal completion carrying an empty <code>content</code> string and no <code>tool_calls</code>. Nothing in that payload is marked as an error, because from the server&rsquo;s point of view nothing failed: the client&rsquo;s limit was honoured exactly.</p>
+<p>The compatible layer inherits the same shape. In <a href="https://raw.githubusercontent.com/ollama/ollama/v0.20.3/openai/openai.go"><code>openai/openai.go</code> at v0.20.3</a>, <code>max_tokens</code> is copied into the internal <code>num_predict</code> option, and for a non-streaming response the finish reason is rewritten to <code>tool_calls</code> only when the response actually carries tool calls; otherwise the underlying <code>done_reason</code> string is returned unchanged. Streaming applies the same rule in <code>toChunk</code>, which reports <code>tool_calls</code> when the chunk itself carries calls or when an earlier chunk already sent one (<code>toolCallSent</code>), so the rewrite tracks calls having been emitted rather than calls present in the final message alone. A dropped partial call therefore keeps <code>finish_reason: &quot;length&quot;</code> instead of being rewritten into something a client might notice.</p>
+<p>This is why the failure is so quiet in an agent loop. A text-generation client that checks only for empty content can treat the turn as a no-op; a tool-calling client that checks only for <code>tool_calls</code> sees &ldquo;no call&rdquo; and often assumes the model chose not to act. The stop reason is the field that separates those cases, and it is present in every response.</p>
+<h2 id="the-negative-result-raising-the-cap-did-not-fix-it-on-this-fixture">The negative result: raising the cap did not fix it on this fixture</h2>
+<p>The obvious remedy is to raise the limit. On this fixture it did not work over an eightfold range. Twenty graded runs at 48 tokens - five per cell across the two prompt variants and the two surfaces - plus the one streaming request at that cap produced zero complete calls, and five runs at 64 on the native surface also produced zero. The first and only complete call in the log came at 96 tokens, in a single run.</p>
+<p>Two readings of that result are tempting and both are wrong. The first is that 96 is the required cap; with n=1 and one variant it supports no such constant, and the same schema on another model or template will spend a different number of tokens before the call closes. The second is that the cap value is irrelevant, which over-reads a single model. What the run does establish is narrower and still useful: the empty state is stable from 8 to 64 tokens, so a retry loop that bumps the cap by a small increment will keep producing identical empty turns while burning time, and a diagnostic that relies on &ldquo;it will work with a bigger number&rdquo; has no measured basis here.</p>
+<p>The practical consequence is to stop treating the cap as the variable to tune and treat the empty response as the signal to inspect. If the stop reason is <code>length</code>, the request needs a different shape - a shorter preamble, a smaller schema, or a generation budget sized to the template - not the same request submitted again with a larger number.</p>
+<h2 id="a-check-you-can-run-on-one-response">A check you can run on one response</h2>
+<p>The detection step needs no server logs and no framework instrumentation. Take the response object your client already has, pass in the cap you sent, and check the three fields together:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">capped_without_call</span>(resp, cap, native<span style="color:#f92672">=</span><span style="color:#66d9ef">True</span>):
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;&#34;&#34;cap is the limit you sent, not a field the server echoes back.&#34;&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> native:
+</span></span><span style="display:flex;"><span>        reason, tokens <span style="color:#f92672">=</span> resp<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;done_reason&#34;</span>), resp<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;eval_count&#34;</span>)
+</span></span><span style="display:flex;"><span>        message <span style="color:#f92672">=</span> resp<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;message&#34;</span>) <span style="color:#f92672">or</span> {}
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">else</span>:
+</span></span><span style="display:flex;"><span>        choice <span style="color:#f92672">=</span> (resp<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;choices&#34;</span>) <span style="color:#f92672">or</span> [{}])[<span style="color:#ae81ff">0</span>]
+</span></span><span style="display:flex;"><span>        reason, tokens <span style="color:#f92672">=</span> choice<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;finish_reason&#34;</span>), (resp<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;usage&#34;</span>) <span style="color:#f92672">or</span> {})<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;completion_tokens&#34;</span>)
+</span></span><span style="display:flex;"><span>        message <span style="color:#f92672">=</span> choice<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;message&#34;</span>) <span style="color:#f92672">or</span> {}
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> (reason <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;length&#34;</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">and</span> <span style="color:#f92672">not</span> message<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;content&#34;</span>)
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">and</span> <span style="color:#f92672">not</span> message<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;tool_calls&#34;</span>)
+</span></span><span style="display:flex;"><span>            <span style="color:#f92672">and</span> cap <span style="color:#f92672">is</span> <span style="color:#f92672">not</span> <span style="color:#66d9ef">None</span> <span style="color:#f92672">and</span> tokens <span style="color:#f92672">==</span> cap)
+</span></span></code></pre></div><p><code>cap</code> is an argument because the response does not carry it. In <a href="https://raw.githubusercontent.com/ollama/ollama/v0.20.3/api/types.go"><code>api/types.go</code> at v0.20.3</a>, <code>ChatResponse</code> (line 534 onward) has no <code>options</code> field - <code>Options</code> is declared on <code>ChatRequest</code> (line 168) - and the compatible body exposes <code>usage.completion_tokens</code> but never <code>max_tokens</code>, so the limit has to come from the request you sent and be compared against the token count the server reports. Pass the <code>num_predict</code> value you set, or the <code>max_tokens</code> you passed to the wrapper; the two are the same number after the mapping described above.</p>
+<p>The predicate is a reading aid, not a fix: it tells you that the cap fired and the call was dropped. Log <code>done_reason</code>, <code>eval_count</code> and the configured cap on every turn, not only on errors, so the state is visible the first time it happens rather than after a retry storm. When the predicate is true, do not resubmit the identical request; change the prompt or the budget first, or surface the state to the operator.</p>
+<p>Two neighbours are worth reading alongside this one. The <a href="https://baeseokjae.github.io/posts/ollama-api-local-llm-integration-developer-guide-2026/">Ollama API integration guide</a> covers the request and response fields this article relies on, and the <a href="https://baeseokjae.github.io/posts/llm-function-calling-tool-use-guide-2026/">function-calling guide</a> explains <code>finish_reason</code> as the signal for detecting a call; this piece is the case where that signal reads <code>length</code> instead. For the prompt-side failure that looks similar but is not the same, the <a href="https://baeseokjae.github.io/posts/ollama-silent-context-truncation-2026/">context-truncation diagnosis</a> covers a prompt that is cut before generation starts, and the <a href="https://baeseokjae.github.io/posts/local-llm-concurrent-agent-sessions-2026/">concurrent-session logging checklist</a> already names <code>length</code> plus <code>num_predict</code> as the stop signal for text turns, though not for a discarded tool call. Readers running the same loop against a different engine can compare the parser behaviour in the <a href="https://baeseokjae.github.io/posts/vllm-streaming-tool-call-parser-corruption-2026/">vLLM streaming tool-call case</a>, and the <a href="https://baeseokjae.github.io/posts/local-ai-agents-guide-2026/">local agent guide</a> covers the retry structure in which one empty turn becomes a stall.</p>
+<h2 id="fixture-reproduction-and-limits">Fixture, reproduction and limits</h2>
+<p>The run used two stdlib <code>urllib</code> scripts against the local daemon at <code>127.0.0.1:11434</code>, no SDK. Each request recorded the HTTP status, wall time, content length, presence of <code>tool_calls</code>, JSON-parseability of the arguments and whether every required key was present, plus <code>done_reason</code>/<code>finish_reason</code> and <code>eval_count</code>/<code>usage.completion_tokens</code>. The graded table, the raw request log, the environment capture and the method note are kept with the draft as a private local author verification; they are not offered here as a downloadable dataset or a reusable harness, so no reader-access promise is made for those files. The fixture is described completely enough to rebuild: one model tag, one tool schema, two prompts, one sampling setting, and the caps listed above.</p>
+<p>The limits are the honest part of this result. It is one host (2 vCPU, recorded load average 4.64 before the sweep and 3.47 and 2.73 at two in-run checkpoints), one model, one quantisation, one tool schema, two prompt variants, and 129 requests. Requests went to a shared local daemon rather than a dedicated server instance, so wall times are provenance only and no throughput or latency claim is drawn from them. The single 96-token completion is one run on one variant, and no boundary is asserted across variants or surfaces. Nothing here measures how often this happens across models, and no prevalence figure is implied. What is supported is the diagnostic: a <code>length</code> stop with a token count equal to the cap and an empty message is the signature of a capped generation whose partial tool call was discarded, and on this fixture raising the cap across an eightfold range did not restore the call.</p>
+]]></content:encoded></item></channel></rss>
