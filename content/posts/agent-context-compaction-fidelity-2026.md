@@ -1,6 +1,6 @@
 ---
 date: 2026-11-02 00:00:00+00:00
-description: "Published measurements of summarisation loss are narrower and stranger than the advice: temporal expressions survived at 3.05% before a one-sentence prompt fix and 62.39% after, named entities and event structure barely changed, and 5x compression raised retrieval calls from 21.0 to 63.9 while completion stayed flat. This post reads those results, separates them from the model's own recall limits, and ships a 12-probe retention test — probe template, scorer and fixture test — for your own transcripts."
+description: 'Published measurements of summarisation loss are narrower and stranger than the advice: temporal expressions survived at 3.05% before a one-sentence prompt fix and 62.39% after, named entities and event structure barely changed, and 5x compression raised retrieval calls from 21.0 to 63.9 while completion stayed flat. This post reads those results, separates them from the model''s own recall limits, and ships a 12-probe retention test — probe template, scorer and fixture test — for your own transcripts.'
 draft: false
 schema: schema-agent-context-compaction-fidelity-2026
 tags:
@@ -9,7 +9,16 @@ tags:
 - agent-reliability
 - evaluation
 - llm
-title: 'What Agent Compaction Actually Drops: published measurements and a retention test you can run'
+title: 'Agent Context Compaction: What Gets Lost—and How to Test It'
+cover:
+  image: /images/agent-context-compaction-fidelity-2026-presentation.png
+  alt: 'Conceptual checklist for context compaction: Original transcript, then Compressed summary, then Fact retention probes. Compare retained facts, not just summary fluency.'
+  caption: Compare retained facts, not just summary fluency. Conceptual illustration; see article for evidence and limits.
+  relative: false
+  hidden: false
+images:
+- /images/agent-context-compaction-fidelity-2026-presentation.png
+lastmod: '2026-11-19T12:14:30+00:00'
 ---
 
 An agent works for two hours. The harness compacts the transcript, the run continues, and somewhere in the next twenty turns it re-runs a migration it has already run, asks the user for a value the user typed an hour ago, or refactors a file it was explicitly told not to touch. Nothing in the run log marks the turn where that fact disappeared. The summary reads fluently, the task still finishes, and the only trace of the loss is work the agent repeats.
