@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>.Tools Jinja Template on RockB</title><link>https://baeseokjae.github.io/tags/.tools-jinja-template/</link><description>Recent content in .Tools Jinja Template on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Thu, 19 Nov 2026 09:28:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/.tools-jinja-template/index.xml" rel="self" type="application/rss+xml"/><item><title>The Chat Template or a Built-in Parser Decides Whether Ollama Gives You a Tool Call</title><link>https://baeseokjae.github.io/posts/ollama-chat-template-tool-support-probe-2026/</link><pubDate>Mon, 02 Nov 2026 06:20:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/ollama-chat-template-tool-support-probe-2026/</guid><description>Ollama 0.20.3 returned a read_file call with .Tools in the chat template and HTTP 400 &amp;#34;does not support tools&amp;#34; without it — unless a built-in parser grants tools. The check, the probe and the fix.</description><content:encoded><![CDATA[<p>You pass a <code>tools</code> array to <code>/api/chat</code>, the call fails, and nothing in the response explains why. On ollama 0.20.3 the failure is a bare HTTP 400 whose message is <code>registry.ollama.ai/library/&lt;model&gt;:latest does not support tools</code>, which names the model and points at the wrong layer. On a server old enough to have no <code>tools</code> field in its chat request at all — <code>v0.2.0</code> and earlier — that JSON key is dropped unread, so the same call returns HTTP 200 with a prose answer and no <code>tool_calls</code> field, and the client reports &ldquo;the model ignored the schema&rdquo;.</p>
+<p>The direct answer, measured on one host and readable in the pinned source: <strong>on a build that configures no built-in tool parser</strong>, whether it can emit a tool call is decided by its chat TEMPLATE, not by the model name, family or parameter count. A template that references <code>.Tools</code> declares the variable <code>tools</code>, the server grants the build the tools capability, and the tool schemas get rendered into the prompt. Remove that block and keep the identical weights in the identical blob, and the server refuses the request before the model ever runs.</p>
+<p>The qualifier is not decoration. The same function in v0.20.3 grants the tools capability on either of two branches — <code>slices.Contains(v, &quot;tools&quot;) || (builtinParser != nil &amp;&amp; builtinParser.HasToolSupport())</code> — and <code>builtinParser</code> is resolved from <code>m.Config.Parser</code>. At that tag five built-in parsers (<code>cogito</code>, <code>gemma4</code>, <code>deepseek3</code>, <code>lfm2</code>, <code>ministral</code>) return <code>true</code> from <code>HasToolSupport()</code>, so a build whose Modelfile selects one of them has tools with no <code>.Tools</code> variable anywhere in its template. The build tested here selects none of them: its template-stripped derivative was refused, which shows the capability came from the template and from nothing else. Every measurement below therefore describes template-branch builds only. The probe does not speak for parser-configured builds, and no such build was run here.</p>
+<h2 id="thirty-second-check-before-you-change-model">Thirty-second check, before you change model</h2>
+<p>Two commands answer the yes/no question for any local build:</p>
+<pre tabindex="0"><code>ollama show --modelfile qwen2.5:0.5b | sed -n &#39;/TEMPLATE &#34;&#34;&#34;/,/&#34;&#34;&#34;/p&#39; | grep -c &#39;\.Tools&#39;
+ollama show qwen2.5:0.5b | sed -n &#39;/Capabilities/,+3p&#39;
+</code></pre><p>The first prints a non-zero count for a build whose template contains a <code>.Tools</code> block. The second prints the capability list the server has derived — the list it later checks a tools request against. Read them in that order. A count of 0 with no <code>tools</code> in the list means no prompt engineering will help: the request will be refused or the schema will never be rendered. A count of 0 with <code>tools</code> in the list means a built-in parser is supplying the capability rather than the template, so the count tells you nothing about whether tools work; only a request does. <code>ollama show --modelfile</code> is where you look for the parser the build selected.</p>
+<p>Reading the flag is necessary, not sufficient. A build flagged <code>tools</code> can still answer in prose if the weights are weak, if the schema is malformed, or if the client sends <code>stream: true</code> and the parser drops the call. The flag tells you the layer is capable; only a request tells you whether a call comes out.</p>
+<h2 id="the-three-builds-and-their-rows">The three builds and their rows</h2>
+<p>One host, CPU only, 2 vCPU, 11 GB RAM, <code>ollama version is 0.20.3</code>, model <code>qwen2.5:0.5b</code> (digest <code>a8b0c5157701</code>, 397 MB, Q4_K_M, already resident). The two derivatives were built <code>FROM qwen2.5:0.5b</code> with the same SYSTEM line; <code>probe-notools:latest</code> deletes only the <code>{{- if .Tools }}...{{- end }}</code> conditional and the <code>or .Tools</code> clause in the message wrapper, and <code>probe-faketools:latest</code> re-adds the literal word &ldquo;tools&rdquo; as one prose sentence, with no <code>.Tools</code> reference.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Build</th>
+					<th><code>.Tools</code> in TEMPLATE</th>
+					<th>Tools sent</th>
+					<th>HTTP</th>
+					<th>Response class</th>
+					<th>prompt_eval_count</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>qwen2.5:0.5b</td>
+					<td>yes</td>
+					<td>yes, 2 runs</td>
+					<td>200</td>
+					<td><code>tool_calls</code>: one <code>read_file</code></td>
+					<td>180</td>
+			</tr>
+			<tr>
+					<td>qwen2.5:0.5b</td>
+					<td>yes</td>
+					<td>no, 2 runs</td>
+					<td>200</td>
+					<td>prose, no call</td>
+					<td>51</td>
+			</tr>
+			<tr>
+					<td>probe-notools:latest</td>
+					<td>no</td>
+					<td>yes, 2 runs</td>
+					<td>400</td>
+					<td>refused before generation</td>
+					<td>not returned</td>
+			</tr>
+			<tr>
+					<td>probe-notools:latest</td>
+					<td>no</td>
+					<td>no, 2 runs</td>
+					<td>200</td>
+					<td>prose, no call</td>
+					<td>52</td>
+			</tr>
+			<tr>
+					<td>probe-faketools:latest</td>
+					<td>no (prose &ldquo;tools&rdquo; only)</td>
+					<td>yes, 2 runs</td>
+					<td>400</td>
+					<td>refused before generation</td>
+					<td>not returned</td>
+			</tr>
+	</tbody>
+</table>
+<p>Every tools-carrying request against a build without the block came back 400, twice out of twice, with <code>does not support tools</code> in the error. The same request against the parent build produced a <code>read_file</code> call both times, with <code>message.content</code> empty and <code>prompt_eval_count: 180</code>.</p>
+<h2 id="what-the-token-count-proves">What the token count proves</h2>
+<p>Without a tools array, the identical messages and options produced <code>prompt_eval_count: 51</code>. With the one-tool schema they produced <code>180</code>. The delta is the receipt that the schema text actually entered the prompt instead of being accepted by the API and quietly discarded. That is the cheap field to read when a client says &ldquo;the model ignores my tools&rdquo;: if <code>prompt_eval_count</code> is unchanged with and without the array, the schema never reached the model, and the fault is above the weights.</p>
+<p><code>prompt_eval_count</code> is a token count, not a diff of the rendered text, so it shows extra input was rendered, not that the schema was rendered well. The extracted template for the parent build is published with this post (linked under Reproduction), so you can confirm the exact strings yourself instead of inferring them from a count.</p>
+<h2 id="the-probe-you-can-rerun">The probe you can rerun</h2>
+<p>The measured runs used a stdlib-only script that extracts the template, builds the derivative, posts the same payload to <code>/api/chat</code> and classifies the answer. The essential loop is small enough to paste into a file:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> json<span style="color:#f92672">,</span> urllib.request
+</span></span><span style="display:flex;"><span>payload <span style="color:#f92672">=</span> {<span style="color:#e6db74">&#34;model&#34;</span>: <span style="color:#e6db74">&#34;qwen2.5:0.5b&#34;</span>, <span style="color:#e6db74">&#34;stream&#34;</span>: <span style="color:#66d9ef">False</span>,
+</span></span><span style="display:flex;"><span>           <span style="color:#e6db74">&#34;messages&#34;</span>: [{<span style="color:#e6db74">&#34;role&#34;</span>: <span style="color:#e6db74">&#34;user&#34;</span>, <span style="color:#e6db74">&#34;content&#34;</span>: <span style="color:#e6db74">&#34;Read /etc/hostname with the read_file tool.&#34;</span>}],
+</span></span><span style="display:flex;"><span>           <span style="color:#e6db74">&#34;options&#34;</span>: {<span style="color:#e6db74">&#34;temperature&#34;</span>: <span style="color:#ae81ff">0</span>, <span style="color:#e6db74">&#34;seed&#34;</span>: <span style="color:#ae81ff">7</span>, <span style="color:#e6db74">&#34;num_predict&#34;</span>: <span style="color:#ae81ff">128</span>},
+</span></span><span style="display:flex;"><span>           <span style="color:#e6db74">&#34;tools&#34;</span>: [{<span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;function&#34;</span>, <span style="color:#e6db74">&#34;function&#34;</span>: {
+</span></span><span style="display:flex;"><span>               <span style="color:#e6db74">&#34;name&#34;</span>: <span style="color:#e6db74">&#34;read_file&#34;</span>, <span style="color:#e6db74">&#34;description&#34;</span>: <span style="color:#e6db74">&#34;Read a file from disk.&#34;</span>,
+</span></span><span style="display:flex;"><span>               <span style="color:#e6db74">&#34;parameters&#34;</span>: {<span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;object&#34;</span>, <span style="color:#e6db74">&#34;required&#34;</span>: [<span style="color:#e6db74">&#34;path&#34;</span>],
+</span></span><span style="display:flex;"><span>                              <span style="color:#e6db74">&#34;properties&#34;</span>: {<span style="color:#e6db74">&#34;path&#34;</span>: {<span style="color:#e6db74">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;string&#34;</span>}}}}}]}
+</span></span><span style="display:flex;"><span>req <span style="color:#f92672">=</span> urllib<span style="color:#f92672">.</span>request<span style="color:#f92672">.</span>Request(<span style="color:#e6db74">&#34;http://127.0.0.1:11434/api/chat&#34;</span>,
+</span></span><span style="display:flex;"><span>                             data<span style="color:#f92672">=</span>json<span style="color:#f92672">.</span>dumps(payload)<span style="color:#f92672">.</span>encode(),
+</span></span><span style="display:flex;"><span>                             headers<span style="color:#f92672">=</span>{<span style="color:#e6db74">&#34;Content-Type&#34;</span>: <span style="color:#e6db74">&#34;application/json&#34;</span>})
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">try</span>:
+</span></span><span style="display:flex;"><span>    body <span style="color:#f92672">=</span> urllib<span style="color:#f92672">.</span>request<span style="color:#f92672">.</span>urlopen(req, timeout<span style="color:#f92672">=</span><span style="color:#ae81ff">120</span>)<span style="color:#f92672">.</span>read()
+</span></span><span style="display:flex;"><span>    d <span style="color:#f92672">=</span> json<span style="color:#f92672">.</span>loads(body); msg <span style="color:#f92672">=</span> d<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;message&#34;</span>, {})
+</span></span><span style="display:flex;"><span>    cls <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;tool_calls&#34;</span> <span style="color:#66d9ef">if</span> msg<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;tool_calls&#34;</span>) <span style="color:#66d9ef">else</span> <span style="color:#e6db74">&#34;prose_no_call&#34;</span>
+</span></span><span style="display:flex;"><span>    print(cls, d<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;prompt_eval_count&#34;</span>), msg<span style="color:#f92672">.</span>get(<span style="color:#e6db74">&#34;content&#34;</span>, <span style="color:#e6db74">&#34;&#34;</span>)[:<span style="color:#ae81ff">120</span>])
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">except</span> urllib<span style="color:#f92672">.</span>error<span style="color:#f92672">.</span>HTTPError <span style="color:#66d9ef">as</span> e:
+</span></span><span style="display:flex;"><span>    print(<span style="color:#e6db74">&#34;refused&#34;</span>, e<span style="color:#f92672">.</span>code, e<span style="color:#f92672">.</span>read()<span style="color:#f92672">.</span>decode()[:<span style="color:#ae81ff">200</span>])
+</span></span></code></pre></div><p>Run it twice, then rerun it without the <code>tools</code> key and compare <code>prompt_eval_count</code>. Repeat after every re-pull, re-quant or <code>ollama create</code>, because the digest and the template can change together.</p>
+<h2 id="which-layer-is-at-fault">Which layer is at fault</h2>
+<table>
+	<thead>
+			<tr>
+					<th>Symptom</th>
+					<th>Layer</th>
+					<th>Check</th>
+					<th>Fix</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>400 <code>does not support tools</code></td>
+					<td>template / capability gate</td>
+					<td><code>ollama show --modelfile &lt;model&gt;</code> has no <code>.Tools</code> block</td>
+					<td>add a <code>.Tools</code> block to the Modelfile, <code>ollama create</code> a new tag</td>
+			</tr>
+			<tr>
+					<td>200, prose, <code>prompt_eval_count</code> unchanged without/with tools</td>
+					<td>template</td>
+					<td>same as above</td>
+					<td>same as above</td>
+			</tr>
+			<tr>
+					<td>200, prose, <code>prompt_eval_count</code> higher with tools</td>
+					<td>model or prompt</td>
+					<td>schema reached the prompt</td>
+					<td>strengthen the instruction, check the model actually learned the format</td>
+			</tr>
+			<tr>
+					<td>200, <code>tool_calls</code> present in raw JSON, absent in your client</td>
+					<td>client parser</td>
+					<td>curl the endpoint directly</td>
+					<td>fix the streaming/JSON parser, not the model</td>
+			</tr>
+	</tbody>
+</table>
+<p>The last row is the reason to always test with a direct HTTP call before blaming the model: a framework that parses only <code>content</code> will report &ldquo;no tool call&rdquo; for a perfectly good response.</p>
+<p>If the call does come out and the trouble starts on the next turn — the assistant turn comes back with empty <code>content</code>, no <code>tool_calls</code> and an <code>eval_count</code> above zero, or an argument is returned retyped — you are past this layer; that failure is diagnosed in <a href="https://baeseokjae.github.io/posts/ollama-tool-call-history-corruption-2026/">the history-rewriting write-up</a>. If instead the open question is terminology — what a tool schema, a <code>tool_calls</code> message and a tool result are, and where each one sits in the request — start with <a href="https://baeseokjae.github.io/posts/llm-function-calling-tool-use-guide-2026/">the function-calling and tool-use guide</a>, which maps each provider&rsquo;s call and result pair and shows how to keep that pair intact.</p>
+<h2 id="what-the-pinned-source-says">What the pinned source says</h2>
+<p>In <code>v0.20.3</code> the capability list is computed from the template and from the configured parser, not from the model name. The server warns if the template does not parse, then appends the tools capability when <strong>either</strong> the template&rsquo;s declared variables contain <code>tools</code> <strong>or</strong> the parser named by <code>m.Config.Parser</code> reports tool support — <a href="https://raw.githubusercontent.com/ollama/ollama/v0.20.3/server/images.go">server/images.go at v0.20.3</a>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#a6e22e">builtinParser</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">parsers</span>.<span style="color:#a6e22e">ParserForName</span>(<span style="color:#a6e22e">m</span>.<span style="color:#a6e22e">Config</span>.<span style="color:#a6e22e">Parser</span>)
+</span></span><span style="display:flex;"><span><span style="color:#75715e">// Check for tools capability</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">v</span>, <span style="color:#a6e22e">err</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">m</span>.<span style="color:#a6e22e">Template</span>.<span style="color:#a6e22e">Vars</span>()
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">if</span> <span style="color:#a6e22e">err</span> <span style="color:#f92672">!=</span> <span style="color:#66d9ef">nil</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">slog</span>.<span style="color:#a6e22e">Warn</span>(<span style="color:#e6db74">&#34;model template contains errors&#34;</span>, <span style="color:#e6db74">&#34;error&#34;</span>, <span style="color:#a6e22e">err</span>)
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">if</span> <span style="color:#a6e22e">slices</span>.<span style="color:#a6e22e">Contains</span>(<span style="color:#a6e22e">v</span>, <span style="color:#e6db74">&#34;tools&#34;</span>) <span style="color:#f92672">||</span> (<span style="color:#a6e22e">builtinParser</span> <span style="color:#f92672">!=</span> <span style="color:#66d9ef">nil</span> <span style="color:#f92672">&amp;&amp;</span> <span style="color:#a6e22e">builtinParser</span>.<span style="color:#a6e22e">HasToolSupport</span>()) {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">capabilities</span> = append(<span style="color:#a6e22e">capabilities</span>, <span style="color:#a6e22e">model</span>.<span style="color:#a6e22e">CapabilityTools</span>)
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p><code>Vars()</code> returns the identifiers the template actually references, lower-cased and de-duplicated — <a href="https://raw.githubusercontent.com/ollama/ollama/main/template/template.go">template/template.go on main</a> walks the parsed root nodes and collects identifiers, which is why a sentence containing the word &ldquo;tools&rdquo; contributes nothing: prose is not an identifier. That is the first branch, and it matches the measured control: <code>probe-faketools:latest</code>, which configures no parser, was refused in both runs.</p>
+<p>The second branch is read from source here, not measured. <code>parsers.ParserForName(m.Config.Parser)</code> resolves whatever parser the build selected, and at v0.20.3 <code>HasToolSupport()</code> returns <code>true</code> in <a href="https://raw.githubusercontent.com/ollama/ollama/v0.20.3/model/parsers/cogito.go">model/parsers/cogito.go</a>, <a href="https://raw.githubusercontent.com/ollama/ollama/v0.20.3/model/parsers/gemma4.go">gemma4.go</a>, <a href="https://raw.githubusercontent.com/ollama/ollama/v0.20.3/model/parsers/deepseek3.go">deepseek3.go</a>, <a href="https://raw.githubusercontent.com/ollama/ollama/v0.20.3/model/parsers/lfm2.go">lfm2.go</a> and <a href="https://raw.githubusercontent.com/ollama/ollama/v0.20.3/model/parsers/ministral.go">ministral.go</a>. A build that selects one of those gets <code>tools</code> in its capability list with no <code>.Tools</code> in its template, so a probe that only inspects the template would classify it as incapable when the server accepts its tools requests. The fetched excerpts and their file hashes are in the <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-chat-template-tool-support-probe-2026/upstream-parser-tool-support-v0.20.3.txt">parser-branch excerpt</a> published with this post.</p>
+<p>The chat handler takes the other half of the decision. It appends the tools capability to the requested set whenever the request carries a non-empty <code>tools</code> array, then asks the scheduler for a runner with that set — <a href="https://raw.githubusercontent.com/ollama/ollama/v0.20.3/server/routes.go">server/routes.go at v0.20.3</a>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#a6e22e">caps</span> <span style="color:#f92672">:=</span> []<span style="color:#a6e22e">model</span>.<span style="color:#a6e22e">Capability</span>{<span style="color:#a6e22e">model</span>.<span style="color:#a6e22e">CapabilityCompletion</span>}
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">if</span> len(<span style="color:#a6e22e">req</span>.<span style="color:#a6e22e">Tools</span>) &gt; <span style="color:#ae81ff">0</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">caps</span> = append(<span style="color:#a6e22e">caps</span>, <span style="color:#a6e22e">model</span>.<span style="color:#a6e22e">CapabilityTools</span>)
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>So the API always accepts the field and always asks for the capability; the refusal happens when the build&rsquo;s own capability list cannot satisfy it. The message itself is assembled in the same file as the check: <code>CheckCapabilities</code> joins a sentinel <code>does not support</code> with <code>tools</code> into one error, which is how a template property ends up reported as a model property. The 400 status is what the probe observed on the wire in 0.20.3; treat the exact wording as an observation of this build, not as a documented API contract.</p>
+<p>The API documentation is not where you learn this. <a href="https://raw.githubusercontent.com/ollama/ollama/v0.20.3/docs/api.md">docs/api.md at v0.20.3</a> shows a <code>tools</code> array in a <code>/api/chat</code> example and says nothing about which builds accept it, so a developer reading the docs reasonably concludes that the field is universally supported and that a model which &ldquo;ignores&rdquo; it is at fault.</p>
+<p>Newer code on <code>main</code>, read on 2026-11-02 with no binary built or run here, is looser: the chat-template path grants the tools capability on a plain substring test for <code>tools</code> or <code>tool_call</code> rather than on declared variables — <a href="https://raw.githubusercontent.com/ollama/ollama/main/server/images.go">server/images.go on main</a>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-go" data-lang="go"><span style="display:flex;"><span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">chatTemplateHasToolSupport</span>(<span style="color:#a6e22e">chatTemplate</span> <span style="color:#66d9ef">string</span>) <span style="color:#66d9ef">bool</span> {
+</span></span><span style="display:flex;"><span>	<span style="color:#66d9ef">return</span> <span style="color:#a6e22e">strings</span>.<span style="color:#a6e22e">Contains</span>(<span style="color:#a6e22e">chatTemplate</span>, <span style="color:#e6db74">&#34;tools&#34;</span>) <span style="color:#f92672">||</span> <span style="color:#a6e22e">strings</span>.<span style="color:#a6e22e">Contains</span>(<span style="color:#a6e22e">chatTemplate</span>, <span style="color:#e6db74">&#34;tool_call&#34;</span>)
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>That is a source-level observation about newer code, not a measurement: no main-branch binary was built or run here, so nothing is claimed about whether <code>probe-faketools:latest</code> would be accepted by it. If you are on a newer build, run the probe rather than assuming either rule applies.</p>
+<h2 id="limits">Limits</h2>
+<p>Single host, CPU only, one 0.5B model and two derivative builds. Everything above is a behaviour observation — did a call happen, was the request refused — and wall times from these runs (0.1 s to 54 s, unloaded model on 2 vCPU) are logged in the run record but not claimed as latency. No GPU, no larger model and no parser-configured build were tested, so nothing here says how often a bigger flagged build produces a well-formed call, and nothing here measures the <code>HasToolSupport()</code> branch at runtime. The version where the <code>tools</code> field and the capability gate first appeared was not bisected, but the window is narrow: <a href="https://raw.githubusercontent.com/ollama/ollama/v0.2.0/api/types.go">api/types.go at v0.2.0</a> has no <code>Tools</code> field in <code>ChatRequest</code> at all, while <a href="https://raw.githubusercontent.com/ollama/ollama/v0.2.8/server/routes.go">server/routes.go at v0.2.8</a> already appends the tools capability when the request carries a non-empty array. On a build before that window the key is dropped by the JSON decoder and the reply is prose with HTTP 200 — read from source for this post, not measured on this host, and not offered as a claim about any particular release in between.</p>
+<h2 id="reproduction">Reproduction</h2>
+<p>The run record, the control run, all three Modelfiles and the extracted templates for the positive and negative cases are published with this post. These are local first-party measurements on the host described above, not vendor benchmarks or third-party downloads:</p>
+<ul>
+<li>Probe driver that produced the rows (edit the <code>EV</code> path at the top to your own evidence directory): <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-chat-template-tool-support-probe-2026/probe_tool_template.py">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-chat-template-tool-support-probe-2026/probe_tool_template.py</a></li>
+<li>Run record for the parent and <code>probe-notools</code> builds, with per-run status, response class, token counts and timestamps: <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-chat-template-tool-support-probe-2026/probe-run.json">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-chat-template-tool-support-probe-2026/probe-run.json</a></li>
+<li>Control run for the prose-mention build: <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-chat-template-tool-support-probe-2026/probe-faketools.json">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-chat-template-tool-support-probe-2026/probe-faketools.json</a></li>
+<li>Modelfile for the negative case, with only the <code>.Tools</code> conditional removed: <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-chat-template-tool-support-probe-2026/Modelfile.notools">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-chat-template-tool-support-probe-2026/Modelfile.notools</a></li>
+<li>Extracted template of the negative derivative, with the <code>.Tools</code> block absent: <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-chat-template-tool-support-probe-2026/template-probe-notools.txt">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-chat-template-tool-support-probe-2026/template-probe-notools.txt</a></li>
+<li>Full <code>ollama show --modelfile</code> dump for the parent build, the file the derivative was cut from: <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-chat-template-tool-support-probe-2026/modelfile-qwen2.5-0.5b.txt">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-chat-template-tool-support-probe-2026/modelfile-qwen2.5-0.5b.txt</a></li>
+<li>Extracted TEMPLATE of the parent build — the positive case behind the higher prompt token count: <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-chat-template-tool-support-probe-2026/template-qwen2.5-0.5b.txt">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-chat-template-tool-support-probe-2026/template-qwen2.5-0.5b.txt</a></li>
+<li>Modelfile for the prose-mention control, where the word &ldquo;tools&rdquo; sits in a sentence and <code>.Tools</code> appears nowhere: <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-chat-template-tool-support-probe-2026/Modelfile.faketools">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-chat-template-tool-support-probe-2026/Modelfile.faketools</a></li>
+<li>Parser-branch source excerpt for v0.20.3, with the capability condition and the five <code>HasToolSupport()</code> returns plus per-file sha256: <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-chat-template-tool-support-probe-2026/upstream-parser-tool-support-v0.20.3.txt">https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-chat-template-tool-support-probe-2026/upstream-parser-tool-support-v0.20.3.txt</a></li>
+</ul>
+<p>The practical conclusion is one habit: before you debug a client, a prompt or a model choice, ask the build whether it can accept tools at all — read the capability list, then send one tools request and read <code>prompt_eval_count</code>. If neither the template nor a configured parser can grant the capability, swap the template or the parser, not the model: the weights were never the problem.</p>
+]]></content:encoded></item></channel></rss>
