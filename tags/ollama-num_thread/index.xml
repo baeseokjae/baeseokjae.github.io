@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Ollama Num_thread on RockB</title><link>https://baeseokjae.github.io/tags/ollama-num_thread/</link><description>Recent content in Ollama Num_thread on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Wed, 04 Nov 2026 00:00:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/ollama-num_thread/index.xml" rel="self" type="application/rss+xml"/><item><title>Ollama Thread Tuning on CPU: Measuring Where More Threads Stop Helping Token Generation (2026)</title><link>https://baeseokjae.github.io/posts/ollama-num-thread-cpu-tuning-2026/</link><pubDate>Wed, 04 Nov 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/ollama-num-thread-cpu-tuning-2026/</guid><description>num_thread is a load-time Runner option whose API default is 0, and Ollama&amp;#39;s documented configuration has no OLLAMA_NUM_THREAD variable. On a 2-vCPU host a fixed sweep measured 13.25 generation tok/s at one thread, about 22.9 at two in the fast-mode rows, and 0.56-0.65 at four, with prompt evaluation timed separately from generation.</description><content:encoded><![CDATA[<p>You follow the usual advice: the local model server is using all your cores, so you pin the thread count to the number of cores and expect token generation to speed up. On a 2-vCPU box the opposite happens. The same 66-token prompt that produced 55 tokens in about 4.5 seconds with one thread took 109 seconds with four, and two later requests at that setting, bounded at 90 seconds in the second window, never returned at all. Both completed requests returned HTTP 200 with an ordinary response body; nothing in them announced that the setting was wrong.</p>
+<p>The advice is a number without a measurement behind it, and it never says which of the two timed phases it is supposed to change. Ollama reports prompt evaluation and token generation as separate durations, and they behave differently — but almost every &ldquo;tokens per second&rdquo; figure people quote divides output tokens by total wall time, which mixes the two. This article shows what <code>num_thread</code> actually is in Ollama 0.20.3, what the server&rsquo;s own default did on a small shared host, and a one-request-at-a-time sweep that separates the phases. It also reports the negative results: one cell was too noisy to average, four threads collapsed throughput instead of improving it, and eight threads was never measured.</p>
+<h2 id="the-knob-exists-the-environment-variable-does-not">The knob exists; the environment variable does not</h2>
+<p><code>num_thread</code> is a field on the <code>Runner</code> option struct in Ollama&rsquo;s Go API, alongside <code>num_ctx</code>, <code>num_batch</code> and <code>num_gpu</code>, and it is accepted in the <code>options</code> object of a generate request (<a href="https://raw.githubusercontent.com/ollama/ollama/main/api/types.go">ollama/api/types.go</a>). The same file shows the default Ollama&rsquo;s own API layer fills in: <code>NumThread: 0, // let the runtime decide</code>. Zero is not a thread count; it is a request to the runtime to choose.</p>
+<p>The variable that articles and forum posts tell you to export, <code>OLLAMA_NUM_THREAD</code>, is not in the server&rsquo;s documented configuration. The FAQ&rsquo;s environment-variable list documents <code>OLLAMA_MAX_LOADED_MODELS</code>, <code>OLLAMA_NUM_PARALLEL</code>, <code>OLLAMA_MAX_QUEUE</code> and the host/model settings, and contains no thread-count variable (<a href="https://docs.ollama.com/faq.md">Ollama FAQ</a>); the <code>envconfig</code> package that parses those variables on the main branch has no thread setting either (<a href="https://raw.githubusercontent.com/ollama/ollama/main/envconfig/config.go">envconfig/config.go</a>). Absence from these files is not proof that the binary ignores an unknown variable, and older releases may differ, but it does mean the widely repeated export is not a documented control surface. The supported way to set the value is per request, in <code>options</code>.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Control</th>
+					<th>Where it lives</th>
+					<th>Default</th>
+					<th>What it changes</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>num_thread</code></td>
+					<td><code>options</code> object of <code>/api/generate</code>, load-time <code>Runner</code> field</td>
+					<td><code>0</code> (&ldquo;let the runtime decide&rdquo;)</td>
+					<td>Worker threads used by the loaded model</td>
+			</tr>
+			<tr>
+					<td><code>OLLAMA_NUM_THREAD</code></td>
+					<td>Not present in the FAQ list or <code>envconfig</code></td>
+					<td>—</td>
+					<td>Nothing documented</td>
+			</tr>
+			<tr>
+					<td><code>OLLAMA_NUM_PARALLEL</code></td>
+					<td>Server environment variable</td>
+					<td><code>1</code></td>
+					<td>How many requests one model processes at once</td>
+			</tr>
+			<tr>
+					<td><code>OLLAMA_MAX_QUEUE</code></td>
+					<td>Server environment variable</td>
+					<td><code>512</code></td>
+					<td>Requests queued before new ones are rejected</td>
+			</tr>
+	</tbody>
+</table>
+<h2 id="what-the-default-resolves-to-and-why-this-article-will-not-name-it">What the default resolves to, and why this article will not name it</h2>
+<p>It is tempting to answer &ldquo;four&rdquo;, because llama.cpp&rsquo;s context parameters default both thread counts to <code>GGML_DEFAULT_N_THREADS</code> (<a href="https://raw.githubusercontent.com/ggml-org/llama.cpp/master/src/llama-context.cpp">llama-context.cpp</a>), and <code>GGML_DEFAULT_N_THREADS</code> is defined as <code>4</code> (<a href="https://raw.githubusercontent.com/ggml-org/llama.cpp/master/ggml/include/ggml.h">ggml.h</a>). That is llama.cpp&rsquo;s own untouched default. It is not a statement about what the Ollama server passes down after it receives <code>NumThread: 0</code>, and the measurement below contradicts reading it that way.</p>
+<p><code>llama.cpp</code> also keeps two independent counts, and the header says so: <code>n_threads</code> is used &ldquo;for generation (single token)&rdquo; and <code>n_threads_batch</code> &ldquo;for prompt and batch processing (multiple tokens)&rdquo; (<a href="https://raw.githubusercontent.com/ggml-org/llama.cpp/master/include/llama.h">llama.h</a>). A single requested <code>num_thread</code> therefore has to be mapped onto two different worker pools, which is one reason a single &ldquo;tokens/s&rdquo; number cannot describe the effect.</p>
+<p>On this host the default behaved like the two-thread setting, not the four-thread one. With <code>num_thread</code> omitted, two requests produced 21.37 and 23.61 generation tok/s (median 22.49, CV 5.0%, rows at 2026-11-04T17:18:03Z and 17:18:04Z) while an explicit four-thread request in the same window managed 0.65 tok/s. Four threads cannot be the setting that produced the default rows — the gap is roughly 35x. What the data cannot do is separate the rule &ldquo;use <code>nproc</code>&rdquo; from &ldquo;use <code>min(4, nproc)</code>&rdquo;, because both evaluate to 2 on a 2-vCPU machine. So the honest statement is: the default runs in the two-thread band here, the four-thread constant does not describe it, and the exact resolution rule stays unresolved.</p>
+<h2 id="method">Method</h2>
+<p>The host is a shared 2-vCPU Neoverse-N1 build machine with 11,927 MB of RAM, running Ollama 0.20.3 and kernel 6.17.0-1019-oracle. The model is <code>qwen2.5:0.5b</code> Q4_K_M, digest <code>a8b0c51577010a279d933d14c2a8ab4b268079d44c5c8830c0a93900f1827c67</code>, loaded with <code>num_ctx 2048</code>, <code>temperature 0</code>, <code>seed 42</code> and <code>keep_alive 5m</code>. Two fixed prompts were used: a 66-token short prompt and a 606-token long prompt, both counted by the server&rsquo;s own <code>prompt_eval_count</code>. <code>num_predict</code> was 96 for the explicit-thread cells and 32 for the default cells and one completed four-thread request, so generation tok/s normalises across them but wall-clock durations do not.</p>
+<p><code>num_thread</code> was passed in the request <code>options</code> rather than set globally, so every cell used the same resident model and the shared daemon was never restarted. Requests ran strictly one at a time, each a synchronous HTTP call, with a 180-second client timeout in the round-0 window and 90 seconds in the round-1 window — which is why the round-0 four-thread request is recorded as completing in 109.4 seconds while the two round-1 four-thread requests are recorded as timed out; no background process, no shell job control, no signal to the service. Rows were appended to separate files per window, and nothing was deleted or rewritten between rounds. The only load-average reading attached to an analysed round-0 request is 4.78 at 16:32:58Z, the start of the invocation that produced the four-thread row; a 4.04 reading was written at 16:23:11Z, at the end of the rejected dedicated-instance attempt and 32 seconds before the first analysed request, so it is a pre-window reading and not an end-of-window one. The round-1 rows store 4.13-4.69 next to the individual requests, against 2 runnable vCPUs.</p>
+<p>The raw rows, probe scripts and method notes from both windows are kept in the author&rsquo;s private run record and are not published as downloadable files; the request body, host specification and field list in this article are everything needed to rerun the same sweep, and the numbers below are reported with their timestamps so they can be checked against that record.</p>
+<h2 id="results">Results</h2>
+<p>Twenty-one records across two windows on 2026-11-04 (16:23-16:34 UTC and 17:14-17:18 UTC). All figures are generation tokens per second, computed from the server&rsquo;s <code>eval_count</code> and <code>eval_duration</code>, never from wall time. Every CV in the table is the population standard deviation divided by the mean of the rows listed for that cell, so the column is comparable across cells.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Cell (2 vCPU host)</th>
+					<th>Requests</th>
+					<th>Median generation tok/s</th>
+					<th>Range</th>
+					<th>CV</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>1 thread, 66-token prompt</td>
+					<td>3</td>
+					<td>13.25</td>
+					<td>13.12-13.30</td>
+					<td>0.6%</td>
+			</tr>
+			<tr>
+					<td>1 thread, 606-token prompt</td>
+					<td>3</td>
+					<td>11.20</td>
+					<td>11.18-11.21</td>
+					<td>0.1%</td>
+			</tr>
+			<tr>
+					<td>2 threads, 66-token prompt, fast mode</td>
+					<td>3</td>
+					<td>22.88</td>
+					<td>22.48-23.00</td>
+					<td>1.0%</td>
+			</tr>
+			<tr>
+					<td>2 threads, 66-token prompt, slow mode</td>
+					<td>3</td>
+					<td>3.25</td>
+					<td>1.81-3.72</td>
+					<td>not averaged</td>
+			</tr>
+			<tr>
+					<td>2 threads, 606-token prompt</td>
+					<td>3</td>
+					<td>18.58</td>
+					<td>18.49-18.62</td>
+					<td>0.3%</td>
+			</tr>
+			<tr>
+					<td>Default (no <code>num_thread</code>)</td>
+					<td>2</td>
+					<td>22.49</td>
+					<td>21.37-23.61</td>
+					<td>5.0%</td>
+			</tr>
+			<tr>
+					<td>4 threads, 66-token prompt</td>
+					<td>2 (+2 timeouts)</td>
+					<td>0.60</td>
+					<td>0.56-0.65</td>
+					<td>7.8%</td>
+			</tr>
+			<tr>
+					<td>8 threads</td>
+					<td>0</td>
+					<td>not measured</td>
+					<td>—</td>
+					<td>—</td>
+			</tr>
+	</tbody>
+</table>
+<p>Two threads beat one on both prompt sizes in this sample: 13.25 to 22.88 tok/s on the short prompt and 11.20 to 18.58 tok/s on the long one, which is what you would expect when two real cores are given two worker threads. The size of the short-prompt gain should not be averaged — see the next section — and the long-prompt ratio (1.66x for twice the threads) is the more trustworthy of the two because that cell was stable.</p>
+<h2 id="the-two-thread-short-cell-split-into-two-modes">The two-thread short cell split into two modes</h2>
+<p>Six short-prompt rows at two threads exist across the two windows, three per window: 22.48, 22.88 and 22.99 tok/s in one mode, and 1.81, 3.25 and 3.72 tok/s in the other. The combined CV of those six rows is 77%, far past the 15% ceiling this experiment set for itself, so no averaged 1-to-2 gain is published from that cell. Both modes are real observations from the same server and model, and the fast mode matches the default cell&rsquo;s band, which is why the table reports them as two populations.</p>
+<p>The plausible mechanism is host contention, not thread count: two of the three slow rows recorded load averages of 4.58 and 4.69 on 2 vCPUs, and the third stores no load average at all, while a neighbour taking the cores leaves the model&rsquo;s two threads runnable but not scheduled. The operational consequence is that on a shared box you cannot compare a thread setting against a baseline taken minutes earlier and attribute the difference to threads. Record load average next to every row, and if your repetitions split into two clusters, report the clusters instead of a mean.</p>
+<h2 id="four-threads-on-a-two-core-host-collapses-throughput">Four threads on a two-core host collapses throughput</h2>
+<p>Oversubscription did not produce a plateau. It produced a cliff. Two completed requests at <code>num_thread: 4</code> measured 0.56 tok/s (55 tokens in 109.4 s wall clock; the 4.78 load average was recorded at the window start, 16:32:58Z, two minutes before this row, which stores no load average of its own) and 0.65 tok/s (32 tokens in 50.9 s, load average 4.13, 17:16:51Z), with two more requests at the same setting in the second window timing out at 90 seconds. The collapse was reproduced in two windows about 42 minutes apart, on the same model digest and the same server instance, so it is not one bad request.</p>
+<p>The magnitude is contention-dependent: both windows had load above the two available cores, so this measures oversubscribed threads on an oversubscribed host, which is the realistic condition for a shared CPU box but not a clean single-tenant figure. The direction is what the data supports — on a 2-vCPU machine, asking for twice the cores costs roughly 35-40x generation throughput relative to the server&rsquo;s own default, and some requests never complete. If you set <code>num_thread</code> from <code>nproc</code> on a machine where <code>nproc</code> already counts hyperthreads or is shared with other work, this is the failure you are signing up for.</p>
+<h2 id="why-a-single-tokenss-number-hides-the-effect">Why a single tokens/s number hides the effect</h2>
+<p>Ollama&rsquo;s generate response reports <code>prompt_eval_duration</code> as &ldquo;time spent evaluating uncached prompt tokens&rdquo;, <code>eval_duration</code> as &ldquo;time spent generating tokens&rdquo;, and <code>prompt_eval_cached_count</code> alongside them (<a href="https://docs.ollama.com/api/generate.md">/api/generate</a>). Divide output tokens by total time and you mix prefill, generation and model load into one figure.</p>
+<p>The clearest example is the first long-prompt request at one thread: 42.70 s total, of which 34.87 s was prompt evaluation and only 7.52 s was the 84 generated tokens. Generation was 11.18 tok/s; dividing 84 tokens by 42.70 s gives 1.97 tok/s, a 5.7x understatement of the thing you were trying to tune. The second identical request finished in 7.96 s because 606 prompt tokens came back from cache (<code>prompt_eval_duration</code> dropped from 34.87 s to 0.10 s). Any sweep that repeats one prompt without noticing <code>prompt_eval_cached_count</code> will &ldquo;discover&rdquo; a 5x speedup that is just the cache warming up.</p>
+<p>Counting the phases separately is also the only way to see that the four-thread collapse hits both. In the long-prompt cell, prefill went from 17.4 tok/s at one thread (606 tokens in 34.87 s) to 31.1 tok/s at two (606 tokens in 19.50 s), a factor of 1.79, while generation went from 11.20 to 18.58 tok/s, a factor of 1.66 — so &ldquo;prompt evaluation scales differently from generation&rdquo; was not observed here; both phases responded to the same doubling, roughly equally. What the separation does buy you is attribution: at four threads the 66-token prompt evaluated at roughly 44 tok/s (1.50 s for 66 tokens) against roughly 873 tok/s at one thread, about 20x slower, while generation fell from 13.25 to 0.60 tok/s. Prefill is not immune to oversubscription just because it uses the batch worker pool.</p>
+<h2 id="what-to-set-and-when-threads-are-the-wrong-lever">What to set, and when threads are the wrong lever</h2>
+<p>On a 2-vCPU host, the measured default was already at the two-thread band and matched an explicit two-thread request; there was nothing to gain by setting the value and a large loss at four. Leaving <code>num_thread</code> unset was the correct configuration here, and the null result is the finding worth keeping.</p>
+<p>On 4- or 8-core machines the same protocol transfers but the conclusion does not: measure <code>nproc</code>, run three repetitions at one, <code>nproc</code> and <code>2 x nproc</code> threads with a fixed prompt, discard a warm-up request, and compare medians only if every cell&rsquo;s CV stays under about 15%. Past <code>nproc</code>, expect degradation rather than a plateau — the plateau in this data is not &ldquo;more threads stop helping&rdquo;, it is &ldquo;more threads than cores is actively harmful&rdquo;. If the reason you started tuning is that a second agent session is waiting for the first, thread count is the wrong lever: the requests are serialised by the server&rsquo;s parallel-slot setting, which is a separate queueing problem described in <a href="https://baeseokjae.github.io/posts/local-llm-concurrent-agent-sessions-2026/">two agent sessions against one local model server</a>. If you are squeezing a model into memory, that is a context and KV-cache budget, not a scheduling one (<a href="https://baeseokjae.github.io/posts/local-llm-vram-kv-cache-budget-2026/">VRAM and KV-cache budget</a>).</p>
+<p>The request that produced each row above is small enough to paste into a terminal, with the thread count as the only variable:</p>
+<pre tabindex="0"><code>curl -s http://127.0.0.1:11434/api/generate -d &#39;{
+  &#34;model&#34;: &#34;qwen2.5:0.5b&#34;,
+  &#34;prompt&#34;: &#34;&lt;fixed prompt&gt;&#34;,
+  &#34;stream&#34;: false,
+  &#34;keep_alive&#34;: &#34;5m&#34;,
+  &#34;options&#34;: {&#34;num_thread&#34;: 2, &#34;num_ctx&#34;: 2048, &#34;num_predict&#34;: 96,
+              &#34;temperature&#34;: 0, &#34;seed&#34;: 42}
+}&#39;
+</code></pre><p>Record <code>eval_count</code>, <code>eval_duration</code>, <code>prompt_eval_count</code>, <code>prompt_eval_duration</code>, <code>prompt_eval_cached_count</code>, <code>total_duration</code> and the host load average for every request; compute generation tok/s as <code>eval_count / (eval_duration / 1e9)</code>. Omit the <code>num_thread</code> key entirely for the default cell — passing <code>0</code> is not the same as omitting it, since <code>0</code> is what the API substitutes when the field is absent, and the comparison you care about is what the server does when nobody asks. Delete one warm-up request per cell before collecting, and never compare a cached prompt against an uncached one. Model choice on a CPU-only host is a bigger lever than any of this and is covered in <a href="https://baeseokjae.github.io/posts/best-local-llm-models-2026/">best local LLM models</a> and <a href="https://baeseokjae.github.io/posts/best-ollama-models-coding-2026/">best Ollama coding models</a>; the API surface itself is in the <a href="https://baeseokjae.github.io/posts/ollama-api-local-llm-integration-developer-guide-2026/">Ollama API integration guide</a>, and the agent-side tuning block most readers arrive from is in <a href="https://baeseokjae.github.io/posts/aider-ollama-local-coding-2026/">Aider with Ollama</a>.</p>
+<h2 id="limitations">Limitations</h2>
+<p>No eight-thread cell exists. Every request above two threads either hit the client timeout of the window that ran it (90 seconds, in the second window) or completed at about 0.6 tok/s, so a further cell would have consumed the remaining measurement budget without producing a distinguishable result; nothing in this article implies eight threads were measured. The two-thread short cell is bimodal and is reported as two modes, not a mean, and neither round reached the nine repetitions the original plan targeted. Host load averaged above the two available cores for much of both windows, so absolute throughput is not a single-tenant number and the four-thread collapse magnitude would be smaller on an idle machine. The effective default thread count could not be resolved from source or from a readable server log, and this host cannot distinguish the two candidate rules because both give 2. All source checks are against main-branch files and current documentation read on 2026-11-04 and re-checked on 2026-11-19, not a tagged 0.20.3 release tarball; every quoted fact was present verbatim in both readings, though the files&rsquo; bytes and line numbers changed between them, so a later main-branch change could still invalidate a quotation. Every figure above comes from a two-window local measurement; no vendor benchmark is quoted, and the observation that both phases respond to thread count rests on one prompt size and one 0.5B model, so a larger model or a different prefill length could still split them.</p>
+]]></content:encoded></item></channel></rss>
