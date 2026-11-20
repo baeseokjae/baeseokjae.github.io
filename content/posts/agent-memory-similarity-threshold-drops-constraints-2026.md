@@ -1,6 +1,6 @@
 ---
 date: 2026-11-14 00:00:00+00:00
-lastmod: 2026-11-14 00:00:00+00:00
+lastmod: 2026-11-20 00:00:00+00:00
 description: On a 12-fact fixture with two local Ollama embedders, one of four constraint queries scored 0.660 under all-minilm, below a 0.7 cosine cutoff, while descriptive facts scored 0.764-0.773. The same constraints all clear 0.90 on snowflake-arctic-embed:33m. Method, sweep and a probe you can run.
 draft: false
 schema: schema-agent-memory-similarity-threshold-drops-constraints-2026
@@ -12,7 +12,15 @@ tags:
 - ollama
 - rag
 - evaluation
-title: 'Your Similarity Cutoff Deletes the Rules First: Constraint Facts Score Below Descriptions in Local Embedders (2026)'
+title: 'Agent Memory Cutoffs Can Hide Constraints: Test Before You Tune'
+cover:
+  image: /images/agent-memory-similarity-threshold-drops-constraints-2026-presentation.png
+  alt: 'Conceptual checklist for similarity cutoffs: Constraint query, then Similarity score, then Threshold decision. Check whether a cutoff hides a required constraint.'
+  caption: Check whether a cutoff hides a required constraint. Conceptual illustration; see article for evidence and limits.
+  relative: false
+  hidden: false
+images:
+- /images/agent-memory-similarity-threshold-drops-constraints-2026-presentation.png
 ---
 
 Your memory pipeline ends with a score gate: keep rows at or above 0.7 cosine similarity, drop the rest. You tuned that number on topical questions and it looked fine. Then someone asks "May I deploy to production on Friday?" and the agent retrieves nothing — not the wrong thing, nothing — because the one stored sentence that should have stopped the deploy scored 0.660.
