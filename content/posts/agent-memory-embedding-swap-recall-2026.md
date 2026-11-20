@@ -1,7 +1,7 @@
 ---
-title: "Swap the Embedding Model, Keep the Store: Agent Memory That Returns the Wrong Neighbour Without an Error"
+title: "Changed Your Embedding Model? Check for Silent Retrieval Errors"
 date: 2026-11-02T15:40:00+00:00
-lastmod: 2026-11-02T15:58:22+00:00
+lastmod: 2026-11-19T20:14:52+00:00
 description: "A 40-document recall harness shows what happens when the encoder behind an existing vector store changes: same-width swaps return wrong neighbours with no exception, while width mismatches fail loudly. Includes the guard that records encoder id, digest and dimension per vector."
 draft: false
 tags:
@@ -16,6 +16,14 @@ tags:
   - silent retrieval failure
   - agent memory retrieval integrity
 schema: "schema-agent-memory-embedding-swap-recall-2026"
+cover:
+  image: "/images/agent-memory-embedding-swap-recall-2026-presentation.png"
+  alt: "Conceptual checklist for an embedding model change: 1 Encoder identity, 2 Vector dimensions, 3 Retrieval checks. Matching dimensions alone do not mean matching spaces."
+  caption: "Matching dimensions alone do not mean matching spaces. Conceptual checklist, not measurement data; see the article for evidence and limits."
+  relative: false
+  hidden: false
+images:
+  - "/images/agent-memory-embedding-swap-recall-2026-presentation.png"
 ---
 
 An agent memory store can survive an embedding-model change while quietly returning the wrong fact. Nothing in the stack raises, because nothing in the stack compares the encoder that wrote a vector with the encoder that now reads it. In a 40-document fixture with 15 single-answer queries, one encoder on both sides ranked the labelled document first for 15 of 15 queries. Replacing the document encoder with a different model of the same width dropped that to 1 of 15, and no call failed. Replacing it with a model of a different width failed all 15 queries with a length error — the loud case, and the easy one.
