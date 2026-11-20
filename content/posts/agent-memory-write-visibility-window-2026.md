@@ -1,6 +1,7 @@
 ---
-title: "The Agent Writes a Correction and Then Reads the Old Fact: Measuring the Memory Write-Visibility Window (2026)"
+title: "Why Your Agent Reads Old Facts After a Memory Update"
 date: 2026-11-15T00:29:00+00:00
+lastmod: 2026-11-20T12:32:10+00:00
 tags:
   - agent memory write visibility
   - read after write consistency
@@ -13,6 +14,14 @@ tags:
 description: "A memory write returns, the next turn reads the superseded value. An 11-configuration sweep shows when the stale read appears and how much of the window is the embedder."
 draft: false
 schema: "schema-agent-memory-write-visibility-window-2026"
+cover:
+  image: "/images/agent-memory-write-visibility-window-2026-presentation.png"
+  alt: "Conceptual three-step chain for an agent memory write: 01 Write acknowledged, 02 Store becomes visible, 03 Next read."
+  caption: "Conceptual checklist, not measurement data: the write acknowledgement and the index becoming visible are two different events, so measure the gap before relying on the updated fact."
+  relative: false
+  hidden: false
+images:
+  - "/images/agent-memory-write-visibility-window-2026-presentation.png"
 ---
 
 Turn 18 of a support-agent transcript. The operator says staging moved from `db-08` to `db-09`. The agent calls its memory tool, gets a success response, and answers "noted — staging now points at `db-09`". Turn 19, a different question that touches the same fact. The agent answers `db-08`.
