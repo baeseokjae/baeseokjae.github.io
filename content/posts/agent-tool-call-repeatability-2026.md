@@ -1,21 +1,29 @@
 ---
-title: "Same Seed, Different Bytes: Measuring Tool-Call Repeatability Before You Trust an Agent Eval (2026)"
-date: 2026-11-15T13:38:00+00:00
-lastmod: 2026-11-15T14:00:00+00:00
-description: "13 replays of one fixed tool-calling request on Ollama 0.20.3 with qwen3:0.6b at seed 42: all 13 calls were semantically identical, but only 11 were byte-identical, and both flips happened at temperature 0.0. Includes the probe, the raw per-call JSONL and a normalise-then-hash helper."
+title: 'Ollama Tool Calls: Same Seed, Different Bytes'
+date: 2026-11-15 13:38:00+00:00
+lastmod: '2026-11-19T12:14:32+00:00'
+description: '13 replays of one fixed tool-calling request on Ollama 0.20.3 with qwen3:0.6b at seed 42: all 13 calls were semantically identical, but only 11 were byte-identical, and both flips happened at temperature 0.0. Includes the probe, the raw per-call JSONL and a normalise-then-hash helper.'
 draft: false
 tags:
-  - tool call repeatability
-  - agent eval flakiness
-  - seed determinism
-  - temperature 0 not deterministic
-  - tool_calls arguments
-  - JSON key order
-  - golden file test
-  - Ollama tool calling
-  - eval snapshot testing
-  - local LLM reproducibility
-schema: "schema-agent-tool-call-repeatability-2026"
+- tool call repeatability
+- agent eval flakiness
+- seed determinism
+- temperature 0 not deterministic
+- tool_calls arguments
+- JSON key order
+- golden file test
+- Ollama tool calling
+- eval snapshot testing
+- local LLM reproducibility
+schema: schema-agent-tool-call-repeatability-2026
+cover:
+  image: /images/agent-tool-call-repeatability-2026-presentation.png
+  alt: 'Conceptual checklist for tool-call repeatability: Fixed request + seed, then Repeated tool calls, then Semantic vs byte match. Compare meaning separately from serialized bytes.'
+  caption: Compare meaning separately from serialized bytes. Conceptual illustration; see article for evidence and limits.
+  relative: false
+  hidden: false
+images:
+- /images/agent-tool-call-repeatability-2026-presentation.png
 ---
 
 A team re-runs its agent eval after a one-line prompt change and the pass rate moves five points. They revert the prompt; the number does not come back. They blame the harness, then the model vendor, and eventually pin `temperature=0` and `seed=42` everywhere — and the number still moves. Nobody in that loop can answer the question that comes before all of it: at the sampling settings the harness already uses, is the emitted tool call even the same object twice?
