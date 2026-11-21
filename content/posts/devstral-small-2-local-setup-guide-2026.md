@@ -64,7 +64,7 @@ Runtime overhead is the softest term. The calculator behind this table assumes 1
 
 Devstral Small 2 is Mistral's 24B open-weight coding model, released December 9, 2025 under Apache 2.0, and Mistral reports 68.0% on SWE-bench Verified for it. That score is vendor-reported: the launch post states the number and names no harness, so treat it as the vendor's own figure rather than an independently reproduced result. Mistral's launch post describes the model as placing "firmly among models up to five times its size while being capable of running locally on consumer hardware" ([Mistral launch post](https://mistral.ai/news/devstral-2-vibe-cli), checked 2026-11-02T16:55:32Z).
 
-The checkpoint is a Mistral3 build (`Mistral3ForConditionalGeneration`) that carries a 24-layer Pixtral vision tower alongside the text stack, and Ollama's registry lists these tags as accepting text and image input. Coding is still the reviewed use case; neither source says anything about vision quality, and this guide makes no claim about it.
+The checkpoint is a model using the Mistral3 architecture that carries a 24-layer Pixtral vision tower alongside the text stack, and Ollama's registry lists these tags as accepting text and image input. Coding is still the reviewed use case; neither source says anything about vision quality, and this guide makes no claim about it.
 
 ### Context length: 256K, 384K, or 393,216?
 
