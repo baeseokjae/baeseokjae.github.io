@@ -1,8 +1,8 @@
 ---
-title: "ACP Install Failed: What JetBrains' package_install_failed Log Line Actually Tells You (2026)"
+title: "JetBrains ACP Install Failed? Seven Checks Before Reinstalling"
 description: "The line 'Agent installation failed for acp.registry.claude-acp: package_install_failed' names a package and one generic token, not a failing step. Six loopback cases against a stub ACP registry show five distinct server-side signatures that all collapse into that same message, plus an ordered seven-check pre-flight you can run before reinstalling."
 date: 2026-11-12 00:00:00+00:00
-lastmod: 2026-11-12 19:08:00+00:00
+lastmod: 2026-11-21T20:15:57+00:00
 draft: false
 schema: schema-jetbrains-acp-package-install-failed-diagnosis-2026
 tags:
@@ -16,6 +16,14 @@ tags:
   - troubleshooting
   - Node.js runtime
   - SHA-256 verification
+cover:
+  image: /images/jetbrains-acp-package-install-failed-diagnosis-2026-presentation.png
+  alt: "Conceptual checklist for ACP installation checks: Package identifier, then Registry + artifact, then Ordered pre-flight. A generic error token does not identify the failing step."
+  caption: A generic error token does not identify the failing step. Conceptual illustration; see article for evidence and limits.
+  relative: false
+  hidden: false
+images:
+  - /images/jetbrains-acp-package-install-failed-diagnosis-2026-presentation.png
 ---
 
 You clicked Install in the AI Assistant agent list, the agent never appeared in AI Chat, and the log shows one line:
@@ -50,7 +58,7 @@ The ACP registry is not a per-agent manifest service. It is one index document w
 - each binary target may carry `archive`, `sha256`, `cmd`, `args`, `env` — the SHA-256 is documented as an integrity check, and the field is optional;
 - installer formats such as `.dmg`, `.pkg`, `.deb`, `.rpm`, `.msi` are explicitly not supported, only `.zip`, `.tar.gz`, `.tgz`, `.tar.bz2`, `.tbz2` or a raw binary.
 
-JetBrains IDEs read a dedicated index at `cdn.agentclientprotocol.com`, not the generic one, and there is a separate preview channel ([registry README](https://raw.githubusercontent.com/agentclientprotocol/registry/main/README.md)). The live JetBrains index is a single JSON document, and the entry for `claude-acp` at version 0.106.0 declares both a per-platform binary with a SHA-256 and an `npx` fallback ([registry-for-jetbrains.json](https://cdn.agentclientprotocol.com/registry/v1/latest/registry-for-jetbrains.json)). The index also carries an `environments.node` block pinning Node.js 24.22.1 with per-platform hashes — that is the shape of the "downloads and manages a Node.js runtime" promise, though nobody documents the client actually consuming that block, so treat it as correlation.
+JetBrains IDEs read a dedicated index at `cdn.agentclientprotocol.com`, not the generic one, and there is a separate preview channel ([registry README](https://raw.githubusercontent.com/agentclientprotocol/registry/main/README.md)). The live JetBrains index is a single JSON document; when this article first checked it, the entry for `claude-acp` at version 0.106.0 declared both a per-platform binary with a SHA-256 and an `npx` fallback, and a re-check on 2026-11-21 found version 0.109.1 published `npx`-only ([registry-for-jetbrains.json](https://cdn.agentclientprotocol.com/registry/v1/latest/registry-for-jetbrains.json)). The index also carries an `environments.node` block pinning Node.js 24.22.1 with per-platform hashes — that is the shape of the "downloads and manages a Node.js runtime" promise, though nobody documents the client actually consuming that block, so treat it as correlation.
 
 The corresponding npm package declares `engines.node: ">=22"` and a `claude-agent-acp` bin ([npm metadata](https://registry.npmjs.org/@agentclientprotocol/claude-agent-acp), [package.json](https://raw.githubusercontent.com/agentclientprotocol/claude-agent-acp/main/package.json)). The registry README also says every listed agent is CI-verified for `authMethods` in the ACP handshake, and the launch post says only agents supporting Agent Auth or Terminal Auth are featured ([JetBrains registry launch](https://blog.jetbrains.com/ai/2026/01/acp-agent-registry/)). That matters for expectations: an agent passing the auth conformance check is not the same as an agent whose archive exists for your platform.
 
