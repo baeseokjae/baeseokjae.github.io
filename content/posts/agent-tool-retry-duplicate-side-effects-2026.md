@@ -9,7 +9,16 @@ tags:
 - idempotency
 - distributed-systems
 - cost-engineering
-title: 'Retrying a Failed Tool Call: Duplicate Side Effects and the Token Bill Nobody Meters'
+title: 'Agent Tool Retries: How Duplicate Actions Happen'
+cover:
+  image: /images/agent-tool-retry-duplicate-side-effects-2026-presentation.png
+  alt: 'Conceptual checklist for tool-call retries: Timeout observed, then Commit state unknown, then Stable request identity. A timeout does not establish whether the action happened.'
+  caption: A timeout does not establish whether the action happened. Conceptual illustration; see article for evidence and limits.
+  relative: false
+  hidden: false
+images:
+- /images/agent-tool-retry-duplicate-side-effects-2026-presentation.png
+lastmod: '2026-11-21T18:14:22+00:00'
 ---
 
 An agent loop calls a tool that files a ticket, posts a review comment, or inserts a row. The call stalls and the client gives up at its timeout. The loop does what every retry wrapper does: it tries again. Nobody in that loop knows whether the first attempt reached the database, so the second attempt may be the first real write or the second one. When it is the second, the user sees a duplicate comment under a single logical step, and the token meter shows one step because the meter counts steps, not executions.
