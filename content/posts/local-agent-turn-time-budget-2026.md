@@ -1,5 +1,5 @@
 ---
-title: "Turn-Time Budget for a Local Coding Agent: what a measured tokens/second figure buys you in tool-call turns"
+title: "Local Coding Agents: Estimate Time per Turn, Not Just Tokens/s"
 date: 2026-11-08T00:00:00+00:00
 description: "One turn is prefill over the prompt plus decode over the output plus tool overhead. Using llama-bench's printed CPU rows for 7B Q4_0 at one thread, a 512-token prompt and 256-token output cost 82.98 s of prefill and 63.21 s of decode: 148.19 s per turn, 1.23 h for thirty turns, and a decode rate of at least 0.497 tok/s to fit a 600 s client timeout. A stdlib harness measures your own host and inverts the equation."
 draft: false
@@ -17,6 +17,15 @@ tags:
   - minimum tokens per second
   - tool call overhead
   - local coding agent
+cover:
+  image: /images/local-agent-turn-time-budget-2026-presentation.png
+  alt: "Conceptual checklist for time per agent turn: Prompt prefill, then Output decoding, then Tool overhead. Add the phases before estimating a multi-turn run."
+  caption: "Add the phases before estimating a multi-turn run. Conceptual illustration; see article for evidence and limits."
+  relative: false
+  hidden: false
+images:
+  - /images/local-agent-turn-time-budget-2026-presentation.png
+lastmod: 2026-11-21T21:34:30+00:00
 ---
 
 Your local model answers a chat question in a couple of seconds and feels fine. You wire it into an agent that needs thirty tool calls to finish one refactor, and around the eighth request the client gives up with a read timeout, or the patch comes back cut in half because generation stopped mid-function. Nothing in the server log looks like an error. Restart the session with a shorter conversation and it completes.
