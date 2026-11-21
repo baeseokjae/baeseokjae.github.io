@@ -1,12 +1,11 @@
 ---
 cover:
-  alt: 'Devstral Small 2 Local Setup Guide 2026: Run Mistral Coding Agent on Your
-    Laptop'
+  alt: Devstral Small 2 local setup fit check across 16GB, 24GB and Apple unified memory
   image: /images/devstral-small-2-local-setup-guide-2026.png
   relative: false
 date: 2026-04-30 06:04:25+00:00
-description: Step-by-step guide to running Devstral Small 2 (24B, 68% SWE-bench) locally
-  via Ollama, vLLM, or llama.cpp — zero API fees, full privacy.
+lastmod: 2026-11-16 15:17:22+00:00
+description: Devstral Small 2 is a 24B model whose Q4_K_M blob Ollama labels 15GB is 14.14 GiB of weights. Fit table for 16GB, 24GB and Apple unified memory with a KV-cache budget computed from the official config, and three setup paths.
 draft: false
 schema: schema-devstral-small-2-local-setup-guide-2026
 tags:
@@ -17,217 +16,157 @@ tags:
 - ollama
 - vllm
 - llama.cpp
-title: 'Devstral Small 2 Local Setup Guide 2026: Run Mistral Coding Agent on Your
-  Laptop'
+title: 'Devstral Small 2 Local Setup 2026: Fit Check First - 24B at Q4 Is a 14.1 GiB Blob, So What Actually Runs on 16GB, 24GB and Apple Unified Memory'
 ---
 
-Devstral Small 2 is a 24B-parameter coding model from Mistral AI that scores 68% on SWE-bench Verified and runs on a single 24GB GPU or a Mac M-series with 32GB unified memory — making it the first cloud-grade coding agent most developers can realistically self-host. This guide covers three setup paths: Ollama for beginners, vLLM for production teams, and llama.cpp for CPU-only or low-VRAM machines.
+Devstral Small 2 is a 24B coding model from Mistral AI. The number that decides whether you can run it is not the parameter count but the weight file: the Q4_K_M blob that Ollama serves for this model is listed on the tag page as "15GB", and the registry manifest behind that label is 15,177,370,240 bytes — 14.14 GiB ([Ollama tag page](https://ollama.com/library/devstral-small-2/tags), checked 2026-11-02T16:42:04Z; [registry manifest](https://registry.ollama.ai/v2/library/devstral-small-2/manifests/24b-instruct-2512-q4_K_M), checked 2026-11-02T16:55:25Z). Those two numbers are the same file described in two units, and the difference between them decides the 16GB case: 14.14 GiB of weights inside a 16 GiB budget leaves about 0.66 GiB for KV cache and runtime overhead, which is about 4,300 tokens of context at the very most — not a usable coding-agent configuration. That is why the fit check comes before the install commands in this version of the guide.
+
+This is a refresh of the April 2026 setup guide. Three things in the original were wrong and are corrected here: the model was released on December 9, 2025, not December 10; the CPU path was described twice with incompatible memory figures; and the fit table mixed the tag page's decimal-GB labels with binary-GiB memory budgets, which understated every total. The three setup methods, the quant table and the troubleshooting section are kept.
+
+## Does Devstral Small 2 Fit Your Machine?
+
+The table below is the decision. Weight sizes are the exact model-layer byte counts from the Ollama registry manifests, converted to GiB; the tag page prints the same blobs as 15GB, 26GB and 48GB in decimal units. Context limits are computed from the official checkpoint config plus a 1.2 GiB runtime overhead allowance (computed, not measured - the arithmetic is in the next section).
+
+| Memory you have | Q4_K_M (14.14 GiB) | Q8_0 (24.13 GiB) | FP16 (44.73 GiB) |
+|---|---|---|---|
+| 8GB | No - weights exceed it | No | No |
+| 12GB | No - weights exceed it | No | No |
+| 16GB | About 4,300 tokens at most, i.e. not usable | No | No |
+| 24GB | Yes: about 56,800 tokens | No - 25.96 GiB at 4096 | No |
+| 32GB | Yes: about 109,200 tokens | Yes, short context only: about 43,700 tokens | No |
+| 48GB | Yes: about 214,000 tokens | Yes: about 148,600 tokens | Yes at 4096 only: 46.56 GiB total, 13,500-token ceiling |
+| 64GB | Yes: about 318,900 tokens | Yes: about 253,400 tokens | Yes: about 118,400 tokens |
+| 96GB or more | Yes, the full 393,216-token position limit at 75.34 GiB | Yes: the full 393,216-token position limit at 85.33 GiB | Yes: about 328,000 tokens |
+
+Three consequences worth stating plainly, because the old page left them ambiguous:
+
+- A 16GB GPU is not a Devstral Small 2 card, but not for the reason the old page gave. The weights do fit: 14.14 GiB of Q4_K_M plus 1.2 GiB of assumed overhead and a 4,096-token KV cache totals 15.96 GiB, which is 40 MiB under a 16 GiB budget. Forty megabytes is not a working margin - desktop drivers and the display reserve take more than that before the model loads - and it caps context at about 4,300 tokens at the very most. There is no configuration where this model is resident and useful in 16 GiB.
+- A 16GB system-RAM laptop with no GPU is not a Devstral Small 2 machine either. The previous FAQ claimed 0.5-2 tokens per second at 4096 context on exactly that configuration. That figure is withdrawn: it was never measured, and the exact arithmetic leaves 0.66 GiB for KV cache after weights and overhead, about 4,300 tokens, before the operating system itself is counted.
+- Apple Silicon works because unified memory is one pool. A 32GB Mac can host the Q4_K_M build with a usable context; a 16GB Mac hits the same 0.66 GiB ceiling a 16GB PC does.
+
+If your machine is the 16GB row, the honest options are a smaller coding model, a hosted endpoint, or a machine with more memory. This guide will not invent a tokens-per-second figure to make the 16GB case look workable.
+
+## Why the Weight Blob Is the Number That Decides
+
+Three separate quantities get conflated in most "can I run it" answers: the weight file, the KV cache, and the runtime's own overhead.
+
+The weight file is fixed by the quantisation you pick. Ollama publishes three local sizes for this model, and they are very different products in memory terms: Q4_K_M, Q8_0 and FP16. The tag page prints them as 15GB, 26GB and 48GB ([Ollama tag page](https://ollama.com/library/devstral-small-2/tags)). Those are decimal labels; the registry manifests give the byte counts that matter when you compare against VRAM, which is sold in binary units. The model layers are 15,177,370,240 bytes (14.14 GiB), 25,909,742,208 bytes (24.13 GiB) and 48,032,074,336 bytes (44.73 GiB) respectively, from the [Q4_K_M](https://registry.ollama.ai/v2/library/devstral-small-2/manifests/24b-instruct-2512-q4_K_M), [Q8_0](https://registry.ollama.ai/v2/library/devstral-small-2/manifests/24b-instruct-2512-q8_0) and [FP16](https://registry.ollama.ai/v2/library/devstral-small-2/manifests/24b-instruct-2512-fp16) manifests, checked 2026-11-02T16:55:25Z and re-checked byte-identically 2026-11-16. Each manifest also carries a 3,418-byte chat template layer and a 21-byte params layer (3,439 bytes beyond the weights), plus a separate 420-byte container-image config blob outside that layer sum - immaterial here.
+
+That conversion is not pedantry. Reading "15GB" as 15 GiB makes a 16GB machine look 0.86 GiB worse off than it is, and the same mistake in the other direction - treating a 24 GiB card as 24 GB - quietly overstates how much context fits. Both errors appeared in the previous version of this table; every figure below is now derived from bytes.
+
+The KV cache is proportional to context length. From the official checkpoint config ([config.json](https://huggingface.co/mistralai/Devstral-Small-2-24B-Instruct-2512/raw/main/config.json), checked 2026-11-02T16:42:33Z), the text stack is 40 layers with 32 attention heads and 8 key/value heads at head dimension 128, and `sliding_window` is null, meaning every layer attends over the full context rather than a sliding window.
+
+That gives 2 x 40 layers x 8 KV heads x 128 = 81,920 values per token. At two bytes per value (f16 KV, the llama.cpp default) that is 160 KiB per token, or 156.25 MiB per 1,000 tokens - 5.0 GiB at 32K context and 60 GiB at the 393,216-token position limit. An fp8 KV cache halves these figures, which is the single cheapest lever if you are close to a memory ceiling.
+
+Runtime overhead is the softest term. The calculator behind this table assumes 1.2 GiB for CUDA context, graph buffers and fragmentation. That is an assumption, not a measurement, and on a 24GB card it shifts the maximum usable context by a few thousand tokens. It does not change the Q4_K_M or Q8_0 verdicts from 24GB up. It does decide the two tight cells: with exact bytes the arithmetic puts 4,096 tokens of Q4_K_M at 15.96 GiB, so the 16GB cell turns on whether 40 MiB survives the driver and display reserve, and FP16 on a 48 GiB card clears 4,096 tokens by only 1.45 GiB - a larger overhead allowance would sink that cell too.
 
 ## What Is Devstral Small 2?
 
-Devstral Small 2 is Mistral AI's open-weight coding specialist, released December 10, 2025 under the Apache 2.0 license. With 24 billion parameters and a 256K-token context window, it achieves 68.0% on SWE-bench Verified — a real-world benchmark measuring a model's ability to resolve open GitHub issues autonomously. That puts it on par with models up to five times its parameter count, including closed-source proprietary systems. Because it ships under Apache 2.0, you can run it locally with no API fees, no data leaving your machine, and no usage restrictions — even in commercial projects. The model is fine-tuned specifically on agentic coding workflows: reading multi-file codebases, writing patches, running tool calls, and self-correcting from test failures. Devstral Small 2 outperforms Qwen 3 Coder Flash (30B) despite being a smaller model, and its larger sibling Devstral 2 (123B) hits 72.2%, compared to Claude Sonnet 4.5's 77.2% — at up to 7x lower cost per coding task. For teams or individuals who need a capable coding agent without cloud dependency, Devstral Small 2 is the most practical choice available today.
+Devstral Small 2 is Mistral's 24B open-weight coding model, released December 9, 2025 under Apache 2.0, and Mistral reports 68.0% on SWE-bench Verified for it. That score is vendor-reported: the launch post states the number and names no harness, so treat it as the vendor's own figure rather than an independently reproduced result. Mistral's launch post describes the model as placing "firmly among models up to five times its size while being capable of running locally on consumer hardware" ([Mistral launch post](https://mistral.ai/news/devstral-2-vibe-cli), checked 2026-11-02T16:55:32Z).
 
-### How Does It Compare to GitHub Copilot?
+The checkpoint is a Mistral3 build (`Mistral3ForConditionalGeneration`) that carries a 24-layer Pixtral vision tower alongside the text stack, and Ollama's registry lists these tags as accepting text and image input. Coding is still the reviewed use case; neither source says anything about vision quality, and this guide makes no claim about it.
 
-GitHub Copilot is a cloud-only SaaS product that sends your code to Microsoft/OpenAI servers for every completion. Devstral Small 2 runs entirely on your hardware — no telemetry, no subscription, no code leaving your machine. For developers working with proprietary codebases, HIPAA-sensitive data, or airgapped environments, this distinction is not a preference but a requirement. In terms of raw capability, Devstral Small 2 handles multi-file edits, shell tool use, and autonomous bug-fix loops that Copilot's autocomplete model is not designed for.
+### Context length: 256K, 384K, or 393,216?
 
-## Hardware Requirements — Can Your Laptop Run It?
+All three numbers are in circulation and they come from different places:
 
-Devstral Small 2 requires a minimum of 24GB VRAM to run at full precision (FP16) on a discrete GPU, or 32GB unified memory on Apple Silicon Macs. With Q4_K_M quantization — which preserves 95%+ of model quality at 40% reduced memory — you can run it on a single RTX 3090, RTX 4090, or any GPU with 16GB+ VRAM, though performance is faster with 24GB. Apple M1, M2, M3, and M4 chips with 32GB unified memory can run the model without any discrete GPU because macOS treats CPU and GPU memory as a shared pool. Windows and Linux users with 16GB VRAM GPUs should use GGUF quantization via llama.cpp for the best performance-to-memory tradeoff. CPU-only inference is possible but slow — expect 1–3 tokens per second on a modern AMD or Intel machine with 64GB RAM, which is usable for testing but not for interactive coding sessions. The model's 256K context window is memory-hungry: fitting a 128K context requires approximately 20GB VRAM even at Q4. For most local setups, keep context under 32K unless you have 24GB+ VRAM available.
+- Mistral's model card lists **Context 256k** ([model documentation](https://docs.mistral.ai/models/devstral-small-2-25-12), checked 2026-11-02T16:42:04Z).
+- Ollama's tag page lists a **384K context window** for the local tags.
+- The checkpoint's `max_position_embeddings` is **393216**, which is 384K in binary units.
 
-| Hardware | VRAM / RAM | Recommended Method | Speed (est.) |
-|---|---|---|---|
-| RTX 4090 | 24GB VRAM | Ollama / vLLM | 25–40 tok/s |
-| RTX 3090 | 24GB VRAM | Ollama (Q4_K_M) | 15–25 tok/s |
-| RTX 4080 | 16GB VRAM | llama.cpp Q4_K_M | 10–18 tok/s |
-| Mac M3 Max 96GB | 96GB unified | Ollama (Metal) | 20–35 tok/s |
-| Mac M2 Pro 32GB | 32GB unified | Ollama (Metal) | 8–15 tok/s |
-| CPU only (64GB RAM) | 64GB RAM | llama.cpp Q4_K_M | 1–3 tok/s |
+Treat 256K as the vendor card figure and 384K as the registry/config figure. Do not treat either as a tested ceiling on your hardware: the KV math above shows that the position limit needs 60 GiB of cache on its own.
 
-## Method 1: Ollama Setup (Easiest — 3 Commands)
+### API deprecation, and what it does and does not change for self-hosting
 
-Ollama is the fastest path to running Devstral Small 2 locally — it handles model download, quantization selection, and an OpenAI-compatible API server in three commands. Install Ollama from the official site for your OS (macOS, Linux, or Windows WSL2), then pull and run the model. No manual CUDA configuration is required; Ollama detects your GPU automatically and selects the appropriate backend. The Q4_K_M quantization variant is used by default for Devstral Small 2 on Ollama, delivering the best balance of speed and quality for consumer hardware. Once the model is running, Ollama exposes a local HTTP server at `localhost:11434` with an OpenAI-compatible `/v1/chat/completions` endpoint, which means any tool that works with OpenAI models — LangChain, LlamaIndex, Continue.dev, OpenHands — can be pointed at your local Devstral instance with a single URL change. The model download is approximately 14GB for the Q4_K_M variant.
+Mistral's documentation marks Devstral Small 2 as **deprecated**, with a deprecation date of 2/27/2026 and **Mistral Medium 3.5** named as the replacement ([model documentation](https://docs.mistral.ai/models/devstral-small-2-25-12), checked 2026-11-02T16:42:04Z). The launch post gives the post-free-period API prices as "$0.40/$2.00 per million tokens (input/output) for Devstral 2 and $0.10/$0.30 for Devstral Small 2", so the Small 2 figure is $0.10 input and $0.30 output per million tokens ([Mistral launch post](https://mistral.ai/news/devstral-2-vibe-cli), checked 2026-11-02T16:55:32Z).
+
+Deprecation governs the hosted endpoint. It does not touch the licence or the downloadable weights, which remain Apache 2.0, and the Ollama registry still serves all three local tags. What changes is the framing: this is no longer "the cheapest way to use Devstral Small 2 through an API", it is the model you run yourself precisely because the API path is closing. Any guide that still pitches the hosted endpoint as the default is out of date.
+
+## The Memory Budget, Computed
+
+For Q4_K_M, weights 14.14 GiB plus 1.2 GiB overhead plus the KV term:
+
+| Context | KV cache | Total |
+|---|---|---|
+| 4,096 | 0.62 GiB | 15.96 GiB |
+| 16,384 | 2.50 GiB | 17.84 GiB |
+| 32,768 | 5.00 GiB | 20.34 GiB |
+| 131,072 | 20.00 GiB | 35.34 GiB |
+| 393,216 | 60.00 GiB | 75.34 GiB |
+
+Every figure in that table is computed from a published blob size and the official config; none is a measurement of a running 24B model. To redo it for another quant, substitute the model-layer bytes divided by 1,073,741,824 and keep the 156.25 MiB per 1,000 tokens term (160 KiB per token; the round 160 MiB figure you may have seen elsewhere is per 1,024 tokens), or half it if you run an fp8 KV cache. For Q8_0 (24.13 GiB) that gives 25.96 GiB total at 4,096 and 27.83 GiB at 16,384, and the full 393,216-token position limit at 85.33 GiB; for FP16 (44.73 GiB) it gives 46.56 GiB at 4,096 and 48.43 GiB at 16,384, which is why FP16 needs a 48 GiB card for even a short context and a 64 GiB card for anything useful. Any budget beyond the position limit buys nothing: 393,216 is where the checkpoint's positions stop, so a 128 GiB card caps out at the same 393,216 tokens as a 96 GiB one.
+
+The author's calculator script, its outputs and the CPU probe log are private working files kept with this article's research notes for the review run; they are not published downloads, so treat these numbers as reproducible arithmetic rather than as a packaged tool. The script reads the three byte counts and the KV configuration as constants and prints the two tables above; anyone can reproduce them by hand from the numbers quoted in this section.
+
+## Path A: Ollama (the 24GB floor)
+
+Ollama is the shortest path and the only one that needs no build step. The explicit Q4_K_M tag matters: the `latest` tag currently resolves to the same manifest digest (24277f07f62d), and that manifest carries the same 15,177,370,240-byte weights layer (c580819bed79), but pinning the tag protects you from a future default change.
 
 ```bash
-# Step 1: Install Ollama (macOS example)
-brew install ollama
-
-# Step 2: Start the Ollama service
-ollama serve
-
-# Step 3: Pull and run Devstral Small 2
-ollama run devstral-small-2
+ollama pull devstral-small-2:24b-instruct-2512-q4_K_M
+ollama run devstral-small-2:24b-instruct-2512-q4_K_M
 ```
 
-For Linux, replace the brew command with:
+That is a 15GB download, 14.14 GiB once it is on disk. Once the model is resident, Ollama exposes an OpenAI-compatible endpoint on `localhost:11434`, so any client that speaks that API can use it. Keep the context setting deliberate: a custom Modelfile with `PARAMETER num_ctx 32768` costs 5 GiB of KV cache on top of the weights, while the default short context costs almost nothing. On a 24GB card, 32K is roughly the practical ceiling before you start evicting.
 
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
-```
-
-Once running, test the API directly:
-
-```bash
-curl http://localhost:11434/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "devstral-small-2",
-    "messages": [{"role": "user", "content": "Write a Python function to parse a CSV file"}]
-  }'
-```
-
-### Configure Ollama for Longer Context
-
-By default Ollama caps context at 2048 tokens for memory safety. To unlock the full 256K window (or a practical 32K for most tasks), create a custom Modelfile:
-
-```bash
-cat > Modelfile << 'EOF'
-FROM devstral-small-2
+```dockerfile
+FROM devstral-small-2:24b-instruct-2512-q4_K_M
 PARAMETER num_ctx 32768
-EOF
-
-ollama create devstral-32k -f Modelfile
-ollama run devstral-32k
 ```
 
-## Method 2: vLLM Server Setup (Production-Grade)
+Build it with `ollama create devstral-32k -f Modelfile` and run `devstral-32k`. If you have 32GB of VRAM, raise `num_ctx`; the table above tells you how far.
 
-vLLM is the preferred deployment method for teams running Devstral Small 2 as a shared inference server — it offers higher throughput, continuous batching, and PagedAttention memory management that Ollama does not implement. vLLM requires a CUDA-compatible GPU on Linux (Windows is not supported), and Python 3.9+. The setup installs via pip and takes under five minutes once CUDA drivers are configured. vLLM exposes an OpenAI-compatible REST API on port 8000 by default, making it a drop-in replacement for the OpenAI endpoint in any application. For production deployments, vLLM's continuous batching can serve multiple concurrent coding sessions without the memory overhead of spawning separate model instances per request. At 24B parameters with A100-80GB hardware, expect 60–80 tokens per second with batched inference. On a single RTX 4090, expect 25–35 tok/s single-user throughput. vLLM also supports tensor parallelism across multiple GPUs — useful if you have two 16GB cards and want to treat them as 32GB combined.
+## Path B: vLLM, when you have the card for it
+
+vLLM is the right tool for a shared server, and the wrong tool for a single 24GB card. The published checkpoint ([mistralai/Devstral-Small-2-24B-Instruct-2512](https://huggingface.co/mistralai/Devstral-Small-2-24B-Instruct-2512)) ships FP8 weights with a `quantization_config` that excludes the vision tower, the multimodal projector and `lm_head` from quantisation. FP8 weights for a 24B model are on the order of 24GB before any KV cache, so a 24GB card cannot hold this checkpoint and a usable context at the same time - that is arithmetic from the config, not a benchmark.
+
+Where vLLM earns its keep is tensor parallelism across two or more cards, or a 48GB-plus card where the FP8 checkpoint plus your context fits. Use `--max-model-len` to state your context budget explicitly rather than letting the default claim the full position limit.
 
 ```bash
-# Install vLLM
 pip install vllm
-
-# Launch the server (single GPU)
 python -m vllm.entrypoints.openai.api_server \
-  --model mistralai/Devstral-Small-2 \
+  --model mistralai/Devstral-Small-2-24B-Instruct-2512 \
   --served-model-name devstral-small-2 \
-  --port 8000 \
-  --max-model-len 32768
-
-# For tensor parallelism across 2 GPUs:
-python -m vllm.entrypoints.openai.api_server \
-  --model mistralai/Devstral-Small-2 \
-  --tensor-parallel-size 2 \
-  --max-model-len 65536
+  --max-model-len 16384 \
+  --port 8000
 ```
 
-Test the vLLM server:
+This guide quotes no vLLM throughput figure. The old version's "60-80 tokens per second on an A100" and "25-35 on a 4090" numbers had no primary source behind them and were not measured on hardware this author has access to, so they are removed rather than relabelled.
+
+## Path C: llama.cpp and the 16GB partial-offload reality
+
+llama.cpp is the path people reach for when the card is small, and it is worth being precise about what partial offload buys you. With `--n-gpu-layers`, some transformer layers run on the GPU and the rest on CPU. On a 16GB card the Q4_K_M weights are 14.14 GiB, which leaves under 2 GiB of VRAM for cache and compute buffers, so the offloadable share is small - a handful of the 40 layers, not the majority. Every token then crosses the PCIe boundary for the CPU-resident layers, and the result is a working model, not a fast one. This guide does not give a tokens-per-second number for that arrangement because it was not measured here.
 
 ```bash
-curl http://localhost:8000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "devstral-small-2",
-    "messages": [{"role": "user", "content": "Review this Python function for bugs"}]
-  }'
-```
+cmake -B build -DGGML_CUDA=ON
+cmake --build build --config Release -j"$(nproc)"
 
-### Quantization with vLLM
-
-For 16GB VRAM GPUs, add `--dtype float16` and `--gpu-memory-utilization 0.90`:
-
-```bash
-python -m vllm.entrypoints.openai.api_server \
-  --model mistralai/Devstral-Small-2 \
-  --dtype float16 \
-  --gpu-memory-utilization 0.90 \
-  --max-model-len 16384
-```
-
-## Method 3: llama.cpp + GGUF (CPU or Low-VRAM Machines)
-
-llama.cpp with GGUF quantization is the right method when you have less than 16GB VRAM or want to run Devstral Small 2 entirely on CPU. GGUF is a portable model format that supports mixed-precision quantization — different layers use different bit depths — which means the model fits in less memory while preserving most of the accuracy on higher-reasoning tasks. The Q4_K_M quantization variant is the community consensus for best quality-to-size ratio: it reduces the 24B model from ~48GB (FP16) to approximately 14GB, while maintaining 95%+ task accuracy on coding benchmarks. For machines with 8GB VRAM, you can offload 20 layers to GPU and run the rest on CPU (`--n-gpu-layers 20`), which gives 3–8 tok/s — slow but functional. llama.cpp also supports Metal on macOS, making it an alternative to Ollama for Mac users who want more control over layer offloading configuration. Install from source or use a prebuilt binary from the llama.cpp releases page.
-
-```bash
-# Build llama.cpp from source (Linux/Mac)
-git clone https://github.com/ggerganov/llama.cpp
-cd llama.cpp
-cmake -B build -DGGML_CUDA=ON  # use DGGML_METAL=ON for Mac
-cmake --build build --config Release -j$(nproc)
-
-# Download the GGUF file (Q4_K_M recommended)
-# From HuggingFace: mistralai/Devstral-Small-2-GGUF
-wget https://huggingface.co/mistralai/Devstral-Small-2-GGUF/resolve/main/devstral-small-2-q4_k_m.gguf
-
-# Run inference (GPU offload)
 ./build/bin/llama-server \
-  --model devstral-small-2-q4_k_m.gguf \
-  --n-gpu-layers 35 \
+  --model /path/to/devstral-small-2-q4_K_M.gguf \
+  --n-gpu-layers 20 \
   --ctx-size 16384 \
   --port 8080
-
-# CPU-only (no --n-gpu-layers flag)
-./build/bin/llama-server \
-  --model devstral-small-2-q4_k_m.gguf \
-  --ctx-size 8192 \
-  --port 8080 \
-  --threads $(nproc)
 ```
 
-### Choose the Right GGUF Quantization
+The GGUF file is the same Q4_K_M blob Ollama serves, 15,177,370,240 bytes. If you already pulled it through Ollama, the weights file sits in Ollama's blob store under the layer digest `sha256:c580819bed79...` (the `24277f07f62d` that the tag page shows is the manifest digest, not the weights file) and can be pointed at directly instead of being downloaded twice. If you are building your own quant, start from the FP8 checkpoint and expect 44.7 GiB of FP16 weights in memory during conversion.
 
-| Variant | File Size | VRAM/RAM | Quality vs FP16 | Best For |
-|---|---|---|---|---|
-| Q2_K | ~9GB | 12GB | ~85% | Testing only |
-| Q4_K_M | ~14GB | 16GB | ~95% | **Recommended** |
-| Q5_K_M | ~17GB | 20GB | ~97% | 24GB VRAM systems |
-| Q8_0 | ~25GB | 28GB | ~99% | Near-lossless quality |
-| F16 | ~48GB | 50GB | 100% | Dedicated A100/H100 |
+`--n-gpu-layers` is the dial, and there is no formula for the right value: raise it until the model stops fitting, back off one layer, and check that context allocation still succeeds. That is a memory exercise, not a speed guarantee.
 
-## Connect to Mistral Vibe CLI for Terminal Coding
+## What the CPU Path Actually Costs
 
-Mistral Vibe CLI is Mistral's official terminal-native coding agent — the equivalent of Cursor or Claude Code, but designed to work with local models via any OpenAI-compatible endpoint. Once Devstral Small 2 is running via Ollama or vLLM, you point Vibe CLI at your local server and get a full agentic coding session in your terminal: multi-file edits, shell command execution, test running, and autonomous bug-fix loops — all without leaving the command line or sending code to the cloud. The CLI reads your project directory, maintains a conversation about the codebase, and can autonomously apply patches across multiple files when given a high-level task like "fix all failing tests" or "add OAuth2 to the auth module." This is the closest local equivalent to GitHub Copilot Workspace or Devin for developers who prioritize privacy.
+The original article's hardware table claimed 1-3 tokens per second for a 64GB-RAM CPU-only machine, and the FAQ claimed 0.5-2 tokens per second at 4096 context for a 16GB-RAM laptop. Neither number had a measurement behind it, and they cannot both describe the same 24B model at the same time.
+
+So that this guide contains at least one real measurement instead of two invented ones, a probe was run on the host used for this refresh: 2 vCPU, 11 GiB of RAM, no GPU, Ollama 0.20.3, generating with `qwen2.5:0.5b` in Q4. The recorded result was 7.95 tokens per second generation over 118 tokens and 6.96 tokens per second prompt processing over 43 tokens, with a 7.1-second load. Those figures are a private local author verification of the tooling path, logged with the exact command output for the review run; they are not published as a downloadable dataset.
+
+Read that number for what it is: a 0.5B model on a two-core VM, which proves the CPU toolchain works and says nothing about a 24B model. Scaling 7.95 tokens per second by the parameter ratio would produce a number that no one measured, so it is not produced here. The 24B model cannot be loaded on 11 GiB of RAM at all; the 14.14 GiB Q4_K_M weight file exceeds it before any cache is allocated. The correct conclusion for the 64GB CPU configuration is that it is the one configuration in the old table that could plausibly host the model - 318,900 tokens of computed context headroom at Q4_K_M - and its throughput remains unmeasured.
+
+## Connecting an agent to the local server
+
+Both paths expose an OpenAI-compatible endpoint, so the client configuration is the same shape: point the tool at `http://localhost:11434/v1` for Ollama or `http://localhost:8000/v1` for vLLM, set the model name to `devstral-small-2`, and use any placeholder API key. Mistral's own terminal agent, Vibe CLI, is documented alongside the launch post ([mistral.ai/news/devstral-2-vibe-cli](https://mistral.ai/news/devstral-2-vibe-cli)); check its current documentation for install steps rather than assuming a package name, since the tooling around it has moved faster than the model.
+
+For OpenHands, the container needs the host endpoint explicitly, because `localhost` inside a container is the container:
 
 ```bash
-# Install Mistral Vibe CLI
-pip install mistral-vibe
-
-# Configure for local Ollama endpoint
-cat > ~/.vibe/config.toml << 'EOF'
-[model]
-provider = "openai-compatible"
-base_url = "http://localhost:11434/v1"
-model = "devstral-small-2"
-api_key = "ollama"
-
-[agent]
-auto_approve = false
-max_file_changes = 50
-EOF
-
-# Start a coding session
-cd /your/project
-vibe "Refactor the authentication module to use JWT tokens"
-```
-
-For vLLM backend, change `base_url` to `http://localhost:8000/v1`.
-
-### Auto-Approval Mode
-
-For trusted projects where you want fully autonomous operation:
-
-```yaml
-[agent]
-auto_approve = true
-allowed_tools = ["read_file", "write_file", "run_shell"]
-denied_tools = ["delete_file", "network_request"]
-```
-
-Auto-approval is off by default. Enable it only in isolated dev environments — it will execute shell commands without confirmation.
-
-## Integrate Devstral Small 2 with OpenHands
-
-OpenHands (formerly OpenDevin) is an open-source autonomous software engineering platform that wraps a coding model in a Docker-based sandbox, giving it persistent file access, shell execution, and browser automation. Integrating Devstral Small 2 with OpenHands gives you a self-hosted version of Devin-like autonomous coding — the agent can read your codebase, run tests, browse documentation, write multi-file patches, and iterate until the tests pass, all locally. OpenHands supports any OpenAI-compatible backend, making the Ollama or vLLM integration straightforward. The combination of Devstral Small 2's 68% SWE-bench score with OpenHands's tool execution scaffolding is currently one of the most capable local autonomous coding setups available. Setup requires Docker and about 5 minutes of configuration.
-
-```bash
-# Install OpenHands
-pip install openhands-ai
-
-# Or run via Docker (recommended)
-docker pull ghcr.io/all-hands-ai/openhands:latest
-
-# Launch with local Devstral endpoint
 docker run -it \
   -e LLM_API_KEY=ollama \
   -e LLM_BASE_URL=http://host.docker.internal:11434/v1 \
@@ -235,97 +174,34 @@ docker run -it \
   -v /your/workspace:/workspace \
   -p 3000:3000 \
   ghcr.io/all-hands-ai/openhands:latest
-
-# Open http://localhost:3000 in your browser
 ```
 
-For vLLM backend, replace `LLM_BASE_URL` with `http://host.docker.internal:8000/v1`.
+On Linux, `host.docker.internal` needs `--add-host=host.docker.internal:host-gateway`. Use the image tag your installed OpenHands documentation specifies; `latest` moves.
 
-### OpenHands Task Examples
+What the harness buys you is the thing the model was tuned for: multi-file reads, patch output, shell execution and iteration on failing tests. Without a tool harness, Devstral Small 2 is a chat model that you paste files into, and most of its coding advantage disappears.
 
-Once connected, you can give OpenHands high-level tasks:
+## Troubleshooting
 
-- "Add unit tests for all functions in `src/auth/`"
-- "Find and fix the memory leak in the websocket handler"
-- "Migrate this codebase from Python 2 to Python 3"
-- "Implement the GitHub issue #47 according to the spec in SPEC.md"
+**"CUDA out of memory" at load.** The Q4_K_M weights are 14.14 GiB, so a 16GB card has under 2 GiB left after the weights and cannot hold a runtime context on top. Reduce `--ctx-size`/`--max-model-len` first; if that does not help, move to a smaller quant or a larger card. Do not expect a context reduction to rescue a 16GB card - at 4,096 tokens the total is 15.96 GiB, which leaves 40 MiB and no headroom for the driver.
 
-## Devstral Small 2 vs. Cloud Alternatives: Is Local Worth It?
+**Ollama reports no GPU on Linux.** Run `nvidia-smi` to confirm the driver is visible, then check `ollama run <model> --verbose` output for the backend it selected. A missing GPU backend usually means the driver or CUDA runtime changed after Ollama was installed; reinstalling from the official script re-detects it.
 
-Running Devstral Small 2 locally is worth it under specific conditions, and not worth it under others — the decision depends on your usage volume, hardware, and privacy requirements. At $0.10/$0.30 per million input/output tokens via the Mistral API, the hosted version is already among the cheapest coding models available, making local deployment a breakeven proposition for casual users who run under a few million tokens per month. But for teams with high token volume, local deployment eliminates per-token costs entirely after the hardware investment. A single RTX 4090 ($1,500–1,800) breaks even against API costs at roughly 5–10 million output tokens — achievable in 2–4 weeks of heavy use. For privacy-sensitive workloads — healthcare software, financial systems, proprietary algorithms — local deployment is not a cost decision but a compliance requirement. The 256K context window also becomes a cost driver at scale: processing a 50K-token codebase context with every request at API prices adds up quickly; locally, it's free.
+**Context errors during inference.** Your prompt exceeded `num_ctx` (Ollama) or `--max-model-len` (vLLM). Raise the setting only if the memory table says you have room; otherwise trim the prompt. A 32K context on Q4_K_M costs 5 GiB of cache, which is the usual reason a 24GB card starts swapping.
 
-| Factor | Local (Devstral Small 2) | Cloud (Mistral API) | Cloud (Claude Sonnet 4.5) |
-|---|---|---|---|
-| SWE-bench Score | 68.0% | 68.0% | 77.2% |
-| Cost per 1M output tokens | $0 (after hardware) | $0.30 | ~$15.00 |
-| Privacy | 100% on-device | Mistral data policy | Anthropic data policy |
-| Context window | 256K | 256K | 200K |
-| Setup time | 5–30 min | Instant | Instant |
-| Latency | 8–40 tok/s | 50–100 tok/s | 40–80 tok/s |
-| Offline capability | Yes | No | No |
+**Slow generation on a Mac.** Confirm Metal is in use via verbose output. If the model is spilling out of unified memory, raising context makes it worse, not better: drop `num_ctx` before adding tokens.
 
-Cloud wins on latency and zero setup. Local wins on privacy, cost at scale, and offline operation.
-
-## Troubleshooting Common Setup Issues
-
-Most Devstral Small 2 setup failures fall into four categories: CUDA version mismatch, insufficient VRAM, context length errors, and model format issues. Diagnosing these systematically saves significant time compared to trial-and-error. CUDA mismatches are the most common issue on Linux — Ollama requires CUDA 11.8+ and vLLM requires CUDA 12.1+. Check your driver version with `nvidia-smi` and ensure it supports your installed CUDA toolkit. VRAM errors appear as "CUDA out of memory" exceptions during model loading; the fix is either to reduce `--max-model-len` (for vLLM) or switch to a lower quantization variant. Context length errors during inference mean your prompt exceeds the configured `num_ctx` (Ollama) or `--max-model-len` (vLLM) — increase these parameters or reduce your prompt size. On macOS, model download stalls are often caused by Ollama's background service not starting; run `ollama serve` explicitly in a terminal and check for permission errors in `~/.ollama/logs/`.
-
-**Issue: "CUDA out of memory" on model load**
-```bash
-# Check actual VRAM usage
-nvidia-smi --query-gpu=memory.used,memory.free --format=csv
-
-# vLLM: reduce model length
-python -m vllm.entrypoints.openai.api_server \
-  --model mistralai/Devstral-Small-2 \
-  --max-model-len 8192  # reduce from default
-
-# Ollama: use smaller quantization
-ollama pull devstral-small-2:q4_0  # smaller than q4_k_m
-```
-
-**Issue: Ollama not detecting GPU on Linux**
-```bash
-# Verify CUDA driver
-nvidia-smi
-# Check Ollama GPU detection
-ollama run devstral-small-2 --verbose 2>&1 | grep -i gpu
-# Reinstall with GPU support
-curl -fsSL https://ollama.com/install.sh | sh
-```
-
-**Issue: Slow inference on Mac (< 5 tok/s)**
-```bash
-# Ensure Metal is enabled (should be automatic)
-# Check if running CPU fallback
-ollama run devstral-small-2 --verbose 2>&1 | grep -i metal
-# Increase num_ctx to use Metal more efficiently
-ollama run devstral-small-2 --num-ctx 8192
-```
-
-**Issue: vLLM tokenizer error on Devstral Small 2**
-```bash
-# Install correct tokenizer dependencies
-pip install transformers>=4.40.0 sentencepiece
-# Use trust_remote_code flag
-python -m vllm.entrypoints.openai.api_server \
-  --model mistralai/Devstral-Small-2 \
-  --trust-remote-code
-```
+**vLLM will not load the checkpoint.** The repository ships FP8 weights with a vision tower; if you are short on memory, that is a capacity problem rather than a tokenizer problem, and no flag fixes it.
 
 ## FAQ
 
-**Can Devstral Small 2 run on a laptop with 16GB RAM and no dedicated GPU?**
-Yes, but slowly. Using llama.cpp with Q4_K_M quantization and a context of 4096 tokens, expect 0.5–2 tokens per second on a modern CPU. This is functional for testing or occasional queries but too slow for interactive coding sessions. A Mac with 32GB unified memory is significantly better than a PC with 16GB system RAM and no discrete GPU — the Mac's memory bandwidth is purpose-built for this workload.
+**Can it run on a 16GB laptop with no GPU?** Not usefully. The Q4_K_M weights are 14.14 GiB, the KV cache at 4096 context adds 0.62 GiB, and the 1.2 GiB overhead allowance takes the total to 15.96 GiB - technically inside 16 GiB, but with 40 MiB spare and before the operating system's own residency. In practice that is about 4,300 tokens of context at the very most, and an mmap-based llama.cpp run may start and thrash well below that. No throughput figure is quoted here because none was measured. The previous version's "0.5-2 tokens per second" answer was unsupported and is withdrawn.
 
-**Is the Apache 2.0 license really free for commercial use?**
-Yes. Apache 2.0 permits use, modification, and distribution in commercial software without royalties or attribution requirements beyond including the license file. There are no "non-commercial only" restrictions. You can embed Devstral Small 2 in a product, use it internally in a company, or sell a service built on it — all without contacting Mistral.
+**Is Apache 2.0 really free for commercial use?** Yes. Apache 2.0 permits commercial use, modification and redistribution, with the licence and notice requirements it specifies. The API deprecation does not change this, because it applies to Mistral's hosted endpoint rather than to the weights.
 
-**How does Devstral Small 2 handle multi-file edits?**
-Devstral Small 2 is fine-tuned specifically for agentic tool use, including multi-file read/write operations. When connected to a tool-calling harness (Vibe CLI, OpenHands, or a custom agent), it can read multiple files into context, reason about dependencies, and output structured patches for each file. Without a tool harness, it's a standard chat model that requires you to paste file contents manually.
+**Which quant should I pick?** Q4_K_M on 24GB, Q8_0 if you have 32GB or more, FP16 only at 64GB and above if you want a context you can actually work in. A 48GB card does fit FP16 at 4,096 tokens - 46.56 GiB total - but the ceiling there is about 13,500 tokens. The fit table is the decision; anything below 24GB is not a Devstral Small 2 machine for this model.
 
-**What context length should I use for everyday coding tasks?**
-For most coding tasks — reviewing a function, writing a new module, fixing a bug — 8K–16K tokens is sufficient. The 256K window is most valuable for large refactors where you need to hold an entire codebase in context simultaneously. Using large context windows increases memory usage and inference latency, so set `num_ctx` to the minimum needed for your actual task.
+**What context length is realistic?** 32K on a 24GB card, and much more if you have the memory for it. The vendor card says 256K, the registry says 384K and the config says 393,216 positions - but nobody has published a measured 393,216-token run on consumer hardware, and this guide does not claim one.
 
-**Can I fine-tune Devstral Small 2 on my own codebase?**
-Yes, under Apache 2.0 you have full rights to fine-tune the model. The recommended path is QLoRA fine-tuning via Unsloth or Axolotl — both support the Devstral Small 2 architecture and can run fine-tuning on a single 24GB GPU. A small dataset of 500–2,000 examples from your codebase is typically enough to meaningfully improve performance on domain-specific patterns. Unsloth's GGUF export pipeline lets you convert the fine-tuned model back to llama.cpp format for local deployment.
+**Can I fine-tune it?** Apache 2.0 gives you the right to. QLoRA on a single large GPU is the usual route, and the tooling question is better answered by the fine-tuning framework's own documentation than by this page; no fine-tuning run was performed for this refresh.
+
+**Why does the page no longer quote tokens per second for GPUs?** Because those numbers were estimates presented as measurements. The only throughput figure in this version comes from a 0.5B probe on a two-core VM, and it is labelled as such.
