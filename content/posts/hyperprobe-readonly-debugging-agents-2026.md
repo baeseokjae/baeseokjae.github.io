@@ -1,6 +1,7 @@
 ---
-title: "Read-Only Debugging Agents for Production: A Capability Envelope You Can Audit (2026)"
+title: "Production Debugging Agents: What “Read-Only” Really Protects"
 date: 2026-11-16T00:10:00+00:00
+lastmod: 2026-11-21T00:00:00+00:00
 tags:
   - AI agents
   - production debugging
@@ -13,7 +14,7 @@ description: "Read-only is four separate controls, and only three are enforced b
 draft: false
 cover:
   image: "/images/hyperprobe-readonly-debugging-agents-2026.png"
-  alt: "Read-only debugging agents for production: a capability envelope you can audit"
+  alt: "Diagram of four read-only enforcement layers for a production debugging agent: the agent's tool policy is only its own promise, while the credential scope, the database read-only transaction and the runtime expression guard refuse writes outside the model. The footer records the local fixture run of 9 scripted calls, 4 allowed and 5 refused."
   relative: false
 schema: schema-hyperprobe-readonly-debugging-agents-2026
 ---
