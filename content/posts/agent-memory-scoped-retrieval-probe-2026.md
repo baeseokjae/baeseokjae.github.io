@@ -1,7 +1,7 @@
 ---
-title: "Scoped Agent Memory: Why a Post-Filtered Top-k Returns One or Two Rows and Ships the Rest to the Model (2026)"
+title: "Agent Memory Filters: Why Top-k Returns Too Few Results"
 date: 2026-11-14T19:12:40+00:00
-lastmod: 2026-11-14T19:12:40+00:00
+lastmod: 2026-11-20T11:16:20+00:00
 description: "A 12-tenant, 168-query probe of the search-then-filter pattern: the caller received 1.80 of the 5 requested rows on average while 3.20 of the unfiltered top-5 belonged to other tenants. Includes an adapter-agnostic probe, the exact fixture, and the CI assertions that keep the filter before ranking."
 draft: false
 tags:
@@ -16,6 +16,14 @@ tags:
   - pgvector iterative scan
   - retrieval filter placement
 schema: "schema-agent-memory-scoped-retrieval-probe-2026"
+cover:
+  image: "/images/agent-memory-scoped-retrieval-probe-2026-presentation.png"
+  alt: "Three-stage checklist for scoped memory retrieval: 1 Tenant filter, 2 Candidate ranking, 3 Returned top-k. Filtering on the tenant before ranking fills the requested top-k; filtering after a global ranking can only keep whichever of the k rows belong to the caller."
+  caption: "Filter first, then rank, then return k — versus ranking globally and filtering afterwards. Conceptual checklist of the two filter positions, not measurement data; the article carries the measured numbers and their limits."
+  relative: false
+  hidden: false
+images:
+  - "/images/agent-memory-scoped-retrieval-probe-2026-presentation.png"
 ---
 
 A team keeps every user's or tenant's memories in one vector collection and enforces isolation in application code. The search returns the nearest neighbours, then a list comprehension keeps the rows that belong to the caller:
