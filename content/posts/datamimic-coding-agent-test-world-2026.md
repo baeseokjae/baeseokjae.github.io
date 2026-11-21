@@ -1,7 +1,7 @@
 ---
-title: "Datamimic Review 2026: Don't Let Your Coding Agent Invent Its Own Test World"
+title: "Datamimic Review: Validate Your Coding Agent's Test Data"
 date: 2026-10-24T00:00:00+00:00
-lastmod: 2026-11-18T00:00:00+00:00
+lastmod: 2026-11-21T19:08:30+00:00
 tags:
   - datamimic
   - datamimic review
@@ -23,7 +23,7 @@ description: "Datamimic CE 4.3.0 review with a reproduced verified=true gate: a 
 draft: false
 cover:
   image: "/images/datamimic-coding-agent-test-world-2026.png"
-  alt: "Datamimic Review 2026: Don't Let Your Coding Agent Invent Its Own Test World"
+  alt: "Title card reading 'Datamimic Review' above the subtitle 'Validate Your Coding Agent's Test Data', on a dark navy grid background"
   relative: false
 schema: schema-datamimic-coding-agent-test-world-2026
 ---
@@ -40,9 +40,9 @@ That framing turns test data from a tooling chore into a governance problem. Whe
 
 Practitioner guidance has converged on the same three rules. A widely-read 2026-07-02 write-up of agent fixture practice recommends taking fixture ownership away from the agent (declaring `fixtures/` read-only), generating seeds deterministically, and carving production subsets in fixed stages. Their concrete control is a CI guard that rejects any commit touching `fixtures/` and `src/` at the same time — "fixture and src changes must be separated" ([antigravitylab](https://antigravitylab.net/en/articles/app-dev/antigravity-agent-test-fixture-seed-data-design)).
 
-The demand side is not in question. Test-data availability was the number-one blocker to faster releases in Capgemini's World Quality Report 2024-25, Gartner projected that 60% of AI and analytics data would be synthetic by 2024, and the synthetic data generation market is forecast to grow from roughly $0.8B in 2026 to about $6.9B by 2034 — a ~31% CAGR — while cumulative GDPR fines have reached EUR 5.88B since 2018 ([ContextQA summary](https://contextqa.com/blog/what-is-synthetic-test-data-gdpr-testing/)). The dates matter here: the Gartner figure is a projection made for 2024, not a current measurement, and I am citing it as the industry framing the vendor repeats rather than as an independent observation.
+The demand side is not in question. Gartner projected that 60% of AI and analytics data would be synthetic by 2024, and the synthetic data generation market is forecast to grow from roughly $0.8B in 2026 to about $6.9B by 2034 — a ~31% CAGR — while cumulative GDPR fines have reached EUR 5.88B since 2018 ([ContextQA summary](https://contextqa.com/blog/what-is-synthetic-test-data-gdpr-testing/)). The dates matter here: the Gartner figure is a projection made for 2024, not a current measurement, and I am citing it as the industry framing the vendor repeats rather than as an independent observation.
 
-DATAMIMIC's opening claim — "don't let your coding agent invent its own test world" — is a direct answer to that gap. The question this review answers is whether the implementation holds up.
+DATAMIMIC's [opening claim on Hacker News](https://news.ycombinator.com/item?id=49722276) — "don't let your coding agent invent its own test world" — is a direct answer to that gap. The question this review answers is whether the implementation holds up.
 
 ## What Is DATAMIMIC, and Where Exactly Is the Community/Enterprise Line?
 
@@ -65,15 +65,15 @@ The business model is a clean engine/platform split rather than a crippled free 
 | Deployment | Local / single process for seeded replays | On-prem and air-gapped via podman-compose or Helm, billion-record scale |
 | Editor tooling | None | JetBrains plugin (marked "early development") |
 
-That last row is the sharpest illustration of the boundary. The DATAMIMIC JetBrains plugin README states it "Requires a DATAMIMIC Enterprise Platform" and that "Standalone DATAMIMIC CE projects are not supported".
+That last row is the sharpest illustration of the boundary. The plugin's [README](https://github.com/rapiddweller/datamimic-jetbrains) is marked "Status: early development", states that it "Requires a DATAMIMIC Enterprise Platform" and an account on it, and that "Standalone DATAMIMIC CE projects are not supported".
 
-Note what the CE/EE split is *not*: it is not a paywall on the interesting idea. The maintainer drew the line himself in the Hacker News launch thread for this exact project ("Datamimic – don't let your coding agent invent its own test world", 2026-09-16, 59 points, 8 comments), saying "In the CE we only have the parsing and execution engine of the models" while the EE platform runs separate environment scanning and PII-recommendation services. CE gives you the contract and the verification. EE sells you the reach — connectors, scale, governance dashboards, and the scanner that tells you which columns are sensitive in the first place.
+Note what the CE/EE split is *not*: it is not a paywall on the interesting idea. The maintainer drew the line himself in the [Hacker News launch thread](https://news.ycombinator.com/item?id=49722276) for this exact project ("Datamimic – don't let your coding agent invent its own test world", 2026-09-16, 59 points, 8 comments), [replying](https://news.ycombinator.com/item?id=49723100) that "In the CE we only have the parsing and execution engine of the models" while the EE platform runs separate environment scanning and PII-recommendation services. CE gives you the contract and the verification. EE sells you the reach — connectors, scale, governance dashboards, and the scanner that tells you which columns are sensitive in the first place.
 
 ## Hands-On: Does DATAMIMIC CE 4.3.0 Actually Verify Itself?
 
 I installed `datamimic-ce` 4.3.0 from PyPI into a fresh Python 3.12.3 virtualenv on aarch64 Linux and exercised it end to end. The package installs cleanly (requires Python >= 3.10), and the CLI is real rather than aspirational: `version`, `info`, `capabilities`, `reference`, `scaffold`, `lint`, `dry-run`, `init`, `run` and `demo`.
 
-The experiment runs two models that differ only in how the parent-child relationship is declared. The first is a flat two-product fixture (`model.dm.json`: `customers`, then a top-level `orders` whose child `customer_id` is an `increment` generator). The second nests `orders` inside `customers` and copies the parent key with `script: parent.customer_id` (`model_ok2.dm.json`). The passing result below comes from the nested model; the failure bullets further down come from deliberately breaking it.
+The experiment runs two models that differ only in how the parent-child relationship is declared. The first is a flat two-product fixture (`model.dm.json`: `customers`, then a top-level `orders` whose child `customer_id` is an `increment` generator). The second nests `orders` inside `customers` and copies the parent key with `script: parent.customer_id` (`model_ok2.dm.json`). The passing result below comes from the nested model; the two failure cases come from one broken reference in that same model and from the flat model's invented child key.
 
 The important result is what happened once the model was correct. With a `customers` product of 4 rows, `orders` nested two-per-parent, `seed: 42` and three declared expectations (`exact_count` 4, `per_parent_count` 2, one `foreign_key`), `scaffold model_ok2.dm.json --format json --smoke-export --deterministic-replay` returned:
 
@@ -94,7 +94,7 @@ Two failure modes reproduce just as sharply, and both are the trap an agent fall
 - **An unrelated generator on the child key.** Declaring the child `customer_id` as `increment` in the flat model (`model.dm.json`) produced `verified=false` with "one or more foreign keys have no captured parent": acceptance reported 6 passed and 1 failed, and `missing_values` listed `["5","6","7","8"]` — four of the eight child rows pointed at parent keys that did not exist. The model still compiled; only acceptance caught it.
 - **An exact reference to the wrong parent field.** Changing the script to `parent.region` produced one failure and one unevaluable check (`passed=5`, `failed=1`, `unevaluable=1`): `foreign_key` failed with "one or more foreign keys have no captured parent" and `missing_values` `["'east'","'north'","'south'","'west'"]`, while `per_parent_count` could not be evaluated and reported "child join value 'east' from 'orders.customer_id' has no captured 'customers.customer_id' parent".
 
-The compiler's own verdict is not the last word: all five captured runs here returned `ok=true` — the model compiled — while acceptance decided `verified`. Structural validity and semantic validity are separate checks, and for a coding agent that is the point — a model can be schema-clean and still fail the run.
+The compiler's own verdict is not the last word: all four captured runs here returned `ok=true` — the model compiled — while acceptance decided `verified`. Structural validity and semantic validity are separate checks, and for a coding agent that is the point — a model can be schema-clean and still fail the run.
 
 ### Is Seeded Output Really Byte-Identical?
 
@@ -106,7 +106,7 @@ I also did not exercise the provenance facade (`generate_domain()`) or inspect i
 
 The schema discipline is what makes the agent loop work, and it comes down to two vocabularies that must not be mixed up.
 
-**Top level allows only five keys:** `version`, `seed`, `products`, `expectations`. Anything else is rejected.
+**Top level allows only four keys:** `version`, `seed`, `products`, `expectations`. Anything else is rejected — `AuthoringSpecV1` in [`datamimic_ce/authoring/spec.py`](https://github.com/rapiddweller/datamimic/blob/4.3.0/datamimic_ce/authoring/spec.py) declares exactly those four fields on a base model configured with `extra="forbid"`.
 
 **Product-level `kind` is not field-level `kind`.** A product declares `generated`, `source` or `time_series`. A field declares `increment`, `values`, `weighted`, `int_range`, `decimal_range`, `pattern`, `constant` or `script`. Mixing the two vocabularies is the most common source of first-attempt rejections.
 
@@ -128,7 +128,7 @@ This is the most honest part of the DATAMIMIC documentation and the most importa
 
 The tag 4.3.0 `AGENTS.md` states it directly: "No `rngSeed` on `<setup>` means every run differs, by design. Seeded runs replay identically and force single-process execution" ([AGENTS.md at 4.3.0](https://github.com/rapiddweller/datamimic/blob/4.3.0/AGENTS.md)). That is the load-bearing caveat for anyone planning scale, and it is the project's own wording rather than an inference from my run.
 
-I did not verify the project's issue tracker in this run, so I am not going to cite specific bug numbers or counts; an earlier draft of this review did, and those numbers were not reproducible from saved evidence. What the code does show is that seeded reproducibility is a single-process property: the replay check compares captures from one bounded run, and the CE authoring surface has no notion of a distributed generation contract.
+I did not read individual issue threads in this run, so I make no claim about specific open bugs or per-issue bug numbers; the only tracker-derived figure in this review is the repository's dated open-issue count (48 when the metadata was checked on 2026-11-21). What the code does show is that seeded reproducibility is a single-process property: the replay check compares captures from one bounded run, and the CE authoring surface has no notion of a distributed generation contract.
 
 So the correct mental model is this: **byte-identical output is a CI-fixture property, not a billion-row property.** If your need is reproducible fixtures reviewed in pull requests, CE is aimed exactly at that. If your need is a nightly billion-record warehouse load with deterministic IDs across a worker pool, that is where the paid tier and its Rust fastpath begin — and where I would want to read the tracker myself before trusting a promise.
 
@@ -183,7 +183,7 @@ Pricing lands where you would expect: Mockaroo's free tier is capped at 1,000 ro
 
 **Wait, or plan for EE, if** you need database introspection, PII scanning, multi-system writes, enterprise message formats, or RBAC and audit dashboards.
 
-**Do not adopt it yet if** you need billion-row generation with deterministic IDs across a worker pool — that is where the paid tier begins — or if you cannot accept an exit path. Be honest about the community size when you weigh this: 116 stars, 3 forks and 13 open issues when I checked the repository metadata on 2026-10-24. I did not re-derive per-contributor commit counts, so treat any "one dominant maintainer" figure you see elsewhere as unverified. Release cadence is genuinely fast ([releases](https://github.com/rapiddweller/datamimic/releases)) — CE 4.3.0 on 2026-09-24, 4.2.0 on 2026-09-19, 4.1.0 on 2026-07-17, 4.0.1 on 2026-07-10, 3.0.0 on 2026-05-26, 2.2.0 on 2025-11-09 — but fast cadence from a single maintainer behind a commercial vendor is a risk factor, not a reassurance. Pilot it on CI fixtures and keep a fallback to plain faker plus pinned seeds or an EE contract.
+**Do not adopt it yet if** you need billion-row generation with deterministic IDs across a worker pool — that is where the paid tier begins — or if you cannot accept an exit path. Be honest about the community size when you weigh this: 117 stars, 5 forks and 48 open issues when I re-checked the repository metadata on 2026-11-21. I did not re-derive per-contributor commit counts, so treat any "one dominant maintainer" figure you see elsewhere as unverified. Release cadence is genuinely fast ([releases](https://github.com/rapiddweller/datamimic/releases)) — CE 4.3.0 on 2026-09-24, 4.2.0 on 2026-09-19, 4.1.0 on 2026-07-17, 4.0.1 on 2026-07-10, 3.0.0 on 2026-05-26, 2.2.0 on 2025-11-09 — but fast cadence from a single maintainer behind a commercial vendor is a risk factor, not a reassurance. Pilot it on CI fixtures and keep a fallback to plain faker plus pinned seeds or an EE contract.
 
 For regulated readers, one framing detail deserves to be stated rather than buried. The README's compliance table points to DORA (Reg. 2022/2554) Arts. 24–25, ISO/IEC 27701:2025, the HIPAA Security Rule at 45 CFR Part 164, Subpart C, GDPR Arts. 4(5), 25 and 32, and PCI DSS 4.0.1 Req. 6.5.5 — while stating that "they are not attestations and do not establish that a dataset or processing activity satisfies the reference." A separate note adds that pseudonymisation does not make data anonymous or establish GDPR compliance, because anonymity under Recital 26 depends on whether a person remains identifiable considering means reasonably likely to be used. These are pointers, not attestations. The genuinely useful distinction for a data protection officer is the pseudonymization split: seeded runs give you GDPR Art. 4(5) pseudonymization (reversible, consistent across runs), while non-seeded runs give privacy-maximised one-time delivery. Choose per dataset, not per project.
 
@@ -195,7 +195,7 @@ The honest scorecard:
 
 **Strong:** the `scaffold` repair loop; `verified=true` as an arithmetic gate; referential integrity that accepts a correctly wired parent reference and rejects an invented one; a seeded replay comparison that found no divergence on a 12-row model; agent-first documentation with machine-readable diagnostics; MIT licence with a real engine rather than a demo.
 
-**Weak:** no database or MongoDB authoring in CE; PII scanning is EE-only; seeded determinism is a single-process property; a small community; and a bug tracker I did not verify in this run, so I make no claim about open-issue counts.
+**Weak:** no database or MongoDB authoring in CE; PII scanning is EE-only; seeded determinism is a single-process property; a small community; and no per-issue inspection of the bug tracker in this run — the open-issue figure above comes from the dated repository metadata, not from reading individual threads.
 
 **Bottom line:** if your problem is "my coding agents keep inventing test data and editing it until the tests pass", DATAMIMIC CE 4.3.0 is the most directly targeted answer shipping today, and it is free to try in an afternoon. If your problem is enterprise-scale, schema-introspecting, multi-system test data management, this is a signpost to the EE platform rather than a solution.
 
@@ -211,7 +211,7 @@ It means the model passed a set of executable checks, not that the tool generate
 
 ### Is DATAMIMIC free, and what is the difference between CE and Enterprise?
 
-The Community Edition is free and MIT-licensed: it ships the model parsing layer, a Python execution engine using multiprocessing with optional Ray, and the documented determinism contract. The Enterprise Edition adds a separately optimised execution engine with a Rust fastpath, a PII scanner and recommendation pipeline, database and MongoDB authoring and connections, Kafka/EDIFACT/SWIFT MT/HL7 targets, coordinated multi-system execution, RBAC and audit dashboards, on-prem or air-gapped deployment, and the JetBrains plugin — which explicitly requires EE and does not support standalone CE projects.
+The Community Edition is free and MIT-licensed: it ships the model parsing layer, a Python execution engine using multiprocessing with optional Ray, and the documented determinism contract. The Enterprise Edition adds a separately optimised execution engine with a Rust fastpath, a PII scanner and recommendation pipeline, database and MongoDB authoring and connections, Kafka/EDIFACT/SWIFT MT/HL7 targets, coordinated multi-system execution, RBAC and audit dashboards, on-prem or air-gapped deployment, and the [JetBrains plugin](https://github.com/rapiddweller/datamimic-jetbrains), which explicitly requires EE and does not support standalone CE projects.
 
 ### Does DATAMIMIC guarantee deterministic, reproducible test data?
 
