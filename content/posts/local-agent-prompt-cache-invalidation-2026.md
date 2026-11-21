@@ -1,22 +1,31 @@
 ---
-title: "Prompt-Prefix Cache in a Local Agent Loop: One Mutable Line at the Top Defeats Prefix Reuse (2026)"
-date: 2026-11-14T00:00:00+00:00
-description: "On one 2-vCPU host running Ollama 0.20.3 and qwen2.5:0.5b, an append-only second turn prefilled 962 tokens in 2.4711 s, while the same turn with one regenerated 'Session started' line on top took 36.8326 s. The seconds are host-specific; the hit/miss class is what reproduces. How to detect it without a cached-token counter, which harness writes break the prefix, and four assertions to keep it broken or fixed."
+title: 'Ollama Prompt Cache Misses: Check the First Changing Line'
+date: 2026-11-14 00:00:00+00:00
+description: On one 2-vCPU host running Ollama 0.20.3 and qwen2.5:0.5b, an append-only second turn prefilled 962 tokens in 2.4711 s, while the same turn with one regenerated 'Session started' line on top took 36.8326 s. The seconds are host-specific; the hit/miss class is what reproduces. How to detect it without a cached-token counter, which harness writes break the prefix, and four assertions to keep it broken or fixed.
 draft: false
-schema: "schema-local-agent-prompt-cache-invalidation-2026"
+schema: schema-local-agent-prompt-cache-invalidation-2026
 tags:
-  - prompt prefix cache
-  - ollama prompt cache
-  - kv cache reuse local llm
-  - prompt_eval_duration
-  - agent prompt invalidation
-  - ollama api generate fields
-  - local llm prefill time
-  - agent harness timestamp prompt
-  - tool registry key order
-  - cache miss detection
-  - llm agent latency debugging
-  - local inference reproducibility
+- prompt prefix cache
+- ollama prompt cache
+- kv cache reuse local llm
+- prompt_eval_duration
+- agent prompt invalidation
+- ollama api generate fields
+- local llm prefill time
+- agent harness timestamp prompt
+- tool registry key order
+- cache miss detection
+- llm agent latency debugging
+- local inference reproducibility
+cover:
+  image: /images/local-agent-prompt-cache-invalidation-2026-presentation.png
+  alt: 'Conceptual checklist for prompt-prefix reuse: Stable prefix, then First changed line, then Reuse boundary. Inspect changes near the beginning of the prompt.'
+  caption: Inspect changes near the beginning of the prompt. Conceptual illustration; see article for evidence and limits.
+  relative: false
+  hidden: false
+images:
+- /images/local-agent-prompt-cache-invalidation-2026-presentation.png
+lastmod: '2026-11-21T21:02:27+00:00'
 ---
 
 Two consecutive turns of a local agent loop can differ by more than an order of magnitude in prefill time while the model, the output length and - within 31 tokens - the prompt size stay nearly the same. On the host used for this article, an append-only second turn prefilled 962 tokens in 2.4711 s. The same second turn, with one line regenerated at the top of the system block, prefilled 993 tokens in 36.8326 s. Nothing errored, nothing was truncated, and no tokens-per-second figure on either turn would have told you which one you were looking at.
