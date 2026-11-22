@@ -1,6 +1,7 @@
 ---
-title: "Two Agent Sessions, One Local Model Server: what concurrency does to latency, context and tool calls"
+title: "Two Agents, One Ollama Server: Why Requests Slow Down"
 date: 2026-11-02T00:00:00+00:00
+lastmod: 2026-11-22T16:16:38+00:00
 tags:
   - local llm concurrency
   - ollama num_parallel
@@ -14,8 +15,12 @@ tags:
   - ollama api num_ctx
   - cpu inference queueing
   - parallel slots kv cache
-description: "Ollama ships one parallel slot per model, so a second agent session waits behind the first: four concurrent requests serialised to 4.0x the single-request wall time on a 2-vCPU host, and OLLAMA_NUM_PARALLEL=4 made each request 4.4-8.0x slower against the default server's single-request baseline (3.8-7.0x against its own) instead of faster. Measured latency, the documented context rules, and what to log when a session stalls."
+description: "Ollama ships one parallel slot per model on CPU and other backends (MLX on Metal picks a memory-based default), so a second agent session waits behind the first: four concurrent requests serialised to 4.0x the single-request wall time on a 2-vCPU host, and OLLAMA_NUM_PARALLEL=4 made each request 4.4-8.0x slower against the default server's single-request baseline (3.8-7.0x against its own) instead of faster. Measured latency, the documented context rules, and what to log when a session stalls."
 draft: false
+cover:
+  image: /images/local-llm-concurrent-agent-sessions-2026-presentation.png
+  alt: 'Conceptual diagram: two agent sessions send HTTP requests to one Ollama server process, whose parallel slots decide what runs and whose queue holds the rest in arrival order; the client only sees per-request wall time, the sum of queue wait and execution. Documentation-scoped schematic for a 2-vCPU CPU host, not a measurement chart.'
+  caption: 'Two sessions, one server: the queue your client cannot see · conceptual schematic, not measurement data'
 schema: "schema-local-llm-concurrent-agent-sessions-2026"
 ---
 
@@ -29,13 +34,13 @@ Two agents pointed at `http://localhost:11434` are two HTTP clients against one 
 
 The FAQ states the rule directly: "For a given model, if there is sufficient available memory when the model is loaded, it is configured to allow parallel request processing", and a model that is loaded with only one request processing at a time will make the second caller wait. Requests that cannot be served immediately are queued in arrival order — "Queued requests will be processed in order" — and only rejected when the queue itself is full ([Ollama FAQ](https://docs.ollama.com/faq.md)).
 
-## Ollama's default is one slot per model, not four
+## Ollama's default is one slot per model on CPU, not four
 
-Three server settings decide the shape of the queue, and all three have defaults you probably never set ([Ollama FAQ](https://docs.ollama.com/faq.md)) — the values below are quoted from that page, which is the same text this run read on 2026-11-02:
+Three server settings decide the shape of the queue, and all three have defaults you probably never set ([Ollama FAQ](https://docs.ollama.com/faq.md)) — the values below are quoted from that page as re-read for this refresh on 2026-11-22, and the page has changed since the measurement run on 2026-11-02:
 
 | Setting | Documented default | What it changes |
 |---|---|---|
-| `OLLAMA_NUM_PARALLEL` | 1 | Parallel requests the model processes at once; "Required RAM will scale by `OLLAMA_NUM_PARALLEL` * `OLLAMA_CONTEXT_LENGTH`" |
+| `OLLAMA_NUM_PARALLEL` | 1 when unset or zero on CPU and other backends; MLX on Metal instead picks a "conservative default based on available memory and the model's cache requirements" | Parallel requests the model processes at once; "More parallel requests require more memory." |
 | `OLLAMA_MAX_LOADED_MODELS` | 3 (CPU) or 3 x GPUs | How many distinct models may stay resident |
 | `OLLAMA_MAX_QUEUE` | 512 | Requests held while busy before new ones are rejected |
 
@@ -92,7 +97,7 @@ The practical consequence: on a one-slot server, your effective concurrency limi
 
 ## Context: multiplied by slots here, per-slot there
 
-The memory side of concurrency is documented, and it is not what most people assume. Ollama does not divide one context window among parallel requests — it multiplies: "Parallel request processing for a given model results in increasing the context size by the number of parallel requests. For example, a 2K context with 4 parallel requests will result in an 8K context and additional memory allocation" ([Ollama FAQ](https://docs.ollama.com/faq.md)). Combined with the stated RAM rule (`OLLAMA_NUM_PARALLEL` x `OLLAMA_CONTEXT_LENGTH`), that means raising slots on a memory-tight box can turn a working setup into an allocation failure at load time, before any request is served.
+The memory side of concurrency is documented, and it is not what most people assume. Ollama does not divide one context window among parallel requests — it multiplies: "Parallel request processing for a given model results in increasing the context size by the number of parallel requests. For example, a 2K context with 4 parallel requests will result in an 8K context and additional memory allocation" ([Ollama FAQ](https://docs.ollama.com/faq.md)). The same bullet closes on the cost without naming a formula — "More parallel requests require more memory" — so raising slots on a memory-tight box can turn a working setup into an allocation failure at load time, before any request is served.
 
 The reported field is a trap. A server started with `OLLAMA_NUM_PARALLEL=4` and `OLLAMA_CONTEXT_LENGTH=2048` answered `/api/ps` with `context_length: 2048` for a model it had just loaded, even though the vendor rule says four slots allocate four times that context. Reading `ollama ps` CONTEXT as "the memory I am using" will therefore understate a multi-slot server; the recorded response is in the published evidence below.
 
