@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Listwise Reranking Local Llm on RockB</title><link>https://baeseokjae.github.io/tags/listwise-reranking-local-llm/</link><description>Recent content in Listwise Reranking Local Llm on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sat, 21 Nov 2026 17:43:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/listwise-reranking-local-llm/index.xml" rel="self" type="application/rss+xml"/><item><title>Listwise Reranking on a 0.6B Local Model: 1 Top-1 Gain out of 8 Queries, and 4 Answers That Would Not Parse</title><link>https://baeseokjae.github.io/posts/agent-memory-listwise-rerank-local-llm-2026/</link><pubDate>Sat, 21 Nov 2026 17:34:13 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-memory-listwise-rerank-local-llm-2026/</guid><description>An editorial fixture run on one 2-vCPU host with arctic-embed-s and qwen3:0.6b: listwise reranking moved 1 answer up and 1 down across 8 paired queries (2 rank changes), reached top-1 once against 0 for the plain embedder, and only 4/8 outputs parsed. Includes the reversed-order control, the failure taxonomy and measured per-query cost.</description><content:encoded><![CDATA[<p>A vector store returns ten candidates. The sentence that answers the question is in there, at position three, behind a near-duplicate that states the same fact with the wrong number. Nothing errors. The agent answers confidently from the wrong value.</p>
+<p>The standard fix in every guide is a cross-encoder reranker, which on a CPU-only box is a model you do not have. But a chat model is already loaded and resident. So the practical question is narrow enough to measure: if the top ten candidates go to a 0.6B local model with the instruction to return them best-first, does the correct answer reach position one, does the model reorder by relevance or by where the candidate sits in the prompt, and what does one query cost on a box that generates in the low teens of tokens per second?</p>
+<p>This is a fixture-scale measurement of exactly that. It is an editorial experiment on one host, one embedder and one chat model. It is not a BEIR result and its numbers should not be compared with published retrieval benchmarks.</p>
+<h2 id="what-the-run-found">What the run found</h2>
+<ul>
+<li>On the 8 queries where the embedder put the answer at rank 2-10 and all three arms completed, the plain embedder scored hit@1 0/8 and MRR@10 0.438.</li>
+<li>The k=10 listwise arm moved 1 answer up, 1 down and left 6 unchanged; it ended at hit@1 1/8 with MRR@10 0.479.</li>
+<li>JSON output was not reliable: 4/8 k=10 responses parsed completely or partially, and only 1/8 returned every requested id exactly once.</li>
+<li>The reversed-order control ended at hit@1 0/8 with MRR@10 0.393; the k=10 arm minus the control is +1 hit@1 and +0.086 MRR.</li>
+<li>Coverage was cut short: the embedder arm recorded all 13 eligible queries, the k=10 arm 9 and the control 8, because the run was stopped while the control was still working. Every arm comparison below uses the 8 queries where all three arms have a row, and the unbalanced rows are still in the shipped results file.</li>
+</ul>
+<p>The honest summary is that this model reordered the list and occasionally found the right answer, but it did not turn a rank-2 to rank-10 candidate set into a reliable top-1, and it failed to return a usable array often enough that a defensive parser is part of the price.</p>
+<h2 id="what-listwise-reranking-is-precisely">What listwise reranking is, precisely</h2>
+<p>Pointwise rerankers score one candidate at a time. Listwise rerankers take the candidate set as input and emit a permutation of it. The formulation this experiment copies is the zero-shot one: a language model receives the candidate documents with identifiers and generates a reordered list of those identifiers, with no task-specific relevance labels and no training step (Ma et al., <a href="https://arxiv.org/abs/2305.02156">Zero-Shot Listwise Document Reranking with a Large Language Model</a>).</p>
+<p>The reason the technique is interesting on small models comes from a different paper. Sun et al. distilled a ChatGPT reranker into a 440M model and reported that the distilled 440M model outperforms a 3B supervised model on BEIR, which is the strongest published argument that reranking ability survives compression (<a href="https://arxiv.org/abs/2304.09542">Is ChatGPT Good at Search?</a>). Both papers rank with models far larger than the one tested here, and neither reports a 752M-parameter local model on a hand-built fixture. That gap is what this run looks at.</p>
+<p>One structural detail matters for anyone copying the method: published listwise rerankers handle long candidate lists with a sliding window over permutation prompts, because model context and output length are bounded. At k=10 this experiment uses a single call with no window, which is a simplification and not equivalent to a sliding-window reranker over 100 candidates.</p>
+<h2 id="why-a-reranker-is-supposed-to-help-at-all">Why a reranker is supposed to help at all</h2>
+<p>The premise is not controversial in the literature. Across 18 heterogeneous zero-shot IR datasets, reranking and late-interaction systems gave the best average zero-shot effectiveness while BM25 remained a robust baseline, and the paper is explicit that the reranking systems pay for that with high computational cost (<a href="https://arxiv.org/abs/2104.08663">BEIR</a>). That is the trade the reader is being asked to make: accuracy for compute. The measurement below asks what the accuracy half of that trade looks like when the compute is a fraction of a CPU core and the model is small.</p>
+<h2 id="the-fixture-and-the-gate-it-never-passed">The fixture, and the gate it never passed</h2>
+<p>The plan called for 120 authored facts in 30 paraphrase clusters, each cluster holding four surface forms of one fact, plus 30 queries whose answer sits at embedder rank 2-10 for at least 60% of queries. A pre-run script had to prove that before any scoring, because a fixture where the embedder is already right cannot test a reranker.</p>
+<p>The construction gate failed on all four builds. Each build&rsquo;s gate output is shipped with this article, so the numbers below are the builders&rsquo; own measurements rather than a remembered narrative:</p>
+<ul>
+<li>v1, 120 documents (the four surface forms, no decoys): hit@1 30/30, saturated. Nothing to improve and no result to publish.</li>
+<li>v2, 180 documents (two value-perturbed near-miss decoys per cluster): hit@1 19/30, with 11 of 30 answers at rank 2-10.</li>
+<li>v3, 210 documents (adds one near-duplicate per cluster that differs from the answer surface only in the value): hit@1 17/30, 13 of 30 at rank 2-10.</li>
+<li>v4, 221 documents (attempts the value substitution on two surface forms per cluster instead of one): hit@1 17/30, 13 of 30 at rank 2-10 - identical answer ranks to v3, because the second near-duplicate never outranked the answer. This is the build the reranker was scored on.</li>
+</ul>
+<p>The 221-document figure in the last build is not two decoys per cluster. The substitution only matches when the surface form contains the exact value string, so 41 of the 60 attempts produced a near-duplicate: 19 clusters ended with one and 11 with two, and the shipped fixture records exactly that split. Of the 221 documents, 120 are answer surface forms, 60 are the v2 near-miss decoys and 41 are value-swapped near-duplicates.</p>
+<p>The final build still misses the 60% construction target: 13/30 queries sit in the 2-10 band, not 18/30. The anti-saturation clause is met and the construction target is not. Rather than tune decoys until a histogram looked right, the experiment ran on the eligible queries in fixture order and stopped part-way through the arms. The embedder arm has a row for all 13 eligible queries (C01, C02, C07, C09, C11, C14, C15, C16, C18, C19, C23, C25, C26); the k=10 arm reached 9 of them and the control 8, because the run was stopped while the control was working on C18. That leaves one unpaired k=10 row (C18) and four baseline-only rows (C19, C23, C25, C26) in the shipped results file, and every arm comparison in this article uses only the 8 queries - C01, C02, C07, C09, C11, C14, C15, C16 - that have all three rows. The 17 saturated queries are excluded from the comparison and their baseline ranks are still in the v4 gate file, so a reader can see what was dropped.</p>
+<p>Each cluster is an operations fact of the kind an agent memory store actually holds: a rebuild duration, a retention window, an error code, a column type. The value-swapped decoy is the whole point. Without it the embedder separates topics; with it, the embedder has to separate two sentences that share every word except the number, which is the failure the reader is trying to fix.</p>
+<h2 id="four-arms">Four arms</h2>
+<p>Every arm holds the store, the encoder and the candidate set fixed and varies only the ranking stage.</p>
+<ul>
+<li>A: the embedder&rsquo;s own order. snowflake-arctic-embed:33m (33M parameters, 384 dimensions, 512-token context in the Ollama build), brute-force cosine over all 221 documents, k=10. No model call.</li>
+<li>B: listwise rerank of the top 10 by qwen3:0.6b with thinking disabled, temperature 0, seed 42, num_ctx 4096, JSON-constrained output, prompt asking for a JSON array of candidate ids best-first.</li>
+<li>D: the reversed-order control. The identical ten candidates, presented in reverse order, same prompt. If a model ranks by position rather than relevance, B and D diverge.</li>
+</ul>
+<p>A k=20 arm was planned and dropped. Three exploratory calls were made on this contended 2-vCPU host, but their outputs and timings were not retained, so this article reports no k=20 measurement at all; a three-query probe would not have been comparable to the other arms in any case.</p>
+<p>The control is the part that makes a gain interpretable. LLM judges are known to carry position, verbosity and self-enhancement biases (<a href="https://arxiv.org/abs/2306.05685">Judging LLM-as-a-Judge</a>), and while that paper studies pairwise judging of chat answers rather than passage ranking, it is the reason a position control is included instead of trusting a single ordering.</p>
+<h2 id="results">Results</h2>
+<p>The table below covers the 8 paired queries, same fixture, same host, one run.</p>
+<table>
+	<thead>
+			<tr>
+					<th>arm</th>
+					<th>hit@1</th>
+					<th>MRR@10</th>
+					<th>moved up / down / same</th>
+					<th>parsed</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>A embedder order (k=10)</td>
+					<td>0/8</td>
+					<td>0.438</td>
+					<td>-</td>
+					<td>n/a</td>
+			</tr>
+			<tr>
+					<td>B listwise rerank (k=10)</td>
+					<td>1/8</td>
+					<td>0.479</td>
+					<td>1 / 1 / 6</td>
+					<td>4/8</td>
+			</tr>
+			<tr>
+					<td>D reversed-order control</td>
+					<td>0/8</td>
+					<td>0.393</td>
+					<td>-</td>
+					<td>3/8</td>
+			</tr>
+	</tbody>
+</table>
+<p>Three things in that table deserve to be stated plainly.</p>
+<p>First, the top-1 count barely moves: 1 of 8 answers reached rank 1 under the k=10 arm, 0 under the embedder alone and 0 under the reversed-order control. The candidates were tight by construction - with a value-swapped near-duplicate in the list, the model had to decide which of two nearly identical sentences answered the question, and it did that rarely.</p>
+<p>Second, aggregate MRR@10 went from 0.438 to 0.479 across these 8 queries, so the reordering was on average a small gain. Movement was not noise-free in either direction: C01 dropped from rank 2 to rank 3 and C14 rose from rank 2 to rank 1, so the arm changed rank for 2 of the 8 queries and left 6 unchanged.</p>
+<p>Third, the control is the number to read before the gain. The k=10 arm and the reversed-order arm differ by +1 hit@1 and +0.086 MRR, so most of what the model did reproduced under a reversed prompt. That is a weak positive: the model is not simply echoing the input order. It is also not evidence of relevance skill: one top-1 answer out of 8, against 0 under the control, is not a ranking stage you would put in a query path.</p>
+<h2 id="the-parse-failures-are-a-result-not-an-incident">The parse failures are a result, not an incident</h2>
+<p>Only 1 of 8 k=10 responses returned the requested array with every id exactly once. The rest split into three failure modes, each visible in the raw output files:</p>
+<ul>
+<li>Object wrapper: the model returned <code>{&quot;candidates&quot;: [3,1,2,...]}</code> instead of a bare array even with JSON output enabled. Recoverable with a tolerant parser, which is what the harness does.</li>
+<li>Truncated list: valid JSON with some ids missing, so the harness appends the missing ids at the end. This silently degrades the arm, because a short list is not a full ranking.</li>
+<li>Invalid ids: values outside 1..k or repeated entries. The harness falls back to the embedder&rsquo;s order for that query.</li>
+</ul>
+<p>A 752M-parameter model asked for a strict array format is at the edge of what an instruction can enforce, and the practical lesson is that any local reranker needs a defensive parser plus a documented fallback order. A silent fallback to the embedder order is the right behaviour, because it is never worse than the baseline. It also means a naive evaluation that counts exceptions as successes will overstate the reranker.</p>
+<h2 id="what-a-query-costs-on-this-host">What a query costs on this host</h2>
+<p>The cost model is deliberately mechanical so it can be recomputed on other hardware.</p>
+<ul>
+<li>Median prompt size: 260 tokens for the k=10 arm, measured by the server&rsquo;s prompt_eval_count rather than estimated from characters.</li>
+<li>Median output: 116 tokens per query.</li>
+<li>Median wall clock per reranked query: 26.0 s, with a worst case of 137.3 s on this contended 2-vCPU host.</li>
+<li>Median generation speed: 9.6 tokens/s.</li>
+</ul>
+<p>The tokens/s figure is worth flagging because it contradicts the planning assumption. The plan carried a 5.7 tokens/s observation from an earlier run; this run measured a median of 9.6 tokens/s on the same model with thinking disabled, and individual queries varied by more than 3x as the box was shared. Wall clock on a CPU box is not a stable property of the model, which is why the token counts are published next to it.</p>
+<p>To recompute the bill on different hardware, take the measured prompt and output token counts, divide the output count by the tokens/s of your box, add the prefill time for the prompt, and multiply by the number of queries per turn. The Ollama API exposes eval_count and eval_duration for exactly this (<a href="https://raw.githubusercontent.com/ollama/ollama/main/docs/api.md">Ollama API docs</a>), and if your client omits them you are estimating rather than measuring.</p>
+<h2 id="the-decision-rule-this-measurement-supports">The decision rule this measurement supports</h2>
+<p>Spending latency on a ranking stage is worth it when the ranking stage is better than the retriever at the specific thing that is failing. On this fixture the failing thing was a value-level distinction between two sentences with nearly identical wording, and a 752M-parameter model with a one-line instruction did not resolve it.</p>
+<p>The rule that follows is narrower than &ldquo;do not rerank&rdquo; and more useful than &ldquo;always rerank&rdquo;:</p>
+<ul>
+<li>If your top-1 errors are topic-level (the wrong document entirely), a listwise pass over 10-20 candidates is cheap enough to try, and the parse-failure rate you measure is the real cost, not the token count.</li>
+<li>If your top-1 errors are value-level (right document, wrong number), this measurement gives you no reason to expect a small model to fix them, and you should fix the write path, the chunk boundary or the encoder instead.</li>
+<li>If you cannot afford a defensive parser and a fallback order, do not put the model in the query path at all.</li>
+</ul>
+<p>If you want the encoder lever measured on the same kind of fixture, the embedding-swap piece in this cluster does that with the store held fixed; the chunk-granularity piece isolates the split; and the Elasticsearch build shows what a hosted reranker stage looks like when the budget allows one. Those three pages are the honest alternatives to this one, and none of them is a substitute for it, because each changes a different lever:</p>
+<ul>
+<li><a href="https://baeseokjae.github.io/posts/agent-memory-embedding-swap-recall-2026/">agent-memory-embedding-swap-recall-2026</a> changes the encoder.</li>
+<li><a href="https://baeseokjae.github.io/posts/agent-memory-chunk-granularity-recall-2026/">agent-memory-chunk-granularity-recall-2026</a> changes the split.</li>
+<li><a href="https://baeseokjae.github.io/posts/persistent-agent-memory-on-elasticsearch-building-0-89-recall/">persistent-agent-memory-on-elasticsearch-building-0-89-recall</a> builds a hosted reranking stage.</li>
+<li><a href="https://baeseokjae.github.io/posts/vector-database-rag-alternative-2026/">vector-database-rag-alternative-2026</a> carries the literature&rsquo;s hybrid+rerank numbers, which is the comparison this fixture cannot make.</li>
+<li><a href="https://baeseokjae.github.io/posts/vector-database-comparison-2026/">vector-database-comparison-2026</a> is where store choice belongs, and <a href="https://baeseokjae.github.io/posts/local-agent-turn-time-budget-2026/">local-agent-turn-time-budget-2026</a> is where the per-query second you just spent has to be accounted for.</li>
+</ul>
+<h2 id="versions-and-what-this-run-does-not-support">Versions, and what this run does not support</h2>
+<ul>
+<li>Host: 2 vCPU, no GPU, ollama 0.20.3. Model digests qwen3:0.6b 7df6b6e09427 and snowflake-arctic-embed:33m e8db018629b4.</li>
+<li>qwen3:0.6b is 523 MB at Q4_K_M and reports 752M parameters in Ollama (<a href="https://ollama.com/library/qwen3:0.6b">qwen3:0.6b</a>), while the upstream card lists 0.6B total and 0.44B non-embedding parameters with a 32,768-token context (<a href="https://huggingface.co/Qwen/Qwen3-0.6B">Qwen3-0.6B</a>). The runtime context used here was num_ctx 4096, not the card&rsquo;s maximum.</li>
+<li>The embedder is arctic-embed-s: 33M parameters, 384 dimensions, vendor-reported 51.98 MTEB retrieval NDCG@10, distinct from the 22M -xs at 50.15 (<a href="https://huggingface.co/Snowflake/snowflake-arctic-embed-s">model card</a>). That vendor score is not this fixture&rsquo;s baseline and is not used as one.</li>
+<li>8 paired queries is too few for a significance claim, and none is made here; the counts are published exactly so a reader can see how little they support.</li>
+<li>Nothing here generalises to hosted cross-encoders, GPU serving, larger local models or other quantizations.</li>
+<li>The reversed-order control detects order sensitivity; it cannot attribute it to position, length or recency.</li>
+</ul>
+<h2 id="reproduce-it">Reproduce it</h2>
+<p>The fixture, query set, the four builders with each build&rsquo;s gate output, the harness, the per-query results and the verbatim model output are committed with this article under <code>research/evidence/agent-memory-listwise-rerank-local-llm-2026/</code>:</p>
+<ul>
+<li><a href="https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/agent-memory-listwise-rerank-local-llm-2026/fixture.json">fixture.json</a> - 30 clusters, their four surface forms, the near-miss decoys and the 41 value-swapped near-duplicates.</li>
+<li><a href="https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/agent-memory-listwise-rerank-local-llm-2026/queries.json">queries.json</a> - the 30 queries.</li>
+<li><a href="https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/agent-memory-listwise-rerank-local-llm-2026/build_fixture_v4.py">build_fixture_v4.py</a> - the builder of record for the 221-document fixture, with <a href="https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/agent-memory-listwise-rerank-local-llm-2026/build_fixture.py">build_fixture.py</a> (v1 facts and queries), <a href="https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/agent-memory-listwise-rerank-local-llm-2026/build_fixture_v2.py">build_fixture_v2.py</a> and <a href="https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/agent-memory-listwise-rerank-local-llm-2026/build_fixture_v3.py">build_fixture_v3.py</a> for the earlier builds.</li>
+<li><a href="https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/agent-memory-listwise-rerank-local-llm-2026/prerun_gate.json">prerun_gate.json</a> - the 221-document build&rsquo;s gate: baseline rank per query and the verdict.</li>
+<li><a href="https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/agent-memory-listwise-rerank-local-llm-2026/prerun_gate_v1.json">prerun_gate_v1.json</a>, <a href="https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/agent-memory-listwise-rerank-local-llm-2026/prerun_gate_v2.json">prerun_gate_v2.json</a> and <a href="https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/agent-memory-listwise-rerank-local-llm-2026/prerun_gate_v3.json">prerun_gate_v3.json</a> - the gate output of each earlier build, so the build history above is verifiable rather than remembered.</li>
+<li><a href="https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/agent-memory-listwise-rerank-local-llm-2026/rerank_bench.py">rerank_bench.py</a> - the harness for arms A, B and D.</li>
+<li><a href="https://github.com/baeseokjae/baeseokjae.github.io/blob/main/research/evidence/agent-memory-listwise-rerank-local-llm-2026/results.csv">results.csv</a> - one row per query per completed arm, with token counts and wall clock, including the 13 embedder rows, the 9 k=10 rows and the 8 control rows.</li>
+<li><a href="https://github.com/baeseokjae/baeseokjae.github.io/tree/main/research/evidence/agent-memory-listwise-rerank-local-llm-2026/raw">raw output</a> - the verbatim response for every query in every completed model arm.</li>
+</ul>
+<p>Run it with <code>ollama pull qwen3:0.6b</code>, <code>ollama pull snowflake-arctic-embed:33m</code>, then <code>PYTHONPATH=. python3 build_fixture_v4.py evidence</code> followed by <code>python3 rerank_bench.py --evidence evidence --out run1 --arms B,D --minrank 2 --maxrank 10</code>. The <code>PYTHONPATH=.</code> is required because the v4 builder imports the fact list, the decoys and the value pairs from the earlier builders in the same directory. Expect the same parse failures; they are the point of the raw directory. Re-running the v4 builder on the same host and embedder reproduced the shipped fixture.json, queries.json and gate measurements byte for byte.</p>
+]]></content:encoded></item></channel></rss>
