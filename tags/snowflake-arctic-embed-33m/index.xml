@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Snowflake Arctic Embed 33m on RockB</title><link>https://baeseokjae.github.io/tags/snowflake-arctic-embed-33m/</link><description>Recent content in Snowflake Arctic Embed 33m on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sat, 21 Nov 2026 16:17:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/snowflake-arctic-embed-33m/index.xml" rel="self" type="application/rss+xml"/><item><title>Ollama dimensions for Agent Memory: What Cutting Vector Width Costs in Recall</title><link>https://baeseokjae.github.io/posts/agent-memory-embedding-dimensions-recall-curve-2026/</link><pubDate>Sat, 21 Nov 2026 15:40:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-memory-embedding-dimensions-recall-curve-2026/</guid><description>Measured on Ollama 0.20.3: the dimensions option returns normalise(full[:d]), and cutting 384 to 128 dims costs 1.7 points recall@5 in a 50-fact store but 10.0 points at 800 facts. Fixture, scripts and raw rows published.</description><content:encoded><![CDATA[<p>Your agent memory table has become the biggest thing you own. The embedding model is small, the code is small, but a million stored vectors at 384 float32 dimensions is 1.5 GB of payload before any index overhead, and Ollama&rsquo;s embed API exposes a <code>dimensions</code> option that looks like a free discount: ask for 128 instead of 384 and the payload drops to one third.</p>
+<p>The discount is real. The question is what it does to retrieval, and the documentation does not answer it. The embed API reference declares the parameter in a single line — &ldquo;Number of dimensions to generate embeddings for&rdquo; — and says nothing about how the shorter vector is produced. If your agent memory is full of near-duplicate facts (the same preference restated four ways, the same project detail rephrased across sessions), the shorter vector is exactly where those paraphrases start colliding, and the failure mode is silent: the wrong paraphrase wins the top-k, and only questions that need one specific variant come back wrong.</p>
+<p>This article answers that with two measurements made on one machine. First, what the option actually computes. Second, what it costs, as a curve over (vector width × index size) rather than a single number.</p>
+<p>The short version:</p>
+<ul>
+<li>On ollama 0.20.3 the option is prefix truncation followed by renormalisation. A request for d dimensions returns <code>normalise(full[:d])</code> to float32 rounding, with a maximum absolute difference of 1.3e-07 across eight model/width probes. It does not re-embed at the lower width.</li>
+<li>Cutting 384 → 128 dims (a 3x payload cut) costs 1.7 points recall@5 in a 50-fact index and 10.0 points in an 800-fact index of the same facts. The cost is not a flat percentage; it is a function of how crowded the store is.</li>
+<li>Below 128 dims the arctic-embed:33m curve flattened on this fixture: 128 and 64 dims produced identical recall@5 (0.550) at 800 facts, and 0.967 at 50 facts.</li>
+</ul>
+<p>Those numbers come from a synthetic fixture I built for this article on a 2 vCPU host with no GPU. They are not a benchmark of any embedder, and a single 384-dim encoder family cannot tell you what a hosted API would do. They are enough to show the shape of the trade, and the fixture and raw rows are published so you can rerun them against your own corpus.</p>
+<h2 id="what-the-dimensions-option-actually-computes">What the dimensions option actually computes</h2>
+<p>The mechanism matters because it decides whether truncation is reversible. Two behaviours are possible: the server could re-embed the text with a shorter output layer, or it could compute the full vector and slice. They produce different vectors, and only the second one lets you keep the full vector and derive the short one later.</p>
+<p>This run compared the API output at d ∈ {32, 64, 128, 256} against <code>normalise(full[:d])</code> computed from the same model&rsquo;s full-width vector, using five probe texts per model. For snowflake-arctic-embed:33m (384 native dims) the largest absolute difference was 6.3e-08 at d=32 and 1.29e-07 at d=256. For nomic-embed-text:latest (768 native) it was 7.5e-08 at d=32 and 7e-08 at d=256. Every returned vector was unit length to within 2.6e-07, and every request returned exactly the number of dimensions asked for.</p>
+<p>So on this version, the option is a lossy slice plus renormalisation. Three consequences follow:</p>
+<ul>
+<li>The information in dimensions d+1..N is gone from what you store. You cannot recover it by re-normalising later, and you cannot &ldquo;upgrade&rdquo; a truncated index in place — you would have to re-embed from the text, which means you still need the text — and how much of that text one embedding covers at ingest is a boundary this site <a href="/posts/local-embedding-context-ceiling-2026/">measured separately</a>.</li>
+<li>Keeping the full vector while indexing the short one is possible and cheap on the write side, because the short vector is derived, not separately computed. That is what makes a two-index or index-plus-rerank strategy viable. Whether a paraphrase gets written to the table at all is a different control: the dedupe threshold on that write path is <a href="/posts/agent-memory-similarity-threshold-drops-constraints-2026/">measured here</a>, and it sets how much crowding this width question ever has to answer.</li>
+<li>Because the operation is a plain prefix, its quality depends entirely on how much of the semantic content the encoder packed into the first d dims — which is a property of training, not of Ollama.</li>
+</ul>
+<p>The <a href="https://docs.ollama.com/api/embed">embed API reference</a> documents none of this. It is a measurement, and it is version-scoped: it holds for ollama 0.20.3 on this host with these two models, and the honest reading is &ldquo;verified here, re-verify on your version&rdquo;.</p>
+<h2 id="why-the-safe-width-depends-on-the-encoder-not-on-your-storage-target">Why the safe width depends on the encoder, not on your storage target</h2>
+<p>Prefix truncation keeps information only if the encoder was trained so that early dimensions carry most of the signal. Matryoshka Representation Learning (MRL) does exactly that: it trains nested sub-vectors so a single embedding can be truncated to a smaller width and still be useful, a property described in the <a href="https://arxiv.org/abs/2205.13147">MRL paper</a> as encoding &ldquo;information at different granularities&rdquo;.</p>
+<p>The two encoders in this run sit on opposite sides of that line, and the difference is visible in vendor material rather than in any Ollama documentation:</p>
+<ul>
+<li>The <a href="https://github.com/Snowflake-Labs/arctic-embed">Snowflake arctic-embed repository</a> claims MRL training for arctic-embed-m-v1.5, saying it delivers retrieval performance &ldquo;even when vectors are truncated to 256 dimensions&rdquo;. The arctic-embed-s section, which carries the 33m parameters and 384 dimensions that the Ollama <code>snowflake-arctic-embed:33m</code> tag matches, makes no MRL claim at all.</li>
+<li>The <a href="https://huggingface.co/nomic-ai/nomic-embed-text-v1.5">nomic-embed-text-v1.5 model card</a> documents MRL usage explicitly: take the layer-normalised output, slice to the target width, L2-normalise. Its example <code>matryoshka_dim</code> is 512 out of 768.</li>
+</ul>
+<p>That is the reason this article measures the plain 384-dim encoder at three index sizes and the MRL 768-dim encoder at the full index only: they are different questions. For a non-MRL encoder, truncation is information loss that you hope the corpus can absorb. For an MRL encoder it is a supported operating mode whose cost still has to be measured, because &ldquo;trained for it&rdquo; is not &ldquo;free&rdquo;.</p>
+<p>And if the width curve you measure turns out unacceptable, the encoder is the other lever: swapping models at a fixed width is a different trade with its own measured cost, covered in <a href="/posts/agent-memory-embedding-swap-recall-2026/">what an encoder swap actually buys</a>. Shrinking a vector and replacing the model that produced it are not substitutes, and only one of them is reversible from stored data.</p>
+<h2 id="the-fixture-800-paraphrased-facts-40-queries-targets-always-indexed">The fixture: 800 paraphrased facts, 40 queries, targets always indexed</h2>
+<p>The experiment holds the encoder, the chunk text, the metric and the query set fixed and varies only the stored width. Chunking is the other lever that decides what sits inside one vector, and it is held constant here because this site already <a href="/posts/agent-memory-chunk-granularity-recall-2026/">measured how splitting the same content changes recall</a>; changing both at once would confound the width effect.</p>
+<p>The corpus is 800 fact strings: 200 subjects, each expressed in four surface-form paraphrases of the same fact, and each variant carries a unique codename so a scorer can tell which variant a query is supposed to match. The query set is 40 questions: 20 cluster-level, where any of the four variants is a correct answer, and 20 exact-paraphrase, where one specific variant is correct. Index sizes are 50, 200 and 800 facts, with three distractor orderings per cell, and every query&rsquo;s target facts are guaranteed to be present in the index being searched.</p>
+<p>That presence guarantee needs stating because the first scoring pass in this run did not have it. It sampled each index as a random subset of the 800 facts, which meant some query targets were simply absent — an automatic miss that made recall look <em>worse</em> at small index sizes for the wrong reason. Those rows are preserved unedited as <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-embedding-dimensions-recall-curve-2026/results.csv">results.csv</a> and published with the rest of the evidence for audit; no claim here uses them. Every number in this article comes from the presence-guaranteed re-score for the 384-dim encoder, or from the full-index cells, where presence is guaranteed by construction.</p>
+<p>What the fixture is not: real prose. Template-generated paraphrases have cleaner semantic separation than messy notes, so the absolute recall values are optimistic. The direction and relative size of the width effect are the transferable part.</p>
+<h2 id="the-measured-curve">The measured curve</h2>
+<p>Recall@1, recall@5 and MRR for <code>snowflake-arctic-embed:33m</code> (384 native dims), cosine on normalised vectors, deterministic full sort, mean of three distractor seeds. Bytes per vector are float32 payload only: 4 × width.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Index size</th>
+					<th>Width</th>
+					<th>Bytes/vector</th>
+					<th>R@1</th>
+					<th>R@5</th>
+					<th>MRR</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>50 facts</td>
+					<td>384</td>
+					<td>1,536</td>
+					<td>0.708</td>
+					<td>0.983</td>
+					<td>0.813</td>
+			</tr>
+			<tr>
+					<td>50 facts</td>
+					<td>256</td>
+					<td>1,024</td>
+					<td>0.725</td>
+					<td>0.975</td>
+					<td>0.821</td>
+			</tr>
+			<tr>
+					<td>50 facts</td>
+					<td>128</td>
+					<td>512</td>
+					<td>0.683</td>
+					<td>0.967</td>
+					<td>0.790</td>
+			</tr>
+			<tr>
+					<td>50 facts</td>
+					<td>64</td>
+					<td>256</td>
+					<td>0.658</td>
+					<td>0.967</td>
+					<td>0.776</td>
+			</tr>
+			<tr>
+					<td>200 facts</td>
+					<td>384</td>
+					<td>1,536</td>
+					<td>0.617</td>
+					<td>0.783</td>
+					<td>0.681</td>
+			</tr>
+			<tr>
+					<td>200 facts</td>
+					<td>256</td>
+					<td>1,024</td>
+					<td>0.567</td>
+					<td>0.783</td>
+					<td>0.652</td>
+			</tr>
+			<tr>
+					<td>200 facts</td>
+					<td>128</td>
+					<td>512</td>
+					<td>0.558</td>
+					<td>0.692</td>
+					<td>0.626</td>
+			</tr>
+			<tr>
+					<td>200 facts</td>
+					<td>64</td>
+					<td>256</td>
+					<td>0.525</td>
+					<td>0.767</td>
+					<td>0.618</td>
+			</tr>
+			<tr>
+					<td>800 facts</td>
+					<td>384</td>
+					<td>1,536</td>
+					<td>0.575</td>
+					<td>0.650</td>
+					<td>0.599</td>
+			</tr>
+			<tr>
+					<td>800 facts</td>
+					<td>256</td>
+					<td>1,024</td>
+					<td>0.525</td>
+					<td>0.575</td>
+					<td>0.549</td>
+			</tr>
+			<tr>
+					<td>800 facts</td>
+					<td>128</td>
+					<td>512</td>
+					<td>0.500</td>
+					<td>0.550</td>
+					<td>0.532</td>
+			</tr>
+			<tr>
+					<td>800 facts</td>
+					<td>64</td>
+					<td>256</td>
+					<td>0.500</td>
+					<td>0.550</td>
+					<td>0.526</td>
+			</tr>
+	</tbody>
+</table>
+<p>Read the 384 row down instead of across and the point of the article appears: adding 16x more facts to the same index costs more recall (0.983 → 0.650 R@5) than cutting the vector to a third of its width at the largest size. Width is not the dominant lever in this fixture. Crowding is.</p>
+<h2 id="at-800-facts-three-times-the-savings-costs-ten-points">At 800 facts, three times the savings costs ten points</h2>
+<p>At the largest index size, 384 → 128 dims cuts the vector payload from 1,536 to 512 bytes — exactly one third — and recall@5 falls from 0.650 to 0.550, with recall@1 from 0.575 to 0.500 and MRR from 0.599 to 0.532. Ten points of recall@5 and 7.5 points of recall@1 for a 3x storage cut, with no seed variance at all: all three distractor orderings produce the identical 0.550 at both widths, because the ordering only permutes the distractor set and the corpus is dense enough that the same candidates win.</p>
+<p>At 50 facts the same 3x cut costs 1.7 points of recall@5 (0.983 → 0.967) and 2.5 points of recall@1 (0.708 → 0.683). The 50-fact store is close to the recall@5 ceiling, which compresses any difference there — you cannot lose ten points when you only had 1.7 to lose. So the honest statement is not &ldquo;truncation is cheap&rdquo; or &ldquo;truncation is expensive&rdquo;; it is that the cost grows with how many near-duplicate candidates compete for the same top-k slots, and a store of hundreds of paraphrased facts per subject is where it starts to bite.</p>
+<p>The 200-fact row is the awkward one, and worth reporting rather than smoothing: 384 and 256 tie at 0.783 R@5, 128 drops to 0.692, and 64 recovers to 0.767. A non-monotone wobble of that size, on 40 queries, is inside the noise this fixture can resolve — 40 queries means one query is 2.5 points, and the three seeds differ by up to 5 points in that cell. Treat the 128 dip at 200 facts as unresolved rather than as a real property of the encoder.</p>
+<h2 id="below-128-dims-the-curve-flattened">Below 128 dims the curve flattened</h2>
+<p>At 800 facts, going from 128 to 64 dims halves the payload again (512 → 256 bytes) and changes nothing measurable: R@1 0.500, R@5 0.550, MRR 0.532 → 0.526, identical across all three seeds. The gradual part of the loss is between 384 and 128; past that, this fixture says you are buying bytes at no measured additional cost.</p>
+<p>That is a plateau, not a licence. At 128 and 64 the absolute numbers are already poor (half the queries miss the top-1 slot), so equal scores are equally consistent with a floor as with equal information content — once the right variant has fallen out of the candidate set, it stays out at any width below. Read the plateau as &ldquo;this fixture cannot distinguish 128 from 64&rdquo;, which is a much weaker statement than &ldquo;64 dims is fine&rdquo;, and one that only a corpus with more headroom could settle.</p>
+<h2 id="the-mrl-encoder-on-the-same-fixture">The MRL encoder on the same fixture</h2>
+<p>The same 800-fact index, embedded by <code>nomic-embed-text:latest</code> (768 native dims):</p>
+<table>
+	<thead>
+			<tr>
+					<th>Width</th>
+					<th>Bytes/vector</th>
+					<th>R@1</th>
+					<th>R@5</th>
+					<th>MRR</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>768</td>
+					<td>3,072</td>
+					<td>0.175</td>
+					<td>0.325</td>
+					<td>0.246</td>
+			</tr>
+			<tr>
+					<td>256</td>
+					<td>1,024</td>
+					<td>0.100</td>
+					<td>0.325</td>
+					<td>0.186</td>
+			</tr>
+			<tr>
+					<td>128</td>
+					<td>512</td>
+					<td>0.150</td>
+					<td>0.375</td>
+					<td>0.234</td>
+			</tr>
+			<tr>
+					<td>64</td>
+					<td>256</td>
+					<td>0.075</td>
+					<td>0.150</td>
+					<td>0.108</td>
+			</tr>
+	</tbody>
+</table>
+<p>Two things stand out. First, the absolute recall is far below the 384-dim encoder&rsquo;s, and the likely reason is in this run&rsquo;s setup rather than in the model: nomic-embed-text-v1.5 requires its task-instruction prefixes (<code>search_document:</code> at index time, <code>search_query:</code> at query time), and this run embedded raw text for both encoders to keep them symmetric. The vendor card is explicit that the prefix is mandatory, so these absolute values understate nomic considerably. Width comparisons <em>within</em> this model are still internally consistent, because every width saw the same unprefixed text.</p>
+<p>Second, the MRL model&rsquo;s width curve here is not the clean monotone decay that &ldquo;trained for truncation&rdquo; might suggest: R@5 is flat at 768 and 256 (0.325), <em>higher</em> at 128 (0.375), then collapses at 64 (0.150). At 40 queries those first three cells differ by two queries or fewer, so the ordering among them is not resolvable. What is resolvable is the drop at 64 dims, which is large and consistent: the MRL property does not extend indefinitely, and where it stops depends on the model — 64 is past the useful point for this encoder on this fixture, while the non-MRL 384-dim encoder had already flattened by 128.</p>
+<p>The practical point is not &ldquo;which encoder is better&rdquo;. It is that the width you can safely cut to is an encoder-specific number you have to measure, and vendor MRL claims are a reason to test, not a substitute for testing.</p>
+<h2 id="the-decision-rule">The decision rule</h2>
+<p>Three options, in the order I would try them. If you have not yet established that vector width is the constraint, start from the <a href="/posts/agent-memory-architecture-guide-2026/">agent-memory architecture guide</a> or the <a href="/posts/best-ai-agent-memory-frameworks-2026/">framework comparison</a>; the rest of this section assumes that decision is made and only sizes the vector.</p>
+<p><strong>Cut width only if the index is small or the recall budget is loose.</strong> If your store holds tens of facts per subject and your questions are cluster-level (any paraphrase is a correct answer), the measured cost was 1.7 points R@5 for a 3x payload cut, which is a reasonable trade. If your store holds hundreds of paraphrases per subject and your questions need one specific variant, the measured cost was 10 points R@5, and the byte saving will not pay for the retrieval failures it buys.</p>
+<p><strong>Keep the full vector and index two widths if you need the storage win and the recall.</strong> Because the short vector is <code>normalise(full[:d])</code>, you can store 384-dim vectors and additionally index 128-dim copies (or a coarse 64-dim pass) without a second embed call. Search the narrow index first for candidate generation, then rescore the candidates at full width. That buys the hot-path cost reduction without discarding the information, at the price of keeping both payloads — worth it when the narrow pass is what is hitting memory limits, not when the whole table is.</p>
+<p><strong>Add reranking instead of shrinking, if the failure is ordering.</strong> The 200-fact wobble and the flat 128/64 cells both suggest candidates often survive to a deeper rank. A cross-encoder rerank over the top-20 at full width addresses ordering; truncation addresses payload. They are not substitutes.</p>
+<p>Whichever you pick, state the savings honestly. A 3x reduction in vector payload is not a 3x smaller database: HNSW or IVF graph overhead stays roughly constant per vector (how stores differ on that overhead is compared in <a href="/posts/vector-database-comparison-2026/">this store-level comparison</a>), and quantization (int8 or binary) can reach a smaller payload <em>at full width</em> without the truncation question at all. This experiment measured neither, so it cannot tell you which is the better byte.</p>
+<h2 id="reproduce-it">Reproduce it</h2>
+<p>Everything is derived from local files, no hosted API and no paid tooling:</p>
+<ul>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-embedding-dimensions-recall-curve-2026/fixture.json">fixture.json</a> — 800 facts (200 subjects × 4 paraphrases with codenames) and the 40 queries</li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-embedding-dimensions-recall-curve-2026/run-2-presence-guaranteed-score.py">run-2-presence-guaranteed-score.py</a> — the scoring pass behind every table here</li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-embedding-dimensions-recall-curve-2026/results-arctic-presence-guaranteed.csv">results-arctic-presence-guaranteed.csv</a> — one row per (width, index size, seed, query)</li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-embedding-dimensions-recall-curve-2026/semantics-check.json">semantics-check.json</a> — the <code>normalise(full[:d])</code> comparison, 8 probes</li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-embedding-dimensions-recall-curve-2026/method.md">method.md</a> — exact commands, seeds and environment</li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-embedding-dimensions-recall-curve-2026/results.csv">results.csv</a> — the superseded first scoring pass, published unedited for audit (sha256 <code>d75a16cf3f1f4fd4a4dba7c915c79456b63c985a2921a961ee8527ccca1abf01</code>); it sampled random index subsets, so its small-store rows are automatic misses, and no number in this article comes from it</li>
+</ul>
+<p>The environment block, so the scope is checkable: ollama 0.20.3, Linux aarch64, 2 vCPU, 11.0 GiB RAM, no GPU. <code>snowflake-arctic-embed:33m</code> digest e8db018629b498a0a1a2eadbe8ab29477c1d7c4b6ba8ff2a69b0a6ed193713be (67 MB, F16, BERT family, 384 native dims), <code>nomic-embed-text:latest</code> digest 0a109f422b47e3a30ba2b10eca18548e944e8a23073ee3f3e947efcf3c45e59f (768 native dims). Full-width embedding cost 0.035 s per text at p50 for the 33M model and 0.154 s per text for the 768-dim model, batches of 32 facts and 8 queries per call, model resident, single host, no repeats — indicative only, not a serving benchmark.</p>
+<h2 id="limits">Limits</h2>
+<ul>
+<li>Fixture scale: 800 facts, 40 queries, index sizes up to 800. A controlled editorial experiment, not an MTEB-style benchmark or a vendor evaluation.</li>
+<li>Template-generated paraphrases are cleaner than real notes, so absolute recall is optimistic. Transfer the direction and relative size of the width effect, not the levels.</li>
+<li>One non-MRL 384-dim encoder across three index sizes, one MRL 768-dim encoder at the full index only, one host, CPU only. No GPU serving, hosted embedding APIs, quantization, reranking or ANN overhead was measured, and no storage or recall improvement is claimed for any hosted service.</li>
+<li>The <code>normalise(full[:d])</code> equivalence is version-scoped to ollama 0.20.3 as installed here. Re-check it on your version before relying on derivable short vectors.</li>
+<li>The task prefixes nomic requires were omitted for symmetry, which depresses that model&rsquo;s absolute numbers; its width comparison is unaffected.</li>
+<li>The first, confounded scoring pass is published unedited as <code>results.csv</code> in the evidence directory (last item under Reproduce, sha256 <code>d75a16cf…</code>) and is not the basis of any claim in this article.</li>
+</ul>
+<p>The takeaway I would act on: measure the width curve on your own corpus before you cut, and expect the answer to depend on how many paraphrases compete in your store, not on a vendor&rsquo;s truncation-friendly training claim.</p>
+]]></content:encoded></item></channel></rss>
