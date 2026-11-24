@@ -1,22 +1,22 @@
 ---
-title: "Agent Memory on Cloudflare Workers: The Documented API, the Compaction Lifecycle, and What to Build in Private Beta"
-date: 2026-10-28T11:20:00+00:00
-lastmod: 2026-10-28T11:20:00+00:00
+title: 'Agent Memory on Cloudflare Workers: API and Compaction'
+date: 2026-10-28 11:20:00+00:00
+lastmod: 2026-10-28 11:20:00+00:00
 tags:
-  - cloudflare agent memory
-  - agent memory cloudflare workers
-  - durable objects agent memory
-  - serverless agent memory
-  - context compaction agent memory
-  - vectorize agent memory
-  - namespaces and profiles
-  - private beta agent memory
-description: "Cloudflare Agent Memory is a managed, namespace- and profile-scoped memory store for agents. What the private-beta documentation actually specifies: the binding, every documented method, ingest and recall limits, supersession, and what to build instead while access is gated."
+- cloudflare agent memory
+- agent memory cloudflare workers
+- durable objects agent memory
+- serverless agent memory
+- context compaction agent memory
+- vectorize agent memory
+- namespaces and profiles
+- private beta agent memory
+description: 'Cloudflare Agent Memory is a managed, namespace- and profile-scoped memory store for agents. What the private-beta documentation actually specifies: the binding, every documented method, ingest and recall limits, supersession, and what to build instead while access is gated.'
 draft: false
 schema: schema-agent-memory-cloudflare-workers
 cover:
-  image: "/images/agent-memory-cloudflare-workers.png"
-  alt: "Agent Memory on Cloudflare Workers: the documented API contract"
+  image: /images/agent-memory-cloudflare-workers.png
+  alt: 'Agent Memory on Cloudflare Workers: the documented API contract'
   relative: false
 ---
 
@@ -135,7 +135,7 @@ Finally, `getSummary()` returns a structured Markdown summary of everything stor
 
 Context compaction is the moment a harness decides what to do with a conversation that no longer fits. The pattern the documentation describes is to make compaction a write, not a discard: the harness bulk-ingests the conversation into the profile at a natural checkpoint — typically when it compacts context, or after the user goes idle — instead of calling the write path on every model turn ([get started](https://developers.cloudflare.com/agent-memory/get-started/)).
 
-Read that as an architecture instruction rather than a performance tip. The write path runs extraction, verifier checks and background vectorization, so per-turn writes put that work on the critical path of every response. A batch at compaction puts it once, on a boundary the harness already treats as expensive. The documentation also points at the Cloudflare Agents SDK session API as the reference implementation for handling compaction, remembering and searching — but the import in that example is from `agents/experimental/memory/session`, an experimental namespace. If you depend on that wiring, pin the version you tested and expect the path to move.
+Read that as an architecture instruction rather than a performance tip. The write path runs extraction, verifier checks and background vectorization, so per-turn writes put that work on the critical path of every response. A batch at compaction puts it once, on a boundary the harness already treats as expensive. The documentation also points at the Cloudflare Agents SDK `Sessions` capability, which stores the conversation for a Durable Object agent, as the reference wiring for that pattern. The example imports it with `import { Sessions } from "agents/sessions"`, and the page states plainly that "agents/sessions is experimental, so its API may change between releases". If you depend on that wiring, pin the version you tested and expect the API to move between releases.
 
 The retrieval side of the lifecycle is where most implementations get it wrong in a way that no amount of storage quality fixes. A memory that is written but never recalled costs money and buys nothing. The read that matters is the one at session start, where the agent asks a small number of targeted questions — what does this entity prefer, what is the current state of the object in question, what rules apply — and rebuilds context from answers rather than from a re-read of the transcript.
 
@@ -260,4 +260,6 @@ The architecture decision underneath all of this is unchanged from before the se
 
 ## How this page was checked
 
-Every API statement here was compared against saved copies of the public Agent Memory documentation and the launch post, fetched on 2026-10-28, by asserting each quoted sentence as an exact substring of the saved text. The saved pages are not all the same age. The index, `concepts/namespaces-profiles`, `concepts/how-agent-memory-works` and `platform/pricing` pages carry "Last updated Jun 2, 2026"; `api/workers-api` and `platform/limits` carry Jun 3, 2026; and `get-started`, which is the source for the compaction lifecycle and the experimental import, carries "Last updated Oct 21, 2026", a week before this check. The launch post carries datePublished 2026-04-17 and dateModified 2026-07-15. The June reference pages are therefore several months old and undocumented changes in them cannot be ruled out, while the get-started page that carries the lifecycle material is current to within a week. That comparison was a private, local author verification: the saved copies are third-party page captures and are not redistributed with this article, which is why every claim above links to the live page instead. No managed-service test was run — no latency, cost, accuracy or isolation measurement — because private-beta access was not available, and no such figure appears in the text.
+Every API statement here was compared against saved copies of the public Agent Memory documentation and the launch post, fetched on 2026-10-28, by asserting each quoted sentence as an exact substring of the saved text. The saved pages are not all the same age. The index, `concepts/namespaces-profiles`, `concepts/how-agent-memory-works` and `platform/pricing` pages carry "Last updated Jun 2, 2026"; `api/workers-api` and `platform/limits` carry Jun 3, 2026; and `get-started`, which is the source for the compaction lifecycle, carried "Last updated Oct 21, 2026" on that date, a week before the check. The launch post carries datePublished 2026-04-17 and dateModified 2026-07-15. The June reference pages are therefore several months old and undocumented changes in them cannot be ruled out, while the get-started page that carries the lifecycle material was current to within a week when it was read. That comparison was a private, local author verification: the saved copies are third-party page captures and are not redistributed with this article, which is why every claim above links to the live page instead. No managed-service test was run — no latency, cost, accuracy or isolation measurement — because private-beta access was not available, and no such figure appears in the text.
+
+One follow-up read changed a detail on that page. Re-reading `get-started` on 2026-11-24 showed it now carries "Last updated Oct 29, 2026", and that version's example imports `Sessions` from `agents/sessions`. The older path quoted in earlier versions of this page, `agents/experimental/memory/session`, returned zero matches in the current page text. The 2026-10-28 record above therefore describes what was on the page on that date; it does not imply the old import path is still current. The experimental caveat survived the move — the page now states that "agents/sessions is experimental, so its API may change between releases" — so the warning to pin a version still applies to the new path.
