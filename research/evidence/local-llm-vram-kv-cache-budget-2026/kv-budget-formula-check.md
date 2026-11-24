@@ -1,7 +1,8 @@
 # Formula check: qwen2.5:0.5b, measured vs. computed KV-cache slope
 
 Run: 2026-11-01T06:12:16Z .. 06:13:31Z (UTC). Ollama 0.20.3, CPU-only, 2 vCPU, 12,213,612 kB RAM.
-Raw: `raw/probe_raw_f16_and_q8_no_fa.json`, `raw/probe_raw_q8_with_flash_attention.json`. Table: `kv-budget-2026-11-01.csv`.
+
+Retained raw table: `kv-budget-2026-11-01.csv` — the eight measured rows, and the sole source of every number below. The probe also wrote one stdout JSON record per cell to scratch space (`PROBE_OUT` in `method.md`); those JSON files were **not retained** and are not part of this evidence bundle. They are not needed to check anything here, and `scripts/kv_budget_probe.py` regenerates equivalent records on your own host.
 
 ## Inputs from the model's own config
 

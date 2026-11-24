@@ -1,6 +1,7 @@
 ---
-title: "Your 18GB GGUF Is Not an 18GB Budget: Sizing KV Cache and Context for a Local Coding Model"
+title: "Local LLM Memory: Why an 18GB Model Needs More Than 18GB"
 date: 2026-11-01T13:00:00+00:00
+lastmod: 2026-11-24T13:23:05+00:00
 tags:
   - local llm vram budget
   - kv cache size formula
@@ -17,6 +18,13 @@ tags:
 description: "A GGUF file is the weights, not the budget. Run the KV-cache formula before you download, with a measured 0.5B check against it on a 12 GB CPU host and the q8_0 setting that saves nothing without Flash Attention."
 draft: false
 schema: "schema-local-llm-vram-kv-cache-budget-2026"
+cover:
+  image: /images/local-llm-vram-kv-cache-budget-2026-presentation.png
+  alt: "Three-part memory budget labelled Model weights, KV cache and Runtime overhead, with the footnote that the model file is only one part of it."
+  caption: "The model file is only one part of the memory budget. Conceptual checklist, not a measurement."
+  relative: false
+images:
+  - /images/local-llm-vram-kv-cache-budget-2026-presentation.png
 ---
 
 You download a 4-bit quantised model, the file is roughly 18 GB, you have 24 GB of VRAM, and the arithmetic looks settled. Then the agent session gets long, the server either dies or quietly starts answering with a fraction of the context you asked for, and the model that "fit yesterday" no longer fits.
