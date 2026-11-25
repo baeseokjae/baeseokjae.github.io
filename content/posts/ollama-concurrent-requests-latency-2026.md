@@ -1,5 +1,5 @@
 ---
-title: "Two Agents, One Ollama: Measuring Why the Second Request Queues Instead of Speeding Up (2026)"
+title: "Ollama Requests Queue Up? Check Parallel Slots and Latency"
 date: 2026-11-04T00:00:00+00:00
 tags:
   - ollama concurrent requests
@@ -17,6 +17,15 @@ tags:
 description: "A CPU-only measurement of two simultaneous Ollama requests: the second one waits one full generation, and the response body proves it. Includes the one-line queue diagnostic, a 17-batch matrix for OLLAMA_NUM_PARALLEL 1/2/4, and why extra slots buy latency, not throughput."
 draft: false
 schema: "schema-ollama-concurrent-requests-latency-2026"
+cover:
+  image: /images/ollama-concurrent-requests-latency-2026-presentation.png
+  alt: 'Diagram of one Ollama request through a single model slot: request arrival, then waiting in the pending queue while the model generates, then generation beginning. A timeline shows total_duration split into load and prompt evaluation, eval_duration, and the leftover queue wait.'
+  caption: 'Compare queue time with generation time: the leftover after the three reported phases is the wait. Conceptual diagram, not to scale; the measured nanoseconds are in the article.'
+  relative: false
+  hidden: false
+images:
+  - /images/ollama-concurrent-requests-latency-2026-presentation.png
+lastmod: '2026-11-25T14:24:43+00:00'
 ---
 
 You start a second coding agent against the Ollama endpoint that already answers your first one. Nothing errors out. The second call simply sits there for two or three seconds, and when both finish your "parallel" run has taken longer than running the two prompts one after the other. The usual conclusion is that the model is slow, the quant is wrong, or the machine needs more RAM. On the host measured here, none of those were true: the second request was queued, and the HTTP response said so in its own timing fields.
@@ -27,7 +36,7 @@ This post is the mechanism, a diagnostic you can run against one response, and a
 
 Ollama's own documentation describes two levels of concurrency: several models resident at once, and, inside one model, several requests processed in parallel. The second level is what a subagent fan-out or a background embedding call runs into, and it is a per-model setting rather than a per-request one — [the FAQ states that parallel request processing is configured when the model is loaded, and that a model is "configured to allow parallel request processing" only if memory allows](https://docs.ollama.com/faq.md). When memory does not allow it, "all new requests will be queued until the new model can be loaded", and "queued requests will be processed in order".
 
-The compiled defaults decide how often that path is taken. In the runtime's configuration source, [parallel request processing defaults to 1, the pending queue to 512, and the maximum number of resident models to 0, meaning automatic](https://raw.githubusercontent.com/ollama/ollama/main/envconfig/config.go). So a stock install handles exactly one generation per model at a time. The second request is not rejected and not run concurrently — it goes into the scheduler's pending channel, which is also where the "server busy" error comes from: [in the scheduler, a request whose runner is neither loaded nor reloadable is pushed to a pending channel, and only a full channel returns `ErrMaxQueue`](https://raw.githubusercontent.com/ollama/ollama/main/server/sched.go). Up to 512 requests can therefore wait politely for a slot before anything fails.
+The compiled defaults decide how often that path is taken. In the runtime's configuration source, [the pending queue defaults to 512 and the resident-model limit to 0, meaning automatic](https://raw.githubusercontent.com/ollama/ollama/main/envconfig/config.go). `OLLAMA_NUM_PARALLEL` ships unset in that same file — it now compiles to 0, "backend default" — and [the FAQ states that on non-MLX backends the effective default is 1](https://docs.ollama.com/faq.md). So a stock install handles exactly one generation per model at a time. The second request is not rejected and not run concurrently — it goes into the scheduler's pending channel, which is also where the "server busy" error comes from: [in the scheduler, a request whose runner is neither loaded nor reloadable is pushed to a pending channel, and only a full channel returns `ErrMaxQueue`](https://raw.githubusercontent.com/ollama/ollama/main/server/sched.go). Up to 512 requests can therefore wait politely for a slot before anything fails.
 
 That is the whole trap. A queued request returns HTTP 200 with a normal-looking answer. The only trace of the wait is time that belongs to no phase of the work.
 
@@ -105,6 +114,6 @@ The measurement is reproducible on a 2-core CPU box in under three minutes: 17 b
 | [method.md](https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-concurrent-requests-latency-2026/method.md) | request shape, derived formulas, what was deliberately not measured; the authoritative `cold` flag is in `summary.csv` |
 | [host.txt](https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-concurrent-requests-latency-2026/host.txt) | `ollama --version`, `nproc`, `free -m`, kernel and architecture |
 | [ps_A.txt](https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-concurrent-requests-latency-2026/ps_A.txt) / [ps_B.txt](https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-concurrent-requests-latency-2026/ps_B.txt) | `/api/ps` after each configuration: `size`, `size_vram`, `context_length` |
-| [server_b_lines.txt](https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-concurrent-requests-latency-2026/server_b_lines.txt) / [server_c_lines.txt](https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-concurrent-requests-latency-2026/server_c_lines.txt) | the server config and load lines showing `OLLAMA_NUM_PARALLEL`, `Ollama version 0.20.3`, `Parallel` and `KvSize` |
+| [server_b_lines.txt](https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-concurrent-requests-latency-2026/server_b_lines.txt) / [server_c_lines.txt](https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/ollama-concurrent-requests-latency-2026/server_c_lines.txt) | the server config and load lines showing `OLLAMA_NUM_PARALLEL`, `Parallel` and `KvSize` |
 
 To rerun on your own hardware, start a second server on a spare port against the same model directory rather than restarting the one your editor is using, point `probe.py` at it, and compare the residual fraction for concurrency 1 and 2. If the second request's residual is near zero and its `eval_duration` roughly doubles, your slots are working; if the residual is about one solo generation, they are not. Note that `summary.csv` reports the per-batch median across the requests in that batch, so a two-request batch with one queued request shows a residual median of roughly half the queued request's own wait — read the per-request fields in `results.jsonl` when you want the wait of the request that actually queued.
