@@ -1,7 +1,7 @@
 ---
-title: "Local LLM VRAM Planning 2026: The KV Cache Math Behind the Context You Can Actually Serve"
+title: Will Your Local LLM Fit? Budget VRAM and KV Cache
 date: 2026-11-03T06:29:00+00:00
-lastmod: 2026-11-03T06:50:12+00:00
+lastmod: 2026-11-24T14:16:02+00:00
 tags:
   - local llm vram planning
   - kv cache bytes per token
@@ -17,6 +17,14 @@ tags:
 description: "Does this model, quant and context fit your card? Compute weights plus KV from the model's own config at a pinned revision, with a per-model table, a hybrid-attention counterexample and a runnable planner."
 draft: false
 schema: "schema-local-llm-vram-kv-cache-sizing-2026"
+cover:
+  image: /images/local-llm-vram-kv-cache-sizing-2026-presentation.png
+  alt: "Conceptual checklist titled 'Will the model fit?' with three stacked steps: model configuration, then context plus concurrency, then available memory, captioned 'state the assumptions before comparing the totals.' No measurements shown."
+  caption: "State the assumptions before comparing the totals. Conceptual checklist, not measurement data; see the article for evidence and limits."
+  relative: false
+  hidden: false
+images:
+  - /images/local-llm-vram-kv-cache-sizing-2026-presentation.png
 ---
 
 A model card says 40,960 tokens. The Q4_K_M file is 4.68 GiB. The card has 12 GB. You set `-c 40960`, and one of three things happens: the load fails, the runtime spills layers to CPU and tokens per second collapse, or the server starts and silently serves a shorter context than you asked for.
