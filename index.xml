@@ -125,6 +125,321 @@
 <pre tabindex="0"><code>python3 multihop_probe.py --out ./out --reader qwen2.5:0.5b --deadline-epoch $(( $(date +%s) + 5400 ))
 </code></pre><p><code>--deadline-epoch</code> is not decorative: the probe&rsquo;s default budget is 900 seconds, it stops decomposing 240 seconds before the deadline, and its reader loop breaks 120 seconds before it — not enough for a four-arm reader grid on a contended 2-vCPU host. The probe writes <code>fixture.json</code>, <code>results-retrieval.json</code>, <code>decomposition.json</code>, <code>results-reader.json</code> and <code>summary.json</code>; this run ended before the reader stage, which is why the last two are missing here rather than withheld. Embedding dimensions are recorded under <code>dims</code> in <code>results-retrieval.json</code> — 384, 384 and 768, measured by the probe — and the model digests in <code>METHOD.md</code> and <code>ollama-tags.json</code>. <a href="https://docs.ollama.com/api/embed">Ollama&rsquo;s <code>/api/embed</code> documentation</a> is the endpoint contract. The two library pages (<a href="https://ollama.com/library/all-minilm"><code>all-minilm</code></a>, <a href="https://ollama.com/library/nomic-embed-text"><code>nomic-embed-text</code></a>) give footprint and context window — 46 MB with 512 tokens, 274 MB with 2K tokens — but no embedding dimensions; the nomic page additionally repeats the vendor&rsquo;s own claim that it surpasses OpenAI&rsquo;s <code>text-embedding-ada-002</code> and <code>text-embedding-3-small</code>, a comparison this article does not test.</p>
 <p>The useful conclusion is not &ldquo;local stores cannot do multi-hop&rdquo;. It is that coverage and accuracy fail separately, that the bridge usually sits just past a five-slot cut, and that the audit which tells you which failure you have is ten lines long.</p>
+]]></content:encoded></item><item><title>A 0.95 Memory Dedupe Threshold Merged Production Into Staging</title><link>https://baeseokjae.github.io/posts/agent-memory-dedupe-cosine-threshold-2026/</link><pubDate>Tue, 24 Nov 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-memory-dedupe-cosine-threshold-2026/</guid><description>On a 40-pair fixture embedded by three local Ollama encoders, a 0.95 cosine dedupe gate merged a production fact into its staging twin, and tightening the gate removed duplicate capture faster than it removed false merges.</description><content:encoded><![CDATA[<p>Your agent memory layer writes a fact the same way a semantic cache writes an answer: embed the incoming record, compare it with what is already stored, and skip the insert if the cosine similarity clears a threshold. The number that circulates for that threshold is 0.92–0.95. <a href="https://baeseokjae.github.io/posts/ai-for-backend-developers-2026/">This site&rsquo;s own backend guide</a> recommends exactly that band for semantic caching, with a code default of 0.93, and the advice transfers into memory layers by copy-paste because the code shape is identical.</p>
+<p>The tolerance is not identical. A cache that returns the wrong cached answer costs one bad response; a dedupe gate that merges two different facts deletes one of them, and the agent will keep answering with the survivor. The measurement below is about that second failure: can a cosine threshold tell a duplicate memory from a memory that differs by one token, and does raising the threshold fix the merges it gets wrong?</p>
+<h2 id="the-short-answer">The short answer</h2>
+<p>On a 40-pair fixture embedded locally by three Ollama encoders, no threshold separated the two populations. The single most similar pair of the whole fixture was a <em>critical</em> pair on every encoder — two sentences that must not be merged — and it scored above the highest-scoring true paraphrase on the same encoder. At 0.95, <code>snowflake-arctic-embed:33m</code> merged 14 of 16 critical pairs and 6 of 16 paraphrases. Raising the gate to 0.99 on that encoder removed the last 6 duplicate merges and still merged 11 critical pairs. Tightening the threshold costs deduplication faster than it removes false merges, and a sweep from 0.80 to 0.999 never finds an operating point where both errors are acceptable.</p>
+<p>That result is from 40 hand-written pairs — 80 single-sentence facts — on one host on 2026-11-10, with prompt-free embedding calls. It is a mechanism demonstration with exact counts, not an error rate for your store. The fixture, the runner and the raw per-pair scores are published with this article so you can run the same comparison against your own encoder before you trust a number.</p>
+<h2 id="the-gate-and-where-092-came-from">The gate, and where 0.92 came from</h2>
+<p>The pattern is three lines: embed, take the maximum cosine against existing memories, drop the write if the maximum is at or above tau. It exists because near-duplicate writes are real — an agent that extracts the same preference twice, or a summariser that rephrases a stored fact, will otherwise fill the top-k with copies of one sentence. Something has to collapse them.</p>
+<p>The threshold is usually inherited from semantic caching practice, where this site&rsquo;s own guide publishes the 0.92–0.95 band, and that is a defensible choice for a cache, where a false hit produces one wrong answer a user can retry. A memory write is different in one specific way: the record that loses the merge is gone. There is no retry path from the agent&rsquo;s next answer, because the agent cannot distinguish &ldquo;this fact was never stored&rdquo; from &ldquo;this fact is false&rdquo;.</p>
+<p>This is also not the same question as the read-side cutoff. <a href="https://baeseokjae.github.io/posts/agent-memory-similarity-threshold-drops-constraints-2026/">A previous measurement on this site</a> showed that a 0.7 retrieval cutoff can drop a stored constraint that scores low against its own question — the failure happens on the way out of the store. This article is about the way in: two facts that both belong in the store, one of which the gate refuses to insert. <a href="https://baeseokjae.github.io/posts/agent-memory-write-path-reliability-2026/">The write-path protocol</a> that defines record, update, contradiction and delete has no measured quantity for the merge decision; this is one attempt to supply it.</p>
+<h2 id="what-a-memory-layer-stores-and-what-one-token-changes">What a memory layer stores, and what one token changes</h2>
+<p>The fixture is 16 paraphrase pairs (same fact, different wording — a gate should merge these), 16 critical pairs (identical sentence, one critical token changed — a gate must never merge these), and 8 controls (unrelated topics — a gate must never merge these). Every pair has a one-line provenance note in <code>pairs.json</code> saying why a real memory layer would hold both sentences. The categories were fixed before the first embedding call: port, TTL, region, retry count, retention, API version, primary-versus-replica, feature flag.</p>
+<p>The critical pairs are the ordinary shape of infrastructure memory, not adversarial strings:</p>
+<ul>
+<li><code>The checkout service uses port 5432 in production.</code> against <code>... in staging.</code> (C01)</li>
+<li><code>The session cache TTL is 60 seconds.</code> against <code>... 600 seconds.</code> (C03)</li>
+<li><code>Object storage buckets live in ap-southeast-2.</code> against <code>... ap-southeast-1.</code> (C06)</li>
+<li><code>The payment client retries 3 times before failing.</code> against <code>... 5 times.</code> (C07)</li>
+<li><code>The internal REST endpoint for orders is /api/v2/orders.</code> against <code>... /api/v1/orders.</code> (C11)</li>
+<li><code>Analytics queries hit the read replica, not the primary.</code> against <code>Analytics queries hit the primary, not the read replica.</code> (C14)</li>
+</ul>
+<p>A memory layer that loses C01 will tell a deploy check that staging&rsquo;s port is production&rsquo;s port. A layer that loses C14 will answer the read-routing question backwards while quoting a stored sentence that reads correctly. Neither merge raises an exception, and neither is visible in a recall benchmark run on a store that was cleaned before the benchmark started.</p>
+<h2 id="the-measurement">The measurement</h2>
+<p>Three encoders ran through a local Ollama daemon&rsquo;s <a href="https://docs.ollama.com/api/embed"><code>/api/embed</code></a>: <a href="https://ollama.com/library/all-minilm"><code>all-minilm:latest</code></a> (384 dimensions, 512-token context), <a href="https://ollama.com/library/snowflake-arctic-embed"><code>snowflake-arctic-embed:33m</code></a> (384 dimensions, 512-token context) and <a href="https://ollama.com/library/nomic-embed-text"><code>nomic-embed-text:latest</code></a> (768 dimensions, 2K-token context). Dimensions and context windows come from the registry pages and the model cards: <a href="https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2">all-MiniLM-L6-v2</a> documents a 384-dimensional output, the <a href="https://huggingface.co/Snowflake/snowflake-arctic-embed-xs">arctic-embed family card</a> documents the 22m/384 size class that the registry&rsquo;s tag rail extends, and <a href="https://huggingface.co/nomic-ai/nomic-embed-text-v1.5"><code>nomic-embed-text</code></a> documents 768 dimensions. All 80 texts per encoder went in one batch call; cosine was computed on the raw returned vectors with no normalisation, whitening or per-store calibration.</p>
+<p>The run recorded Ollama 0.20.3 on 2 vCPU and 11.9 GiB of RAM, F16 weights, and a <code>prompt_eval_count</code> of 1120, 1120 and 1082. That field is the <strong>per-request total across all 80 inputs</strong>, not a per-input count: 1120 tokens for 80 sentences is about 14 tokens each, against 626 words across the 80 fixture texts and 12 words in the longest one. No single input came anywhere near the 512-token window of <code>all-minilm</code> or <code>snowflake-arctic-embed:33m</code>, so <a href="https://docs.ollama.com/api/embed"><code>/api/embed</code></a>&rsquo;s default <code>truncate=true</code> had nothing to cut — the counts are the <code>embed_call</code> rows in <code>results.jsonl</code>. The three batch calls took 0.87 s, 2.59 s and 6.41 s of wall time for all 80 texts. The measurement date was 2026-11-10; the seven external pages cited here were re-fetched and re-read on 2026-11-24, and the numbers below are the 2026-11-10 run, not a re-run.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Encoder</th>
+					<th>Paraphrase min / median / max</th>
+					<th>Critical min / median / max</th>
+					<th>Highest critical − lowest paraphrase</th>
+					<th>Control max</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>all-minilm:latest</td>
+					<td>0.6466 / 0.8651 / 0.9240</td>
+					<td>0.6559 / 0.9528 / 0.9934</td>
+					<td>−0.3468</td>
+					<td>0.2689</td>
+			</tr>
+			<tr>
+					<td>snowflake-arctic-embed:33m</td>
+					<td>0.8790 / 0.9376 / 0.9853</td>
+					<td>0.9315 / 0.9958 / 0.9979</td>
+					<td>−0.1189</td>
+					<td>0.7150</td>
+			</tr>
+			<tr>
+					<td>nomic-embed-text:latest</td>
+					<td>0.6614 / 0.8336 / 0.9545</td>
+					<td>0.7594 / 0.9649 / 0.9918</td>
+					<td>−0.3304</td>
+					<td>0.6128</td>
+			</tr>
+	</tbody>
+</table>
+<p>A negative margin means the classes overlap: the lowest paraphrase on each encoder scores below the highest critical pair, and the critical distribution reaches further up than the paraphrase distribution does. A separating threshold needs the opposite ordering — every paraphrase above every critical pair, or at least a clean gap between them.</p>
+<p>The single most similar pair in the fixture was critical on all three encoders, and on each encoder it outscored the best paraphrase:</p>
+<table>
+	<thead>
+			<tr>
+					<th>Encoder</th>
+					<th>Highest critical pair</th>
+					<th>Cosine</th>
+					<th>Highest paraphrase pair</th>
+					<th>Cosine</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>all-minilm:latest</td>
+					<td>C14 (replica/primary swap)</td>
+					<td>0.9934</td>
+					<td>P10 (backups retained vs kept)</td>
+					<td>0.9240</td>
+			</tr>
+			<tr>
+					<td>snowflake-arctic-embed:33m</td>
+					<td>C07 (retries 3 vs 5)</td>
+					<td>0.9979</td>
+					<td>P15 (flag enabled vs on)</td>
+					<td>0.9853</td>
+			</tr>
+			<tr>
+					<td>nomic-embed-text:latest</td>
+					<td>C06 (ap-southeast-2 vs -1)</td>
+					<td>0.9918</td>
+					<td>P15 (flag enabled vs on)</td>
+					<td>0.9545</td>
+			</tr>
+	</tbody>
+</table>
+<p>That ordering is the whole problem in one row. The pairs the gate most wants to merge are the ones it must not merge, because a one-token change barely moves the embedding: <code>production</code> and <code>staging</code> occupy the same slot in the same sentence, so the vectors differ mostly in that one direction. The specific identity of the top pair moves between encoders — the swap, the retry count, the region suffix — so the correct statement is per encoder, not a universal maximum.</p>
+<p>At the commonly recommended 0.95, on this fixture:</p>
+<ul>
+<li><code>all-minilm:latest</code> merged 8 of 16 critical pairs and 0 of 16 paraphrases.</li>
+<li><code>snowflake-arctic-embed:33m</code> merged 14 of 16 critical pairs and 6 of 16 paraphrases — including C01, production versus staging, at 0.9572.</li>
+<li><code>nomic-embed-text:latest</code> merged 9 of 16 critical pairs and 2 of 16 paraphrases.</li>
+</ul>
+<p>No control pair merged at any threshold from 0.80 to 0.999 on any encoder. The gate is not indiscriminate; it is specifically blind to the differences that infrastructure memory is made of.</p>
+<h2 id="raising-the-threshold-fixes-the-wrong-side">Raising the threshold fixes the wrong side</h2>
+<p>The sweep tested 41 thresholds from 0.80 to 0.995 in 0.005 steps, plus 0.999, recording duplicate capture (paraphrases at or above tau, of 16), false merges (critical pairs at or above tau, of 16), controls merged (of 8) and F1. Six rows per encoder are reproduced here; the full matrix is in <code>sweep.csv</code>.</p>
+<table>
+	<thead>
+			<tr>
+					<th>tau</th>
+					<th>all-minilm dup / false / F1</th>
+					<th>arctic-33m dup / false / F1</th>
+					<th>nomic dup / false / F1</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>0.80</td>
+					<td>12 / 15 / 0.558</td>
+					<td>16 / 16 / 0.667</td>
+					<td>10 / 14 / 0.500</td>
+			</tr>
+			<tr>
+					<td>0.90</td>
+					<td>4 / 13 / 0.242</td>
+					<td>14 / 16 / 0.609</td>
+					<td>3 / 13 / 0.188</td>
+			</tr>
+			<tr>
+					<td>0.92</td>
+					<td>2 / 10 / 0.143</td>
+					<td>12 / 16 / 0.545</td>
+					<td>2 / 13 / 0.129</td>
+			</tr>
+			<tr>
+					<td>0.95</td>
+					<td>0 / 8 / 0.000</td>
+					<td>6 / 14 / 0.333</td>
+					<td>2 / 9 / 0.148</td>
+			</tr>
+			<tr>
+					<td>0.97</td>
+					<td>0 / 5 / 0.000</td>
+					<td>2 / 12 / 0.133</td>
+					<td>0 / 7 / 0.000</td>
+			</tr>
+			<tr>
+					<td>0.99</td>
+					<td>0 / 1 / 0.000</td>
+					<td>0 / 11 / 0.000</td>
+					<td>0 / 1 / 0.000</td>
+			</tr>
+	</tbody>
+</table>
+<p>Two things follow directly from the table. First, the best F1 on every encoder is at 0.80, the lowest threshold tested — the sweep never finds a good operating point above it, and on two encoders the F1 at 0.80 is itself under 0.56 because the false merges are already 14 or 15 of 16. Second, the walk from 0.95 to 0.99 trades the wrong thing. On <code>snowflake-arctic-embed:33m</code>, raising the gate discards the last 6 duplicate captures and 3 of the 14 false merges; 11 false merges survive at 0.99. On the other two encoders the same walk removes 7 and 8 of the false merges, and both also give up their duplicate captures: <code>all-minilm</code> captures 0 duplicates at either threshold and still merges C14, the replica/primary swap, at 0.99; <code>nomic-embed-text</code> captures 2 duplicates at 0.95 and none at 0.99, where it still merges C06, the region suffix. So 0.99 on those two encoders collapses no duplicates while retaining one false merge each.</p>
+<p>A reader who tuned 0.92 to 0.95 to 0.99 in that order would end up with no deduplication and, on one encoder, most of the dangerous merges intact. The threshold window where both error types are non-zero is 0.80–0.92 on all-minilm, 0.80–0.985 on arctic-33m and 0.80–0.95 on nomic; the useful range is the part of the sweep where the gate still does something.</p>
+<h2 id="what-it-costs-when-a-fact-disappears">What it costs when a fact disappears</h2>
+<p>Pair scores are abstract. The store arm turns them into the reader&rsquo;s actual symptom. A 30-fact store (the <code>a</code> side of the 16 critical pairs plus the <code>a</code> side of 14 paraphrase pairs) receives 30 subsequent writes: 14 paraphrases, which are true duplicates, and 16 critical variants, which are distinct facts. Each write is compared with everything already stored and dropped when the maximum cosine is at or above tau.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Gate</th>
+					<th>Encoder</th>
+					<th>Store size after</th>
+					<th>Duplicates collapsed (of 14)</th>
+					<th>Distinct facts lost (of 16)</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>none</td>
+					<td>any</td>
+					<td>60</td>
+					<td>0</td>
+					<td>0</td>
+			</tr>
+			<tr>
+					<td>0.95</td>
+					<td>all-minilm:latest</td>
+					<td>52</td>
+					<td>0</td>
+					<td>8</td>
+			</tr>
+			<tr>
+					<td>0.95</td>
+					<td>snowflake-arctic-embed:33m</td>
+					<td>42</td>
+					<td>4</td>
+					<td>14</td>
+			</tr>
+			<tr>
+					<td>0.95</td>
+					<td>nomic-embed-text:latest</td>
+					<td>51</td>
+					<td>0</td>
+					<td>9</td>
+			</tr>
+			<tr>
+					<td>0.99</td>
+					<td>all-minilm:latest</td>
+					<td>59</td>
+					<td>0</td>
+					<td>1</td>
+			</tr>
+			<tr>
+					<td>0.99</td>
+					<td>snowflake-arctic-embed:33m</td>
+					<td>49</td>
+					<td>0</td>
+					<td>11</td>
+			</tr>
+			<tr>
+					<td>0.99</td>
+					<td>nomic-embed-text:latest</td>
+					<td>59</td>
+					<td>0</td>
+					<td>1</td>
+			</tr>
+	</tbody>
+</table>
+<p>On <code>snowflake-arctic-embed:33m</code> at 0.95 the gate collapses 4 duplicates and suppresses 14 distinct facts: the store grows by 12 rows where an ungated store grows by 30, and most of what is missing is not duplication. At 0.99 the same encoder still loses 11 distinct facts and collapses nothing. The two encoders that look tolerable at 0.99 are tolerable because they collapse no duplicates at all there: their stores keep 59 of the 60 rows, which is the ungated store minus one false merge, carrying the gate&rsquo;s latency for no deduplication.</p>
+<p>The symptom in production is not a failed write. It is an agent that answers with the value from whichever variant it stored first, confidently, and cannot be corrected by re-asking, because the second fact was never inserted. This is the same class of loss as <a href="https://baeseokjae.github.io/posts/agent-memory-write-visibility-window-2026/">a write that never becomes visible inside the read window</a>, and the opposite of <a href="https://baeseokjae.github.io/posts/agent-memory-delete-semantics-test-2026/">a fact that must be deleted</a>: here the deletion is a side effect of an insert elsewhere.</p>
+<p>The store arm is one store, one write order, 30 scripted writes drawn from the same 40 pairs. Write order and store size change which facts collide, so read its counts as an exact demonstration of the failure mode, not as an expected loss rate.</p>
+<h2 id="a-guard-that-helps-and-where-it-fails">A guard that helps, and where it fails</h2>
+<p>Cosine alone leaves no usable operating point, so the obvious next step is a second, cheaper check. The guard tested here merges only when the cosine clears tau <em>and</em> the critical-token multiset is identical on both texts, where a critical token is a number, an <code>/api/vN</code> path segment, a region code of the form <code>xx-name-N</code>, an environment word (production/prod, staging/stage, development/dev, normalised), <code>primary</code>/<code>replica</code>, <code>enabled</code>/<code>disabled</code>, or <code>port</code>.</p>
+<table>
+	<thead>
+			<tr>
+					<th>tau</th>
+					<th>Encoder</th>
+					<th>False merges without guard</th>
+					<th>False merges with guard</th>
+					<th>Duplicate capture without / with guard</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>0.95</td>
+					<td>all-minilm:latest</td>
+					<td>8</td>
+					<td>1</td>
+					<td>0 / 0</td>
+			</tr>
+			<tr>
+					<td>0.95</td>
+					<td>snowflake-arctic-embed:33m</td>
+					<td>14</td>
+					<td>1</td>
+					<td>6 / 4</td>
+			</tr>
+			<tr>
+					<td>0.95</td>
+					<td>nomic-embed-text:latest</td>
+					<td>9</td>
+					<td>1</td>
+					<td>2 / 0</td>
+			</tr>
+			<tr>
+					<td>0.99</td>
+					<td>all-minilm:latest</td>
+					<td>1</td>
+					<td>1</td>
+					<td>0 / 0</td>
+			</tr>
+			<tr>
+					<td>0.99</td>
+					<td>snowflake-arctic-embed:33m</td>
+					<td>11</td>
+					<td>1</td>
+					<td>0 / 0</td>
+			</tr>
+			<tr>
+					<td>0.99</td>
+					<td>nomic-embed-text:latest</td>
+					<td>1</td>
+					<td>0</td>
+					<td>0 / 0</td>
+			</tr>
+	</tbody>
+</table>
+<p>The guard does most of what it promises at 0.95: it blocks 7 of 8, 13 of 14 and 8 of 9 false merges. It does not do the rest, and both of its failure modes are instructive.</p>
+<p>The first failure is C14, the replica/primary swap. <code>Analytics queries hit the read replica, not the primary.</code> and <code>Analytics queries hit the primary, not the read replica.</code> carry the same multiset <code>{primary, replica}</code>, so the order-blind comparison passes and the merge goes through on all three encoders. Catching a swap needs position or a relation — which token is the subject of which verb — not a bag of tokens.</p>
+<p>The second failure is the other direction: the guard blocks true duplicates whose rephrasing changes the token inventory. <code>The billing API binds to port 8443.</code> against <code>Billing API listens on 8443.</code> drops the word <code>port</code>; <code>Object storage buckets live in ap-southeast-2.</code> against <code>S3 buckets are provisioned in ap-southeast-2.</code> adds a bare digit token from <code>S3</code>; <code>checkout_new_ui flag is enabled in production.</code> against <code>The checkout_new_ui feature flag is on in production.</code> replaces <code>enabled</code> with <code>on</code>. All four such paraphrases (P02, P06, P15, P16) are rejected on every encoder, which is why guard duplicate capture falls to 0–4 of 16 rather than staying at the raw 0–6.</p>
+<p>At 0.99 the combination is safe and useless: one false merge remains on two encoders (C14 again), and no duplicate is collapsed on any encoder. At 0.95 it removes most false merges but also blocks four true duplicates, so it is not a drop-in replacement for the gate either. Published alone, either version would be a prescription tested only on the cases where it works, so both are here.</p>
+<h2 id="what-to-do-in-your-own-store-this-week">What to do in your own store this week</h2>
+<ol>
+<li><strong>Measure separability before you pick a number.</strong> The 40 pairs, the stdlib-only runner and the sweep are published below. Swapping the fixture for 40 of your own facts and re-running against your encoder takes minutes and answers the question for your store, which is the only store where the answer matters.</li>
+<li><strong>Fail open.</strong> When the score is in the ambiguous band, insert. A duplicate costs a slot in the top-k; a false merge costs a fact. If you must choose an error, choose the recoverable one.</li>
+<li><strong>Treat numbers, regions, versions, ports, environments and flag polarity as merge blockers, not merge signals.</strong> They are exactly the tokens that barely move a cosine score, and they are exactly the tokens whose loss changes an answer.</li>
+<li><strong>Record the write you skipped, with its score and the row it matched.</strong> A merge decision you cannot audit cannot be corrected, and the wrong merges above are invisible in aggregate metrics.</li>
+<li><strong>Set <code>truncate: false</code></strong> on <a href="https://docs.ollama.com/api/embed"><code>/api/embed</code></a> if you store long memories. With the default, an input longer than the context window is silently cut before it is compared, so the vector that gets gated is not the vector of the sentence you stored. Nothing in this run hit that limit; it is a documented behaviour of the endpoint, not a result here.</li>
+<li><strong>Do not read this as encoder selection.</strong> Encoders differ in margin and in which pair scores highest, and the same family of gate failure appeared on all three. <a href="https://baeseokjae.github.io/posts/agent-memory-embedding-swap-recall-2026/">A recall comparison after an encoder swap</a> is the query-time version of this problem; the write-time version does not have a winner among these three.</li>
+</ol>
+<h2 id="what-this-does-not-show">What this does not show</h2>
+<ul>
+<li>40 hand-written pairs (80 single-sentence facts) in infrastructure vocabulary, authored before any embedding call, on one host, in one run on 2026-11-10. Not a sample from a real agent transcript, and not a rate for any deployment.</li>
+<li>Prompt-free <code>/api/embed</code> calls. <a href="https://huggingface.co/nomic-ai/nomic-embed-text-v1.5"><code>nomic-embed-text-v1.5</code></a> documents mandatory task-instruction prefixes — including <code>clustering:</code> for &ldquo;remove semantic duplicates&rdquo; — and the arctic family documents a query prefix for queries. None was used, so those columns describe the un-prefixed call shape only, not those models&rsquo; best case.</li>
+<li>Cosine on raw vectors, no normalisation or per-store calibration. A rescaled space may order pairs differently.</li>
+<li>The store arm reuses the pair fixture with one write order; it is a mechanism demonstration, not a recall benchmark.</li>
+<li>One guard implementation, with a position-blind token comparison as its demonstrated defect. Relational, slot-based or schema-aware guards were not tested.</li>
+<li>No claim about how Mem0, Zep, Graphiti or any product implements deduplication — no vendor source was read for this run. The subject is cosine gating as a technique. For where deduplication sits in a broader architecture, see <a href="https://baeseokjae.github.io/posts/agent-memory-architecture-guide-2026/">the three-layer memory model</a> and <a href="https://baeseokjae.github.io/posts/best-ai-agent-memory-frameworks-2026/">the framework comparison</a>, both of which list entity deduplication as a product strength without quantifying false merges; this article measures the primitive underneath that claim.</li>
+<li>No search-volume, prevalence or &ldquo;most teams&rdquo; claim. No recommended threshold is published here; the finding is that this fixture has no good operating point.</li>
+</ul>
+<h2 id="evidence-and-reproduction">Evidence and reproduction</h2>
+<p>The measurement is original first-party work, dated 2026-11-10, and has not been re-run. Every result file below is the byte-for-byte output of that run, hashed in <code>CHECKSUMS.txt</code> and in this article&rsquo;s review record, and published under <code>research/evidence/agent-memory-dedupe-cosine-threshold-2026/</code> in the site repository. The single exception is <code>run.sh</code>: it gained one <code>mkdir -p &quot;$OUT&quot;</code> line on 2026-11-24 so that the documented command stops dying on a missing <code>./evidence</code> directory. Its current hash is the one in <code>CHECKSUMS.txt</code>, and no measured file changed.</p>
+<ul>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-dedupe-cosine-threshold-2026/run_experiment.py"><code>run_experiment.py</code></a> — stdlib-only runner: batch embedding calls, cosine, the 41-point sweep, the store arm and the token guard.</li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-dedupe-cosine-threshold-2026/run.sh"><code>run.sh</code></a> — captures <code>ollama --version</code>, <code>nproc</code>, <code>free -m</code> and <code>ollama show</code> for each model, then runs the experiment; it creates the output directory (the only file here changed after the run).</li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-dedupe-cosine-threshold-2026/pairs.json"><code>pairs.json</code></a> — the 40 pairs with class and provenance note; the file to replace with your own facts.</li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-dedupe-cosine-threshold-2026/results.jsonl"><code>results.jsonl</code></a> — per-call records (model, dimension, wall seconds, <code>prompt_eval_count</code>) and all 120 per-pair cosines with the guard verdict.</li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-dedupe-cosine-threshold-2026/sweep.csv"><code>sweep.csv</code></a> — 41 thresholds × 3 encoders: duplicate capture, false merge, controls merged, precision, recall, F1.</li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-dedupe-cosine-threshold-2026/summary.json"><code>summary.json</code></a> — derived class ranges, separation margins, best operating point, store arm and guard arm.</li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-dedupe-cosine-threshold-2026/METHOD.md"><code>METHOD.md</code></a> — fixture design, runner behaviour, environment actually used, and the design deviations.</li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-dedupe-cosine-threshold-2026/environment.txt"><code>environment.txt</code></a> — the captured host and model snapshot.</li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-dedupe-cosine-threshold-2026/CHECKSUMS.txt"><code>CHECKSUMS.txt</code></a> — the SHA256 of every artifact, written at collection time and updated once, on 2026-11-24, for the <code>run.sh</code> line; every measured digest is the original.</li>
+</ul>
+<p>To reproduce: pull the three tags into a local Ollama, then run <code>./run.sh</code> from that directory — it creates <code>./evidence</code>, or writes into the directory you pass as its argument; no network and no API key are involved. If you change the pairs, change them before the first embedding call and record why each pair belongs in a memory layer — the fixture&rsquo;s value is that its categories were fixed before any score was seen.</p>
 ]]></content:encoded></item><item><title>Qwen3 0.6B as an Agent Tool Router: 13 CPU Calls, 10-94 s Each</title><link>https://baeseokjae.github.io/posts/qwen3-0-6b-agent-tool-router-2026/</link><pubDate>Tue, 24 Nov 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/qwen3-0-6b-agent-tool-router-2026/</guid><description>On a 2-core CPU box with Ollama 0.20.3, qwen3:0.6b returned the right tool and a schema-valid title/priority pair in 7 of 7 calls that were not cut off by the token cap, at 1, 4 and 8 tools - but each call took between 10.2 s and 94.3 s, and with a 128-token generation budget every 4- and 8-tool call came back empty with done_reason=length. Thirteen raw calls, the script and the JSONL are published.</description><content:encoded><![CDATA[<p>The smallest Qwen3 checkpoint is 0.6B parameters and fits on a CPU in under a gigabyte of memory. That makes it tempting as the cheap routing layer of an agent: hand it eight tool definitions, let it pick <code>create_ticket</code>, let a bigger model do the actual work. Two numbers decide whether that idea survives contact with a real agent loop - how often it picks the right tool, and how long one call takes - and neither is on the model card.</p>
 <p>This article reports both from a fixture that was run on one CPU-only box: 13 calls to <code>qwen3:0.6b</code> through Ollama&rsquo;s <code>/api/chat</code>, with 1, 4 and 8 tools registered, temperature 0, seed 7, and an explicit instruction naming the goal. The short answer: <strong>selection was not the problem, generation budget and wall time were.</strong> Every call that reached a normal stop chose <code>create_ticket</code> and filled both required arguments validly; no call ever chose a wrong tool. But the first sweep returned six empty responses in a row until the generation budget was raised, and the slowest single call took 94.3 s on 2 CPU cores.</p>
 <p>The model card for <a href="https://huggingface.co/Qwen/Qwen3-0.6B">Qwen3-0.6B</a> declares 0.6B total parameters, 0.44B non-embedding, 28 layers and a 32,768-token native context (<a href="https://huggingface.co/Qwen/Qwen3-0.6B/raw/main/README.md">model card README</a>). It states nothing about tool-selection accuracy or per-call latency, which is why a fixture is needed rather than a spec comparison.</p>
