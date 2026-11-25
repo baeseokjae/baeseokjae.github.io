@@ -1,9 +1,18 @@
 ---
-title: "Empty Responses at the Token Cap: reading done_reason=length in an Ollama agent loop (2026)"
+title: "Ollama Returns an Empty Response? Check the Token Limit"
 date: 2026-11-08T22:05:00+00:00
 description: "A tool-calling turn can return HTTP 200 with empty content and no tool_calls: the token cap fired mid-call. Read done_reason=length, and why raising the cap did not help here."
 draft: false
 schema: "schema-ollama-empty-tool-call-token-cap-2026"
+cover:
+  image: /images/ollama-empty-tool-call-token-cap-2026-presentation.png
+  alt: 'Conceptual checklist for an empty tool-call response: HTTP 200 with empty content, then inspect the stop reason, then check the token usage. Raising the token cap is not a guaranteed fix.'
+  caption: 'Raising the token cap is not a guaranteed fix. Conceptual illustration; see article for evidence and limits.'
+  relative: false
+  hidden: false
+images:
+  - /images/ollama-empty-tool-call-token-cap-2026-presentation.png
+lastmod: '2026-11-25T14:55:56+00:00'
 tags:
   - ollama done_reason length
   - ollama empty response
