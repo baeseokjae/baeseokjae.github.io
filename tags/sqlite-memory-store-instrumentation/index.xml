@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Sqlite Memory Store Instrumentation on RockB</title><link>https://baeseokjae.github.io/tags/sqlite-memory-store-instrumentation/</link><description>Recent content in Sqlite Memory Store Instrumentation on RockB</description><image><title>RockB</title><url>https://baeseokjae.github.io/images/og-default.png</url><link>https://baeseokjae.github.io/images/og-default.png</link></image><generator>Hugo</generator><language>en-us</language><lastBuildDate>Wed, 25 Nov 2026 13:35:00 +0000</lastBuildDate><atom:link href="https://baeseokjae.github.io/tags/sqlite-memory-store-instrumentation/index.xml" rel="self" type="application/rss+xml"/><item><title>Agent Memory Tracing: OpenTelemetry Spans for Write, Retrieve and Evict</title><link>https://baeseokjae.github.io/posts/agent-memory-observability-otel-spans-2026/</link><pubDate>Wed, 25 Nov 2026 13:35:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-memory-observability-otel-spans-2026/</guid><description>The GenAI semantic conventions already define a memory span with create_memory, search_memory and delete_memory operations. A stdlib SQLite fixture shows the attribute set that answers whether a fact was written, retrieved or evicted, plus the two attributes the spec leaves out.</description><content:encoded><![CDATA[<p>A memory-backed agent gives a stale answer and the stack shows a clean turn. The prompt was assembled, the tool returned, the model spoke, and every span on the trace is green. Nothing reports whether the fact was ever written, whether the retrieval that should have supplied it actually matched, or whether the record was quietly evicted two turns earlier. Those three causes produce the same user-visible symptom, and the usual log line — a query string and a hit count — cannot separate them.</p>
+<p>This article is about the smallest instrumentation change that can: emit one span per memory operation, named and attributed the way the OpenTelemetry GenAI semantic conventions now define, and add the two attributes the convention deliberately leaves out. A stdlib Python wrapper over a local SQLite store demonstrates the shape on a 51-record fixture, and the span dump it produced is published alongside the script so the trace can be read before anything is wired into a real backend.</p>
+<h2 id="three-questions-a-memory-trace-has-to-answer">Three questions a memory trace has to answer</h2>
+<p>For any fact that should have been recalled, ask, in trace order:</p>
+<ol>
+<li>Was it written? Is there a <code>create_memory</code>, <code>update_memory</code> or <code>upsert_memory</code> span carrying that record at any point, not just this turn?</li>
+<li>Was it retrieved? Is there a <code>search_memory</code> span in this turn whose candidate set included it, and did that search return it after ranking?</li>
+<li>Was it evicted? Is there a <code>delete_memory</code> span for it, with a reason and a timestamp between the write and the bad answer?</li>
+</ol>
+<p>If all three are absent, the fault is upstream of the memory subsystem — the agent never asked, or the extraction step never produced the fact. That is a different fix from &ldquo;raise k&rdquo;, which is what teams usually try first. The value of tracing memory operations is that these four states stop looking identical.</p>
+<h2 id="what-the-conventions-already-define">What the conventions already define</h2>
+<p>Instrumentation recipes for agent memory often invent span names such as <code>memory.write</code> and <code>memory.retrieve</code>. Do not — the vocabulary exists. The GenAI semantic conventions in <code>open-telemetry/semantic-conventions-genai</code> define a memory span whose <code>gen_ai.operation.name</code> is one of <code>create_memory_store</code>, <code>search_memory</code>, <code>create_memory</code>, <code>update_memory</code>, <code>upsert_memory</code>, <code>delete_memory</code> or <code>delete_memory_store</code>, with the first and last covering store lifecycle rather than records (<a href="https://github.com/open-telemetry/semantic-conventions-genai/blob/e6658f14c9d9ea0760825f029cb82e7673f48fab/docs/gen-ai/gen-ai-spans.md">span definitions</a>). The same file fixes span naming and error handling: the span name should be the operation name, and span status follows the general recording-errors rules, with <code>error.type</code> conditionally required on failure.</p>
+<p>Every statement in this article about the convention is pinned to commit <code>e6658f14</code> of that repository, dated 2026-11-06, and that document carries <strong>Development</strong> status, not Stable. Names can still move. Treat this as &ldquo;the current proposed vocabulary&rdquo;, check the commit you build against, and do not hard-code the strings in more than one place in your codebase.</p>
+<p>Span kind is <code>CLIENT</code> for an out-of-process memory service and may be <code>INTERNAL</code> for a store running in the same process. The fixture below uses <code>INTERNAL</code> for that reason. This choice changes how a backend draws the service edge; it does not change the attribute set.</p>
+<p>The shape that matters is the hierarchy: one trace per agent turn, an <code>invoke_agent</code> parent, and memory operations as child spans under the turn that performed them. That is what lets you ask &ldquo;was there a write for this record before this read&rdquo; as a query rather than a manual grep.</p>
+<h2 id="the-attribute-set-and-the-one-that-is-easy-to-misread">The attribute set, and the one that is easy to misread</h2>
+<p>The memory span table in the <a href="https://github.com/open-telemetry/semantic-conventions-genai/blob/e6658f14c9d9ea0760825f029cb82e7673f48fab/docs/registry/attributes/gen-ai.md">attribute registry</a> and the <a href="https://github.com/open-telemetry/semantic-conventions-genai/blob/e6658f14c9d9ea0760825f029cb82e7673f48fab/reference/reports/memory-span.md">memory span reference report</a> agree on the levels:</p>
+<ul>
+<li>Required: <code>gen_ai.operation.name</code>.</li>
+<li>Conditionally required: <code>error.type</code> if the operation ended in an error, <code>gen_ai.memory.record.id</code>, <code>gen_ai.memory.store.id</code> if applicable, <code>gen_ai.provider.name</code>, and <code>server.port</code> if <code>server.address</code> is set.</li>
+<li>Recommended: <code>gen_ai.memory.record.count</code>, <code>server.address</code>.</li>
+<li>Opt-in, gated: <code>gen_ai.memory.query.text</code>, <code>gen_ai.memory.records</code>.</li>
+</ul>
+<p><code>gen_ai.memory.record.count</code> is the trap. Its meaning is operation-specific: for <code>search_memory</code> it is the number of records returned, for <code>create_memory</code> the number attempted, and likewise for update, upsert and delete. A zero therefore means &ldquo;search returned nothing&rdquo; on one span and &ldquo;delete matched nothing&rdquo; on another. Reading <code>record.count</code> without <code>gen_ai.operation.name</code> in the same query produces exactly the confusion this instrumentation is meant to remove.</p>
+<h2 id="a-runnable-wrapper-with-no-dependencies">A runnable wrapper with no dependencies</h2>
+<p>The published script is a single 142-line standard library file importing <code>hashlib</code>, <code>json</code>, <code>os</code>, <code>random</code>, <code>sqlite3</code>, <code>time</code> and <code>uuid</code>. It writes span dictionaries in OTLP/JSON shape instead of using the OpenTelemetry SDK, because the run interpreter had no SDK installed and the point is the attribute contract, not the exporter. The same attribute set maps onto <code>tracer.start_as_current_span(...)</code> one-for-one when you do add the SDK.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">search_memory</span>(con, rec, trace, parent, query, top_k<span style="color:#f92672">=</span><span style="color:#ae81ff">3</span>):
+</span></span><span style="display:flex;"><span>    st, t0 <span style="color:#f92672">=</span> _now(), time<span style="color:#f92672">.</span>perf_counter()
+</span></span><span style="display:flex;"><span>    cur <span style="color:#f92672">=</span> con<span style="color:#f92672">.</span>execute(<span style="color:#e6db74">&#34;SELECT key, value FROM memory WHERE ns=? AND value LIKE ? LIMIT ?&#34;</span>,
+</span></span><span style="display:flex;"><span>                      (NAMESPACE, <span style="color:#e6db74">f</span><span style="color:#e6db74">&#34;%</span><span style="color:#e6db74">{</span>query<span style="color:#e6db74">}</span><span style="color:#e6db74">%&#34;</span>, top_k))
+</span></span><span style="display:flex;"><span>    hits <span style="color:#f92672">=</span> cur<span style="color:#f92672">.</span>fetchall()
+</span></span><span style="display:flex;"><span>    attrs <span style="color:#f92672">=</span> {<span style="color:#e6db74">&#34;gen_ai.operation.name&#34;</span>: {<span style="color:#e6db74">&#34;stringValue&#34;</span>: <span style="color:#e6db74">&#34;search_memory&#34;</span>},
+</span></span><span style="display:flex;"><span>             <span style="color:#e6db74">&#34;gen_ai.provider.name&#34;</span>: {<span style="color:#e6db74">&#34;stringValue&#34;</span>: PROVIDER},
+</span></span><span style="display:flex;"><span>             <span style="color:#e6db74">&#34;gen_ai.memory.store.id&#34;</span>: {<span style="color:#e6db74">&#34;stringValue&#34;</span>: STORE_ID},
+</span></span><span style="display:flex;"><span>             <span style="color:#e6db74">&#34;gen_ai.memory.record.count&#34;</span>: {<span style="color:#e6db74">&#34;intValue&#34;</span>: str(len(hits))},
+</span></span><span style="display:flex;"><span>             <span style="color:#e6db74">&#34;gen_ai.memory.query.text&#34;</span>: {<span style="color:#e6db74">&#34;stringValue&#34;</span>: query},   <span style="color:#75715e"># Opt-In in the spec</span>
+</span></span><span style="display:flex;"><span>             <span style="color:#e6db74">&#34;memory.hit&#34;</span>: {<span style="color:#e6db74">&#34;boolValue&#34;</span>: bool(hits)},
+</span></span><span style="display:flex;"><span>             <span style="color:#e6db74">&#34;memory.candidate_count&#34;</span>: {<span style="color:#e6db74">&#34;intValue&#34;</span>: str(len(hits))},
+</span></span><span style="display:flex;"><span>             <span style="color:#e6db74">&#34;memory.op.duration_ms&#34;</span>: {<span style="color:#e6db74">&#34;doubleValue&#34;</span>: (time<span style="color:#f92672">.</span>perf_counter() <span style="color:#f92672">-</span> t0) <span style="color:#f92672">*</span> <span style="color:#ae81ff">1000</span>}}
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> rec<span style="color:#f92672">.</span>span(trace, parent, <span style="color:#e6db74">&#34;search_memory&#34;</span>, <span style="color:#ae81ff">1</span>, st, _now(), attrs), hits
+</span></span></code></pre></div><p>Record keys are replaced by a 16-hex SHA-256 prefix before they reach an attribute (<code>memory.key_hash</code>, and <code>gen_ai.memory.record.id</code> on delete). That keeps keys usable for correlation across spans while keeping raw identifiers out of a dump that may be shipped to a backend.</p>
+<h2 id="reading-the-dump">Reading the dump</h2>
+<p>Three traces, seven spans. The fixture writes 51 synthetic facts in one <code>create_memory</code> batch, searches the same query twice with a value change in between, then deletes one record.</p>
+<table>
+	<thead>
+			<tr>
+					<th>Trace</th>
+					<th>Span</th>
+					<th>Attributes in the dump, plus the value the run log records as returned (†)</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>1</td>
+					<td><code>invoke_agent memory-fixture</code></td>
+					<td><code>gen_ai.operation.name=invoke_agent</code></td>
+			</tr>
+			<tr>
+					<td>1</td>
+					<td><code>create_memory</code></td>
+					<td><code>record.count=51</code>, <code>store.id=fixture-store</code>, duration 11.85 ms</td>
+			</tr>
+			<tr>
+					<td>2</td>
+					<td><code>search_memory</code> (first)</td>
+					<td><code>record.count=1</code>, <code>memory.hit=true</code>, 0.13 ms; returned <code>user timezone is UTC+8</code> †</td>
+			</tr>
+			<tr>
+					<td>2</td>
+					<td><code>search_memory</code> (second)</td>
+					<td><code>record.count=1</code>, <code>memory.hit=true</code>, 0.11 ms; returned <code>user timezone is UTC+9 (Asia/Seoul)</code> †</td>
+			</tr>
+			<tr>
+					<td>3</td>
+					<td><code>delete_memory</code></td>
+					<td><code>record.id</code> (16-hex prefix), <code>record.count=1</code>, <code>memory.evicted_reason=superseded_by_newer_value</code>, 12.13 ms</td>
+			</tr>
+	</tbody>
+</table>
+<p>† The returned value is not a span attribute. The dump carries <code>gen_ai.memory.query.text</code>, the counts, the hit flag and the durations, and no record content, because <code>gen_ai.memory.records</code> is opt-in and was left off in this run. The two returned strings come from the stdout captured in <code>method.md</code>.</p>
+<p>The interesting row is the pair in trace 2. The same query returns two different values inside one trace, and no write span sits between them: the underlying table was updated directly, so the trace records a read whose answer changed without a corresponding <code>create_memory</code> or <code>update_memory</code>. That is the staleness signature in its cheapest form. In production it usually appears as a read in turn 40 returning a value written in turn 3 by a path that was never instrumented, and the trace is what makes the missing write visible as a gap instead of a mystery.</p>
+<p>After the delete, 50 of the 51 records remain. The delete span carries the reason because the application put it there — not the convention.</p>
+<h2 id="the-two-attributes-the-spec-leaves-out">The two attributes the spec leaves out</h2>
+<p>The memory span table has no attribute for a retrieval hit/miss flag and none for why a record was evicted. Absence here is checked against the complete attribute tables and the reference report at that commit; it says nothing about what a future revision may add. Until then, name your additions outside the <code>gen_ai.*</code> namespace so a future convention attribute does not collide with an application one:</p>
+<ul>
+<li><code>memory.hit</code> (bool) on <code>search_memory</code>: did the ranked result set contain at least one record? <code>record.count</code> alone cannot tell a filtered-out record from a miss when you also post-filter by namespace or freshness.</li>
+<li><code>memory.candidate_count</code> (int): how many candidates the search considered before the top-k cut. The fixture sets it to the returned count because its <code>LIKE</code> query has no separate candidate stage; with a vector index this is the number before truncation, and it is the number that tells you whether raising k would help.</li>
+<li><code>memory.evicted_reason</code> (string) on <code>delete_memory</code>: <code>superseded_by_newer_value</code>, <code>ttl_expired</code>, <code>user_requested</code>, <code>capacity</code>. Without it, an eviction looks the same as a cleanup job and as a bug.</li>
+</ul>
+<p>Keep record identifiers in attributes, never in span names. Span names are indexed and aggregated; putting a key hash in the name multiplies the series count by the number of records and makes every dashboard unreadable within a week.</p>
+<h2 id="four-failure-signatures-and-the-queries-that-find-them">Four failure signatures and the queries that find them</h2>
+<p>With the spans above in a backend, each failure mode becomes a query rather than a debugging session:</p>
+<ol>
+<li><strong>Never written.</strong> No <code>create_memory</code>, <code>update_memory</code> or <code>upsert_memory</code> span exists for the record at any time before the bad answer. Look upstream at extraction; the memory store is not at fault.</li>
+<li><strong>Written, never retrieved.</strong> A write exists, but no <code>search_memory</code> span in the failing turn returned it — and <code>memory.hit=true</code> with <code>candidate_count</code> far above <code>record.count</code> says the record was a candidate that lost the ranking cut.</li>
+<li><strong>Retrieved zero.</strong> <code>search_memory</code> with <code>record.count=0</code> and <code>memory.hit=false</code>: the query, the namespace filter or the store id is wrong. Compare <code>gen_ai.memory.store.id</code> against the store the write used; a typo in a namespace produces a permanent, silent empty result.</li>
+<li><strong>Evicted before the read.</strong> A <code>delete_memory</code> span with <code>record.id</code> matching the missing record falls between the write and the read. <code>memory.evicted_reason=superseded_by_newer_value</code> means the fix is a read that honours recency, not a bigger k.</li>
+</ol>
+<p>The one-line form of query 2 is: filter <code>gen_ai.operation.name = search_memory</code>, group by <code>gen_ai.memory.record.id</code> (or your key hash), and look for turns where the record is absent while a write span for it exists earlier.</p>
+<h2 id="content-capture-and-privacy">Content capture and privacy</h2>
+<p><code>gen_ai.memory.query.text</code> and <code>gen_ai.memory.records</code> are opt-in and the spec says instrumentations should not capture them by default; capture should be gated. That gate matters more for memory than for most telemetry, because a memory record is a user fact by construction. The practical rules that held for this fixture:</p>
+<ul>
+<li>Hash record keys. A 16-hex prefix is enough to join spans and too short to reverse a guessable key set only if the keys are not low-entropy strings; if they are, use a keyed hash.</li>
+<li>Leave <code>gen_ai.memory.query.text</code> off in production, or capture it only under an explicit debug flag with a retention window. The fixture records it deliberately, and the published dump says so.</li>
+<li>Do not put record contents in attributes. <code>gen_ai.memory.records</code> exists, is opt-in, and is the wrong default for anything a user typed.</li>
+<li>Send memory spans to the same backend as the rest of the turn so the parent-child relation survives. A memory span in a separate pipeline cannot answer &ldquo;what did this turn read&rdquo;.</li>
+</ul>
+<h2 id="limits">Limits</h2>
+<p>The measurement here is one synthetic fixture: 51 records, substring matching, no vector index, single process, Python 3.12 with sqlite3, run on 2026-11-16. Nothing in it measures recall quality, latency at scale or cost. OTLP/JSON was produced and is ingestible by shape, but it was not replayed into an OpenTelemetry Collector in this run, so the Collector path is documented API usage rather than a tested pipeline. No framework was checked to see whether it emits these spans today; the convention lists <code>aws-bedrock-agentcore</code> and <code>google-adk</code> as supporting libraries, and that is the extent of the claim.</p>
+<p>For the surrounding picture, see the existing pages on <a href="https://baeseokjae.github.io/posts/ai-agent-observability-opentelemetry-2026/">OpenTelemetry for agent observability</a>, on <a href="https://baeseokjae.github.io/posts/langfuse-for-deepseek-harness-opentelemetry-based-agent-observability/">Langfuse with a DeepSeek harness</a> for the exporter and backend side, on <a href="https://baeseokjae.github.io/posts/best-ai-agent-memory-frameworks-2026/">agent memory frameworks</a> and on <a href="https://baeseokjae.github.io/posts/agent-memory-architecture-guide-2026/">memory architecture</a> for where write, retrieve and evict sit in a larger design. The <a href="https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-agent-spans/">OpenTelemetry docs page for GenAI agent spans</a> returns HTTP 200 with a moved notice that points to the repository above rather than serving the definitions itself; the repository is the source to cite. Public discussion of this gap is recent — see the thread <a href="https://news.ycombinator.com/item?id=50411467">&ldquo;Agent memory needs its OpenTelemetry moment&rdquo;</a> — but engagement counts are not evidence that any specific backend emits these spans.</p>
+<h2 id="files">Files</h2>
+<p>The fixture is published with this article: <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-observability-otel-spans-2026/memory_spans.py"><code>memory_spans.py</code></a> (the wrapper), <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-observability-otel-spans-2026/spans.json"><code>spans.json</code></a> (the OTLP/JSON dump quoted above), <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-observability-otel-spans-2026/method.md"><code>method.md</code></a> (environment, exact output and reproduce command) and <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-observability-otel-spans-2026/make_cover.py"><code>make_cover.py</code></a> (the diagram source). The fixture database <a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-observability-otel-spans-2026/memory.sqlite"><code>memory.sqlite</code></a> is committed beside them, and <code>python3 memory_spans.py .</code> in a copy of that directory regenerates both the database and the dump.</p>
+]]></content:encoded></item></channel></rss>
