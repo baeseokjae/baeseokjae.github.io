@@ -1,5 +1,5 @@
 ---
-title: "What an Ollama Vision Tag Really Ships: qwen3-vl Projector Packaging, Image-Token Cost and the 4096-Token Wall (2026)"
+title: "Ollama Ignores Your Image? Check the Tag and Token Budget"
 date: 2026-11-03T17:20:00+00:00
 description: "Separate the three failures behind 'the model ignored my image' — a tag that 404s, a tag that drops the pixels, and image tokens eating a 4096-token context — with registry layer tables, a measured prompt-token count and the KV arithmetic for one image."
 draft: false
@@ -15,6 +15,15 @@ tags:
   - ollama show capabilities
   - vision language model local
   - prompt_eval_count
+cover:
+  image: /images/local-vlm-tag-projector-image-token-cost-2026-presentation.png
+  alt: "Conceptual checklist for vision input diagnosis: does the tag exist, does the image path work, does the context budget fit? Packaging failures are separate from image-token pressure."
+  caption: "Separate packaging failures from image-token pressure. Conceptual checklist; see the article for evidence and limits."
+  relative: false
+  hidden: false
+images:
+  - /images/local-vlm-tag-projector-image-token-cost-2026-presentation.png
+lastmod: 2026-11-26T07:46:49+00:00
 ---
 
 You pull a vision model, send a screenshot, and get an answer that reads as if no image was attached. Or the request that worked with one image dies as soon as a second one is in the prompt. The error message, when there is one, points at the request, not at the three very different things that can be wrong: the tag you typed does not exist, the tag exists but the runtime drops the image, or the model does see the image and the image tokens have already consumed the context window.
