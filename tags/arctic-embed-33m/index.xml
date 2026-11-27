@@ -133,4 +133,137 @@
 <li><a href="https://github.com/baeseokjae/baeseokjae.github.io/tree/main/research/evidence/agent-memory-listwise-rerank-local-llm-2026/raw">raw output</a> - the verbatim response for every query in every completed model arm.</li>
 </ul>
 <p>Run it with <code>ollama pull qwen3:0.6b</code>, <code>ollama pull snowflake-arctic-embed:33m</code>, then <code>PYTHONPATH=. python3 build_fixture_v4.py evidence</code> followed by <code>python3 rerank_bench.py --evidence evidence --out run1 --arms B,D --minrank 2 --maxrank 10</code>. The <code>PYTHONPATH=.</code> is required because the v4 builder imports the fact list, the decoys and the value pairs from the earlier builders in the same directory. Expect the same parse failures; they are the point of the raw directory. Re-running the v4 builder on the same host and embedder reproduced the shipped fixture.json, queries.json and gate measurements byte for byte.</p>
+]]></content:encoded></item><item><title>Agent Memory Fact Extraction on a 0.6B Local Model: What It Drops, What It Stores as Noise, and What Raw Turns Cost Instead (2026)</title><link>https://baeseokjae.github.io/posts/agent-memory-fact-extraction-small-local-models-2026/</link><pubDate>Sat, 21 Nov 2026 00:00:00 +0000</pubDate><guid>https://baeseokjae.github.io/posts/agent-memory-fact-extraction-small-local-models-2026/</guid><description>A private local run on 8 authored turns, 9 facts and 5 queries with snowflake-arctic-embed:33m fixed: qwen3:0.6b with a JSON-array prompt wrote 12 rows, stored 1 acknowledgement and cut the five retrieved rows of a top-5 prompt from 365 characters to 230, while qwen2.5:0.5b recovered 3 of 9 facts.</description><content:encoded><![CDATA[<p>Week two of a local agent memory store is where the design questions actually arrive. The store was built the obvious way: every conversation turn goes through the embedding endpoint, one vector per turn, top-k comes back. Then two things happen at once, and neither raises an error.</p>
+<p>The first is that retrieved rows are chat fragments. In the authored 8-turn fixture behind this article, four of the eight stored turns were acknowledgements — &ldquo;Noted. I will run black and isort with the black profile rather than reformatting by hand&rdquo;, &ldquo;Got it. Deploy window is Tuesday 02:00-04:00 UTC&rdquo;, &ldquo;Running the tests now.&rdquo;, &ldquo;Sounds good.&rdquo; Those rows are short, they are dense in the vocabulary of the question being asked, and they rank. A retriever asked about the deploy window returns the sentence that says the window exists without saying what it is.</p>
+<p>The second is that facts which were definitely stated do not come back, because the sentence carrying the fact was ranked below the acknowledgement that repeated it. Nothing failed. The store returned rows. They were the wrong rows.</p>
+<p>The published fix is to add an extraction stage: instead of storing turns, ask a model to pull durable facts out of each turn and store those. That is what Mem0 documents in its add() pipeline, where messages go through an LLM that &ldquo;pulls out key facts, decisions, or preferences&rdquo; before anything is written. The advice is sound and it is written for a hosted model. It does not tell you what a 0.6B model running on the machine in front of you actually keeps, what noise it writes anyway, what it costs in wall-clock per turn, or whether storing raw turns at the same encoder and the same k is the cheaper trade.</p>
+<p>This article answers that with one small, honest matrix: six write arms, one fixed encoder, five scored queries, on a two-vCPU host with no GPU. The result is not the one the premise predicted. A 0.6B model did extract facts well enough to beat raw turns on both prompt size and first-hit answerability — with one specific prompt — while a 0.5B model produced rows that answered none of the five queries at rank 1.</p>
+<h2 id="what-the-hosted-pattern-assumes-and-what-it-leaves-unmeasured">What the hosted pattern assumes, and what it leaves unmeasured</h2>
+<p>Mem0&rsquo;s write path is documented as three stages, not four: information extraction by an LLM, then additive storage, then retrieval. The add() page is explicit that storage is additive — new memories are added &ldquo;without overwriting or deleting existing memories&rdquo; — and it warns on the same page that with <code>infer=False</code> the payload is stored exactly as provided, so &ldquo;duplicates can land&rdquo;. There is no conflict-resolution stage in the documented add() flow to appeal to when a duplicate does land. The extraction step is the part that decides what a memory even is, and it is also the part that costs a model call per message batch. The vendor&rsquo;s own improvement notes for its graph memory report a &ldquo;+20 point improvement on LoCoMo (71.4 → 91.6)&rdquo; and &ldquo;+26 point improvement on LongMemEval&rdquo;, plus extraction latency &ldquo;roughly in half&rdquo;. Those are vendor-reported benchmark deltas on the vendor&rsquo;s stack; they say nothing about what fraction of facts survives on a 0.6B model on CPU, and the product pages do not publish a per-add cost on your hardware.</p>
+<p>Two consequences follow for anyone localising this pattern. First, the extraction step has to be evaluated as a writer, not as a chatbot: the question is what rows land in the store, not whether the model can discuss them. Second, the comparison that matters is not &ldquo;extraction versus no extraction&rdquo; in the abstract, but extraction versus the raw-turn store at identical encoder, identical k and identical queries, because that is the only version where the trade-off is visible.</p>
+<h2 id="the-setup-encoder-k-and-fixture-held-fixed">The setup: encoder, k and fixture held fixed</h2>
+<p>Everything here runs against a local Ollama 0.20.3 server on a Linux host with 2 vCPU, 11 GiB of RAM and no GPU. Extraction calls go to <code>/api/generate</code> with <code>temperature 0</code>, <code>seed 42</code>, <code>num_predict 120</code> and <code>think: false</code>; the Ollama API reference lists <code>think</code> as &ldquo;(for thinking models) should the model think before responding&rdquo;, and turning it off is what makes a 120-token budget usable for a JSON answer. The two extraction models are different Qwen generations rather than two sizes of one family: <code>qwen3:0.6b</code> is the Q4_K_M build of Qwen3-0.6B (751.63M parameters as reported by <code>/api/show</code>), whose card lists 0.6B total parameters with 0.44B non-embedding, and <code>qwen2.5:0.5b</code> is the Q4_K_M build of Qwen2.5-0.5B (494.03M parameters as reported by <code>/api/show</code>), whose card lists a 0.5B dense model with a 32K context and structured-output support.</p>
+<p>The encoder is fixed for every arm: snowflake-arctic-embed:33m, a 384-dimension member of the arctic-embed family whose model card puts the 33M-parameter <code>s</code> row at 384 dimensions. Vectors are scored by brute-force cosine over a full sort, k=5, no re-ranker, no hybrid search, no metadata filter. If you want the encoder itself varied rather than held, that experiment exists separately in <a href="https://baeseokjae.github.io/posts/agent-memory-embedding-swap-recall-2026/">the embedding-swap comparison</a>; this piece deliberately does not repeat it.</p>
+<p>The fixture is authored, not scraped: 16 turns of a synthetic engineering standup, 19 durable facts across eight subjects, eight distractor acknowledgements and ten queries. Of those, 8 turns, 9 facts and 5 queries were in scope for this run, where &ldquo;in scope&rdquo; means every key token of the fact or query appears in the included turn text. That scoping rule matters for reading the recall column below, and the reason is uncomfortable: because the facts are spoken in those turns, any store built from that text contains them by construction.</p>
+<h2 id="a-measured-result-that-contradicts-the-premise">A measured result that contradicts the premise</h2>
+<p>The short version of the matrix, at 8 stored turns, 9 facts, 5 queries and 24 extraction calls. Two character figures appear below and they are different measurements: the last column is the sum of the retrieved rows that make up one top-5 prompt, averaged over the five queries, while the figure in brackets is characters per retrieved row. They are only interchangeable when an arm stored at least five rows. The stored <code>mean_top5_chars</code> field divides the summed length of the retrieved rows by 5 rows × 5 queries — that is, by k=5 — whether or not five rows were actually returned, so the prompt total in the table is five times the field, and the field equals characters per retrieved row only for the five arms that stored five or more rows. The two-turn window arm stores four rows, so its per-row figure is its own prompt total divided by four, not by five.</p>
+<ul>
+<li>Raw turns, one vector per turn: 8 rows, 4 of them acknowledgements (4/8), answerability@1 0.6 and @5 1.0, 365 characters in a top-5 prompt (73 per retrieved row).</li>
+<li>Two-turn sliding window: 4 rows, every row containing an acknowledgement (4/4), answerability@1 1.0 and @5 1.0, 685 characters per top-5 prompt, which is all four stored rows at about 171 characters each (256, 160, 157 and 113 characters; the 137 in <code>results.json</code> is 686/5, the field&rsquo;s fixed k=5 denominator).</li>
+<li>Facts from qwen3:0.6b, prompt P1 (&ldquo;JSON array of strings, durable facts only&rdquo;): 12 rows, 1 acknowledgement row (1/12), 0 parse failures, answerability@1 0.8 and @5 1.0, 230 characters per top-5 prompt (46 per row).</li>
+<li>Facts from qwen3:0.6b, prompt P2 (&ldquo;one fact per line, no commentary&rdquo;): 28 rows, 1 acknowledgement row (1/28), answerability@1 0.8 and @5 0.8, 50 characters per top-5 prompt (10 per row).</li>
+<li>Facts from qwen2.5:0.5b, prompt P1: 16 rows, no acknowledgement rows (0/16), 3 of 9 facts recoverable, answerability@1 0.0 and @5 0.2, 60 characters per top-5 prompt (12 per row), 1 parse failure.</li>
+<li>Turns plus P1 facts in one store, scored by best match: 20 rows, 5 acknowledgement rows (5/20), answerability@1 0.8 and @5 1.0, 260 characters per top-5 prompt (52 per row).</li>
+</ul>
+<table>
+	<thead>
+			<tr>
+					<th>Arm</th>
+					<th>Stored rows</th>
+					<th>Ack rows / stored rows</th>
+					<th>Answerability@1</th>
+					<th>Answerability@5</th>
+					<th>Top-5 prompt chars</th>
+					<th>Per retrieved row</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Raw turns</td>
+					<td>8</td>
+					<td>4/8</td>
+					<td>0.6</td>
+					<td>1.0</td>
+					<td>365</td>
+					<td>73</td>
+			</tr>
+			<tr>
+					<td>Two-turn window</td>
+					<td>4</td>
+					<td>4/4</td>
+					<td>1.0</td>
+					<td>1.0</td>
+					<td>685</td>
+					<td>171</td>
+			</tr>
+			<tr>
+					<td>qwen3:0.6b, P1</td>
+					<td>12</td>
+					<td>1/12</td>
+					<td>0.8</td>
+					<td>1.0</td>
+					<td>230</td>
+					<td>46</td>
+			</tr>
+			<tr>
+					<td>qwen3:0.6b, P2</td>
+					<td>28</td>
+					<td>1/28</td>
+					<td>0.8</td>
+					<td>0.8</td>
+					<td>50</td>
+					<td>10</td>
+			</tr>
+			<tr>
+					<td>qwen2.5:0.5b, P1</td>
+					<td>16</td>
+					<td>0/16</td>
+					<td>0.0</td>
+					<td>0.2</td>
+					<td>60</td>
+					<td>12</td>
+			</tr>
+			<tr>
+					<td>Turns + P1 facts</td>
+					<td>20</td>
+					<td>5/20</td>
+					<td>0.8</td>
+					<td>1.0</td>
+					<td>260</td>
+					<td>52</td>
+			</tr>
+	</tbody>
+</table>
+<p>The per-retrieved-row column is the <code>mean_top5_chars</code> field, which divides by k=5 whether or not five rows came back. Five arms stored at least five rows, so for them the field is characters per retrieved row. The two-turn window arm stored four rows totalling 686 characters, so its per-row figure here is 686/4 ≈ 171, while its 685-character prompt total remains five times the stored 137.</p>
+<p>Read the acknowledgement column first, because it is the one that does not depend on the generous matching rule. Raw turns stored four acknowledgement rows out of eight. The two-turn window stored four out of four — every row it wrote contained an acknowledgement, because acknowledgements are half of a two-turn span. qwen3:0.6b with P1 wrote twelve rows and exactly one of them was an acknowledgement, the literal string &ldquo;Running the tests now.&rdquo; that the model was handed as a turn and returned as a fact. That is the whole argument for extraction in one line: at the same encoder and the same k, the extractor removed three of the four acknowledgement rows from the store that the raw-turn arm wrote.</p>
+<p>The second thing to read is not recall but what each arm returned. Recall is 1.0 for five of six arms, and that number is close to meaningless here: the facts appear verbatim in the turns the store was built from, so substring matching finds them in any store that kept the text. The informative signals are the acknowledgement ratio, answerability@k and the characters a top-5 prompt actually carries. On those, the two-turn window wins answerability@1 outright (1.0) and pays nearly double the context (685 characters against 365, at about 171 characters per retrieved row against 73). Prompt P1 wins on context (230 characters, 37% less than raw turns) at 0.8 answerability@1. Prompt P2&rsquo;s 28 rows and 50-character prompt are not a win: at 10 characters per row a &ldquo;fact&rdquo; is often a single token, and answerability@5 fell to 0.8 while P1 held 1.0.</p>
+<h2 id="what-the-small-model-wrote-turn-by-turn">What the small model wrote, turn by turn</h2>
+<p>The per-call records make the failure modes concrete, and they are not the ones a benchmark delta would suggest.</p>
+<p>With P1, the 8 extraction calls returned 12 items and no parse failures. One turn — the one with the black/isort preference — came back as &ldquo;Durable facts: black, isort, memory service, black profile&rdquo;, which is a keyword bag wearing a sentence&rsquo;s clothes. One acknowledgement turn came back as the literal acknowledgement. One turn returned only the token &ldquo;Durable&rdquo;, twice. Every one of those rows is a stored memory in the arm that produced it, so a write path that trusts the model&rsquo;s output without validating it is a write path that stores &ldquo;Durable&rdquo;.</p>
+<p>With P2, the same 8 turns returned 28 items and still no parse failures, but the model&rsquo;s own formatting leaked into the rows: several items are the bracket characters &ldquo;[&rdquo; and &ldquo;]&rdquo; stored as separate memories, and four items (t03, t05, t07, t08) end with a stray <code>&quot;,</code> copied from the prompt example. Twenty-eight rows for nine facts is over-extraction, and the 10-character retrieved row is the price of it: the retrieved facts are so short that they can match a query on one token and still not answer it.</p>
+<p>qwen2.5:0.5b failed the task on this fixture rather than degrading gracefully. Its 16 rows were noun fragments — &ldquo;black&rdquo;, &ldquo;isort&rdquo;, &ldquo;window&rdquo;, &ldquo;Tuesday&rdquo;, &ldquo;the API gateway&rdquo;, &ldquo;Redis&rdquo;, &ldquo;not the defaults&rdquo;. One call (t08, 1.1 seconds) failed to parse and returned no items at all, so there is no separate &ldquo;empty list&rdquo; record to count: seven calls produced the 16 rows and the eighth contributed nothing. Three of nine facts were recoverable by the matching rule and first-hit answerability was 0.0. This is a single fixture at a single seed and it is not a verdict on the model family, but for this job the difference between the two sizes is the difference between a store you can use and a store you cannot.</p>
+<p>The wall-clock price is reported as observed, not extrapolated. With P1, the eight calls took 79.8 seconds in total: 23.1, 20.5 and 15.8 seconds for the first three, then 1.9 to 5.8 seconds each, median 5.6 seconds. That shape is a warm-up, not a per-turn cost, and quoting the mean of 10.0 seconds per turn without saying so would overstate steady-state cost by roughly a factor of two. P2&rsquo;s eight calls took 28.7 seconds (mean 3.6), and qwen2.5:0.5b&rsquo;s took 21.3 seconds (mean 2.7) — cheap, and worth nothing, because the rows it produced did not answer the queries. The whole extraction matrix ran inside a 185-second cap, and no arm was cut for time.</p>
+<h2 id="the-decision-rule-this-run-supports">The decision rule this run supports</h2>
+<p>Strip the numbers to a rule and it reads like this. If your questions are answered by a single sentence and your prompt budget is not the binding constraint, a two-turn window is the strongest cheap arm in this matrix: 1.0 answerability@1 at four rows, for 685 characters per top-5 prompt against 365 for raw turns. If prompt budget or noise rows are the binding constraint, qwen3:0.6b with a strict JSON-array instruction is the arm to try, at 230 characters per top-5 prompt and one acknowledgement row in twelve — but only with per-row validation, because the same model also wrote &ldquo;Durable&rdquo; as a memory and returned a keyword bag as a fact. If you were considering a sub-1B model with no format discipline, P2 is what that looks like: 28 rows, bracket characters stored as their own memories, and a 50-character prompt padded with tokens.</p>
+<p>Two things to measure before trusting any of it on your own data. First, measure the acknowledgement rate on the write path directly — count stored rows that contain no fact, because that number did not depend on the generous matching rule and it separated the arms cleanly. Second, measure what a top-5 prompt costs in characters rather than only whether the answer was found, because the character count is where extraction actually pays and where over-extraction actually hurts.</p>
+<p>The failure modes not covered here have their own write-path entries: <a href="https://baeseokjae.github.io/posts/local-embedding-context-ceiling-2026/">clipping at ingest</a> is the silent truncation that happens before a vector exists, <a href="https://baeseokjae.github.io/posts/agent-memory-write-path-reliability-2026/">failed writes</a> cover what happens when the store rejects an add, and <a href="https://baeseokjae.github.io/posts/agent-memory-chunk-granularity-recall-2026/">chunk-granularity</a> covers the case where the unit is too small to hold a two-part answer. For the hosted version of this pipeline, <a href="https://baeseokjae.github.io/posts/mem0-agent-memory-guide-2026/">the Mem0 walkthrough</a> describes extraction as a product stage, and <a href="https://baeseokjae.github.io/posts/persistent-agent-memory-on-elasticsearch-building-0-89-recall/">the Elasticsearch build</a> shows where extraction sits in a full hybrid stack. If you are still choosing the store, start from <a href="https://baeseokjae.github.io/posts/agent-memory-architecture-guide-2026/">the memory architecture guide</a> or <a href="https://baeseokjae.github.io/posts/best-ai-agent-memory-frameworks-2026/">the framework comparison</a> rather than from this matrix.</p>
+<h2 id="what-this-run-cannot-tell-you">What this run cannot tell you</h2>
+<p>The scope box is as important as the results, and it is smaller than the original plan.</p>
+<ul>
+<li>Scale. 8 turns, 9 facts and 5 queries. Answerability moves in steps of 0.2 at five queries, so a single flipped query changes a headline number, and no ranking of the arms beyond the clear loser is statistically meaningful.</li>
+<li>Matching. Recall was computed by normalised substring matching, with no hand audit. Failure condition (c) in the plan — audit disagreement above 10% invalidates automatic matching — could not be tested, so the recall column here should be treated as unvalidated and the acknowledgement and answerability columns as the load-bearing ones.</li>
+<li>One seed, one authored fixture, no real conversation logs. Nothing here speaks to long-tail phrasing, multi-language turns, or conversations where facts arrive across dozens of turns.</li>
+<li>Hardware. 2 vCPU, 11 GiB, no GPU, Ollama 0.20.3, these two model tags and this one embedder. Tokens per second will not transfer to GPU serving, a different CPU class, or a hosted extraction API.</li>
+<li>The 300–800ms per-add figure that circulates for Mem0&rsquo;s hosted pipeline was not found in the primary documentation fetched for this run, so it is not repeated as a measurement here. The vendor&rsquo;s published claims used above are the LoCoMo and LongMemEval deltas and the halved extraction latency, both vendor-reported on the vendor&rsquo;s own stack.</li>
+</ul>
+<p>This is a private local author verification, run on the host that wrote the article, not a hosted benchmark: the fixture, the per-call records, the aggregate results and the method are linked below so another operator can rebuild the same comparison from the saved records. The scratch driver script is not published with this article, so the check is re-scorable rather than re-runnable end to end, and the numbers should be read as one operator&rsquo;s fixture result rather than a public harness.</p>
+<h2 id="reproduction-inputs">Reproduction inputs</h2>
+<p>Four original files are published with this article, and they are the only inputs behind every number above:</p>
+<ul>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-fact-extraction-small-local-models-2026/fixture.json">fixture.json</a> — the authored 16-turn transcript, 19 ground-truth facts, 8 distractor acknowledgements and 10 queries; this run used the first 8 turns.</li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-fact-extraction-small-local-models-2026/raw-records.jsonl">raw-records.jsonl</a> — one line per model call: model, prompt id, prompt and output tokens, seconds, parsed items and the raw text, for all 24 calls.</li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-fact-extraction-small-local-models-2026/results.json">results.json</a> — per-arm rows, acknowledgement counts, answerability and character counts, generated 2026-11-21T16:31:22Z. Its <code>mean_top5_chars</code> field is the summed length of the retrieved rows divided by 5 rows × 5 queries — by k=5, whether or not five rows were returned — so the field equals characters per retrieved row only for arms that stored at least five rows; the top-5 prompt totals in the table are five times that field.</li>
+<li><a href="https://raw.githubusercontent.com/baeseokjae/baeseokjae.github.io/main/research/evidence/agent-memory-fact-extraction-small-local-models-2026/method.md">method.md</a> — the matching rule, the arm definitions, the extraction options and the recorded deviations.</li>
+</ul>
+<p>A superseded copy of the fixture that carried a note claiming 20 durable facts was retired during preparation: it was byte-identical apart from that one note string, its own ground-truth array always held 19 entries, and it is not an input to any number above. The published fixture above is the measured set.</p>
+<p>These are original files from this run. The vendor documentation snapshots used for the source checks are not redistributed. Recompute any column above from the fixture and the per-call records to re-score the matrix.</p>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Ollama API reference, <code>/api/generate</code> and <code>/api/embed</code>: <a href="https://raw.githubusercontent.com/ollama/ollama/main/docs/api.md">raw.githubusercontent.com/ollama/ollama/main/docs/api.md</a></li>
+<li>Mem0 add() pipeline (extraction stage): <a href="https://docs.mem0.ai/core-concepts/memory-operations/add.md">docs.mem0.ai/core-concepts/memory-operations/add.md</a></li>
+<li>Mem0 graph memory overview (vendor LoCoMo/LongMemEval deltas, halved extraction latency): <a href="https://docs.mem0.ai/open-source/graph_memory/overview.md">docs.mem0.ai/open-source/graph_memory/overview.md</a></li>
+<li>Qwen3-0.6B model card: <a href="https://huggingface.co/Qwen/Qwen3-0.6B/raw/main/README.md">huggingface.co/Qwen/Qwen3-0.6B/raw/main/README.md</a></li>
+<li>Qwen2.5-0.5B model card: <a href="https://huggingface.co/Qwen/Qwen2.5-0.5B/raw/main/README.md">huggingface.co/Qwen/Qwen2.5-0.5B/raw/main/README.md</a></li>
+<li>snowflake-arctic-embed-s model card (33M parameters, 384 dimensions): <a href="https://huggingface.co/Snowflake/snowflake-arctic-embed-s/raw/main/README.md">huggingface.co/Snowflake/snowflake-arctic-embed-s/raw/main/README.md</a></li>
+</ul>
 ]]></content:encoded></item></channel></rss>
